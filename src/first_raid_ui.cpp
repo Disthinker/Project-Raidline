@@ -51,6 +51,11 @@ std::vector<std::string> App::weaponSupplyTooltipLines(AssetInstanceId weaponId,
 }
 
 void App::renderFirstRaidHints() {
+  // Alpha results place the unchanged guidance in their scrollable detail
+  // column; do not cover the result controls with the old floating card.
+  if (gameFlow_.state() == GameFlowState::RaidResult &&
+      gameSession_.world().isAlphaRaidWorld())
+    return;
   if (gameFlow_.state() == GameFlowState::MainMenu || pauseMenu_.isOpen() ||
       developerWeaponPanelOpen_ || tacticalMapOpen_ || medicalWheelOpen_ ||
       baseConstructionPanelOpen_ || basePlacementState_ ||

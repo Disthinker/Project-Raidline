@@ -4742,6 +4742,9 @@ void App::processEvents()
     pendingMainMenuCommand_.reset();
     pendingPauseMenuCommand_.reset();
     pendingScreenConfirm_ = false;
+    pendingRaidResultEvents_.clear();
+    raidResultConfirmRequested_ = false;
+    raidResultInputCancelledThisFrame_ = false;
     homeFoundingInputBlockedThisFrame_ = homeFoundingPrompt_.has_value();
     developerWeaponPanelBlocksGameplayThisFrame_ =
         developerWeaponPanelOpen_;
@@ -4768,6 +4771,10 @@ void App::processEvents()
             event.type == SDL_EVENT_WINDOW_FOCUS_LOST ||
             event.type == SDL_EVENT_WINDOW_RESIZED ||
             event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
+            raidResultUi_.press.reset();
+            pendingRaidResultEvents_.clear();
+            raidResultConfirmRequested_ = false;
+            raidResultInputCancelledThisFrame_ = true;
             regionalUi_.press.reset();
             if (regionalUi_.confirmationKey) deploymentWarningArmed_ = false;
             regionalUi_.confirmationKey.reset();
@@ -5483,6 +5490,35 @@ void App::processEvents()
 
         else if (gameFlow_.state() == GameFlowState::RaidResult)
         {
+            if (gameSession_.world().isAlphaRaidWorld())
+            {
+                if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
+                    (event.key.scancode == SDL_SCANCODE_RETURN ||
+                     event.key.scancode == SDL_SCANCODE_KP_ENTER) &&
+                    input_.wasActionJustPressed(GameAction::ScreenConfirm))
+                    raidResultConfirmRequested_ = true;
+                if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                     event.type == SDL_EVENT_MOUSE_BUTTON_UP) &&
+                    event.button.button == SDL_BUTTON_LEFT)
+                {
+                    input_.suppressPrimaryPointerUntilRelease();
+                    pendingRaidResultEvents_.push_back({
+                        event.type == SDL_EVENT_MOUSE_BUTTON_DOWN
+                            ? UiRaidResultEventKind::Down : UiRaidResultEventKind::Up,
+                        {event.button.x, event.button.y}});
+                }
+                else if (event.type == SDL_EVENT_MOUSE_MOTION)
+                    pendingRaidResultEvents_.push_back({UiRaidResultEventKind::Move,
+                        {event.motion.x, event.motion.y}});
+                else if (event.type == SDL_EVENT_MOUSE_WHEEL)
+                {
+                    const float direction = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.0F : 1.0F;
+                    const int delta = event.wheel.y * direction > 0 ? -1 : event.wheel.y * direction < 0 ? 1 : 0;
+                    pendingRaidResultEvents_.push_back({UiRaidResultEventKind::Wheel,
+                        windowUiViewport().toLogical({event.wheel.mouse_x, event.wheel.mouse_y}), delta});
+                }
+                continue;
+            }
             if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                 event.button.button == SDL_BUTTON_LEFT)
             {
@@ -5650,6 +5686,15 @@ void App::handleDeveloperPanelClick(MousePosition position)
 void App::update(float deltaTime)
 {
     uiClockSeconds_+=std::max(0.0F,deltaTime);
+    if (gameFlow_.state() == GameFlowState::RaidResult &&
+        (pauseMenu_.isOpen() || developerWeaponPanelOpen_ ||
+         developerWeaponPanelBlocksGameplayThisFrame_ ||
+         inventoryOverlayState_.isOpen() || !windowHasInputFocus_))
+    {
+        raidResultUi_.press.reset();
+        pendingRaidResultEvents_.clear();
+        raidResultConfirmRequested_ = false;
+    }
     deploymentConfirmConsumedThisFrame_ = false;
     if (gameFlow_.state() != GameFlowState::Base ||
         gameFlow_.activeBaseFacility() != BaseFacilityKind::RaidGate || !regionalOperationsOpen_) {
@@ -5875,6 +5920,11 @@ void App::update(float deltaTime)
     if (gameFlow_.state() == GameFlowState::RaidResult)
     {
         pendingInventoryUiEvents_.clear();
+        if (gameSession_.world().isAlphaRaidWorld())
+        {
+            updateRaidResultUi(deltaTime);
+            return;
+        }
         if (screenConfirm)
         {
             static_cast<void>(handleScreenConfirm());
@@ -6136,6 +6186,12 @@ void App::update(float deltaTime)
     gameFlow_.update(
         gameplayInput,
         deltaTime);
+    if (gameFlow_.state() == GameFlowState::RaidResult &&
+        gameSession_.world().isAlphaRaidWorld())
+    {
+        resetRaidResultUi();
+        refreshRaidResultUi(true);
+    }
     if (openedRaidSceneContainerId_ && !gameSession_.raidSceneContainerAvailable(*openedRaidSceneContainerId_))
     {
         closeInventory();
@@ -8003,107 +8059,7 @@ void App::renderStashOverlay()
     if (gameSession_.world().isAlphaRaidWorld() &&
         gameFlow_.state() == GameFlowState::RaidResult)
     {
-        const SDL_FRect panel{
-            kStashPanelX,
-            kStashPanelY,
-            kStashPanelWidth,
-            kStashPanelHeight};
-        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(renderer_, 20, 28, 30, 244);
-        SDL_RenderFillRect(renderer_, &panel);
-        SDL_SetRenderDrawColor(renderer_, 122, 184, 166, 255);
-        SDL_RenderRect(renderer_, &panel);
-        uiTextRenderer_.render(
-            renderer_, panel.x + 154.0F, panel.y + 24.0F,
-            "RAID RESULT");
-        const auto &result = gameSession_.profile().lastRaidResult;
-        if (result.has_value())
-        {
-            const char *outcome = result->outcome == RaidResultOutcome::Extracted
-                ? "EXTRACTED"
-                : result->outcome == RaidResultOutcome::PlayerDead
-                    ? "PLAYER DEAD"
-                    : result->outcome == RaidResultOutcome::ActiveQuit
-                        ? "RAID ABANDONED"
-                        : "ABNORMAL EXIT - FAILED";
-            uiTextRenderer_.render(
-                renderer_, panel.x + 24.0F, panel.y + 64.0F, outcome);
-            const std::string currency = fmt::format(
-                "CURRENCY CHANGE: {:+}",
-                result->currencyDelta);
-            uiTextRenderer_.render(
-                renderer_, panel.x + 24.0F, panel.y + 90.0F,
-                currency.c_str());
-            const std::string travel = fmt::format(
-                "RETURN / REGROUP TRAVEL: {} MIN",
-                result->travelMinutesApplied);
-            uiTextRenderer_.render(
-                renderer_, panel.x + 24.0F, panel.y + 112.0F,
-                travel.c_str());
-            const std::string rescued = fmt::format(
-                "RESCUED RESIDENTS: +{} (SECURED)",
-                result->rescuedOrdinaryResidents);
-            uiTextRenderer_.render(
-                renderer_, panel.x + 24.0F, panel.y + 136.0F,
-                rescued.c_str());
-            if (result->baseThreatReducedUnits > 0U)
-            {
-                const std::string threat = fmt::format(
-                    "BASE THREAT REDUCED: -{}",
-                    result->baseThreatReducedUnits);
-                uiTextRenderer_.render(
-                    renderer_, panel.x + 250.0F, panel.y + 136.0F,
-                    threat.c_str());
-            }
-            if (result->outcome == RaidResultOutcome::Extracted)
-            {
-                const std::string count = fmt::format(
-                    "RETURNED ASSETS: {}",
-                    result->returnedItemDefinitionIds.size());
-                uiTextRenderer_.render(
-                    renderer_, panel.x + 24.0F, panel.y + 162.0F,
-                    count.c_str());
-                float y = panel.y + 188.0F;
-                for (std::size_t index = 0;
-                     index < result->returnedItemDefinitionIds.size() &&
-                     index < (result->wishReturn ? 5U : 9U);
-                     ++index)
-                {
-                    const std::string &name = publishedContentRegistry().item(
-                        result->returnedItemDefinitionIds[index]).displayName;
-                    uiTextRenderer_.render(
-                        renderer_, panel.x + 42.0F, y, name.c_str());
-                    y += 20.0F;
-                }
-            }
-            else
-            {
-                uiTextRenderer_.render(
-                    renderer_, panel.x + 24.0F, panel.y + 166.0F,
-                    "ALL CARRIED ASSETS WERE LOST");
-                uiTextRenderer_.render(
-                    renderer_, panel.x + 24.0F, panel.y + 190.0F,
-                    result->lostRaidRecordId.has_value()
-                        ? "A LOST RAID RECORD IS AVAILABLE AT THE RAID GATE"
-                        : "NO GEAR WAS CARRIED; NO LOST RECORD WAS CREATED");
-            }
-        }
-        if (result && result->wishReturn)
-        {
-            const auto &summary = *result->wishReturn;
-            const std::string title = "WISH RETURN | " + publishedContentRegistry().basePriority(
-                summary.focus.wish.definitionId).displayName;
-            const std::string numbers = fmt::format("WISH ITEMS {} | CONTRIBUTION {}/{}",
-                summary.itemCount, summary.contribution, summary.focus.requiredContribution);
-            uiTextRenderer_.render(renderer_, panel.x + 24.0F, panel.y + 294.0F, title.c_str());
-            uiTextRenderer_.render(renderer_, panel.x + 24.0F, panel.y + 316.0F, numbers.c_str());
-            uiTextRenderer_.render(renderer_, panel.x + 24.0F, panel.y + 340.0F,
-                summary.expired ? (result->outcome == RaidResultOutcome::Extracted ?
-                    "WISH ENDED | ITEMS STAY IN PLACE" : "WISH ENDED | NO RETURNED CONTRIBUTION") :
-                summary.contribution >= summary.focus.requiredContribution ?
-                    "WISH STOCK SUFFICIENT | SUBMIT MANUALLY IN BASE" : "WISH STOCK INSUFFICIENT | NO EXTRA PENALTY");
-        }
-        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+        renderRaidResult();
         return;
     }
 
@@ -15857,6 +15813,11 @@ void App::render()
         renderRaidScreen();
         break;
     case GameFlowState::RaidResult:
+        if (gameSession_.world().isAlphaRaidWorld())
+        {
+            renderRaidResult();
+            break;
+        }
         renderRaidScreen();
         renderScreenPrimaryButton(
             "RETURN TO BASE");
