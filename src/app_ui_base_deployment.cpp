@@ -202,6 +202,7 @@ void App::handleBaseDeploymentEvent(const UiDeploymentEvent &event) {
     if (control == C::Regional || control == C::LostRecords) {
         resetBaseDeploymentUi();
         deploymentWarningArmed_ = false;
+        resetRegionalOperationsUi();
         regionalOperationsOpen_ = control == C::Regional;
         lostRaidRecordsOpen_ = control == C::LostRecords;
         if (lostRaidRecordsOpen_) resetLostRecoveryUi();

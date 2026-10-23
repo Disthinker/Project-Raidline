@@ -2069,6 +2069,7 @@ bool App::tryDeployFromBase(
     deploymentWarningArmed_ = false;
     lostRaidRecordsOpen_ = false;
     regionalOperationsOpen_ = false;
+    resetRegionalOperationsUi();
     resetLostRecoveryUi();
     selectedRaidSelfRecoveryRecordId_.reset();
     selectedRaidIntelligence_ = {};
@@ -2077,6 +2078,31 @@ bool App::tryDeployFromBase(
     developerCrisisRevealEnabled_ = false;
     uiMessage_.clear();
     return true;
+}
+
+void App::openRegionalConstruction(bool reserve)
+{
+    if (reserve)
+    {
+        baseConstructionPage_ = BaseConstructionPage::Owned;
+        baseConstructionCatalogPage_ = 0U;
+    }
+    else
+    {
+        const auto &projects = publishedContentRegistry().baseConstructionProjects();
+        const auto project = std::find_if(projects.begin(), projects.end(),
+            [](const BaseConstructionProjectDefinition &entry)
+            { return entry.target == BaseFacilityUpgradeTarget::KitchenWater; });
+        baseConstructionPage_ = BaseConstructionPage::Purchase;
+        baseConstructionCatalogPage_ = project == projects.end() ? 0U :
+            static_cast<std::size_t>(std::distance(projects.begin(), project)) / kBaseBuildCardsPerPage;
+    }
+    regionalOperationsOpen_ = false;
+    gameFlow_.closeBaseFacility();
+    baseConstructionPanelOpen_ = true;
+    activateBaseBuildCamera();
+    uiMessage_ = reserve ? "SELECT RESERVE FACILITY IN BASE BUILD OWNED PAGE" :
+        "OPENED BASE BUILD | KITCHEN & WATER REQUIRED";
 }
 
 void App::renderRaidLoadingScreen(
@@ -2521,43 +2547,9 @@ SDL_FRect App::raidLostRecordsButton() const noexcept
     return SDL_FRect{920.0F, 184.0F, 200.0F, 34.0F};
 }
 
-SDL_FRect App::raidRegionalOperationsButton() const noexcept
-{
-    return SDL_FRect{700.0F, 184.0F, 200.0F, 34.0F};
-}
-
-SDL_FRect App::regionalBaseSiteClearanceButton() const noexcept
-{
-    return SDL_FRect{300.0F, 360.0F, 520.0F, 40.0F};
-}
-
-SDL_FRect App::regionalFacilityReserveButton() const noexcept
-{
-    return SDL_FRect{300.0F, 405.0F, 420.0F, 32.0F};
-}
-
-SDL_FRect App::regionalBaseSiteFeatureButton() const noexcept
-{
-    return SDL_FRect{740.0F, 405.0F, 375.0F, 32.0F};
-}
-
-SDL_FRect App::regionalBasePerimeterSweepButton() const noexcept
-{
-    return SDL_FRect{300.0F, 610.0F, 815.0F, 34.0F};
-}
-
 SDL_FRect App::baseAutoDefenseButton() const noexcept
 {
     return base_siege_warning_layout::automatic;
-}
-
-SDL_FRect App::regionalOutpostActionButton(std::size_t index) const noexcept
-{
-    return SDL_FRect{
-        755.0F,
-        446.0F + static_cast<float>(index) * 62.0F,
-        360.0F,
-        36.0F};
 }
 
 SDL_FRect App::raidIntelligenceButton(std::size_t index) const noexcept
@@ -2874,6 +2866,7 @@ void App::updateBase(float deltaTime)
         resetBaseDeploymentUi();
         lostRaidRecordsOpen_ = false;
         regionalOperationsOpen_ = false;
+        resetRegionalOperationsUi();
         resetLostRecoveryUi();
         if (gameFlow_.baseWorld().canAccessStash())
         {
@@ -2934,6 +2927,18 @@ void App::updateBase(float deltaTime)
         if (input_.wasActionJustPressed(GameAction::InventoryCancel))
         {
             if (gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate &&
+                regionalOperationsOpen_)
+            {
+                regionalOperationsOpen_ = false;
+                resetRegionalOperationsUi();
+                resetBaseDeploymentUi();
+                deploymentWarningArmed_ = false;
+                input_.suppressPrimaryPointerUntilRelease();
+                pendingBaseClicks_.clear();
+                uiMessage_.clear();
+                return;
+            }
+            if (gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate &&
                 lostRaidRecordsOpen_)
             {
                 lostRaidRecordsOpen_ = false;
@@ -2955,6 +2960,8 @@ void App::updateBase(float deltaTime)
             pendingBaseClicks_.clear();
             deploymentWarningArmed_ = false;
             lostRaidRecordsOpen_ = false;
+            regionalOperationsOpen_ = false;
+            resetRegionalOperationsUi();
             resetLostRecoveryUi();
             uiMessage_.clear();
             return;
@@ -2965,6 +2972,7 @@ void App::updateBase(float deltaTime)
             profileAssetSelection_->orientation = rotatedClockwise(
                 profileAssetSelection_->orientation);
         }
+        updateRegionalOperationsUi();
         auto lostRecoveryEvents = std::move(pendingLostRecoveryEvents_);
         pendingLostRecoveryEvents_.clear();
         for (const auto &event : lostRecoveryEvents) handleLostRecoveryEvent(event);
@@ -3093,227 +3101,8 @@ void App::handleBasePointerClick(const BasePointerClick &click)
 
     if (*facility == BaseFacilityKind::RaidGate)
     {
-        if (regionalOperationsOpen_)
-        {
-            if (contains(raidRegionalOperationsButton(), click.position))
-            {
-                regionalOperationsOpen_ = false;
-                deploymentWarningArmed_ = false;
-                uiMessage_.clear();
-                return;
-            }
-            const auto &outposts =
-                publishedContentRegistry().regionalOperations().outposts;
-            const auto &baseSites =
-                publishedContentRegistry().regionalOperations().baseSites;
-            if (contains(
-                    regionalBasePerimeterSweepButton(), click.position))
-            {
-                const BasePerimeterSweepPlan plan = queryBasePerimeterSweep(
-                    gameSession_.profile(), publishedContentRegistry());
-                if (!plan.canDeploy)
-                {
-                    uiMessage_ = plan.message;
-                    gameAudio_.play(SoundEventId::UiDeny);
-                    return;
-                }
-                const bool deployed = tryDeployFromBase(
-                    std::nullopt,
-                    std::nullopt,
-                    plan.baseSiteDefinitionId);
-                gameAudio_.play(deployed
-                    ? SoundEventId::UiConfirm
-                    : SoundEventId::UiDeny);
-                return;
-            }
-            const auto candidate = std::find_if(
-                baseSites.begin(), baseSites.end(),
-                [&](const RegionalBaseSiteDefinition &site)
-                {
-                    return site.nodeId != gameSession_.profile()
-                        .regionalOperations.activeBaseNodeId;
-                });
-            if (candidate != baseSites.end() &&
-                contains(regionalBaseSiteClearanceButton(), click.position))
-            {
-                const RegionalBaseSiteState &state = gameSession_.profile()
-                    .regionalOperations.baseSites.at(candidate->id);
-                if (!state.unlocked)
-                {
-                    const bool deployed = tryDeployFromBase(
-                        std::nullopt, candidate->id);
-                    gameAudio_.play(deployed
-                        ? SoundEventId::UiConfirm
-                        : SoundEventId::UiDeny);
-                    return;
-                }
-                const BaseFacilityDefinitionId kitchenWater{
-                    "base_facility.kitchen_water"};
-                if (!baseFacilityOwned(gameSession_.profile(), kitchenWater))
-                {
-                    const auto &projects = publishedContentRegistry()
-                        .baseConstructionProjects();
-                    const auto project = std::find_if(
-                        projects.begin(), projects.end(),
-                        [](const BaseConstructionProjectDefinition &entry)
-                        {
-                            return entry.target ==
-                                BaseFacilityUpgradeTarget::KitchenWater;
-                        });
-                    baseConstructionPage_ = BaseConstructionPage::Purchase;
-                    baseConstructionCatalogPage_ = project == projects.end()
-                        ? 0U
-                        : static_cast<std::size_t>(
-                            std::distance(projects.begin(), project)) /
-                            kBaseBuildCardsPerPage;
-                    regionalOperationsOpen_ = false;
-                    gameFlow_.closeBaseFacility();
-                    baseConstructionPanelOpen_ = true;
-                    activateBaseBuildCamera();
-                    uiMessage_ = "OPENED BASE BUILD | KITCHEN & WATER REQUIRED";
-                    gameAudio_.play(SoundEventId::UiConfirm);
-                    return;
-                }
-                const BaseMigrationReceipt receipt =
-                    gameSession_.executeBaseMigration(
-                        candidate->id,
-                        nextProfileTransactionId("migrate-main-base"));
-                uiMessage_ = receipt.succeeded
-                    ? "MAIN BASE MIGRATION COMPLETE | OLD BASE IS AN OUTPOST"
-                    : receipt.message;
-                gameAudio_.play(receipt.succeeded
-                    ? SoundEventId::UiConfirm
-                    : SoundEventId::UiDeny);
-                return;
-            }
-            const BaseFacilityDefinitionId workshop{
-                "base_facility.workshop"};
-            if (contains(regionalFacilityReserveButton(), click.position) &&
-                baseFacilityOwned(gameSession_.profile(), workshop) &&
-                !baseFacilityInstalled(gameSession_.profile(), workshop))
-            {
-                gameFlow_.closeBaseFacility();
-                baseConstructionPage_ = BaseConstructionPage::Owned;
-                baseConstructionCatalogPage_ = 0U;
-                baseConstructionPanelOpen_ = true;
-                activateBaseBuildCamera();
-                uiMessage_ =
-                    "SELECT RESERVE FACILITY IN BASE BUILD OWNED PAGE";
-                gameAudio_.play(SoundEventId::UiConfirm);
-                return;
-            }
-            const auto activeSite = std::find_if(
-                baseSites.begin(), baseSites.end(),
-                [&](const RegionalBaseSiteDefinition &site)
-                {
-                    return site.nodeId == gameSession_.profile()
-                        .regionalOperations.activeBaseNodeId;
-                });
-            const RegionalBaseSiteDefinition *featureSite =
-                activeSite != baseSites.end() ? &*activeSite : nullptr;
-            if (featureSite != nullptr &&
-                gameSession_.profile().regionalOperations.baseSites.at(
-                    featureSite->id).uniqueFeatureRepaired)
-            {
-                const auto stagedSite = std::find_if(
-                    baseSites.begin(), baseSites.end(),
-                    [&](const RegionalBaseSiteDefinition &site)
-                    {
-                        const RegionalBaseSiteState &state =
-                            gameSession_.profile().regionalOperations
-                                .baseSites.at(site.id);
-                        return site.id != featureSite->id &&
-                            state.unlocked &&
-                            !state.uniqueFeatureRepaired;
-                    });
-                if (stagedSite != baseSites.end())
-                {
-                    featureSite = &*stagedSite;
-                }
-            }
-            if (featureSite != nullptr &&
-                contains(regionalBaseSiteFeatureButton(), click.position))
-            {
-                const BaseSiteFeatureRepairPlan plan =
-                    queryBaseSiteFeatureRepair(
-                        gameSession_.profile(),
-                        publishedContentRegistry(),
-                        BaseSiteFeatureRepairCommand{featureSite->id});
-                if (plan.canCommit)
-                {
-                    const BaseSiteFeatureRepairReceipt receipt =
-                        gameSession_.executeBaseSiteFeatureRepair(
-                            featureSite->id,
-                            nextProfileTransactionId(
-                                "repair-base-site-feature"));
-                    uiMessage_ = receipt.succeeded
-                        ? "BASE SITE FEATURE REPAIRED | OPERATIONAL WHILE THIS IS THE MAIN BASE"
-                        : receipt.message;
-                    gameAudio_.play(receipt.succeeded
-                        ? SoundEventId::UiConfirm
-                        : SoundEventId::UiDeny);
-                }
-                else
-                {
-                    uiMessage_ = plan.message;
-                    gameAudio_.play(SoundEventId::UiDeny);
-                }
-                return;
-            }
-            for (std::size_t index{}; index < outposts.size(); ++index)
-            {
-                if (!contains(
-                        regionalOutpostActionButton(index), click.position))
-                {
-                    continue;
-                }
-                const RegionalOutpostDefinition &definition = outposts[index];
-                const RegionalOutpostState &state = gameSession_.profile()
-                    .regionalOperations.outposts.at(definition.id);
-                if (state.disrupted)
-                {
-                    const bool deployed = tryDeployFromBase(
-                        definition.id);
-                    gameAudio_.play(deployed
-                        ? SoundEventId::UiConfirm
-                        : SoundEventId::UiDeny);
-                    return;
-                }
-                if (!state.established)
-                {
-                    const RegionalOutpostReceipt receipt =
-                        gameSession_.executeEstablishRegionalOutpost(
-                            definition.id,
-                            nextProfileTransactionId("establish-outpost"));
-                    uiMessage_ = receipt.succeeded
-                        ? "REGIONAL OUTPOST ESTABLISHED"
-                        : receipt.message;
-                    gameAudio_.play(receipt.succeeded
-                        ? SoundEventId::UiConfirm
-                        : SoundEventId::UiDeny);
-                    return;
-                }
-                const bool assign =
-                    assignedRegionalOutpostStaff(state) == 0U;
-                const RegionalOutpostStaffingReceipt receipt =
-                    gameSession_.executeRegionalOutpostStaffing(
-                        definition.id,
-                        assign,
-                        nextProfileTransactionId(
-                            assign ? "assign-outpost-garrison"
-                                   : "clear-outpost-garrison"));
-                uiMessage_ = receipt.succeeded
-                    ? assign
-                        ? "OUTPOST GARRISON ASSIGNED | SHORTCUTS ONLINE"
-                        : "OUTPOST GARRISON RETURNED | SHORTCUTS OFFLINE"
-                    : receipt.message;
-                gameAudio_.play(receipt.succeeded
-                    ? SoundEventId::UiConfirm
-                    : SoundEventId::UiDeny);
-                return;
-            }
-            return;
-        }
+        // Regional commands are owned by their native down/up adapter.
+        if (regionalOperationsOpen_) return;
         // Lost-record commands are owned by their native down/up adapter.
         if (lostRaidRecordsOpen_) return;
         // Ordinary deployment input is owned by the native down/up queue.
@@ -4939,6 +4728,7 @@ void App::processEvents()
     syncBaseSiegeWarningUi();
     pendingSiegeWarningAction_.reset();
     pendingLostRecoveryEvents_.clear();
+    pendingRegionalEvents_.clear();
     pendingDeploymentEvents_.clear();
     siegeWarningBlocksGameplayThisFrame_ = baseSiegeWarningVisible();
     pendingInventoryUiEvents_.clear();
@@ -4978,6 +4768,10 @@ void App::processEvents()
             event.type == SDL_EVENT_WINDOW_FOCUS_LOST ||
             event.type == SDL_EVENT_WINDOW_RESIZED ||
             event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
+            regionalUi_.press.reset();
+            if (regionalUi_.confirmationKey) deploymentWarningArmed_ = false;
+            regionalUi_.confirmationKey.reset();
+            pendingRegionalEvents_.clear();
             lostRecoveryUi_.press.reset();
             lostRecoveryUi_.confirmationKey.reset();
             pendingLostRecoveryEvents_.clear();
@@ -5559,6 +5353,19 @@ void App::processEvents()
                     pendingInventoryUiEvents_.push_back(*uiEvent);
                 }
             }
+            else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate && regionalOperationsOpen_)
+            {
+                if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT) {
+                    input_.suppressPrimaryPointerUntilRelease();
+                    pendingRegionalEvents_.push_back({event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? UiRegionalOperationsEventKind::Down : UiRegionalOperationsEventKind::Up, {event.button.x, event.button.y}});
+                } else if (event.type == SDL_EVENT_MOUSE_MOTION)
+                    pendingRegionalEvents_.push_back({UiRegionalOperationsEventKind::Move, {event.motion.x, event.motion.y}});
+                else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+                    const float direction = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.0F : 1.0F;
+                    const int delta = event.wheel.y * direction > 0 ? -1 : event.wheel.y * direction < 0 ? 1 : 0;
+                    pendingRegionalEvents_.push_back({UiRegionalOperationsEventKind::Wheel, windowUiViewport().toLogical({event.wheel.mouse_x, event.wheel.mouse_y}), delta});
+                }
+            }
             else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate &&
                      lostRaidRecordsOpen_ && !regionalOperationsOpen_)
             {
@@ -5845,6 +5652,22 @@ void App::update(float deltaTime)
     uiClockSeconds_+=std::max(0.0F,deltaTime);
     deploymentConfirmConsumedThisFrame_ = false;
     if (gameFlow_.state() != GameFlowState::Base ||
+        gameFlow_.activeBaseFacility() != BaseFacilityKind::RaidGate || !regionalOperationsOpen_) {
+        if (gameFlow_.state() != GameFlowState::Base ||
+            gameFlow_.activeBaseFacility() != BaseFacilityKind::RaidGate) regionalOperationsOpen_ = false;
+        if (regionalProjectionRevision_ || regionalUi_.press || regionalUi_.confirmationKey || !pendingRegionalEvents_.empty())
+            resetRegionalOperationsUi();
+    }
+    if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || developerWeaponPanelBlocksGameplayThisFrame_ ||
+        inventoryOverlayState_.isOpen() || !windowHasInputFocus_ || baseSiegeWarningVisible() ||
+        siegeWarningBlocksGameplayThisFrame_ || gameSession_.baseDefenseSaveBlocked() ||
+        gameSession_.baseDailySaveBlocked() || baseDefenseResultVisible_) {
+        regionalUi_.press.reset();
+        if (regionalUi_.confirmationKey) deploymentWarningArmed_ = false;
+        regionalUi_.confirmationKey.reset();
+        pendingRegionalEvents_.clear();
+    }
+    if (gameFlow_.state() != GameFlowState::Base ||
         gameFlow_.activeBaseFacility() != BaseFacilityKind::RaidGate ||
         !lostRaidRecordsOpen_ || regionalOperationsOpen_) {
         if (lostRecoveryProjectionRevision_ || lostRecoveryUi_.press ||
@@ -6033,7 +5856,7 @@ void App::update(float deltaTime)
     if (gameFlow_.state() == GameFlowState::Base)
     {
         if (screenConfirm && !baseSiegeWarningVisible() &&
-            !siegeWarningBlocksGameplayThisFrame_ &&
+            !siegeWarningBlocksGameplayThisFrame_ && !regionalOperationsOpen_ &&
             gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate)
         {
             // Enter and a queued pointer release share one explicit intention.
@@ -14776,338 +14599,6 @@ void App::renderBaseKitchenWater()
     if (!uiMessage_.empty())
     {
         uiTextRenderer_.render(renderer_, 250.0F, 684.0F, uiMessage_.c_str());
-    }
-}
-
-void App::renderRegionalOperations()
-{
-    const SDL_FRect panel{
-        100.0F, 120.0F, 1080.0F, 580.0F};
-    SDL_SetRenderDrawColor(renderer_, 18, 25, 22, 248);
-    SDL_RenderFillRect(renderer_, &panel);
-    SDL_SetRenderDrawColor(renderer_, 110, 156, 128, 255);
-    SDL_RenderRect(renderer_, &panel);
-
-    uiTextRenderer_.render(
-        renderer_, 430.0F, 150.0F,
-        "REGIONAL BASE SITES, ROUTES & OUTPOSTS");
-    const SDL_FRect back = raidRegionalOperationsButton();
-    SDL_SetRenderDrawColor(renderer_, 48, 66, 58, 255);
-    SDL_RenderFillRect(renderer_, &back);
-    SDL_SetRenderDrawColor(renderer_, 126, 166, 142, 255);
-    SDL_RenderRect(renderer_, &back);
-    uiTextRenderer_.render(
-        renderer_, back.x + 24.0F, back.y + 10.0F,
-        "BACK TO BRIEFING");
-
-    const ContentRegistry &content = publishedContentRegistry();
-    const ProfileState &profile = gameSession_.profile();
-    const RegionNodeDefinition &base = content.regionNode(
-        profile.regionalOperations.activeBaseNodeId);
-    const std::string baseLabel = fmt::format(
-        "ACTIVE MAIN BASE | {} | TECHNOLOGY CORE {}",
-        base.displayName,
-        profile.regionalOperations.technologyCore.instanceId);
-    uiTextRenderer_.render(
-        renderer_, 300.0F, 232.0F, baseLabel.c_str());
-    uiTextRenderer_.render(
-        renderer_, 300.0F, 258.0F,
-        "CLEAR SITE > ESTABLISH STAGING OUTPOST > BUILD CORE FACILITIES > MIGRATE");
-
-    const auto &baseSites = content.regionalOperations().baseSites;
-    const auto activeSite = std::find_if(
-        baseSites.begin(), baseSites.end(),
-        [&](const RegionalBaseSiteDefinition &site)
-        { return site.nodeId == profile.regionalOperations.activeBaseNodeId; });
-    const std::optional<RegionalOutpostDefinitionId> activeBaseOutpost =
-        activeSite != baseSites.end()
-            ? activeSite->outpostDefinitionId
-            : std::nullopt;
-    const auto candidate = std::find_if(
-        baseSites.begin(), baseSites.end(),
-        [&](const RegionalBaseSiteDefinition &site)
-        { return site.nodeId != profile.regionalOperations.activeBaseNodeId; });
-    if (candidate != baseSites.end())
-    {
-        const RegionalBaseSiteState &siteState =
-            profile.regionalOperations.baseSites.at(candidate->id);
-        const char *tier = candidate->tier == RegionalBaseSiteTier::Basic
-            ? "BASIC"
-            : candidate->tier == RegionalBaseSiteTier::Mature
-                ? "MATURE" : "STRATEGIC";
-        const std::string siteStatus = fmt::format(
-            "CANDIDATE SITE | {} | {} | {}",
-            candidate->displayName, tier,
-            siteState.unlocked ? "UNLOCKED" : "LOCKED");
-        uiTextRenderer_.render(
-            renderer_, 300.0F, 288.0F, siteStatus.c_str());
-        const std::string advantage = fmt::format(
-            "ADVANTAGE | {}", candidate->advantage);
-        uiTextRenderer_.render(
-            renderer_, 300.0F, 310.0F, advantage.c_str());
-        const BaseFacilityDefinitionId warehouse{
-            "base_facility.warehouse"};
-        const BaseFacilityDefinitionId dormitory{
-            "base_facility.dormitory"};
-        const BaseFacilityDefinitionId kitchenWater{
-            "base_facility.kitchen_water"};
-        const BaseFacilityDefinitionId medical{
-            "base_facility.medical"};
-        const auto facilityStatus = [&](const BaseFacilityDefinitionId &id)
-        {
-            return baseFacilityOwned(profile, id) ? "READY" : "MISSING";
-        };
-        const std::string infrastructure = fmt::format(
-            "MIGRATION CORE | WAREHOUSE {} | DORMITORY FACILITY {} | KITCHEN/WATER {} | MEDICAL FACILITY {}",
-            facilityStatus(warehouse),
-            facilityStatus(dormitory),
-            facilityStatus(kitchenWater),
-            facilityStatus(medical));
-        uiTextRenderer_.render(
-            renderer_, 300.0F, 334.0F, infrastructure.c_str());
-
-        const RegionalBaseSiteClearancePlan clearance =
-            queryRegionalBaseSiteClearance(profile, content, candidate->id);
-        bool actionAvailable{};
-        std::string actionLabel;
-        if (!siteState.unlocked)
-        {
-            actionAvailable = clearance.canDeploy;
-            actionLabel = deploymentWarningArmed_
-                ? "CONFIRM BASE SITE CLEARING RAID"
-                : "DEPLOY BASE SITE CLEARING RAID";
-        }
-        else if (!baseFacilityOwned(profile, kitchenWater))
-        {
-            actionAvailable = true;
-            actionLabel = "OPEN BASE BUILD | KITCHEN & WATER REQUIRED";
-        }
-        else
-        {
-            const BaseMigrationPlan migration = queryBaseMigration(
-                profile, content, BaseMigrationCommand{candidate->id});
-            actionAvailable = migration.canCommit;
-            actionLabel = migration.canCommit
-                ? fmt::format(
-                    "MIGRATE MAIN BASE | {}H | OLD BASE BECOMES OUTPOST",
-                    migration.migrationMinutes / kWorldMinutesPerHour)
-                : "MIGRATION BLOCKED | ESTABLISH TARGET OUTPOST";
-        }
-        const SDL_FRect action = regionalBaseSiteClearanceButton();
-        SDL_SetRenderDrawColor(
-            renderer_, actionAvailable ? 56 : 42,
-            actionAvailable ? 92 : 52,
-            actionAvailable ? 70 : 52, 255);
-        SDL_RenderFillRect(renderer_, &action);
-        SDL_SetRenderDrawColor(renderer_, 164, 208, 184, 255);
-        SDL_RenderRect(renderer_, &action);
-        uiTextRenderer_.render(
-            renderer_, action.x + 34.0F, action.y + 12.0F,
-            actionLabel.c_str());
-    }
-
-    const BaseFacilityDefinitionId workshop{"base_facility.workshop"};
-    const bool workshopInReserve = baseFacilityOwned(profile, workshop) &&
-        !baseFacilityInstalled(profile, workshop);
-    const SDL_FRect reserveButton = regionalFacilityReserveButton();
-    SDL_SetRenderDrawColor(
-        renderer_, workshopInReserve ? 54 : 38,
-        workshopInReserve ? 86 : 48,
-        workshopInReserve ? 72 : 50, 255);
-    SDL_RenderFillRect(renderer_, &reserveButton);
-    SDL_SetRenderDrawColor(renderer_, 142, 184, 158, 255);
-    SDL_RenderRect(renderer_, &reserveButton);
-    uiTextRenderer_.render(
-        renderer_, reserveButton.x + 16.0F, reserveButton.y + 8.0F,
-        workshopInReserve
-            ? "FACILITY RESERVE | OPEN BASE BUILD OWNED PAGE"
-            : "FACILITY RESERVE | EMPTY");
-
-    const RegionalBaseSiteDefinition *featureSite =
-        activeSite != baseSites.end() ? &*activeSite : nullptr;
-    if (featureSite != nullptr &&
-        profile.regionalOperations.baseSites.at(featureSite->id)
-            .uniqueFeatureRepaired &&
-        candidate != baseSites.end())
-    {
-        const RegionalBaseSiteState &candidateState =
-            profile.regionalOperations.baseSites.at(candidate->id);
-        if (candidateState.unlocked &&
-            !candidateState.uniqueFeatureRepaired)
-        {
-            featureSite = &*candidate;
-        }
-    }
-    if (featureSite != nullptr)
-    {
-        const RegionalBaseSiteState &state =
-            profile.regionalOperations.baseSites.at(featureSite->id);
-        const BaseSiteFeatureRepairPlan repair =
-            queryBaseSiteFeatureRepair(
-                profile, content,
-                BaseSiteFeatureRepairCommand{featureSite->id});
-        const SDL_FRect featureButton = regionalBaseSiteFeatureButton();
-        SDL_SetRenderDrawColor(
-            renderer_,
-            state.uniqueFeatureRepaired ? 54 : repair.canCommit ? 66 : 42,
-            state.uniqueFeatureRepaired ? 90 : repair.canCommit ? 104 : 52,
-            state.uniqueFeatureRepaired ? 72 : repair.canCommit ? 78 : 52,
-            255);
-        SDL_RenderFillRect(renderer_, &featureButton);
-        SDL_SetRenderDrawColor(renderer_, 164, 208, 184, 255);
-        SDL_RenderRect(renderer_, &featureButton);
-        const std::string featureLabel = state.uniqueFeatureRepaired
-            ? featureSite->uniqueFeatureManufacturingDurationPercent < 100U
-                ? fmt::format(
-                    "FEATURE ONLINE | TIME {}%",
-                    featureSite->uniqueFeatureManufacturingDurationPercent)
-                : "SITE FEATURE ONLINE | BASELINE EFFECT"
-            : repair.canCommit
-                ? fmt::format(
-                    "REPAIR FEATURE | {} MAT | {}H | TIME {}%",
-                    repair.materialUnits,
-                    repair.durationMinutes / kWorldMinutesPerHour,
-                    repair.manufacturingDurationPercent)
-                : "SITE FEATURE REPAIR BLOCKED";
-        uiTextRenderer_.render(
-            renderer_, featureButton.x + 12.0F,
-            featureButton.y + 8.0F, featureLabel.c_str());
-    }
-
-    const auto &definitions = content.regionalOperations().outposts;
-    for (std::size_t index{}; index < definitions.size(); ++index)
-    {
-        const RegionalOutpostDefinition &definition = definitions[index];
-        const RegionalOutpostState &state =
-            profile.regionalOperations.outposts.at(definition.id);
-        const float rowY = 444.0F + static_cast<float>(index) * 62.0F;
-        const bool representsActiveBase =
-            activeBaseOutpost.has_value() &&
-            *activeBaseOutpost == definition.id;
-        const std::string status = fmt::format(
-            "{} | {} | STAFF {}/{} | {}",
-            definition.displayName,
-            representsActiveBase ? "MAIN BASE" :
-                state.established ? "ESTABLISHED" :
-                state.unlocked ? "UNLOCKED" : "LOCKED",
-            assignedRegionalOutpostStaff(state),
-            definition.requiredStaff,
-            representsActiveBase
-                ? "CORE ACTIVE"
-                : state.disrupted
-                ? "DISRUPTED"
-                : regionalOutpostOnline(profile, content, definition.id)
-                    ? "ONLINE" : "OFFLINE");
-        uiTextRenderer_.render(renderer_, 300.0F, rowY, status.c_str());
-        const std::string threat = representsActiveBase
-            ? "ACTIVE MAIN BASE LOCATION | NOT A LIGHT OUTPOST"
-            : fmt::format(
-                "THREAT {}/{} | {} SAFE OPERATION(S) REMAIN",
-                state.shortcutOperationsSinceRestoration,
-                definition.safeShortcutOperations,
-                definition.safeShortcutOperations >
-                        state.shortcutOperationsSinceRestoration
-                    ? definition.safeShortcutOperations -
-                          state.shortcutOperationsSinceRestoration
-                    : 0U);
-        uiTextRenderer_.render(
-            renderer_, 300.0F, rowY + 22.0F, threat.c_str());
-
-        const bool hasGarrison =
-            assignedRegionalOutpostStaff(state) != 0U;
-        const RegionalOutpostPlan establishPlan =
-            queryEstablishRegionalOutpost(
-                profile, content,
-                EstablishRegionalOutpostCommand{definition.id});
-        const RegionalOutpostStaffingPlan staffingPlan =
-            queryRegionalOutpostStaffing(
-                profile, content,
-                RegionalOutpostStaffingCommand{
-                    definition.id, !hasGarrison});
-        const bool canCommit = !representsActiveBase && (state.disrupted
-            ? state.established &&
-                assignedRegionalOutpostStaff(state) ==
-                    definition.requiredStaff
-            : state.established
-                ? staffingPlan.canCommit
-                : establishPlan.canCommit);
-        const SDL_FRect action = regionalOutpostActionButton(index);
-        SDL_SetRenderDrawColor(
-            renderer_, canCommit ? 48 : 42,
-            canCommit ? 98 : 52,
-            canCommit ? 74 : 52, 255);
-        SDL_RenderFillRect(renderer_, &action);
-        SDL_SetRenderDrawColor(renderer_, 164, 208, 184, 255);
-        SDL_RenderRect(renderer_, &action);
-        uiTextRenderer_.render(
-            renderer_, action.x + 18.0F, action.y + 13.0F,
-            representsActiveBase
-                ? "MAIN BASE | TECHNOLOGY CORE ACTIVE"
-                : state.disrupted
-                ? deploymentWarningArmed_
-                    ? "CONFIRM OUTPOST CLEARING RAID"
-                    : "DEPLOY OUTPOST CLEARING RAID"
-                : state.established
-                    ? hasGarrison
-                        ? "RETURN OUTPOST GARRISON"
-                        : staffingPlan.canCommit
-                            ? "ASSIGN FULL GARRISON | ACTIVATE SHORTCUTS"
-                            : "GARRISON ASSIGNMENT BLOCKED"
-                    : establishPlan.canCommit
-                        ? "ESTABLISH LIGHT OUTPOST"
-                        : state.unlocked
-                            ? "OUTPOST ESTABLISHMENT BLOCKED"
-                            : "CLEAR BASE SITE TO UNLOCK");
-    }
-
-    const BasePerimeterSweepPlan sweep = queryBasePerimeterSweep(
-        profile, content);
-    const SDL_FRect sweepButton = regionalBasePerimeterSweepButton();
-    SDL_SetRenderDrawColor(
-        renderer_,
-        sweep.canDeploy ? 64 : 42,
-        sweep.canDeploy ? 96 : 52,
-        sweep.canDeploy ? 62 : 52,
-        255);
-    SDL_RenderFillRect(renderer_, &sweepButton);
-    SDL_SetRenderDrawColor(renderer_, 204, 184, 104, 255);
-    SDL_RenderRect(renderer_, &sweepButton);
-    const std::string sweepLabel = sweep.canDeploy
-        ? fmt::format(
-              "{}PERIMETER SWEEP | THREAT {} | SUCCESS -{} | RAID +{} | NORMAL EXITS OPEN",
-              deploymentWarningArmed_ ? "CONFIRM " : "",
-              sweep.currentThreatUnits,
-              sweep.threatReductionUnits,
-              kBaseSiegeRaidThreatUnits)
-        : fmt::format(
-              "PERIMETER SWEEP LOCKED | THREAT {}/{}",
-              sweep.currentThreatUnits,
-              kBasePerimeterSweepMinimumThreat);
-    uiTextRenderer_.render(
-        renderer_, sweepButton.x + 14.0F, sweepButton.y + 10.0F,
-        sweepLabel.c_str());
-
-    const RegionalRoutePlan riverside = queryRegionalRoute(
-        profile, content, MapDefinitionId{"map.raid.riverside"});
-    const RegionalRoutePlan industrial = queryRegionalRoute(
-        profile, content, MapDefinitionId{"map.raid.industrial"});
-    const RegionalRoutePlan frontier = queryRegionalRoute(
-        profile, content, MapDefinitionId{"map.raid.frontier_exchange"});
-    const std::string routeSummary = fmt::format(
-        "CURRENT ONE-WAY ROUTES | RIVERSIDE {} | ASHWORKS {} | FRONTIER {} MIN",
-        riverside.travelMinutes,
-        industrial.travelMinutes,
-        frontier.travelMinutes);
-    uiTextRenderer_.render(
-        renderer_, 300.0F, 650.0F, routeSummary.c_str());
-    uiTextRenderer_.render(
-        renderer_, 300.0F, 672.0F,
-        "OUTPOSTS HAVE NO STORAGE OR SERVICES | ESC BACK");
-    if (!uiMessage_.empty())
-    {
-        SDL_SetRenderDrawColor(renderer_, 224, 218, 152, 255);
-        uiTextRenderer_.render(
-            renderer_, 300.0F, 694.0F, uiMessage_.c_str());
     }
 }
 

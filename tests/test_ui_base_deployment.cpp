@@ -45,7 +45,7 @@ struct UiBaseDeploymentTestAccess {
     static void pause(App &a) { a.pauseMenu_.open(); }
     static void resume(App &a) { a.pauseMenu_.close(); }
     static void closeInventory(App &a) { a.closeInventory(); }
-    static SDL_FRect oldRegional(App &a) { return a.raidRegionalOperationsButton(); }
+    static SDL_FRect oldRegional(App &) { return {700,184,200,34}; } // Removed legacy hotspot.
     static SDL_FRect oldLost(App &a) { return a.raidLostRecordsButton(); }
     static void attach(App &a, SDL_Renderer *r, float scale) {
         a.renderer_ = r; ASSERT_TRUE(a.uiTextRenderer_.initialize(r)); a.uiTextRenderer_.setRasterScale(scale);
@@ -498,7 +498,8 @@ TEST_F(UiBaseDeploymentTest, OriginalSubpageHotspotsAreNotInterceptedByTheNewPag
     ASSERT_TRUE(profile().recoveryTask);
     click(center(uiLostRecoveryControlRect(UiLostRecoveryControl::ConfirmCancel))); EXPECT_FALSE(profile().recoveryTask);
     click(center(uiLostRecoveryControlRect(UiLostRecoveryControl::Close))); ASSERT_FALSE(A::lost(*app)); control(C::Regional); ASSERT_TRUE(A::regional(*app));
-    A::legacy(*app, center(A::oldRegional(*app))); EXPECT_FALSE(A::regional(*app));
+    A::legacy(*app, center(A::oldRegional(*app))); EXPECT_TRUE(A::regional(*app));
+    click(center(uiRegionalOperationsControlRect(UiRegionalOperationsControl::Close))); EXPECT_FALSE(A::regional(*app));
 }
 
 TEST_F(UiBaseDeploymentTest, OrdinaryUiRefreshAndResetDoNotClearARegionalConfirmation) {

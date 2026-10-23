@@ -501,6 +501,9 @@ add_library(raidline_sdl_client STATIC
     src/ui_foundation.h
     src/app_ui_foundation.cpp
     src/app_ui_weapon_components.cpp
+    src/app_ui_regional_operations.cpp
+    src/ui_regional_operations_presentation.cpp
+    src/ui_regional_operations_presentation.h
     src/app_ui_lost_recovery.cpp
     src/ui_lost_recovery_presentation.cpp
     src/ui_lost_recovery_presentation.h
@@ -1039,3 +1042,4 @@ raidline_add_test(UiBaseDormitoryTest tests/test_ui_base_dormitory.cpp raidline:
 raidline_add_test(UiBaseAllocationTest tests/test_ui_base_allocation.cpp raidline::sdl_client)
 raidline_add_test(UiBaseDeploymentTest tests/test_ui_base_deployment.cpp raidline::sdl_client)
 raidline_add_test(UiLostRecoveryTest tests/test_ui_lost_recovery.cpp raidline::sdl_client)
+raidline_add_test(UiRegionalOperationsTest tests/test_ui_regional_operations.cpp raidline::sdl_client)

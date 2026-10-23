@@ -1,15 +1,70 @@
-# 当前：失物记录与寻回界面 v1 已验收，正在交付
+# 当前：区域路线与基地行动界面 v1 已验收，正在交付
 
-用户已验收候选 **1b0c6c638de5**，并明确授权提交、推送和合并。本轮只交付这一候选，不启动下一项开发。
+用户已验收候选 **112b77113765**，并授权提交、推送和合并。当前正在交付；本轮不启动下一项开发。
 
-- task_id：ui-lost-recovery；plan_version：RL-UI-LOST-RECOVERY-v1；state：accepted_pending_delivery；pending_request：无。
-- candidate_id 与 accepted_candidate_id：RL-UI-LOST-RECOVERY-v1-local-1b0c6c638de5；acceptance_source：2026-10-22 主控直接人类原文“验收通过，请完成提交、推送和合并。”。
-- 冻结源码、程序、入口及原修改已核对。Windows本地完整2507/2507、专项154/154和原五项3ms通过；本次准确提交的PR与main双平台CI待执行。
-- 分支codex/ui-lost-recovery-v1，baseline／HEAD58a2ac27c8d366ba3796d92d77c819b370518408。只交付12项源码／测试／构建与3项记录，保留19份无关脏文档和五工作区原修改。
-- [任务记录](../exec-plans/active/ui-lost-recovery-v1.md)保留验收来源、实际Git／CI进度和保护证据。未启动游戏或访问真实存档。
+本轮不安排或启动下一任务。
+
+- task_id：ui-regional-operations；plan_version：RL-UI-REGIONAL-OPERATIONS-v1；state：accepted_pending_delivery；pending_request：无。
+- candidate_id 与 accepted_candidate_id：RL-UI-REGIONAL-OPERATIONS-v1-local-112b77113765；acceptance_source：2026-10-23 主控直接人类原文“区域路线与基地行动界面 v1 验收通过，请完成提交、推送和合并。”。
+- 仅交付13项；21份无关脏文档及五工作区其他修改保持。已验收程序、资源、存档规则和桌面 **Project Raidline Debug** 未变；未启动游戏。
+- [任务记录](../exec-plans/active/ui-regional-operations-v1.md)保留验收、Git、双平台CI和保护证据。
 
 <details>
-<summary>验收前与历史记录</summary>
+<summary>验收候选与前序历史</summary>
+
+# 当前：区域路线与基地行动界面统一 v1 待验收
+
+**候选 112b77113765 已完成并冻结。** 区域页已整理为“路线与哨所、基地与迁移、外围清剿”三个标签；操作独立，原收费、时间、驻军和结算规则保持。
+
+继续使用原桌面 **Project Raidline Debug**，按[简短试玩清单](../acceptance/ui-regional-operations-v1.md)验收。
+
+- task_id：ui-regional-operations；plan_version：RL-UI-REGIONAL-OPERATIONS-v1；state：waiting_human_acceptance；pending_request：无。
+- candidate_id：RL-UI-REGIONAL-OPERATIONS-v1-local-112b77113765；accepted_candidate_id、acceptance_source：无。approval_source：2026-10-22主控直接人类原文“同意 RL-UI-REGIONAL-OPERATIONS-v1，请按方案实施，保留已验收的 UI 和玩法行为、原存档、固定测试入口及3ms性能门槛，完成后提供简洁的验收清单，暂不提交、推送或合并。”。
+- Windows Debug全目标构建、专项214/214、完整2548/2548、原五项3ms通过。原2507项全保留，新增41项；78张中英文三尺寸离屏图已审查。
+- 分支codex/ui-regional-operations-v1；baseline／HEAD 8a086f435345deff312ac4a00b955eaab2d28c9f；未提交候选以源码与程序指纹识别，不把HEAD当作已包含新代码。
+- 原存档规则、资源、固定入口和五工作区其他修改保持。未启动游戏、访问真实存档、提交、推送或合并；未运行新远端CI，等待当前候选人工验收。
+- [任务记录](../exec-plans/active/ui-regional-operations-v1.md)保留实际范围、检查和回滚证据。
+
+<details>
+<summary>已批准方案与前序历史</summary>
+
+以下“待批准／未实施”是历史状态，当前以本页上方为准。
+
+# 当前：区域路线与基地行动界面统一 v1 待批准
+
+策划已指定 **RL-UI-REGIONAL-OPERATIONS-v1**，主控已核查真实代码。拟把区域旧页整理为“路线与哨所、基地与迁移、外围清剿”三个标签，分别说明条件、耗时和操作影响。
+
+具体范围、保留规则和验收办法见[开发方案](../exec-plans/active/ui-regional-operations-v1.md)。**本轮尚未实施，等待用户批准。** 前一失物记录与寻回界面v1保持已交付。
+
+- task_id：ui-regional-operations；plan_version：RL-UI-REGIONAL-OPERATIONS-v1；state：waiting_plan_approval；pending_request：无。
+- approval_source：无实施批准。本轮直接人类原文“请协调策划线程安排下一步UI优化任务，并给出具体开发方案。”，仅授权协调和准备方案。
+- candidate_id、accepted_candidate_id、acceptance_source：无新候选。原已验收程序、桌面Project Raidline Debug、源码、资源、存档规则和其他未提交修改保持。
+- 策划原生请求MAIN-UI-NEXT-20261022-AFTER-LOST-RECOVERY-01已收到完整匹配结果；实际主线8a086f4与当前68f6168同树，已合并且双平台CI通过。这是依赖基线，不是新方案的验证。
+- 本轮只做只读核查、策划协调和计划记录；未切分支、构建、测试、启动游戏、访问真实存档、提交、推送或合并。
+
+<details>
+<summary>已交付与前序历史</summary>
+
+# 当前：失物记录与寻回界面 v1 已交付
+
+已提交并推送`68f6168`，[PR189](https://github.com/Disthinker/Project-Raidline/pull/189)已普通合并为`8a086f4`。PR及合并后main的Windows／Ubuntu均各2507/2507通过，原五项3ms检查全部通过。
+
+策划已只读确认交付；本轮未安排或启动下一任务。
+
+原桌面 **Project Raidline Debug**、已验收程序和其他未提交修改保持。[任务记录](../exec-plans/active/ui-lost-recovery-v1.md)保留完整交付证据。
+
+<details>
+<summary>本次任务身份与授权</summary>
+
+- task_id：ui-lost-recovery；plan_version：RL-UI-LOST-RECOVERY-v1；state：delivered；pending_request：无。
+- 已验收候选：RL-UI-LOST-RECOVERY-v1-local-1b0c6c638de5；acceptance_source：2026-10-22主控直接人类原文“验收通过，请完成提交、推送和合并。”。
+
+</details>
+
+<details>
+<summary>验收候选与前序历史</summary>
+
+以下“待验收／未提交”均为历史阶段，当前状态以本页上方为准。
 
 # 当前：行动失物记录与寻回界面 v1 待验收
 
@@ -1491,6 +1546,12 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 ## 2026-10-19 供应与回收界面 v1
 
 当前任务：RL-UI-BASE-SUPPLY-v1；用户已批准，状态 in_progress。在 UI 开发目录的 codex/ui-base-supply-v1 分支实施。范围和授权见对应 ExecPlan。禁止提交、推送、合并和启动游戏。
+
+</details>
+
+</details>
+
+</details>
 
 </details>
 
