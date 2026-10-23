@@ -38,6 +38,7 @@
 #include "ui_base_allocation_presentation.h"
 #include "ui_base_deployment_presentation.h"
 #include "ui_lost_recovery_presentation.h"
+#include "ui_regional_operations_presentation.h"
 #include "weapon_supply_projection.h"
 
 enum class MainMenuCommand
@@ -168,6 +169,7 @@ private:
     friend struct UiBaseAllocationTestAccess;
     friend struct UiBaseDeploymentTestAccess;
     friend struct UiLostRecoveryTestAccess;
+    friend struct UiRegionalOperationsTestAccess;
     friend struct UiFoundationTestAccess;
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
@@ -240,6 +242,17 @@ private:
     void resetLostRecoveryUi();
     void refreshLostRecoveryUi(bool force = false);
     void handleLostRecoveryEvent(const UiLostRecoveryEvent &);
+    UiRegionalOperationsState regionalUi_;
+    UiRegionalOperationsProjection regionalProjection_;
+    std::optional<ProfileRevision> regionalProjectionRevision_;
+    std::string regionalViewKey_, regionalFeedback_;
+    std::uint64_t regionalProjectionGeneration_{};
+    std::vector<UiRegionalOperationsEvent> pendingRegionalEvents_;
+    void resetRegionalOperationsUi();
+    void refreshRegionalOperationsUi(bool force = false);
+    void updateRegionalOperationsUi();
+    void handleRegionalOperationsEvent(const UiRegionalOperationsEvent &);
+    void openRegionalConstruction(bool reserve);
     UiDeploymentState deploymentUi_;
     UiDeploymentProjection deploymentProjection_;
     std::optional<ProfileRevision> deploymentProjectionRevision_;
@@ -570,14 +583,7 @@ private:
         std::size_t index) const noexcept;
     [[nodiscard]] SDL_FRect raidMapNextButton() const noexcept;
     [[nodiscard]] SDL_FRect raidLostRecordsButton() const noexcept;
-    [[nodiscard]] SDL_FRect raidRegionalOperationsButton() const noexcept;
-    [[nodiscard]] SDL_FRect regionalBaseSiteClearanceButton() const noexcept;
-    [[nodiscard]] SDL_FRect regionalFacilityReserveButton() const noexcept;
-    [[nodiscard]] SDL_FRect regionalBaseSiteFeatureButton() const noexcept;
-    [[nodiscard]] SDL_FRect regionalBasePerimeterSweepButton() const noexcept;
     [[nodiscard]] SDL_FRect baseAutoDefenseButton() const noexcept;
-    [[nodiscard]] SDL_FRect regionalOutpostActionButton(
-        std::size_t index) const noexcept;
     void processEvents();
     void update(float deltaTime);
 
