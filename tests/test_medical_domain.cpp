@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "alpha_content_ids.h"
+#include "base_manufacturing_domain.h"
 #include "medical_domain.h"
 
 namespace
@@ -195,4 +196,79 @@ TEST(MedicalDomainTest, ContinuousHealingConsumesChargeBeforeApplyingHealth)
     EXPECT_EQ(
         profile.assets.find(medkit)->remainingCharges,
         chargesBefore - 1U);
+}
+
+TEST(MedicalDomainTest, ManufacturingOutputRejectsUseAndContinuousHealing)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("reserved-medical", content);
+    profile.currentHealth = 40;
+    const ItemDefinition &input = content.item(
+        ItemDefinitionId{"item.loot.first_aid_stock"});
+    const auto origin = findFirstProfileFit(
+        profile, content, ProfileContainerId::stash(), input,
+        ItemOrientation::Degrees0);
+    ASSERT_TRUE(origin.has_value());
+    static_cast<void>(profile.assets.create(
+        input, StoredAssetLocation{ProfileContainerId::stash(), *origin}));
+    const BaseManufacturingReceipt started = executeStartBaseManufacturing(
+        profile, content,
+        StartBaseManufacturingCommand{BaseManufacturingRecipeDefinitionId{
+            "base_manufacturing.medkit_alpha_repack"}},
+        CommandContext{profile.revision, "reserve-medical-output"});
+    ASSERT_TRUE(started.succeeded) << started.message;
+    ASSERT_TRUE(started.outputAssetId.has_value());
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+    const AssetInstanceId output = *started.outputAssetId;
+    const std::uint64_t before = profileStateFingerprint(profile);
+
+    for (MedicalAccess access : {
+             MedicalAccess::AnyOwned, MedicalAccess::CarriedOnly})
+    {
+        const MedicalUsePlan plan = queryMedicalUse(
+            profile, content, output, access);
+        EXPECT_FALSE(plan.canCommit);
+        EXPECT_EQ(plan.error, DomainErrorCode::IllegalDestination);
+        EXPECT_EQ(profileStateFingerprint(profile), before);
+    }
+
+    const MedicalUseReceipt use = executeMedicalUse(
+        profile, content, output, MedicalAccess::AnyOwned,
+        CommandContext{profile.revision, "use-reserved-output"});
+    EXPECT_FALSE(use.succeeded);
+    EXPECT_EQ(use.error, DomainErrorCode::IllegalDestination);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+
+    const MedicalUseReceipt begin = beginContinuousHealing(
+        profile, content, output, MedicalAccess::AnyOwned,
+        CommandContext{profile.revision, "begin-reserved-healing"});
+    EXPECT_FALSE(begin.succeeded);
+    EXPECT_EQ(begin.error, DomainErrorCode::IllegalDestination);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+}
+
+TEST(MedicalDomainTest, OwnedStashMedkitQueryIsReadOnlyAndStillHeals)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("owned-medical", content);
+    profile.currentHealth = 40;
+    const AssetInstanceId medkit = findAsset(profile, alpha_content::medkit);
+    ASSERT_NE(medkit, 0U);
+    const std::uint64_t before = profileStateFingerprint(profile);
+
+    const MedicalUsePlan plan = queryMedicalUse(
+        profile, content, medkit, MedicalAccess::AnyOwned);
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_EQ(plan.effect, MedicalUseEffect::RestoreHealth);
+    EXPECT_EQ(plan.durationMs, 5000U);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+
+    const MedicalUseReceipt use = executeMedicalUse(
+        profile, content, medkit, MedicalAccess::AnyOwned,
+        CommandContext{profile.revision, "use-owned-medkit"});
+    ASSERT_TRUE(use.succeeded) << use.message;
+    EXPECT_EQ(use.healedAmount, 30);
+    EXPECT_EQ(profile.currentHealth, 70);
+    ASSERT_NE(profile.assets.find(medkit), nullptr);
+    EXPECT_EQ(profile.assets.find(medkit)->remainingCharges, 2U);
 }

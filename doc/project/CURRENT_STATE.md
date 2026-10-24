@@ -1,3 +1,16 @@
+# 当前：野战医疗补给分装 v1 已通过人工验收
+
+**用户已验收此功能，并明确授权提交、推送与合并。** 本任务不继续开展UI专项，也不自动启动下一功能。
+
+- task_id：`base-field-medical-supplies-v1`；plan_version：`RL-BASE-FIELD-MEDICAL-SUPPLIES-v1`；state：`accepted`。
+- accepted_candidate_id：`RL-BASE-FIELD-MEDICAL-SUPPLIES-v1-local-598d86291dd7`。
+- acceptance_source：2026-10-24本主控线程用户：“野战医疗补给分装 v1 验收通过，请完成提交、推送和合并。”
+- [功能及交付记录](../exec-plans/active/base-field-medical-supplies-v1.md)；[已通过验收清单](../acceptance/base-field-medical-supplies-v1.md)。
+- 同一候选Windows本地完整2734项与原五项3ms通过，原存档、UI、玩法和固定入口保留。准确远端CI及合并状态以对应PR和主控后续记录为准。
+
+<details>
+<summary>上一项及更早记录（历史）</summary>
+
 # 当前：通行许可与凭证撤离已验收，正在交付
 
 **RL-RAID-CREDENTIAL-EXTRACTION-v1 已获用户验收，正在提交、推送并完成双平台CI后合并。** 已验收候选`1d3fae52cc99`保持；桌面 **Project Raidline Debug** 继续使用同一程序。
@@ -1857,6 +1870,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 
 </details>
 
+
+</details>
 
 </details>
 

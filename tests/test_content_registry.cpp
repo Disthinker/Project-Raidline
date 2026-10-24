@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <filesystem>
+#include <iterator>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -125,7 +127,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "raid-credential-extraction-content-69");
+        "base-field-medical-supplies-content-70");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -229,7 +231,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(registry.baseWorkforce().generalFallbackDurationPercent, 150U);
     EXPECT_EQ(registry.baseWorkforce().workshopLevel2DurationPercent, 85U);
     EXPECT_EQ(registry.baseWorkforce().medicalLevel2DurationPercent, 85U);
-    ASSERT_EQ(registry.baseManufacturingRecipes().size(), 4U);
+    ASSERT_EQ(registry.baseManufacturingRecipes().size(), 6U);
     const BaseManufacturingRecipeDefinition &manufacturing =
         registry.baseManufacturingRecipe(
             BaseManufacturingRecipeDefinitionId{
@@ -257,7 +259,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.category, BaseSupplyCategory::Recreation);
     EXPECT_EQ(comfort.requiredContribution, 14U);
     EXPECT_FALSE(comfort.sourceHint.empty());
-    ASSERT_EQ(registry.items().size(), 58U);
+    ASSERT_EQ(registry.items().size(), 59U);
     const auto &light = registry.item(ItemDefinitionId{"item.component.weapon_flashlight_basic"});
     const auto &battery = registry.item(ItemDefinitionId{"item.battery.universal"});
     ASSERT_TRUE(light.weaponLight);
@@ -1962,6 +1964,143 @@ TEST(ContentRegistryTest, BaseManufacturingRejectsRecycleValueCreation)
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(invalid)),
         ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, FieldMedicalRecipesPreserveExistingProductionAndSingleStockCosts)
+{
+    const auto &content = publishedContentRegistry();
+    struct ExpectedRecipe
+    {
+        const char *id;
+        const char *output;
+        std::uint32_t quantity;
+        std::uint32_t minutes;
+        std::vector<BaseManufacturingInputDefinition> inputs;
+    };
+    const ExpectedRecipe expected[]{
+        {"base_manufacturing.weapon_maintenance_kit", "item.maintenance.weapon_kit_basic", 1, 360,
+         {{ItemDefinitionId{"item.loot.scrap_parts"}, 1}, {ItemDefinitionId{"item.loot.electronics"}, 1}}},
+        {"base_manufacturing.ammunition_9x19_standard", "item.ammunition.9mm_basic", 60, 120,
+         {{ItemDefinitionId{"item.loot.scrap_parts"}, 1}, {ItemDefinitionId{"item.loot.electronics"}, 1}}},
+        {"base_manufacturing.ammunition_5_45x39_standard", "item.ammunition.5_45x39_standard", 60, 180,
+         {{ItemDefinitionId{"item.loot.copper_wire_spool"}, 1}, {ItemDefinitionId{"item.loot.electronics"}, 1}}},
+        {"base_manufacturing.ammunition_7_62x51_standard", "item.ammunition.7_62x51_standard", 40, 240,
+         {{ItemDefinitionId{"item.loot.precision_components"}, 1}}},
+        {"base_manufacturing.medkit_alpha_repack", "item.medical.medkit_alpha", 1, 120,
+         {{ItemDefinitionId{"item.loot.first_aid_stock"}, 1}}},
+        {"base_manufacturing.bandage_roll_basic_repack", "item.medical.bandage_roll_basic", 1, 60,
+         {{ItemDefinitionId{"item.loot.first_aid_stock"}, 1}}}};
+    ASSERT_EQ(content.baseManufacturingRecipes().size(), std::size(expected));
+    for (const auto &entry : expected)
+    {
+        SCOPED_TRACE(entry.id);
+        const auto &recipe = content.baseManufacturingRecipe(BaseManufacturingRecipeDefinitionId{entry.id});
+        EXPECT_EQ(recipe.outputItemDefinitionId, ItemDefinitionId{entry.output});
+        EXPECT_EQ(recipe.outputQuantity, entry.quantity);
+        EXPECT_EQ(recipe.durationMinutes, entry.minutes);
+        EXPECT_EQ(recipe.workerCount, 1U);
+        EXPECT_EQ(recipe.inputs, entry.inputs);
+    }
+    const auto &medkit = content.item(alpha_content::medkit);
+    ASSERT_TRUE(medkit.medicalUse);
+    EXPECT_EQ(medkit.maximumCharges, 3U);
+    EXPECT_EQ(medkit.medicalUse->effect, MedicalItemEffect::RestoreHealth);
+    EXPECT_EQ(medkit.medicalUse->effectMagnitude, 30U);
+    EXPECT_EQ(medkit.medicalUse->actionDurationMs, 5000U);
+    EXPECT_EQ(medkit.marketBuyPrice, 60U);
+    EXPECT_EQ(medkit.marketRecyclePrice, 15U);
+}
+
+TEST(ContentRegistryTest, FieldBandageRollPublishesThreeLightBleedingUsesAndExistingArt)
+{
+    const auto &content = publishedContentRegistry();
+    const auto &roll = content.item(ItemDefinitionId{"item.medical.bandage_roll_basic"});
+    const auto &bandage = content.item(alpha_content::bandage);
+    EXPECT_EQ(roll.id, ItemId::Count);
+    EXPECT_EQ(roll.category, ItemCategory::Medical);
+    EXPECT_EQ(roll.displayName, "Bandage Roll");
+    EXPECT_EQ(roll.inventoryWidthCells, 1);
+    EXPECT_EQ(roll.inventoryHeightCells, 1);
+    EXPECT_FALSE(roll.canRotate);
+    EXPECT_EQ(roll.maxStackSize, 1U);
+    EXPECT_EQ(roll.unitWeightGrams, 300U);
+    EXPECT_EQ(roll.maximumCharges, 3U);
+    ASSERT_TRUE(roll.medicalUse);
+    EXPECT_EQ(roll.medicalUse->effect, MedicalItemEffect::StopLightBleeding);
+    EXPECT_EQ(roll.medicalUse->effectMagnitude, 1U);
+    EXPECT_EQ(roll.medicalUse->actionDurationMs, 2000U);
+    EXPECT_TRUE(roll.medicalUse->slowMovement);
+    EXPECT_TRUE(roll.visualAssetsPublished);
+    EXPECT_EQ(roll.inventoryTexturePath, bandage.inventoryTexturePath);
+    EXPECT_EQ(roll.worldTexturePath, bandage.worldTexturePath);
+    ASSERT_TRUE(roll.baseContribution);
+    EXPECT_EQ(roll.baseContribution->hygiene, 15U);
+    EXPECT_EQ(roll.baseContribution->food, 0U);
+    EXPECT_EQ(roll.baseContribution->morale, 0U);
+    EXPECT_EQ(roll.baseContribution->security, 0U);
+}
+
+TEST(ContentRegistryTest, FieldBandageRollIsManufacturedOnlyAndCannotIncreaseRecycleValue)
+{
+    const auto &content = publishedContentRegistry();
+    const ItemDefinitionId rollId{"item.medical.bandage_roll_basic"};
+    const auto &roll = content.item(rollId);
+    EXPECT_EQ(roll.marketBuyPrice, 0U);
+    EXPECT_EQ(roll.marketRecyclePrice, 15U);
+    const auto &stock = content.item(ItemDefinitionId{"item.loot.first_aid_stock"});
+    EXPECT_EQ(stock.marketRecyclePrice, 35U);
+    ASSERT_TRUE(stock.baseContribution);
+    EXPECT_EQ(stock.baseContribution->hygiene, 20U);
+    EXPECT_LT(roll.marketRecyclePrice, stock.marketRecyclePrice);
+    EXPECT_EQ(std::find(content.fixedSupplyItemIds().begin(), content.fixedSupplyItemIds().end(), rollId),
+              content.fixedSupplyItemIds().end());
+    for (const auto &table : content.lootTables())
+        for (const auto &entry : table.entries)
+            EXPECT_NE(entry.itemDefinitionId, rollId) << table.id.value();
+    for (const auto &map : content.maps())
+        for (const auto &entry : map.groundItems)
+            EXPECT_NE(entry.itemDefinitionId, rollId) << map.id.value();
+    EXPECT_EQ(std::count_if(content.baseManufacturingRecipes().begin(), content.baseManufacturingRecipes().end(),
+        [&](const auto &recipe) { return recipe.outputItemDefinitionId == rollId; }), 1);
+}
+
+TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDefinitions)
+{
+    const auto original = hospitalContentCandidateJson();
+    ASSERT_EQ(original.at("content_version"), "base-field-medical-supplies-content-70");
+    for (const auto *required : {"fortifications", "enemy_combat_definitions"})
+    {
+        SCOPED_TRACE(required);
+        auto invalid = original;
+        invalid.erase(required);
+        EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid.dump())), ContentRegistryError);
+    }
+    auto invalid = original;
+    auto &spawn = invalid["enemy_deployments"][0]["enemies"][0];
+    spawn.erase("enemy_combat_definition");
+    spawn["maximum_health"] = 3;
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid.dump())), ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, FieldMedicalContentRejectsBrokenRecipeReferencesAndInvalidCharges)
+{
+    const auto original = hospitalContentCandidateJson();
+    const auto recipeIndex = original.at("base_manufacturing").at("recipes").size() - 1;
+    auto invalid = original;
+    invalid["base_manufacturing"]["recipes"][recipeIndex]["inputs"][0]["item"] = "item.loot.missing_first_aid_stock";
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid.dump())), ContentRegistryError);
+    invalid = original;
+    invalid["base_manufacturing"]["recipes"][recipeIndex]["output"]["item"] = "item.medical.missing_bandage_roll";
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid.dump())), ContentRegistryError);
+    invalid = original;
+    for (auto &item : invalid["items"])
+        if (item.at("id") == "item.medical.bandage_roll_basic") item["maximum_charges"] = 0;
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid.dump())), ContentRegistryError);
+    invalid = original;
+    auto &items = invalid["items"];
+    items.erase(std::remove_if(items.begin(), items.end(), [](const auto &item)
+        { return item.at("id") == "item.medical.bandage_roll_basic"; }), items.end());
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid.dump())), ContentRegistryError);
 }
 
 TEST(ContentRegistryTest, FixedMapsPublishDistinctLootRoles)

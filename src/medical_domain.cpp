@@ -255,6 +255,12 @@ MedicalUsePlan queryMedicalUse(
         plan.message = "medical asset does not exist";
         return plan;
     }
+    if (std::holds_alternative<BaseServiceAssetLocation>(asset->location))
+    {
+        plan.error = DomainErrorCode::IllegalDestination;
+        plan.message = "medical asset is reserved by a Base service";
+        return plan;
+    }
     if (access == MedicalAccess::CarriedOnly &&
         !assetIsCarried(profile, medicalAssetId))
     {

@@ -125,7 +125,7 @@ TEST(ProfileStateTest, NewPublishedProfileCreatesLegacyCatalogAndExcludesPurchas
         "published-profile-test", content);
 
     EXPECT_EQ(profile.revision, 1U);
-    // Paid decoys preserve the accepted content-66 bootstrap inventory.
+    // Purchased additions and manufactured rolls preserve the accepted bootstrap inventory.
     EXPECT_EQ(profile.assets.records().size(), 59U);
     EXPECT_EQ(profile.assets.nextAssetId(), 60U);
     EXPECT_TRUE(profile.committedTransactions.contains(
@@ -146,7 +146,8 @@ TEST(ProfileStateTest, NewPublishedProfileCreatesLegacyCatalogAndExcludesPurchas
                     (!entry.second.reliefBatchId.has_value() ||
                      definition.maxStackSize == 1U);
             });
-        if (definition.weaponLight || definition.battery || definition.meleeUse || definition.noiseDecoyUse) {
+        if (definition.weaponLight || definition.battery || definition.meleeUse || definition.noiseDecoyUse ||
+            definition.definitionId == ItemDefinitionId{"item.medical.bandage_roll_basic"}) {
             EXPECT_EQ(stored, profile.assets.records().end()) << definition.definitionId.value();
             continue;
         }

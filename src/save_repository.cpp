@@ -2949,7 +2949,8 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion >= 53 && contentVersion == "weapon-flashlight-battery-content-65") ||
             (schemaVersion >= 54 && contentVersion == "quick-melee-self-defense-content-66") ||
             (schemaVersion >= 54 && contentVersion == "raid-noise-decoy-content-67") ||
-            (schemaVersion >= 56 && contentVersion == "ui-unified-chest-rig-content-68");
+            (schemaVersion >= 56 && contentVersion == "ui-unified-chest-rig-content-68") ||
+            (schemaVersion >= 57 && contentVersion == "raid-credential-extraction-content-69");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -4834,6 +4835,38 @@ SaveWriteResult SaveRepository::save(
         const auto preserved = preserveLayoutMigrationSources(
             validPrimary ? SaveLoadStatus::LoadedPrimary : SaveLoadStatus::RecoveredBackup,
             "credential-extraction-v1");
+        if (!preserved.succeeded)
+        {
+            std::filesystem::remove(temporaryPath_, error);
+            return {false, preserved.message};
+        }
+    }
+    const auto isPreFieldMedicalContentSource = [&](const std::filesystem::path &path, bool valid)
+    {
+        if (!valid || contentVersion != "base-field-medical-supplies-content-70")
+            return false;
+        const auto bytes = readText(path);
+        if (!bytes) return false;
+        try
+        {
+            return Json::parse(*bytes).at("content_version").get<std::string>() !=
+                contentVersion;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    };
+    if (isPreFieldMedicalContentSource(primaryPath_, validPrimary) ||
+        isPreFieldMedicalContentSource(backupPath_, validBackup))
+    {
+        // This content upgrade deliberately keeps schema 57. Its old definitions
+        // still need byte-exact rollback sources before either rolling file is
+        // replaced, including recovery from an invalid primary. Once both valid
+        // sources use content 70, ordinary saves no longer create archives.
+        const auto preserved = preserveLayoutMigrationSources(
+            validPrimary ? SaveLoadStatus::LoadedPrimary : SaveLoadStatus::RecoveredBackup,
+            "field-medical-supplies-v1");
         if (!preserved.succeeded)
         {
             std::filesystem::remove(temporaryPath_, error);
