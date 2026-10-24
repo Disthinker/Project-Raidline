@@ -276,6 +276,11 @@ std::size_t populatePublishedWarehouseCatalog(
     definitions.reserve(content.items().size());
     for (const ItemDefinition &definition : content.items())
     {
+        // Manufactured medical supplies are not automatic catalog grants.
+        if (definition.definitionId.value() == "item.medical.bandage_roll_basic")
+        {
+            continue;
+        }
         // Tactical equipment is purchased, never an automatic catalog grant.
         if (!definition.weaponLight && !definition.battery && !definition.meleeUse && !definition.noiseDecoyUse) definitions.push_back(&definition);
     }
@@ -2303,6 +2308,8 @@ ProfileValidationResult validateProfileState(
             return {false, "Base manufacturing recipe is unknown"};
         }
         const AssetRecord *output = profile.assets.find(order.outputAssetId);
+        const ItemDefinition &outputDefinition = content.item(
+            recipe->outputItemDefinitionId);
         const auto *outputService = output != nullptr
             ? std::get_if<BaseServiceAssetLocation>(&output->location)
             : nullptr;
@@ -2374,6 +2381,8 @@ ProfileValidationResult validateProfileState(
             outputService->jobId != order.jobId ||
             output->definitionId != recipe->outputItemDefinitionId ||
             output->quantity != recipe->outputQuantity ||
+            (outputDefinition.medicalUse.has_value() &&
+             output->remainingCharges != outputDefinition.maximumCharges) ||
             !claimedServiceAssetIds.insert(order.outputAssetId).second)
         {
             return {false, "Base manufacturing order is invalid"};

@@ -254,6 +254,13 @@ InventoryReceipt applyMove(
             "asset does not exist",
             candidate.revision);
     }
+    if (std::holds_alternative<BaseServiceAssetLocation>(source->location))
+    {
+        return failure(
+            DomainErrorCode::IllegalDestination,
+            "asset is reserved by a Base service",
+            candidate.revision);
+    }
     if (lostRaidRecordForAsset(candidate, source->instanceId).has_value())
     {
         return failure(
@@ -497,6 +504,13 @@ InventoryReceipt applyEquip(
         return failure(
             DomainErrorCode::MissingAsset,
             "asset does not exist",
+            candidate.revision);
+    }
+    if (std::holds_alternative<BaseServiceAssetLocation>(source->location))
+    {
+        return failure(
+            DomainErrorCode::IllegalDestination,
+            "asset is reserved by a Base service",
             candidate.revision);
     }
     if (lostRaidRecordForAsset(candidate, source->instanceId).has_value())

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-credential-extraction-content-69",
+  "content_version": "base-field-medical-supplies-content-70",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -258,6 +258,26 @@
         "output": {"item": "item.ammunition.7_62x51_standard", "quantity": 40},
         "worker_count": 1,
         "duration_minutes": 240
+      },
+      {
+        "id": "base_manufacturing.medkit_alpha_repack",
+        "display_name": "Basic Medkit Repacking",
+        "inputs": [
+          {"item": "item.loot.first_aid_stock", "quantity": 1}
+        ],
+        "output": {"item": "item.medical.medkit_alpha", "quantity": 1},
+        "worker_count": 1,
+        "duration_minutes": 120
+      },
+      {
+        "id": "base_manufacturing.bandage_roll_basic_repack",
+        "display_name": "Bandage Roll Repacking",
+        "inputs": [
+          {"item": "item.loot.first_aid_stock", "quantity": 1}
+        ],
+        "output": {"item": "item.medical.bandage_roll_basic", "quantity": 1},
+        "worker_count": 1,
+        "duration_minutes": 60
       }
     ]
   },
@@ -1225,6 +1245,30 @@
       "market_recycle_price": 5,
       "base_contribution": {"hygiene": 5},
       "maximum_charges": 1,
+      "medical_use": {
+        "effect": "stop_light_bleeding",
+        "action_duration_ms": 2000,
+        "effect_magnitude": 1,
+        "slow_movement": true
+      }
+    },
+    {
+      "id": "item.medical.bandage_roll_basic",
+      "display_name": "Bandage Roll",
+      "category": "medical",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 300,
+      "visual_assets_published": true,
+      "world": {
+        "render_size": {"x": 64, "y": 64},
+        "pickup_size": {"x": 72, "y": 72}
+      },
+      "inventory_texture": "items/inventory/item_medkit_basic_v1_128x128.png",
+      "world_texture": "items/world/item_medkit_basic_v1_64x64.png",
+      "market_recycle_price": 15,
+      "base_contribution": {"hygiene": 15},
+      "maximum_charges": 3,
       "medical_use": {
         "effect": "stop_light_bleeding",
         "action_duration_ms": 2000,

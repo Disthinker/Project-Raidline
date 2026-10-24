@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "alpha_content_ids.h"
+#include "base_manufacturing_domain.h"
 #include "raid_action.h"
 
 namespace
@@ -189,6 +190,96 @@ TEST(RaidActionTest, RaidHealRequiresCarriedMedkitAndConsumesOneCharge)
     EXPECT_EQ(profile.currentHealth, 70);
     ASSERT_NE(profile.assets.find(medkits[0]), nullptr);
     EXPECT_EQ(profile.assets.find(medkits[0])->remainingCharges, 2U);
+}
+
+TEST(RaidActionTest, LegacyHealRejectsMedicineWithoutRestoreHealthEffect)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("legacy-medical-effect", content);
+    profile.currentHealth = 40;
+    ASSERT_TRUE(applyWoundRoll(
+        profile.medicalStatus,
+        WoundRollCommand{WoundSource::Scratch, 0, 15000}).applied);
+    const ItemDefinitionId rollId{"item.medical.bandage_roll_basic"};
+    const ItemDefinition &roll = content.item(rollId);
+    const auto origin = findFirstProfileFit(
+        profile, content, ProfileContainerId::stash(), roll,
+        ItemOrientation::Degrees0);
+    ASSERT_TRUE(origin.has_value());
+    static_cast<void>(profile.assets.create(
+        roll, StoredAssetLocation{ProfileContainerId::stash(), *origin}));
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+
+    for (const ItemDefinitionId &definitionId : {
+             alpha_content::bandage, alpha_content::tourniquet,
+             alpha_content::painkiller, rollId})
+    {
+        const auto matching = assets(profile, definitionId);
+        ASSERT_FALSE(matching.empty());
+        const std::uint64_t before = profileStateFingerprint(profile);
+        const HealReceipt rejected = executeHeal(
+            profile, content, matching.front(), HealAccess::AnyOwned,
+            CommandContext{profile.revision, "legacy-non-healing-medical"});
+        EXPECT_FALSE(rejected.succeeded) << definitionId.value();
+        EXPECT_EQ(rejected.error, DomainErrorCode::InvalidQuantity);
+        EXPECT_EQ(profileStateFingerprint(profile), before);
+    }
+}
+
+TEST(RaidActionTest, LegacyHealRejectsManufacturingOutputWithoutMutation)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("legacy-reserved-heal", content);
+    profile.currentHealth = 40;
+    const ItemDefinition &input = content.item(
+        ItemDefinitionId{"item.loot.first_aid_stock"});
+    const auto origin = findFirstProfileFit(
+        profile, content, ProfileContainerId::stash(), input,
+        ItemOrientation::Degrees0);
+    ASSERT_TRUE(origin.has_value());
+    static_cast<void>(profile.assets.create(
+        input, StoredAssetLocation{ProfileContainerId::stash(), *origin}));
+    const BaseManufacturingReceipt started = executeStartBaseManufacturing(
+        profile, content,
+        StartBaseManufacturingCommand{BaseManufacturingRecipeDefinitionId{
+            "base_manufacturing.medkit_alpha_repack"}},
+        CommandContext{profile.revision, "reserve-legacy-healing-output"});
+    ASSERT_TRUE(started.succeeded) << started.message;
+    ASSERT_TRUE(started.outputAssetId.has_value());
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+    const std::uint64_t before = profileStateFingerprint(profile);
+
+    const HealReceipt rejected = executeHeal(
+        profile, content, *started.outputAssetId, HealAccess::AnyOwned,
+        CommandContext{profile.revision, "legacy-heal-reserved-output"});
+    EXPECT_FALSE(rejected.succeeded);
+    EXPECT_EQ(rejected.error, DomainErrorCode::IllegalDestination);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+}
+
+TEST(RaidActionTest, LegacyHealPreservesOwnedMedkitHealingAndRetryBehavior)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("legacy-owned-heal", content);
+    profile.currentHealth = 90;
+    const auto medkits = assets(profile, alpha_content::medkit);
+    ASSERT_FALSE(medkits.empty());
+    const CommandContext command{profile.revision, "legacy-owned-medkit"};
+
+    const HealReceipt healed = executeHeal(
+        profile, content, medkits.front(), HealAccess::AnyOwned, command);
+    ASSERT_TRUE(healed.succeeded) << healed.message;
+    EXPECT_EQ(healed.healedAmount, 10);
+    EXPECT_EQ(profile.currentHealth, 100);
+    ASSERT_NE(profile.assets.find(medkits.front()), nullptr);
+    EXPECT_EQ(profile.assets.find(medkits.front())->remainingCharges, 2U);
+    const std::uint64_t after = profileStateFingerprint(profile);
+
+    const HealReceipt repeated = executeHeal(
+        profile, content, medkits.front(), HealAccess::AnyOwned, command);
+    EXPECT_TRUE(repeated.succeeded);
+    EXPECT_TRUE(repeated.alreadyCommitted);
+    EXPECT_EQ(profileStateFingerprint(profile), after);
 }
 
 TEST(RaidActionTest, MagazineUnloadPrefersBackpackAndRejectsStashAsset)

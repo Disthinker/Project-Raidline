@@ -308,12 +308,17 @@ HealReceipt executeHeal(
     AssetRecord *medkit = candidate.assets.findMutable(medkitAssetId);
     if (medkit == nullptr)
         return fail(DomainErrorCode::MissingAsset, "Medkit does not exist");
+    if (std::holds_alternative<BaseServiceAssetLocation>(medkit->location))
+        return fail(DomainErrorCode::IllegalDestination,
+                    "Medkit is reserved by a Base service");
     const ItemDefinition &definition = content.item(medkit->definitionId);
     if (access == HealAccess::CarriedOnly &&
         !assetIsCarried(candidate, medkitAssetId))
         return fail(DomainErrorCode::IllegalDestination,
                     "Medkit is not carried into the Raid");
     if (definition.category != ItemCategory::Medical ||
+        !definition.medicalUse.has_value() ||
+        definition.medicalUse->effect != MedicalItemEffect::RestoreHealth ||
         medkit->remainingCharges == 0)
         return fail(DomainErrorCode::InvalidQuantity,
                     "Medkit has no usable charge");

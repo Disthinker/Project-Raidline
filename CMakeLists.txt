@@ -850,6 +850,14 @@ raidline_add_test(
     tests/test_base_manufacturing_domain.cpp
     raidline::domain)
 raidline_add_test(
+    FieldMedicalSuppliesTest
+    tests/test_base_field_medical_supplies.cpp
+    raidline::sdl_client)
+raidline_add_test(
+    FieldMedicalSaveTest
+    tests/test_field_medical_save.cpp
+    raidline::services)
+raidline_add_test(
     BaseWorkforceDomainTest
     tests/test_base_workforce_domain.cpp
     raidline::domain)
