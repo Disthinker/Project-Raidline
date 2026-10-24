@@ -1,3 +1,52 @@
+# 当前：UI已验收，正在补齐CI验证
+
+**游戏程序保持已验收版本。** 首轮Windows检查通过，Ubuntu发现旧测试的文字采样位置过期；仅同步两处测试坐标，继续同一PR交付。
+
+- 本地重新构建、聚焦2项及完整2644项检查通过。
+- [PR #192](https://github.com/Disthinker/Project-Raidline/pull/192)等待新提交的双平台检查，通过后合并。
+- 原桌面入口、存档及已验收UI和玩法保持；交付后结束UI专项，不启动下一任务。
+
+<details>
+<summary>测试兼容修正与交付证据</summary>
+
+- state：accepted_ci_pending；task_id：ui-final-consolidation；fix_plan_version：RL-UI-BASE-DECLUTTER-v1；CI兼容修正：RL-UI-TEST-RANGE-SAMPLING-COMPAT-v1。
+- 人类验收与交付授权：2026-10-24主控直接原文“基地显示减负 v1 复验通过，请完成提交、推送和合并。”；已验收产品候选`RL-UI-BASE-DECLUTTER-v1-local-544b4a735d34`保持。
+- 同一获批UI收官范围内，按AGENTS允许的普通测试失败修正，仅将原测试采样y126→118、568→560同步到已验收布局；20px高度、宽度、亮度>150、像素数>30、双语与其余断言保持，没有降低门槛或skip。没有新增或模拟人类批准，没有改动正式界面、玩法、存档、构建或CI配置。
+- 原157份测试现为156份逐字节不变，1份仅两坐标变化；不能继续把157全不变写为当前事实。原五项3ms负载、计时、阈值和断言全部不变。
+- 首轮[PR CI 40071692174](https://github.com/Disthinker/Project-Raidline/actions/runs/40071692174)准确提交1aacebf：Windows2644/2644通过，Ubuntu2643/2644，唯一失败为旧测试场文字采样。两平台原五项3ms通过；首轮整体为failure，不能当作交付通过。
+- Linux已有SDL固定8×8字形，新文字118..125和560..567不落在旧126/568采样带；Windows字形较高所以原检查可过。已核对不是文字丢失、颜色变暗或字体加载失败；没有为通过检查调整游戏画面。
+- 当前CI测试兼容候选`RL-UI-BASE-DECLUTTER-v1-ci-test-621613274734`；全源码/测试488文件指纹`621613274734167b1ce3de373ad65ad4b7357633c16d3cdf21d7d2bb7282e641`。相对人类验收仅原测试一文件改变，其余487份源码逐字节相同；正式程序仍为`d4caf356cbe3374415b52d995614d014665c81bccf6769847ecb45d02ca7c5ee`。产品验收仍绑定同一程序，未要求无变化游戏重新验收。
+- Windows构建4仅重建DeveloperRangeUiTest，聚焦2/2、最新完整2644/2644通过，0失败/跳过，耗时519.73秒；五项3ms实际通过。原程序及其余156份可执行文件不变，资源74、DLL7、固定入口不变。
+- 累计PR范围为原32文件加1份测试，共33文件；本次追加提交仅1份测试和同一3份交付记录。原25份无关文档、预览及五工作区其他修改不提交；Git钩子曾归一化4文档换行，已据事前备份/指纹恢复原字节，不改钩子或配置。
+- 原提交1aacebf已推送，[PR #192](https://github.com/Disthinker/Project-Raidline/pull/192)尚未合并。追加提交后等待新准确HEAD的双平台检查，通过才合并，再核对主线CI。没有启动游戏，也不启动下一任务。
+- 支持证据：`C:\Users\Administrator\Documents\美术资源生成\tmp\ui-base-declutter-v1-20261024\delivery\test-coordinate-compat`；完整full-2.log/xml/results和build-4.log/result在上一级证据目录。原CI日志/行号/哈希保留在delivery/first-ci-review，未覆盖失败记录。
+
+</details>
+
+<details>
+<summary>前序提交、验收、方案与检查历史</summary>
+
+以下旧状态为历史，当前以上方为准。
+
+# 当前：已验收，PR双平台检查中
+
+**当前候选已通过用户复验。** 已验收，PR双平台检查中。
+
+- state：accepted_ci_pending；task_id：ui-final-consolidation；fix_plan_version：RL-UI-BASE-DECLUTTER-v1；parent_plan_version：RL-UI-FINAL-CONSOLIDATION-v1；pending_request：无。
+- accepted_candidate_id：`RL-UI-BASE-DECLUTTER-v1-local-544b4a735d34`；人类验收与远端交付授权：2026-10-24主控直接原文“基地显示减负 v1 复验通过，请完成提交、推送和合并。”。
+- 代码提交`1aacebf1feb211490405d3916805bd5add0a864d`，已推送到codex/ui-final-consolidation-v1；[PR #192](https://github.com/Disthinker/Project-Raidline/pull/192)。仅提交约定32文件，未夹带原25份无关脏文档或预览。
+- PR双平台检查正在运行；通过前不合并。 [PR CI 40071692174](https://github.com/Disthinker/Project-Raidline/actions/runs/40071692174)绑定上述准确提交。尚未合并，合并后继续核对主线双平台CI。
+- 已验收源码488文件SHA256：`544b4a735d34afa76fee258a91967c75e0c8e7fb0b100c56cc2283827cb5125c`；程序SHA256：`d4caf356cbe3374415b52d995614d014665c81bccf6769847ecb45d02ca7c5ee`。原桌面Project Raidline Debug保持，实际开发目录`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`；为保护未提交资料，仍保留当前开发分支，不切换其他工作区。
+- 本地Windows构建、50项UI及2644项全量检查已通过；原157份测试源码、原五项3ms门槛、74份运行资源及7份DLL保持。没有读取真实存档或启动游戏。
+- 本次结束UI专项，不启动下一任务。完整证据见`C:\Users\Administrator\Documents\美术资源生成\tmp\ui-base-declutter-v1-20261024\delivery`；Git钩子曾归一化4份未提交文档的换行，已据原备份逐字节恢复并核对事前哈希，没有修改钩子或配置。
+
+本段为交付进度的本地补记；不为复制CI状态新增提交。
+
+<details>
+<summary>提交时记录及前序方案与检查历史</summary>
+
+以下“正在交付”“待复验”“待批准”均为历史，当前以上方实际结果为准。
+
 # 当前：基地显示减负已验收，正在交付
 
 用户已通过当前候选复验，正在完成提交、推送与合并。交付后结束本轮UI专项。
@@ -1795,6 +1844,10 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 
 </details>
 
+
+</details>
+
+</details>
 
 </details>
 

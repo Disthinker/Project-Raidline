@@ -80,9 +80,9 @@ TEST_F(DeveloperRangeUiTest, ActualPanelTextContrastsWithBackgroundAndButtons)
         Access::paint(*app, language);
         ASSERT_TRUE(SDL_RenderPresent(renderer));
         EXPECT_GT(brightPixels({130, 55, 800, 20}), 30U);  // title
-        EXPECT_GT(brightPixels({130, 126, 800, 20}), 30U); // selected weapon
+        EXPECT_GT(brightPixels({130, 118, 800, 20}), 30U); // selected weapon
         EXPECT_GT(brightPixels({138, 520, 280, 20}), 30U); // grant button
-        EXPECT_GT(brightPixels({130, 568, 850, 20}), 30U); // feedback
+        EXPECT_GT(brightPixels({130, 560, 850, 20}), 30U); // feedback
     }
 }
 
