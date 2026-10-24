@@ -81,6 +81,7 @@ struct UiDeploymentProjection {
     MapDefinitionId selectedMapId;
     std::size_t selectedMapIndex{}, mapPage{}, interiorPage{};
     bool mapValid{};
+    std::optional<bool> credentialUnlocked;
     std::string mapName, difficulty, warning, routeProfile, routeName;
     RaidTravelPreview travel;
     std::array<UiDeploymentIntelligence, kRaidIntelligenceCategoryCount> intelligence;

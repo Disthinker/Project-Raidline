@@ -336,6 +336,7 @@ public:
     [[nodiscard]] InventoryReceipt changeDeviceBattery(DeviceBatteryCommand, std::string transactionId);
     [[nodiscard]] InventoryReceipt toggleWeaponLight();
     void cancelWeaponLightInput() noexcept { lightKeyPending_=false; lightLongPressConsumed_=false; lightKeyHeldSeconds_=0; }
+    void cancelRaidCredentialInteraction() noexcept;
     [[nodiscard]] bool alphaRaidActive() const noexcept;
     [[nodiscard]] bool recoveredAbandonedRaid() const noexcept;
 

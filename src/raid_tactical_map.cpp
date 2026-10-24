@@ -31,7 +31,8 @@ void RaidTacticalMapState::configure(
     std::optional<ContentRect> advancedResourceArea,
     std::vector<Vec2> initialEnemyCenters,
     std::vector<RaidSpecialLocationMapState> specialLocations,
-    std::vector<RaidTacticalObjective> objectives)
+    std::vector<RaidTacticalObjective> objectives,
+    std::optional<ContentRect> credentialExtraction)
 {
     if (!std::isfinite(worldSize.x) || !std::isfinite(worldSize.y) ||
         worldSize.x <= 0.0F || worldSize.y <= 0.0F)
@@ -93,6 +94,7 @@ void RaidTacticalMapState::configure(
     normalExtraction_ = normalExtraction;
     emergencyExtraction_ = emergencyExtraction;
     conditionalExtraction_ = conditionalExtraction;
+    credentialExtraction_ = credentialExtraction;
     advancedResourceArea_ = advancedResourceArea;
     initialEnemyCenters_ = std::move(initialEnemyCenters);
     specialLocations_ = std::move(specialLocations);
@@ -101,6 +103,7 @@ void RaidTacticalMapState::configure(
     normalExtractionDiscovered_ = false;
     emergencyExtractionDiscovered_ = false;
     conditionalExtractionDiscovered_ = false;
+    credentialExtractionDiscovered_ = false;
 }
 
 void RaidTacticalMapState::revealAround(Vec2 worldPosition) noexcept
@@ -159,6 +162,8 @@ void RaidTacticalMapState::revealAround(Vec2 worldPosition) noexcept
         discovered(emergencyExtraction_);
     conditionalExtractionDiscovered_ = conditionalExtractionDiscovered_ ||
         discovered(conditionalExtraction_);
+    credentialExtractionDiscovered_ = credentialExtractionDiscovered_ ||
+        discovered(credentialExtraction_);
     for (RaidSpecialLocationMapState &location : specialLocations_)
     {
         location.discovered = location.discovered ||
@@ -345,6 +350,8 @@ bool RaidTacticalMapState::pointRevealed(Vec2 point) const noexcept
 bool RaidTacticalMapState::extractionVisible(
     RaidMapExtractionKind kind) const noexcept
 {
+    if (kind == RaidMapExtractionKind::Credential && !credentialExtraction_)
+        return false;
     if (hasIntelligence(RaidIntelligenceCategory::Transport))
     {
         return true;
@@ -357,6 +364,8 @@ bool RaidTacticalMapState::extractionVisible(
         return emergencyExtractionDiscovered_;
     case RaidMapExtractionKind::EmergencyConditional:
         return conditionalExtractionDiscovered_;
+    case RaidMapExtractionKind::Credential:
+        return credentialExtractionDiscovered_;
     }
     return false;
 }
@@ -379,6 +388,11 @@ const std::optional<ContentRect> &
 RaidTacticalMapState::conditionalExtraction() const noexcept
 {
     return conditionalExtraction_;
+}
+const std::optional<ContentRect> &
+RaidTacticalMapState::credentialExtraction() const noexcept
+{
+    return credentialExtraction_;
 }
 const std::optional<ContentRect> &
 RaidTacticalMapState::advancedResourceArea() const noexcept

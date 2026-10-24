@@ -1410,6 +1410,11 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
 
 Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
 {
+    if (schemaVersion < 57 &&
+        (!profile.raidExtractionPermissions.empty() ||
+         (profile.pendingRaid && profile.pendingRaid->credentialExtraction) ||
+         (profile.lastRaidResult && !profile.lastRaidResult->unlockedExtractionPermissions.empty())))
+        throw std::invalid_argument{"Raid credentials require schema 57"};
     if (schemaVersion < 55 && profile.stashLayoutVersion != 0)
         throw std::invalid_argument{"independent Stash pages require schema 55"};
     Json assets = assetRegistryValue(profile.assets, schemaVersion);
@@ -1432,6 +1437,12 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         payload["stash_layout_version"] = profile.stashLayoutVersion;
     if (schemaVersion >= 56)
         payload["chest_rig_layout_version"] = profile.chestRigLayoutVersion;
+    if (schemaVersion >= 57)
+    {
+        payload["raid_extraction_permissions"] = Json::array();
+        for (const auto &id : profile.raidExtractionPermissions)
+            payload["raid_extraction_permissions"].push_back(id.value());
+    }
     if (schemaVersion == 1)
     {
         return payload;
@@ -2006,6 +2017,29 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {"loot", std::move(loot)},
             {"carried_root_asset_ids", raid.carriedRootAssetIds},
             {"starting_health", raid.startingHealth}};
+        if (schemaVersion >= 57)
+        {
+            Json credential = nullptr;
+            if (raid.credentialExtraction)
+            {
+                const auto &snapshot = *raid.credentialExtraction;
+                const auto &definition = snapshot.definition;
+                credential = {
+                    {"rules_version", snapshot.rulesVersion},
+                    {"unlocked_at_deploy", snapshot.unlockedAtDeploy},
+                    {"investigation_completed", snapshot.investigationCompleted},
+                    {"permission_id", definition.permissionId.value()},
+                    {"investigation_point_id", definition.investigationPointId},
+                    {"investigation_space_id", definition.investigationSpaceId.value()},
+                    {"investigation_point", vectorValue(definition.investigationPoint)},
+                    {"investigation_radius", definition.investigationRadius},
+                    {"investigation_duration_seconds", definition.investigationDurationSeconds},
+                    {"extraction_point", {{"position", vectorValue(definition.extractionPoint.position)},
+                                           {"size", vectorValue(definition.extractionPoint.size)}}},
+                    {"extraction_duration_seconds", definition.extractionDurationSeconds}};
+            }
+            payload["pending_raid"]["credential_extraction"] = std::move(credential);
+        }
         if (raid.startingAssets && schemaVersion < 51) throw std::invalid_argument("scene rollback requires schema 51");
         if (schemaVersion >= 51)
             payload["pending_raid"]["starting_assets"] = raid.startingAssets
@@ -2610,6 +2644,12 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {"outcome", raidOutcomeName(profile.lastRaidResult->outcome)},
             {"returned_item_definition_ids", std::move(returned)},
             {"currency_delta", profile.lastRaidResult->currencyDelta}};
+        if (schemaVersion >= 57)
+        {
+            payload["last_raid_result"]["unlocked_extraction_permissions"] = Json::array();
+            for (const auto &id : profile.lastRaidResult->unlockedExtractionPermissions)
+                payload["last_raid_result"]["unlocked_extraction_permissions"].push_back(id.value());
+        }
         if (schemaVersion >= 9)
         {
             payload["last_raid_result"]["travel_minutes_applied"] =
@@ -2736,7 +2776,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2908,7 +2948,8 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion >= 50 && contentVersion == "raid-armored-infected-content-64") ||
             (schemaVersion >= 53 && contentVersion == "weapon-flashlight-battery-content-65") ||
             (schemaVersion >= 54 && contentVersion == "quick-melee-self-defense-content-66") ||
-            (schemaVersion >= 54 && contentVersion == "raid-noise-decoy-content-67");
+            (schemaVersion >= 54 && contentVersion == "raid-noise-decoy-content-67") ||
+            (schemaVersion >= 56 && contentVersion == "ui-unified-chest-rig-content-68");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -2930,7 +2971,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56) ||
+              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2944,6 +2985,17 @@ SaveLoadResult deserializeProfileEnvelope(
         }
 
         ProfileState profile;
+        if (schemaVersion >= 57)
+        {
+            const Json &permissions = payload.at("raid_extraction_permissions");
+            if (!permissions.is_array())
+                return {SaveLoadStatus::Failed, std::nullopt, "Raid extraction permissions must be an array"};
+            for (const Json &id : permissions)
+                if (!profile.raidExtractionPermissions.emplace(id.get<std::string>()).second)
+                    return {SaveLoadStatus::Failed, std::nullopt, "Raid extraction permission is duplicated"};
+        }
+        else if (payload.contains("raid_extraction_permissions"))
+            return {SaveLoadStatus::Failed, std::nullopt, "Raid credentials require schema 57"};
         if (schemaVersion >= 56 && !payload.at("chest_rig_layout_version").is_number_unsigned())
             return {SaveLoadStatus::Failed, std::nullopt, "chest rig layout marker is invalid"};
         profile.chestRigLayoutVersion = schemaVersion >= 56
@@ -3642,6 +3694,27 @@ SaveLoadResult deserializeProfileEnvelope(
         {
             const Json &value = payload.at("pending_raid");
             PendingRaidSnapshot raid;
+            if (schemaVersion >= 57 && !value.at("credential_extraction").is_null())
+            {
+                const Json &credential = value.at("credential_extraction");
+                RaidCredentialExtractionSnapshot snapshot;
+                snapshot.rulesVersion = credential.at("rules_version").get<std::string>();
+                snapshot.unlockedAtDeploy = credential.at("unlocked_at_deploy").get<bool>();
+                snapshot.investigationCompleted = credential.at("investigation_completed").get<bool>();
+                snapshot.definition = RaidCredentialExtractionDefinition{
+                    RaidExtractionPermissionDefinitionId{credential.at("permission_id").get<std::string>()},
+                    credential.at("investigation_point_id").get<std::string>(),
+                    RaidSpaceDefinitionId{credential.at("investigation_space_id").get<std::string>()},
+                    parseVector(credential.at("investigation_point")),
+                    credential.at("investigation_radius").get<float>(),
+                    credential.at("investigation_duration_seconds").get<float>(),
+                    ContentRect{parseVector(credential.at("extraction_point").at("position")),
+                                parseVector(credential.at("extraction_point").at("size"))},
+                    credential.at("extraction_duration_seconds").get<float>()};
+                raid.credentialExtraction = std::move(snapshot);
+            }
+            else if (schemaVersion < 57 && value.contains("credential_extraction"))
+                return {SaveLoadStatus::Failed, std::nullopt, "Raid credential snapshot requires schema 57"};
             raid.raidId = value.at("raid_id").get<std::string>();
             raid.settlementId = value.at("settlement_id").get<std::string>();
             raid.rulesVersion = value.at("rules_version").get<std::string>();
@@ -3974,7 +4047,9 @@ SaveLoadResult deserializeProfileEnvelope(
                         const std::uint32_t kind =
                             anchor.at("kind").get<std::uint32_t>();
                         if (kind > static_cast<std::uint32_t>(
-                                schemaVersion >= 36
+                                schemaVersion >= 57
+                                    ? RaidMapAnchorKind::CredentialExtraction
+                                    : schemaVersion >= 36
                                     ? RaidMapAnchorKind::ResourcePoint
                                     : RaidMapAnchorKind::InteriorEntrance))
                         {
@@ -4579,6 +4654,16 @@ SaveLoadResult deserializeProfileEnvelope(
                         "Raid result outcome is invalid"};
             }
             LastRaidResult result;
+            if (schemaVersion >= 57)
+            {
+                const Json &permissions = value.at("unlocked_extraction_permissions");
+                if (!permissions.is_array())
+                    return {SaveLoadStatus::Failed, std::nullopt, "Raid result permissions must be an array"};
+                for (const Json &id : permissions)
+                    result.unlockedExtractionPermissions.emplace_back(id.get<std::string>());
+            }
+            else if (value.contains("unlocked_extraction_permissions"))
+                return {SaveLoadStatus::Failed, std::nullopt, "Raid result permissions require schema 57"};
             result.settlementId =
                 value.at("settlement_id").get<std::string>();
             result.outcome = *outcome;
@@ -4727,6 +4812,34 @@ SaveWriteResult SaveRepository::save(
         isValidEnvelope(primaryPath_, publishedContentRegistry());
     const bool validBackup =
         isValidEnvelope(backupPath_, publishedContentRegistry());
+    const auto isLegacySource = [](const std::filesystem::path &path, bool valid)
+    {
+        if (!valid) return false;
+        const auto bytes = readText(path);
+        if (!bytes) return false;
+        try
+        {
+            return Json::parse(*bytes).at("schema_version").get<std::uint32_t>() < 57U;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    };
+    if (isLegacySource(primaryPath_, validPrimary) || isLegacySource(backupPath_, validBackup))
+    {
+        // The rolling backup is replaced by later saves and by pending-Raid
+        // mirroring. Keep immutable, byte-exact upgrade sources first so a
+        // schema-57 write never consumes the only pre-upgrade recovery copy.
+        const auto preserved = preserveLayoutMigrationSources(
+            validPrimary ? SaveLoadStatus::LoadedPrimary : SaveLoadStatus::RecoveredBackup,
+            "credential-extraction-v1");
+        if (!preserved.succeeded)
+        {
+            std::filesystem::remove(temporaryPath_, error);
+            return {false, preserved.message};
+        }
+    }
     const bool mirrorPendingRaid = profile.pendingRaid.has_value();
     bool installCandidateBackup = false;
     if (mirrorPendingRaid)

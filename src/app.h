@@ -184,6 +184,7 @@ private:
     friend struct UiBaseDefensePresentationTestAccess;
     friend struct UiItemDetailsTestAccess;
     friend struct UiRaidHudTestAccess;
+    friend struct RaidCredentialSessionTestAccess;
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
     friend struct WeaponInventoryUiTestAccess;
@@ -816,6 +817,7 @@ private:
     SDL_FRect worldLabelBounds(float x, float y, std::string_view label);
     void renderWorldLabel(float x, float y, std::string_view label);
     void renderExtractionPoint();
+    void renderRaidCredentialDocuments();
     void renderRaidSpacePortal();
     void renderStorageCabinet();
     void renderBallisticBlockers();

@@ -65,4 +65,6 @@ struct GameplayInput
     // Service-owned mission objective gate. All extraction types remain
     // unavailable until the active mission contract is complete.
     bool extractionEligible{true};
+    // Service arbitration preserves portal/container/loot priority for F.
+    bool credentialInvestigationAllowed{true};
 };

@@ -43,6 +43,8 @@ std::string contextKey(const ProfileState &profile, const UiDeploymentProjection
     key.number(p.language);
     key.add(p.selectedMapId.value());
     key.number(p.mapValid);
+    key.number(p.credentialUnlocked.has_value());
+    if (p.credentialUnlocked) key.number(*p.credentialUnlocked);
     key.number(p.currency);
     key.number(profile.currentHealth);
     key.number(profile.pendingRaid.has_value());
@@ -187,6 +189,9 @@ UiDeploymentProjection projectUiDeployment(
         result.difficulty = selectedMap->operationBriefing.difficulty;
         result.warning = selectedMap->operationBriefing.warning;
         result.routeProfile = selectedMap->routeProfile;
+        if (selectedMap->credentialExtraction && !recoveryRecordId)
+            result.credentialUnlocked = profile.raidExtractionPermissions.contains(
+                selectedMap->credentialExtraction->permissionId);
         result.travel = queryRaidTravel(profile, content, *selectedMap);
         for (const auto &routeId : result.travel.routeIds) {
             if (!result.routeName.empty()) result.routeName += " > ";

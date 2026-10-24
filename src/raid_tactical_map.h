@@ -12,7 +12,8 @@ enum class RaidMapExtractionKind
 {
     Normal,
     EmergencySignal,
-    EmergencyConditional
+    EmergencyConditional,
+    Credential
 };
 
 struct RaidSpecialLocationMapState
@@ -85,7 +86,8 @@ public:
         std::optional<ContentRect> advancedResourceArea,
         std::vector<Vec2> initialEnemyCenters,
         std::vector<RaidSpecialLocationMapState> specialLocations = {},
-        std::vector<RaidTacticalObjective> objectives = {});
+        std::vector<RaidTacticalObjective> objectives = {},
+        std::optional<ContentRect> credentialExtraction = std::nullopt);
     void revealAround(Vec2 worldPosition) noexcept;
     void configureOutdoorLayout(
         const RaidGeneratedMapLayout &layout,
@@ -107,6 +109,8 @@ public:
     emergencyExtraction() const noexcept;
     [[nodiscard]] const std::optional<ContentRect> &
     conditionalExtraction() const noexcept;
+    [[nodiscard]] const std::optional<ContentRect> &
+    credentialExtraction() const noexcept;
     [[nodiscard]] const std::optional<ContentRect> &
     advancedResourceArea() const noexcept;
     [[nodiscard]] const std::vector<Vec2> &
@@ -134,6 +138,7 @@ private:
     ContentRect normalExtraction_;
     std::optional<ContentRect> emergencyExtraction_;
     std::optional<ContentRect> conditionalExtraction_;
+    std::optional<ContentRect> credentialExtraction_;
     std::optional<ContentRect> advancedResourceArea_;
     std::vector<Vec2> initialEnemyCenters_;
     std::vector<RaidSpecialLocationMapState> specialLocations_;
@@ -149,4 +154,5 @@ private:
     bool normalExtractionDiscovered_{};
     bool emergencyExtractionDiscovered_{};
     bool conditionalExtractionDiscovered_{};
+    bool credentialExtractionDiscovered_{};
 };

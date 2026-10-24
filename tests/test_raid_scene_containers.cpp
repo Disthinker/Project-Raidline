@@ -5,6 +5,7 @@
 #include "alpha_content_ids.h"
 #include "game_session.h"
 #include "raid_lifecycle.h"
+#include "raid_credential_legacy_fixture.h"
 #include "save_repository.h"
 #include "raid_visibility_fixture.h"
 
@@ -66,6 +67,7 @@ TEST_F(RaidSceneContainerTest, FrozenRollsHaveOneOwnerAndNoAdditionalRewardsAcro
         }
         EXPECT_EQ(moved,4U);
         auto legacy=a;
+        stripCredentialExtractionForLegacySnapshot(legacy);
         // Historical schema50 fixture has no corpse ownership/source fields.
         legacy.pendingRaid->rulesVersion="content-beta-loot-economy-29";
         for(auto &enemy:legacy.pendingRaid->enemies) enemy.sourceEnemyId.clear();
@@ -187,6 +189,7 @@ TEST_F(RaidSceneContainerTest, Schema51RoundtripAndAbnormalRollbackRestoreExactO
     auto loaded=deserializeProfileEnvelope(serializeProfileEnvelope(p,content.contentVersion()),content);
     ASSERT_TRUE(loaded.profile)<<loaded.message; EXPECT_EQ(profileStateFingerprint(p),profileStateFingerprint(*loaded.profile));
     auto legacy=p;legacy.stashLayoutVersion=0;
+    stripCredentialExtractionForLegacySnapshot(legacy);
     EXPECT_THROW(serializeProfileEnvelope(legacy,content.contentVersion(),50),std::invalid_argument);
     const auto r=rollbackPendingRaidToBase(*loaded.profile,content); ASSERT_TRUE(r.succeeded)<<r.message;
     EXPECT_EQ(assetHash(loaded.profile->assets),baseline); EXPECT_TRUE(boxes(*loaded.profile).empty());

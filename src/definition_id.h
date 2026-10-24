@@ -91,6 +91,7 @@ struct EnemyDeploymentDefinitionTag;
 struct EnemyCombatDefinitionTag;
 struct MapDefinitionTag;
 struct RaidSpaceDefinitionTag;
+struct RaidExtractionPermissionDefinitionTag;
 struct BasePriorityDefinitionTag;
 struct BaseCommunityEventDefinitionTag;
 struct RescueDefinitionTag;
@@ -113,6 +114,8 @@ using EnemyDeploymentDefinitionId =
 using EnemyCombatDefinitionId = DefinitionId<EnemyCombatDefinitionTag>;
 using MapDefinitionId = DefinitionId<MapDefinitionTag>;
 using RaidSpaceDefinitionId = DefinitionId<RaidSpaceDefinitionTag>;
+using RaidExtractionPermissionDefinitionId =
+    DefinitionId<RaidExtractionPermissionDefinitionTag>;
 using BasePriorityDefinitionId = DefinitionId<BasePriorityDefinitionTag>;
 using BaseCommunityEventDefinitionId =
     DefinitionId<BaseCommunityEventDefinitionTag>;

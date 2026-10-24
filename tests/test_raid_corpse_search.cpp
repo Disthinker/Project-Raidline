@@ -3,6 +3,7 @@
 #include "game_session.h"
 #include "raid_corpse_search.h"
 #include "raid_lifecycle.h"
+#include "raid_credential_legacy_fixture.h"
 #include "save_repository.h"
 #include <gtest/gtest.h>
 #include <algorithm>
@@ -21,6 +22,7 @@ std::vector<AssetInstanceId> corpses(const ProfileState &p)
 }
 void legacyCorpses(ProfileState &p)
 {
+    stripCredentialExtractionForLegacySnapshot(p);
     for (auto &loot : p.pendingRaid->loot) if (loot.corpseContainerAssetId)
     {
         p.assets.findMutable(loot.assetId)->location = RaidGroundAssetLocation{p.pendingRaid->raidId, loot.slotIndex};
@@ -160,6 +162,7 @@ TEST_F(RaidCorpseSearchTest, Schema52RoundTripAndLegacy51NeverRetrofitCorpses)
     expose(); const auto loaded=deserializeProfileEnvelope(serializeProfileEnvelope(p,content.contentVersion()),content);
     ASSERT_TRUE(loaded.profile)<<loaded.message; EXPECT_EQ(profileStateFingerprint(*loaded.profile),profileStateFingerprint(p));
     p.stashLayoutVersion=0;
+    stripCredentialExtractionForLegacySnapshot(p);
     EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(p,content.contentVersion(),51)),std::invalid_argument);
     legacyCorpses(p); const auto old=deserializeProfileEnvelope(serializeProfileEnvelope(p,content.contentVersion(),51),content);
     ASSERT_TRUE(old.profile)<<old.message; EXPECT_TRUE(corpses(*old.profile).empty()); EXPECT_EQ(old.profile->pendingRaid->loot,p.pendingRaid->loot);

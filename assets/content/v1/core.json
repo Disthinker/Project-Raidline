@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "ui-unified-chest-rig-content-68",
+  "content_version": "raid-credential-extraction-content-69",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -2440,6 +2440,16 @@
     },
     {
       "id": "map.raid.frontier_exchange",
+      "credential_extraction": {
+        "permission_id": "raid_permission.frontier_exchange.freight_exit",
+        "investigation_point_id": "investigation.frontier_exchange.transit_documents",
+        "investigation_space_id": "raid_space.frontier_exchange.office",
+        "investigation_point": {"x": 540, "y": 190},
+        "investigation_radius": 72,
+        "investigation_duration_seconds": 2,
+        "extraction_point": {"position": {"x": 2300, "y": 1500}, "size": {"x": 170, "y": 130}},
+        "extraction_duration_seconds": 6
+      },
       "display_name": "Frontier Exchange",
       "route_profile": "DISTRICT ROAD NETWORK | HUGE OUTDOOR | FIXED LANDMARKS",
       "procedural_outdoor": {

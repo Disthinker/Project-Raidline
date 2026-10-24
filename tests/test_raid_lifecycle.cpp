@@ -20,6 +20,7 @@
 #include "base_siege_domain.h"
 #include "raid_lifecycle.h"
 #include "raid_corpse_legacy_fixture.h"
+#include "raid_credential_legacy_fixture.h"
 #include "raid_rescue_domain.h"
 #include "regional_operations_domain.h"
 
@@ -1219,6 +1220,7 @@ TEST(RaidLifecycleTest,
         7712202U,
         MapDefinitionId{"map.raid.frontier_exchange"}).succeeded);
     ASSERT_TRUE(legacy.pendingRaid.has_value());
+    stripCredentialExtractionForLegacySnapshot(legacy);
     stripCorpseBindingsForLegacySnapshot(legacy);
     PendingRaidSnapshot &raid = *legacy.pendingRaid;
     raid.rulesVersion = "procedural-frontier-encounter-ecology-26";

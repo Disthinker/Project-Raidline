@@ -367,6 +367,10 @@ void App::renderBaseDeployment() {
         std::string briefing = tr(p.mapName);
         append(briefing, tr(fmt::format("DIFFICULTY {}", p.difficulty)));
         append(briefing, tr(p.warning));
+        if (p.credentialUnlocked)
+            append(briefing, tr(*p.credentialUnlocked
+                ? "TRANSIT PERMIT REGISTERED | HIGH RISK CREDENTIAL EXIT AVAILABLE"
+                : "TRANSIT PERMIT NOT REGISTERED | INVESTIGATE EXCHANGE OFFICE AND EXTRACT"));
         append(briefing, "");
         append(briefing, fmt::format("{}  {}", tr("DEPARTURE"), clock(p.travel.departure)));
         append(briefing, fmt::format("{}  {}", tr("ARRIVAL"), clock(p.travel.arrival)));

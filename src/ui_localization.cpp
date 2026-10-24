@@ -15,6 +15,19 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
     {
+     {"TRANSIT PERMIT NOT REGISTERED | INVESTIGATE EXCHANGE OFFICE AND EXTRACT", "通行许可未登记 · 调查交易所办公室并成功撤离"},
+     {"TRANSIT PERMIT REGISTERED | HIGH RISK CREDENTIAL EXIT AVAILABLE", "通行许可已登记 · 高危可使用凭证出口"},
+     {"FRONTIER TRANSIT PERMIT REGISTERED", "边境交换站通行许可已登记"},
+     {"TRANSIT PERMIT REGISTERED", "通行许可已登记"},
+     {"TRANSIT DOCUMENTS SECURED", "通行资料已取得"},
+     {"TRANSIT DOCUMENTS | HOLD F 2s", "通行资料 · 按住 F 2秒"},
+     {"TRANSIT DOCUMENTS SECURED | EXTRACT TO REGISTER", "通行资料已取得 · 成功撤离后登记"},
+     {"INVESTIGATING TRANSIT DOCUMENTS", "调查通行资料"},
+     {"TRANSIT DOCUMENTS", "通行资料"},
+     {"CREDENTIAL EXIT | PERMISSION REQUIRED", "凭证出口 · 需要通行许可"},
+     {"CREDENTIAL EXIT | WAIT FOR HIGH RISK", "凭证出口 · 等待高危"},
+     {"CREDENTIAL EXIT | 6s | NO WEIGHT LIMIT", "凭证出口 · 等待6秒 · 不限重"},
+     {"CREDENTIAL EXIT | 6s", "凭证出口 · 等待6秒"},
      {"HOVER WEAPON FOR STATUS | RIGHT-CLICK ACTIONS | H HIDE HINTS", "悬停武器查看状态 · 右键操作 · H 隐藏提示"},
      {"PRODUCTION PLAN CHANGED - CHECK AND CLICK AGAIN", "生产方案已变化，请核对后重新点击"},
      {"CLOSE WORKSHOP", "关闭"},

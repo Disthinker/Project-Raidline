@@ -23,7 +23,8 @@ enum class RaidMapAnchorKind : std::uint8_t
     Enemy,
     PressureSpawn,
     InteriorEntrance,
-    ResourcePoint
+    ResourcePoint,
+    CredentialExtraction
 };
 
 struct RaidMapAnchorRequest
@@ -250,6 +251,8 @@ inline constexpr std::string_view kRaidAnchorEmergencyExtraction{
     "emergency_extraction"};
 inline constexpr std::string_view kRaidAnchorConditionalExtraction{
     "conditional_extraction"};
+inline constexpr std::string_view kRaidAnchorCredentialExtraction{
+    "credential_extraction"};
 inline constexpr std::string_view kRaidAnchorHighRiskControl{
     "high_risk_control"};
 inline constexpr std::string_view kRaidAnchorAdvancedResource{

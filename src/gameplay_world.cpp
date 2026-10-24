@@ -642,6 +642,48 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
                 highRisk.seed % highRiskPressureSpawns_.size());
     }
 
+    if (config.credentialExtraction)
+    {
+        const auto &snapshot = *config.credentialExtraction;
+        const auto &definition = snapshot.definition;
+        const auto interior = std::find_if(interiors_.begin(), interiors_.end(),
+            [&](const InteriorRuntime &candidate)
+            { return candidate.id == definition.investigationSpaceId; });
+        const auto finitePoint = [](Vec2 point)
+        { return std::isfinite(point.x) && std::isfinite(point.y); };
+        const ContentRect exit = definition.extractionPoint;
+        if (!config.highRisk.enabled || !definition.permissionId.valid() ||
+            definition.investigationPointId.empty() ||
+            definition.investigationSpaceId == outdoorRaidSpaceId() ||
+            interior == interiors_.end() ||
+            snapshot.rulesVersion != kRaidCredentialExtractionRulesVersion ||
+            !finitePoint(definition.investigationPoint) ||
+            definition.investigationPoint.x < 0.0F ||
+            definition.investigationPoint.y < 0.0F ||
+            definition.investigationPoint.x > interior->worldSize.x ||
+            definition.investigationPoint.y > interior->worldSize.y ||
+            !std::isfinite(definition.investigationRadius) ||
+            definition.investigationRadius <= 0.0F ||
+            !std::isfinite(definition.investigationDurationSeconds) ||
+            definition.investigationDurationSeconds <= 0.0F ||
+            !std::isfinite(definition.extractionDurationSeconds) ||
+            definition.extractionDurationSeconds <= 0.0F ||
+            !finitePoint(exit.position) || !finitePoint(exit.size) ||
+            exit.position.x < 0.0F || exit.position.y < 0.0F ||
+            exit.size.x <= 0.0F || exit.size.y <= 0.0F ||
+            exit.position.x + exit.size.x > config.worldSize.x ||
+            exit.position.y + exit.size.y > config.worldSize.y)
+        {
+            throw std::invalid_argument{
+                "RaidWorldConfig credential settings are invalid"};
+        }
+        credentialExtraction_ = snapshot;
+        credentialExtractionPoint_.emplace(exit.position, exit.size);
+        if (snapshot.investigationCompleted)
+            credentialInvestigationElapsedSeconds_ =
+                definition.investigationDurationSeconds;
+    }
+
     raidSession_ = RaidSession{RaidSessionConfig{
         0.0F,
         config.normalExtractionDurationSeconds,
@@ -650,7 +692,10 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
             config.highRisk.enabled,
             config.highRisk.regularPhaseDurationSeconds,
             config.highRisk.emergencyExtractionDurationSeconds,
-            config.highRisk.conditionalExtractionDurationSeconds}}};
+            config.highRisk.conditionalExtractionDurationSeconds},
+        credentialExtraction_ && credentialExtraction_->unlockedAtDeploy
+            ? credentialExtraction_->definition.extractionDurationSeconds
+            : 0.0F}};
     std::vector<Vec2> initialEnemyCenters;
     initialEnemyCenters.reserve(enemies_.size());
     for (const Enemy &enemy : enemies_)
@@ -684,7 +729,10 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
             : std::nullopt,
         std::move(initialEnemyCenters),
         std::move(specialLocations),
-        std::move(config.tacticalObjectives));
+        std::move(config.tacticalObjectives),
+        credentialExtraction_
+            ? std::optional<ContentRect>{credentialExtraction_->definition.extractionPoint}
+            : std::nullopt);
     tacticalMap_.configureOutdoorLayout(
         outdoorLayout_, outdoorColumns_, outdoorRows_);
     tacticalMap_.revealAround(playerCenter(player_));
@@ -1092,6 +1140,13 @@ void GameplayWorld::update(
         conditionalExtractionPoint_->contains(playerCenter(player_));
     const bool wasCallingSignal =
         raidSession_.extractionRoute() == RaidExtractionRoute::EmergencySignal;
+    const bool playerInCredentialExtraction =
+        input.extractionEligible && inOutdoorRaidSpace() &&
+        !controlsSuppressedAtFrameStart && !player_.isControlled() &&
+        !input.inventoryOpen && !input.throwableModal &&
+        !input.freezeObservationDirection && !spaceTransitionedLastUpdate_ &&
+        credentialExtractionUnlocked() && credentialExtractionPoint_ &&
+        credentialExtractionPoint_->contains(playerCenter(player_));
     if (std::isfinite(deltaTime) && deltaTime > 0.0F)
     {
         signalInterruptedSeconds_ = std::max(0.0F, signalInterruptedSeconds_ - deltaTime);
@@ -1109,7 +1164,8 @@ void GameplayWorld::update(
         input.extractionEligible && !player_.isControlled() &&
             playerInConditionalExtraction,
         input.interactJustPressed && !controlsSuppressedAtFrameStart &&
-            !spaceTransitionedLastUpdate_ && canCallSignalExtraction(input));
+            !spaceTransitionedLastUpdate_ && canCallSignalExtraction(input),
+        playerInCredentialExtraction);
     if (wasCallingSignal && raidSession_.isActive() &&
         raidSession_.extractionRoute() != RaidExtractionRoute::EmergencySignal)
     {
@@ -1468,6 +1524,7 @@ void GameplayWorld::update(
                         contact.controlDuration));
                 if (raidSession_.interruptSignalExtraction())
                     signalInterruptedSeconds_ = 3.0F;
+                static_cast<void>(raidSession_.interruptCredentialExtraction());
             }
         }
     }
@@ -1477,7 +1534,8 @@ void GameplayWorld::update(
         player_.isControlled();
 
     if (!spaceTransitionedLastUpdate_ && !controlsSuppressed &&
-        !raidSession_.signalCalledLastUpdate() && input.interactJustPressed)
+        !raidSession_.signalCalledLastUpdate() && input.interactJustPressed &&
+        !(input.credentialInvestigationAllowed && credentialInvestigationInRange()))
     {
         tryPickupOne();
     }
@@ -1497,6 +1555,8 @@ void GameplayWorld::update(
     melee_.prepare(input.meleeJustPressed,controlsSuppressed || input.inventoryOpen || !raidSession_.isActive(),
         playerCenter(player_),shooting_.aimDirection(),
         activeEnemySet,[&](Vec2 a,Vec2 b){return activeBlockerIndex().hasLineOfSight(a,b);});
+
+    updateCredentialInvestigation(input, deltaTime, controlsSuppressedAtFrameStart);
 
 }
 
@@ -2111,6 +2171,72 @@ GameplayWorld::conditionalExtractionMaximumWeightGrams() const noexcept
     return conditionalExtractionMaximumWeightGrams_;
 }
 
+const std::optional<ExtractionPoint> &
+GameplayWorld::credentialExtractionPoint() const noexcept
+{
+    return credentialExtractionPoint_;
+}
+
+bool GameplayWorld::credentialExtractionUnlocked() const noexcept
+{
+    return credentialExtraction_ && credentialExtraction_->unlockedAtDeploy;
+}
+
+const std::optional<RaidCredentialExtractionSnapshot> &
+GameplayWorld::credentialExtractionSnapshot() const noexcept
+{
+    return credentialExtraction_;
+}
+
+bool GameplayWorld::credentialInvestigationInRange() const
+{
+    if (!credentialExtraction_ || credentialExtraction_->investigationCompleted ||
+        !raidSession_.isActive() || player_.isDead() || player_.isControlled())
+        return false;
+    const auto &definition = credentialExtraction_->definition;
+    const Vec2 center = playerCenter(player_);
+    return activeRaidSpaceId() == definition.investigationSpaceId &&
+        distanceSquared(center, definition.investigationPoint) <=
+            definition.investigationRadius * definition.investigationRadius &&
+        activeBlockerIndex().hasLineOfSight(center, definition.investigationPoint) &&
+        raidBoundsObservable(Rect{
+            {definition.investigationPoint.x - 10.0F,
+             definition.investigationPoint.y - 10.0F}, {20.0F, 20.0F}});
+}
+
+float GameplayWorld::credentialInvestigationProgress() const noexcept
+{
+    if (!credentialExtraction_) return 0.0F;
+    return std::clamp(credentialInvestigationElapsedSeconds_ /
+        credentialExtraction_->definition.investigationDurationSeconds, 0.0F, 1.0F);
+}
+
+std::optional<RaidCredentialInvestigationFact>
+GameplayWorld::pendingCredentialInvestigation() const
+{
+    return pendingCredentialInvestigation_;
+}
+
+void GameplayWorld::acknowledgeCredentialInvestigation() noexcept
+{
+    if (credentialExtraction_ && pendingCredentialInvestigation_)
+        credentialExtraction_->investigationCompleted = true;
+    pendingCredentialInvestigation_.reset();
+}
+
+void GameplayWorld::cancelCredentialInvestigationInteraction() noexcept
+{
+    if (!credentialExtraction_ || !credentialExtraction_->investigationCompleted)
+        credentialInvestigationElapsedSeconds_ = 0.0F;
+    pendingCredentialInvestigation_.reset();
+}
+
+void GameplayWorld::interruptCredentialInteraction() noexcept
+{
+    cancelCredentialInvestigationInteraction();
+    static_cast<void>(raidSession_.interruptCredentialExtraction());
+}
+
 const RaidSession &
 GameplayWorld::raidSession() const noexcept
 {
@@ -2420,6 +2546,8 @@ bool GameplayWorld::damagePlayer(int damage)
     {
         highRiskActivationElapsedSeconds_ = 0.0F;
     }
+    if (damage > 0)
+        cancelCredentialInvestigationInteraction();
 
     if (!killed)
     {
@@ -3184,6 +3312,33 @@ void GameplayWorld::updateOrdinarySurvivorRescue(
     ordinarySurvivorRescueElapsedSeconds_ = std::min(
         ordinarySurvivorRescueDurationSeconds_,
         ordinarySurvivorRescueElapsedSeconds_ + deltaTime);
+}
+
+void GameplayWorld::updateCredentialInvestigation(
+    const GameplayInput &input, float deltaTime,
+    bool controlsSuppressedAtFrameStart)
+{
+    if (!credentialExtraction_ || credentialExtraction_->investigationCompleted)
+        return;
+    if (controlsSuppressedAtFrameStart || !input.credentialInvestigationAllowed ||
+        !input.interactPressed || input.inventoryOpen || input.throwableModal ||
+        input.freezeObservationDirection || spaceTransitionedLastUpdate_ ||
+        raidSpacePortalInteractionInRange() || !credentialInvestigationInRange())
+    {
+        cancelCredentialInvestigationInteraction();
+        return;
+    }
+    if (pendingCredentialInvestigation_ || !std::isfinite(deltaTime) || deltaTime <= 0.0F)
+        return;
+    const auto &definition = credentialExtraction_->definition;
+    credentialInvestigationElapsedSeconds_ = std::min(
+        definition.investigationDurationSeconds,
+        credentialInvestigationElapsedSeconds_ + deltaTime);
+    if (credentialInvestigationElapsedSeconds_ >= definition.investigationDurationSeconds)
+    {
+        pendingCredentialInvestigation_ = RaidCredentialInvestigationFact{
+            definition.investigationPointId, activeRaidSpaceId(), playerCenter(player_)};
+    }
 }
 
 std::size_t GameplayWorld::spawnHighRiskPressureWave()

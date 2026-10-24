@@ -17,6 +17,7 @@
 #include "ground_item.h"
 #include "loot_table.h"
 #include "raid_corpse_search.h"
+#include "raid_credential_extraction.h"
 #include "particle_system.h"
 #include "player.h"
 #include "player_damage_observation.h"
@@ -157,6 +158,7 @@ struct RaidWorldConfig
     bool developerRange{};
     bool noiseDecoyEnabled{};
     bool lightConeObservationEnabled{};
+    std::optional<RaidCredentialExtractionSnapshot> credentialExtraction;
 };
 
 struct RaidOutdoorLabelProjection
@@ -339,6 +341,21 @@ public:
 
     [[nodiscard]] std::uint64_t
     conditionalExtractionMaximumWeightGrams() const noexcept;
+
+    [[nodiscard]] const std::optional<ExtractionPoint> &
+    credentialExtractionPoint() const noexcept;
+    [[nodiscard]] bool credentialExtractionUnlocked() const noexcept;
+    [[nodiscard]] const std::optional<RaidCredentialExtractionSnapshot> &
+    credentialExtractionSnapshot() const noexcept;
+    [[nodiscard]] bool credentialInvestigationInRange() const;
+    [[nodiscard]] float credentialInvestigationProgress() const noexcept;
+    [[nodiscard]] std::optional<RaidCredentialInvestigationFact>
+    pendingCredentialInvestigation() const;
+    void acknowledgeCredentialInvestigation() noexcept;
+    void cancelCredentialInvestigationInteraction() noexcept;
+    // Pause can stop simulation updates entirely. Its service hook interrupts
+    // only the new credential interactions; existing routes retain their rules.
+    void interruptCredentialInteraction() noexcept;
 
     [[nodiscard]]
     const RaidSession &raidSession() const noexcept;
@@ -624,6 +641,10 @@ private:
     float signalInterruptedSeconds_{};
     std::optional<ExtractionPoint> conditionalExtractionPoint_;
     std::uint64_t conditionalExtractionMaximumWeightGrams_{};
+    std::optional<ExtractionPoint> credentialExtractionPoint_;
+    std::optional<RaidCredentialExtractionSnapshot> credentialExtraction_;
+    float credentialInvestigationElapsedSeconds_{};
+    std::optional<RaidCredentialInvestigationFact> pendingCredentialInvestigation_;
     RaidSession raidSession_;
     RaidTacticalMapState tacticalMap_;
 
@@ -709,6 +730,9 @@ private:
         const GameplayInput &input,
         float deltaTime,
         Vec2 playerCenter);
+    void updateCredentialInvestigation(
+        const GameplayInput &input, float deltaTime,
+        bool controlsSuppressedAtFrameStart);
     [[nodiscard]] std::size_t spawnHighRiskPressureWave();
     [[nodiscard]] bool canSpawnHighRiskEnemy(
         const EnemySpawn &spawn) const noexcept;

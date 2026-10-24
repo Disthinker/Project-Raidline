@@ -1053,6 +1053,14 @@ struct RaidHighRiskCrisisSnapshot
     }
 };
 
+struct RaidCredentialExtractionSnapshot
+{
+    RaidCredentialExtractionDefinition definition;
+    bool unlockedAtDeploy{};
+    bool investigationCompleted{};
+    std::string rulesVersion{"credential-extraction-1"};
+};
+
 struct PendingRaidSnapshot
 {
     std::string raidId;
@@ -1069,6 +1077,7 @@ struct PendingRaidSnapshot
     std::vector<RaidLootSnapshot> loot;
     std::optional<AssetRegistry> startingAssets; // schema 51: exact pre-deploy assets for scene-container rollback
     std::optional<RaidRescueSnapshot> rescue;
+    std::optional<RaidCredentialExtractionSnapshot> credentialExtraction;
     std::optional<RaidSelfRecoverySnapshot> selfRecovery;
     std::optional<RegionalOutpostRestorationSnapshot> outpostRestoration;
     std::optional<RegionalBaseSiteClearanceSnapshot> baseSiteClearance;
@@ -1096,6 +1105,7 @@ struct LastRaidResult
     std::optional<std::string> lostRaidRecordId;
     std::uint32_t baseThreatReducedUnits{};
     std::optional<BaseWishReturnSummary> wishReturn;
+    std::vector<RaidExtractionPermissionDefinitionId> unlockedExtractionPermissions;
 };
 
 struct ProfileState
@@ -1131,6 +1141,7 @@ struct ProfileState
     BasePriorityState basePriority;
     RaidIntelligenceArchiveState raidIntelligence;
     RaidInteriorIntelligenceArchiveState raidInteriorIntelligence;
+    std::set<RaidExtractionPermissionDefinitionId> raidExtractionPermissions;
     BaseServiceJobId nextBaseServiceJobId{1};
     std::optional<GunsmithMaintenanceJob> gunsmithMaintenanceJob;
     AssetRegistry assets;

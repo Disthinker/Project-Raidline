@@ -836,7 +836,7 @@ ContentRegistry ContentRegistry::fromJson(
             registry.contentVersion_ == "base-fortification-foundation-content-61" ||
             registry.contentVersion_ == "hospital-raid-theme-content-62" ||
             registry.contentVersion_ == "weapon-components-content-63" ||
-            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68");
+            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69");
 
         if (root.contains("fortifications"))
         {
@@ -862,7 +862,7 @@ ContentRegistry ContentRegistry::fromJson(
         if ((registry.contentVersion_ == "base-fortification-foundation-content-61" ||
              registry.contentVersion_ == "hospital-raid-theme-content-62" ||
              registry.contentVersion_ == "weapon-components-content-63" ||
-             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68")) &&
+             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69")) &&
             !registry.fortifications_.contains(kWoodBarricadeDefinition))
             fail("wood barricade definition is required by content 61");
 
@@ -2456,6 +2456,8 @@ ContentRegistry ContentRegistry::fromJson(
         }
 
         std::set<RescueDefinitionId> rescueDefinitionIds;
+        std::set<RaidExtractionPermissionDefinitionId> extractionPermissionIds;
+        std::set<std::string> investigationPointIds;
         std::set<RaidSpaceDefinitionId> raidSpaceDefinitionIds{
             outdoorRaidSpaceId()};
         for (const Json &mapValue :
@@ -3776,6 +3778,50 @@ ContentRegistry ContentRegistry::fromJson(
                              "blocker");
                     }
                 }
+            }
+
+            if (mapValue.contains("credential_extraction"))
+            {
+                const Json &value = requiredObject(mapValue, "credential_extraction");
+                RaidCredentialExtractionDefinition credential{
+                    RaidExtractionPermissionDefinitionId{requiredString(value, "permission_id")},
+                    requiredString(value, "investigation_point_id"),
+                    RaidSpaceDefinitionId{requiredString(value, "investigation_space_id")},
+                    parseVec2(value, "investigation_point"),
+                    requiredFiniteFloat(value, "investigation_radius", true),
+                    requiredFiniteFloat(value, "investigation_duration_seconds", true),
+                    parseRect(value, "extraction_point"),
+                    requiredFiniteFloat(value, "extraction_duration_seconds", true)};
+                const auto interior = std::find_if(
+                    definition.interiors.begin(), definition.interiors.end(),
+                    [&](const RaidInteriorDefinition &candidate)
+                    { return candidate.id == credential.investigationSpaceId; });
+                if (!hasPrefix(credential.permissionId.value(), "raid_permission.") ||
+                    !hasPrefix(credential.investigationPointId, "investigation.") ||
+                    !extractionPermissionIds.insert(credential.permissionId).second ||
+                    !investigationPointIds.insert(credential.investigationPointId).second ||
+                    interior == definition.interiors.end() || !definition.highRisk.enabled ||
+                    credential.investigationRadius > 160.0F ||
+                    credential.investigationDurationSeconds > 30.0F ||
+                    credential.extractionDurationSeconds > 30.0F ||
+                    !rectInside(credential.extractionPoint, definition.walkableBounds))
+                    fail("map credential extraction definition is invalid or duplicated");
+                const ContentRect interiorBounds{Vec2{}, interior->worldSize};
+                const ContentRect pointBounds{
+                    Vec2{credential.investigationPoint.x - 12.0F,
+                         credential.investigationPoint.y - 12.0F},
+                    Vec2{24.0F, 24.0F}};
+                if (!rectInside(pointBounds, interiorBounds) ||
+                    rectsOverlap(pointBounds, interior->interiorExit) ||
+                    std::any_of(interior->ballisticBlockers.begin(), interior->ballisticBlockers.end(),
+                        [&](const auto &blocker) { return rectsOverlap(pointBounds, blocker.bounds); }) ||
+                    std::any_of(interior->lootSlots.begin(), interior->lootSlots.end(),
+                        [&](const auto &slot)
+                        { const Vec2 delta{slot.position.x - credential.investigationPoint.x,
+                                           slot.position.y - credential.investigationPoint.y};
+                          return delta.x * delta.x + delta.y * delta.y < 96.0F * 96.0F; }))
+                    fail("credential investigation point overlaps an existing interior interaction");
+                definition.credentialExtraction = std::move(credential);
             }
 
             const std::size_t index = registry.maps_.size();

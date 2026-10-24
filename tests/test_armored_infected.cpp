@@ -5,6 +5,7 @@
 #include "combat_runtime_checkpoint_json.h"
 #include "raid_lifecycle.h"
 #include "raid_corpse_legacy_fixture.h"
+#include "raid_credential_legacy_fixture.h"
 #include "save_repository.h"
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
@@ -75,12 +76,16 @@ TEST(ArmoredInfectedTest, InvalidAndBlockedShotsPreserveHealthAndArmor) {
 }
 TEST(ArmoredInfectedTest, FrontierReplacementPreservesPopulationGeometryAndLootAcrossSeeds) {
     auto json=nlohmann::json::parse(publishedContentJson());
+    // Both sides represent the earlier armor slice, before credential exits.
+    for (auto &map:json["maps"]) if (map["id"]=="map.raid.frontier_exchange")
+        map.erase("credential_extraction");
+    const auto armored=ContentRegistry::fromJson(json.dump());
     for (auto &map:json["maps"]) if (map["id"]=="map.raid.frontier_exchange")
         for (auto &group:map["procedural_outdoor"]["encounter_archetypes"]) group.erase("armored_member_definition");
     const auto ordinary=ContentRegistry::fromJson(json.dump());
     for (unsigned seed=1;seed<=8;++seed) {
         const auto baseline=deploy(ordinary,seed);
-        auto upgraded=deploy(content(),seed);
+        auto upgraded=deploy(armored,seed);
         stripCorpseBindingsForLegacySnapshot(upgraded);
         auto &s=*upgraded.pendingRaid;
         EXPECT_EQ(s.enemies.size(),baseline.pendingRaid->enemies.size());
@@ -101,6 +106,7 @@ TEST(ArmoredInfectedTest, FrozenArmorRoundTripsAndOldSchemaDoesNotGainArmor) {
     EXPECT_EQ(loaded.profile->pendingRaid->enemies,p.pendingRaid->enemies);
     EXPECT_EQ(profileStateFingerprint(*loaded.profile),profileStateFingerprint(p));
     p.stashLayoutVersion=0; // Explicit pre-page legacy fixture.
+    stripCredentialExtractionForLegacySnapshot(p);
     EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(p,content().contentVersion(),49)),std::invalid_argument);
     // This fixture represents a Raid frozen before either armor or scene
     // storage existed. Do not downgrade a newly generated schema-51 Raid.

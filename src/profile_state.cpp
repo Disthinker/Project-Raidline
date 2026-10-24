@@ -1236,6 +1236,15 @@ ProfileValidationResult validateProfileState(
         return {false, "unsupported chest rig layout version"};
     if (profile.stashLayoutVersion > 1)
         return {false, "unsupported warehouse layout version"};
+    const auto knownExtractionPermission = [&content](const RaidExtractionPermissionDefinitionId &id)
+    {
+        return std::any_of(content.maps().begin(), content.maps().end(),
+            [&](const MapDefinition &map)
+            { return map.credentialExtraction && map.credentialExtraction->permissionId == id; });
+    };
+    for (const auto &id : profile.raidExtractionPermissions)
+        if (!knownExtractionPermission(id))
+            return {false, "Raid extraction permission is unknown"};
     if (const auto components = validateWeaponComponents(profile, content); !components.valid)
         return components;
     if (const auto devices = validateTacticalDevices(profile, content); !devices.valid) return devices;
@@ -2416,6 +2425,55 @@ ProfileValidationResult validateProfileState(
         {
             return {false, "pending Raid map is invalid"};
         }
+        if (raid.credentialExtraction)
+        {
+            const auto &snapshot = *raid.credentialExtraction;
+            const auto &frozen = snapshot.definition;
+            if (!raidMap->credentialExtraction)
+                return {false, "pending Raid credential belongs to a different map"};
+            const auto &definition = *raidMap->credentialExtraction;
+            const auto *anchor = findRaidAnchorPlacement(raid.spatialLayout, kRaidAnchorCredentialExtraction);
+            const bool finiteExit = std::isfinite(frozen.extractionPoint.position.x) &&
+                std::isfinite(frozen.extractionPoint.position.y) &&
+                std::isfinite(frozen.extractionPoint.size.x) && std::isfinite(frozen.extractionPoint.size.y);
+            const bool insideExit = finiteExit && frozen.extractionPoint.size.x > 0.0F &&
+                frozen.extractionPoint.size.y > 0.0F &&
+                frozen.extractionPoint.position.x >= raidMap->walkableBounds.position.x &&
+                frozen.extractionPoint.position.y >= raidMap->walkableBounds.position.y &&
+                frozen.extractionPoint.position.x + frozen.extractionPoint.size.x <=
+                    raidMap->walkableBounds.position.x + raidMap->walkableBounds.size.x &&
+                frozen.extractionPoint.position.y + frozen.extractionPoint.size.y <=
+                    raidMap->walkableBounds.position.y + raidMap->walkableBounds.size.y;
+            if (snapshot.rulesVersion != "credential-extraction-1" ||
+                raid.rulesVersion != kRaidCorpseRulesVersion ||
+                raid.selfRecovery || raid.outpostRestoration || raid.baseSiteClearance || raid.basePerimeterSweep ||
+                frozen.permissionId != definition.permissionId ||
+                frozen.investigationPointId != definition.investigationPointId ||
+                frozen.investigationSpaceId != definition.investigationSpaceId ||
+                frozen.investigationPoint.x != definition.investigationPoint.x ||
+                frozen.investigationPoint.y != definition.investigationPoint.y ||
+                frozen.investigationRadius != definition.investigationRadius ||
+                frozen.investigationDurationSeconds != definition.investigationDurationSeconds ||
+                frozen.extractionDurationSeconds != definition.extractionDurationSeconds ||
+                frozen.extractionPoint.size.x != definition.extractionPoint.size.x ||
+                frozen.extractionPoint.size.y != definition.extractionPoint.size.y ||
+                !insideExit ||
+                snapshot.unlockedAtDeploy != profile.raidExtractionPermissions.contains(frozen.permissionId) ||
+                std::none_of(raid.interiors.begin(), raid.interiors.end(),
+                    [&](const auto &interior) { return interior.id == frozen.investigationSpaceId; }) ||
+                anchor == nullptr || anchor->kind != RaidMapAnchorKind::CredentialExtraction ||
+                anchor->bounds != frozen.extractionPoint)
+                return {false, "pending Raid credential snapshot is invalid"};
+            if (std::any_of(raid.spatialLayout.anchorPlacements.begin(), raid.spatialLayout.anchorPlacements.end(),
+                    [&](const auto &other)
+                    { return other.id != kRaidAnchorCredentialExtraction &&
+                             overlaps(other.bounds, frozen.extractionPoint); }) ||
+                std::any_of(raid.spatialLayout.ballisticBlockers.begin(), raid.spatialLayout.ballisticBlockers.end(),
+                    [&](ContentRect blocker) { return overlaps(blocker, frozen.extractionPoint); }))
+                return {false, "pending Raid credential extraction overlaps an occupied anchor"};
+        }
+        else if (findRaidAnchorPlacement(raid.spatialLayout, kRaidAnchorCredentialExtraction) != nullptr)
+            return {false, "pending Raid credential anchor is missing its snapshot"};
         std::set<RaidSpaceDefinitionId> sceneSpaces;
         for (const auto &[id, asset] : profile.assets.records())
             if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
@@ -2953,6 +3011,14 @@ ProfileValidationResult validateProfileState(
                 raidMap->highRisk.conditionalExtractionPoint,
                 raidMap->highRisk.activationControlPoint,
                 raidMap->highRisk.advancedResourceArea};
+            if (raid.credentialExtraction)
+            {
+                const auto bounds = raid.credentialExtraction->definition.extractionPoint;
+                anchors.occupiedRegions.push_back(bounds);
+                anchors.reachablePoints.push_back(Vec2{
+                    bounds.position.x + bounds.size.x * 0.5F,
+                    bounds.position.y + bounds.size.y * 0.5F});
+            }
             for (const RaidEnemySnapshot &enemy : raid.enemies)
             {
                 if (enemy.spaceId != outdoorRaidSpaceId())
@@ -3464,6 +3530,7 @@ ProfileValidationResult validateProfileState(
                                     RaidMapAnchorKind::InteriorEntrance,
                                     raid.interiors[index].exteriorEntrance);
                 const std::size_t expectedAnchorCount = 6U +
+                    static_cast<std::size_t>(raid.credentialExtraction.has_value()) +
                     static_cast<std::size_t>(raid.rescue.has_value()) +
                     static_cast<std::size_t>(raid.selfRecovery.has_value()) +
                     (encounterEcologyRules
@@ -4575,6 +4642,15 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "last Raid result is invalid"};
     }
+    if (profile.lastRaidResult)
+    {
+        std::set<RaidExtractionPermissionDefinitionId> resultPermissions;
+        for (const auto &id : profile.lastRaidResult->unlockedExtractionPermissions)
+            if (profile.lastRaidResult->outcome != RaidResultOutcome::Extracted ||
+                !knownExtractionPermission(id) || !profile.raidExtractionPermissions.contains(id) ||
+                !resultPermissions.insert(id).second)
+                return {false, "last Raid extraction permission summary is invalid"};
+    }
     if (profile.pendingRaid && profile.pendingRaid->wishFocus.has_value() !=
             profile.pendingRaid->travel.startingBasePriority.focus.has_value())
         return {false, "Raid wish focus is missing its starting state"};
@@ -5072,9 +5148,35 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     {
         hashBytes(hash, rescue.value());
     }
+    // Empty migrated archives preserve historical fingerprint-seeded events.
+    if (!profile.raidExtractionPermissions.empty())
+    {
+        hashBytes(hash, "raid-extraction-permissions-1");
+        for (const auto &id : profile.raidExtractionPermissions) hashBytes(hash, id.value());
+    }
     if (profile.pendingRaid.has_value())
     {
         const PendingRaidSnapshot &raid = *profile.pendingRaid;
+        if (raid.credentialExtraction)
+        {
+            const auto &snapshot = *raid.credentialExtraction;
+            const auto &definition = snapshot.definition;
+            hashBytes(hash, snapshot.rulesVersion);
+            hashBytes(hash, definition.permissionId.value());
+            hashBytes(hash, definition.investigationPointId);
+            hashBytes(hash, definition.investigationSpaceId.value());
+            hashFloat(hash, definition.investigationPoint.x);
+            hashFloat(hash, definition.investigationPoint.y);
+            hashFloat(hash, definition.investigationRadius);
+            hashFloat(hash, definition.investigationDurationSeconds);
+            hashFloat(hash, definition.extractionPoint.position.x);
+            hashFloat(hash, definition.extractionPoint.position.y);
+            hashFloat(hash, definition.extractionPoint.size.x);
+            hashFloat(hash, definition.extractionPoint.size.y);
+            hashFloat(hash, definition.extractionDurationSeconds);
+            hashInteger(hash, snapshot.unlockedAtDeploy ? 1U : 0U);
+            hashInteger(hash, snapshot.investigationCompleted ? 1U : 0U);
+        }
         if (raid.startingAssets)
         {
             ProfileState baseline;
@@ -5597,6 +5699,8 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     }
     if (profile.lastRaidResult.has_value())
     {
+        for (const auto &id : profile.lastRaidResult->unlockedExtractionPermissions)
+            hashBytes(hash, id.value());
         hashBytes(hash, profile.lastRaidResult->settlementId);
         hashInteger(hash, static_cast<std::uint32_t>(
             profile.lastRaidResult->outcome));

@@ -7,6 +7,7 @@
 #include "chest_rig_layout_migration.h"
 #include "game_session.h"
 #include "raid_lifecycle.h"
+#include "raid_credential_legacy_fixture.h"
 #include "save_repository.h"
 
 namespace {
@@ -86,7 +87,7 @@ TEST(ChestRigLayoutTest, LegacySaveUpgradesOnceAndPreservesExactSourceBeforeWrit
     const auto again=saves.load(c);ASSERT_TRUE(again.profile);EXPECT_FALSE(again.migratedChestRigLayout);
     EXPECT_EQ(profileStateFingerprint(*again.profile),profileStateFingerprint(*loaded.profile));
     const auto json=nlohmann::json::parse(serializeProfileEnvelope(*again.profile,c.contentVersion()));
-    EXPECT_EQ(json["schema_version"],56);EXPECT_EQ(json["payload"]["chest_rig_layout_version"],1);
+    EXPECT_EQ(json["schema_version"],57);EXPECT_EQ(json["payload"]["chest_rig_layout_version"],1);
 }
 TEST(ChestRigLayoutTest, CorruptPrimaryRecoversLegacyBackupAndKeepsBothSources) {
     const auto &c=publishedContentRegistry();TemporaryDirectory temp;SaveRepository saves{temp.path};
@@ -104,6 +105,7 @@ TEST(ChestRigLayoutTest, PendingRaidAndStartingAssetSnapshotMigrateTogether) {
     const auto deployed=executeDeploy(old,c,DeployCommand{"old-chest-raid","old-chest-settlement",41,MapDefinitionId{"map.raid.frontier_exchange"}},
         {old.revision,"deploy-old-chest"});
     ASSERT_TRUE(deployed.succeeded)<<deployed.message;ASSERT_TRUE(old.pendingRaid->startingAssets);
+    stripCredentialExtractionForLegacySnapshot(old);
     const auto loaded=deserializeProfileEnvelope(serializeProfileEnvelope(old,"raid-noise-decoy-content-67",55),c);
     ASSERT_TRUE(loaded.profile)<<loaded.message;
     auto candidate=*loaded.profile;EXPECT_EQ(candidate.pendingRaid->raidId,old.pendingRaid->raidId);

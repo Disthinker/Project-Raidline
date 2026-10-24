@@ -675,6 +675,18 @@ struct ProceduralOutdoorDefinition
         const ProceduralOutdoorDefinition &) = default;
 };
 
+struct RaidCredentialExtractionDefinition
+{
+    RaidExtractionPermissionDefinitionId permissionId;
+    std::string investigationPointId;
+    RaidSpaceDefinitionId investigationSpaceId;
+    Vec2 investigationPoint{};
+    float investigationRadius{72.0F};
+    float investigationDurationSeconds{2.0F};
+    ContentRect extractionPoint;
+    float extractionDurationSeconds{6.0F};
+};
+
 struct MapDefinition
 {
     MapDefinitionId id;
@@ -695,6 +707,7 @@ struct MapDefinition
     ContentRect extractionPoint;
     RaidRuleDefinition raidRules;
     std::optional<RaidRescueDefinition> rescue;
+    std::optional<RaidCredentialExtractionDefinition> credentialExtraction;
     HighRiskRaidDefinition highRisk;
     LootTableDefinitionId storageLootTableId;
     EnemyDeploymentDefinitionId enemyDeploymentId;
