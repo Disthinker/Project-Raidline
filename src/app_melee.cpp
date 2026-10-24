@@ -2,26 +2,28 @@
 #include <fmt/format.h>
 #include <cmath>
 
-void App::renderProfileMeleeDetails(const AssetRecord &asset,const ItemDefinition &definition)
+void App::renderProfileMeleeDetails(const AssetRecord &asset, const ItemDefinition &definition)
 {
-    const auto &use=*definition.meleeUse;
-    const SDL_FRect panel{40,70,1200,600},back{860,92,340,32};
-    SDL_SetRenderDrawColor(renderer_,24,29,30,250);SDL_RenderFillRect(renderer_,&panel);
-    SDL_SetRenderDrawColor(renderer_,43,60,65,255);SDL_RenderFillRect(renderer_,&back);
-    const auto text=[&](float x,float y,const std::string &label){SDL_SetRenderDrawColor(renderer_,232,225,201,255);uiTextRenderer_.render(renderer_,x,y,label.c_str());};
-    text(70,100,"MELEE DETAILS");text(866,100,"BACK TO INVENTORY");text(70,155,definition.displayName);
-    text(70,210,fmt::format("MELEE DURABILITY {:.1f}/{:.1f}",asset.currentDurability/100.0F,asset.currentMaximumDurability/100.0F));
-    text(70,250,fmt::format("MELEE DAMAGE {}",use.damage));
-    text(70,290,fmt::format("MELEE RANGE {:.0f} | ANGLE {:.0f}",use.range,use.angleDegrees));
-    text(70,330,fmt::format("攻击恢复 {:.2f} 秒",use.recoverySeconds));
-    text(70,370,fmt::format("刀具重量 {} 克 | 尺寸 {} × {} 格",definition.unitWeightGrams,definition.inventoryWidthCells,definition.inventoryHeightCells));
-    text(650,210,"V QUICK MELEE | KEEP CURRENT FIREARM");
-    text(650,250,"ONE TARGET | WALLS AND ARMOR APPLY");
-    text(650,290,"WEAR ONLY ON CONTACT | NO STUN LOCK");
-    text(650,330,"BASE FULL MAINTENANCE | NO RAID REPAIR");
-    text(70,450,asset.currentDurability ? "READY FOR EMERGENCY SELF DEFENSE":"UTILITY KNIFE BROKEN | BASE MAINTENANCE");
-    text(70,550,"EQUIP IN QUICK MELEE SLOT");
-    if(!uiMessage_.empty())text(70,610,uiMessage_);
+    const auto model = projectUiItemDetails(gameSession_.profile(), publishedContentRegistry(), asset.instanceId, uiTextRenderer_.language());
+    if (!model) return;
+    if (itemDetailsInteraction_.synchronize({asset.instanceId, 0, gameSession_.profile().revision, 0,
+        uiTextRenderer_.language(), gameSession_.alphaRaidActive()})) deviceBatteryDrag_.reset();
+    uiFinalPanel(renderer_, uiItemDetailsPanel());
+    uiFinalTextAt(renderer_, uiTextRenderer_, 70, 96, model->title, 600, 22);
+    renderFoundationButton(21000, uiItemDetailsBack(), "BACK TO INVENTORY", true, false, false, {}, 14);
+    uiFinalTextAt(renderer_, uiTextRenderer_, 70, 148, model->name, 1120, 20);
+    uiFinalPanel(renderer_, {70, 184, 540, 258});
+    renderBaseSupplyImage(definition.definitionId, uiItemDetailsImage(model->kind));
+    for (std::size_t i = 0; i < model->metrics.size(); ++i) {
+        const auto r = uiItemDetailsMetric(model->kind, i);
+        uiFinalText(renderer_, uiTextRenderer_, {r.x, r.y, r.w, 23}, model->metrics[i].label, 12, 1, {157, 181, 174, 255});
+        uiFinalText(renderer_, uiTextRenderer_, {r.x, r.y + 29, r.w, 31}, model->metrics[i].value, 20);
+    }
+    uiFinalText(renderer_, uiTextRenderer_, {70, 452, 1120, 31}, model->status, 16, 1,
+        model->warning ? SDL_Color{238, 205, 144, 255} : SDL_Color{113, 191, 179, 255});
+    for (std::size_t i = 0; i < model->notes.size(); ++i)
+        uiFinalText(renderer_, uiTextRenderer_, {70, 498 + static_cast<float>(i) * 42, 1120, 40}, model->notes[i], 14, 2);
+    renderUiItemDetailsFeedback(renderer_, uiTextRenderer_, itemDetailsInteraction_, model->kind, uiMessage_);
 }
 
 void App::renderMeleeSwing(const WorldMeleeRuntime &melee)
@@ -42,12 +44,14 @@ void App::renderMeleeSwing(const WorldMeleeRuntime &melee)
 
 void App::renderMeleeStatus()
 {
-    if(inventoryOverlayState_.isOpen())return;
+    if(inventoryOverlayState_.isOpen() || tacticalMapOpen_ || medicalWheelOpen_ || throwableWheelOpen_ || developerWeaponPanelOpen_ || developerRangePanelOpen_)return;
     const auto id=equippedAsset(gameSession_.profile(),EquipmentSlotKind::QuickMelee);
-    const auto *asset=id ? gameSession_.profile().assets.find(*id):nullptr;
-    if(asset){SDL_SetRenderDrawColor(renderer_,230,224,194,255);uiTextRenderer_.render(renderer_,16,668,
-        asset->currentDurability ? fmt::format("V QUICK MELEE | MELEE DURABILITY {:.1f}",asset->currentDurability/100.0F).c_str()
-                                 : "UTILITY KNIFE BROKEN | BASE MAINTENANCE");}
-    else if(gameSession_.persistenceMessage()=="EQUIP A UTILITY KNIFE")
-    {SDL_SetRenderDrawColor(renderer_,230,224,194,255);uiTextRenderer_.render(renderer_,16,668,"EQUIP A UTILITY KNIFE");}
+    const auto *a=id?gameSession_.profile().assets.find(*id):nullptr;
+    const bool zh=uiTextRenderer_.language()==UiLanguage::SimplifiedChinese;
+    std::string label;
+    if(a)label=a->currentDurability?fmt::format("V {} {:.1f}",zh?"近战":"MELEE",a->currentDurability/100.0F):(zh?"近战损坏 · 回营维修":"MELEE BROKEN · BASE REPAIR");
+    else if(gameSession_.persistenceMessage()=="EQUIP A UTILITY KNIFE")label="EQUIP A UTILITY KNIFE";
+    const SDL_FRect bounds = gameFlow_.state()==GameFlowState::Base
+        ? SDL_FRect{704,630,552,24} : SDL_FRect{450,666,310,24};
+    if(!label.empty())uiFinalText(renderer_,uiTextRenderer_,bounds,label,12,1);
 }

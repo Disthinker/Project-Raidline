@@ -44,6 +44,7 @@ bool App::baseSiegeWarningVisible() const
 
 bool App::routeBaseSiegeWarningEvent(const SDL_Event &event)
 {
+    if (gameSession_.baseDefenseSaveBlocked() || gameSession_.baseDailySaveBlocked()) return false;
     if (gameFlow_.state() != GameFlowState::Base ||
         !gameSession_.profile().baseSiege.warningActive || gameSession_.baseDefenseActive())
         return false;
@@ -118,6 +119,7 @@ bool App::updateBaseSiegeWarning(float deltaTime)
         basePlacementState_.reset();
         baseFixedFacilityPlacementState_.reset();
         baseConstructionPanelOpen_ = false;
+        resetBaseFinalDetailsUi();
         deactivateBaseBuildCamera();
         baseFacilityContextMenu_.reset();
         tacticalMapOpen_ = false;
@@ -259,119 +261,49 @@ void App::renderBaseDefenseWorld()
 
 void App::renderBaseDefenseHud()
 {
-    if (!gameSession_.baseDefenseActive())
-    {
-        if (gameSession_.baseDailySaveBlocked())
-        {
-            SDL_SetRenderDrawColor(renderer_, 145, 66, 40, 255);
-            SDL_RenderFillRect(renderer_, &kDefenseRetry);
-            uiTextRenderer_.render(renderer_, kDefenseRetry.x + 10.0F, kDefenseRetry.y + 9.0F,
-                                   "SAVE PROTECTION PAUSED | RETRY");
+    const auto language=uiTextRenderer_.language();const auto tr=[&](auto en,auto zh){return uiBaseManagementText(language,en,zh);};
+    const bool active=gameSession_.baseDefenseActive();
+    const bool blocked=active?gameSession_.baseDefenseSaveBlocked():gameSession_.baseDailySaveBlocked();
+    if(blocked) {
+        renderFoundationButton(20600,kDefenseRetry,tr("Save paused · retry","保存暂停 · 重试"),true,true,false,{},14);
+        const auto box=uiBaseDefenseFeedbackRect();uiFinalPanel(renderer_,box,true);
+        uiFinalTextAt(renderer_,uiTextRenderer_,box.x+14,box.y+10,tr("SAVE FAILED · world protected","保存失败 · 已暂停保护"),box.w-28,15);
+        const auto &message=gameSession_.persistenceMessage();
+        if(baseFinalFeedbackKey_!=message){baseFinalFeedbackKey_=message;baseFinalFeedbackScroll_=0;}
+        renderUiBaseManagementFeedback(renderer_,uiTextRenderer_,{box.x+14,box.y+42,box.w-28,box.h-54},message,baseFinalFeedbackScroll_);
+    }
+    if(!active) {
+        if(baseDefenseResultVisible_ && !blocked) {
+            const auto facts=projectUiBaseDefenseResultFacts(gameSession_.profile().baseSiege,language);
+            const auto box=uiBaseDefenseResultPanel();uiFinalPanel(renderer_,box,!facts.defended);
+            uiFinalTextAt(renderer_,uiTextRenderer_,354,250,facts.title,572,22);
+            uiFinalTextAt(renderer_,uiTextRenderer_,354,295,facts.summary,572,14,2);
+            uiFinalTextAt(renderer_,uiTextRenderer_,354,340,facts.retained,572,14,2);
+            uiFinalTextAt(renderer_,uiTextRenderer_,354,394,facts.losses,572,14);
+            renderFoundationButton(20601,{510,440,260,44},tr("Continue","继续游戏"),true,false,false,{},17);
         }
-        if (developerPerformanceOverlayOpen_)
-        {
-            const auto s = gameSession_.baseDailyCheckpointStatus();
-            const auto text = fmt::format(
-                "BASE CHECKPOINT | COPY {:.2f}ms | JSON {:.2f}ms | COMMIT {:.2f}ms | LAG {:.0f}ms | {}/{}",
-                s.lastCopyMilliseconds, s.lastWriteMetrics.serializationMilliseconds,
-                s.lastWriteMetrics.commitMilliseconds, s.durabilityLagMilliseconds,
-                s.durableGeneration, s.requestedGeneration);
-            uiTextRenderer_.render(renderer_, 16.0F, 580.0F, text.c_str());
+        if(developerPerformanceOverlayOpen_) {
+            const auto s=gameSession_.baseDailyCheckpointStatus();
+            uiFinalTextAt(renderer_,uiTextRenderer_,16,580,fmt::format("BASE CHECKPOINT · Copy {:.2f}ms · JSON {:.2f}ms · Commit {:.2f}ms · Lag {:.0f}ms · {}/{}",
+                s.lastCopyMilliseconds,s.lastWriteMetrics.serializationMilliseconds,s.lastWriteMetrics.commitMilliseconds,s.durabilityLagMilliseconds,s.durableGeneration,s.requestedGeneration),1248,12);
         }
-        if (!baseDefenseResultVisible_)
-            return;
-        const auto &result = gameSession_.profile().baseSiege;
-        const bool defended = result.lastOutcome == BaseSiegeOutcome::Defended;
-        const SDL_FRect panel{330, 230, 620, 275};
-        SDL_SetRenderDrawColor(renderer_, 28, 35, 30, 255);
-        SDL_RenderFillRect(renderer_, &panel);
-        SDL_SetRenderDrawColor(renderer_, 207, 208, 153, 255);
-        SDL_RenderRect(renderer_, &panel);
-        uiTextRenderer_.render(renderer_, 370, 260,
-                               defended ? "BASE DEFENDED | SAFETY PERIOD STARTED"
-                                        : "BASE DEFENSE FAILED SOFTLY | RECOVERY PERIOD STARTED");
-        uiTextRenderer_.render(
-            renderer_, 370, 305,
-            defended ? "SUCCESS: MATERIAL +8, MORALE SUPPORT, 7 SAFE DAYS"
-                     : "FAILURE: LIMITED PUBLIC LOSS, 12 SAFE DAYS, NO PERSONAL GEAR LOSS");
-        uiTextRenderer_.render(renderer_, 370, 345,
-                               "ITEMS KEPT IN PLACE | SPENT AMMO AND MEDICINE REMAIN SPENT");
-        const auto losses = fmt::format("SECURITY SPENT {} | RESIDENTS LOST {}",
-                                        result.lastSecuritySpent, result.lastPopulationLost);
-        uiTextRenderer_.render(renderer_, 370, 381, losses.c_str());
-        const SDL_FRect close{510, 440, 260, 44};
-        SDL_SetRenderDrawColor(renderer_, 49, 86, 62, 255);
-        SDL_RenderFillRect(renderer_, &close);
-        uiTextRenderer_.render(renderer_, 530, 454, "CONTINUE GAME");
         return;
     }
-    const auto *state = gameFlow_.baseWorld().baseDefenseState();
-    if (!state)
-        state = &*gameSession_.profile().activeBaseDefense;
-    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-    const SDL_FRect panel{330.0F, 74.0F, 620.0F, 116.0F};
-    SDL_SetRenderDrawColor(renderer_, 35, 24, 17, 232);
-    SDL_RenderFillRect(renderer_, &panel);
-    SDL_SetRenderDrawColor(renderer_, 244, 201, 142, 255);
-    SDL_RenderRect(renderer_, &panel);
-    std::size_t total{};
-    for (const auto &wave : state->wavePlans)
-        total += wave.enemyIds.size();
-    const auto status = fmt::format(
-        "BASE DEFENSE | WAVE {}/{} | PROCESSED {}/{} | BREACH {}/{}",
-        std::min(state->currentWave + 1U, static_cast<std::uint32_t>(state->wavePlans.size())),
-        state->wavePlans.size(), state->killedIds.size() + state->breachedIds.size(), total,
-        state->breachedIds.size(), state->breachLimit);
-    uiTextRenderer_.render(renderer_, 345.0F, 86.0F, status.c_str());
-    uiTextRenderer_.render(renderer_, 345.0F, 109.0F,
-                           "INTERCEPT OUTSIDE CORE | RED LINE CONTACT COUNTS AS A BREACH");
-    uiTextRenderer_.render(renderer_, 345.0F, 132.0F,
-                           "CORE IS SAFE; HIDING DOES NOT STOP THE ATTACK | ESC PAUSES");
-    const auto &world = gameFlow_.baseWorld();
-    const Vec2 player = world.playerPosition();
-    std::string approaches{"APPROACHES: "};
-    for (std::size_t i{}; i < std::min<std::size_t>(2, state->wavePlans.size()); ++i)
-    {
-        const auto d = state->wavePlans[i].entry;
-        if (i)
-            approaches += " / ";
-        approaches += std::abs(d.x - player.x) > std::abs(d.y - player.y)
-                          ? (d.x > player.x ? "EAST" : "WEST")
-                          : (d.y > player.y ? "SOUTH" : "NORTH");
+    const auto *state=gameFlow_.baseWorld().baseDefenseState();
+    if(!state && gameSession_.profile().activeBaseDefense)state=&*gameSession_.profile().activeBaseDefense;
+    if(!state)return;
+    const auto facts=projectUiBaseDefenseFacts(*state,gameFlow_.baseWorld().playerPosition(),language);
+    const SDL_FRect panel{330,74,620,116};uiFinalPanel(renderer_,panel,true);
+    uiFinalTextAt(renderer_,uiTextRenderer_,345,82,facts.title+" · "+facts.breach,590,15);
+    uiFinalTextAt(renderer_,uiTextRenderer_,345,108,facts.progress+" · "+facts.nextWave,590,13);
+    uiFinalTextAt(renderer_,uiTextRenderer_,345,132,tr("Intercept outside core · Red-line contact counts as a breach","在核心外拦截 · 敌人触及红线即计突破"),590,13);
+    uiFinalTextAt(renderer_,uiTextRenderer_,345,157,facts.approaches+tr(" · Hiding does not stop attack"," · 躲避不会阻止进攻"),590,12);
+    uiFinalText(renderer_,uiTextRenderer_,kDefenseAbandon,tr("Esc · pause / abandon defense","Esc · 暂停 / 放弃防守"),12);
+    if(developerPerformanceOverlayOpen_) {
+        const auto m=gameFlow_.baseWorld().baseDefenseMetrics();const auto s=gameSession_.baseDefenseCheckpointStatus();
+        uiFinalTextAt(renderer_,uiTextRenderer_,16,562,fmt::format("BASE SIM {:.2f}ms · Nav {:.2f}ms / {} · Actors {}",m.updateMilliseconds,m.navigationMilliseconds,m.navigationQueries,m.activeEnemies),1248,12);
+        uiFinalTextAt(renderer_,uiTextRenderer_,16,580,fmt::format("BASE CHECKPOINT · Copy {:.2f}ms · JSON {:.2f}ms · Commit {:.2f}ms · Lag {:.0f}ms · {}/{}",
+            s.lastCopyMilliseconds,s.lastWriteMetrics.serializationMilliseconds,s.lastWriteMetrics.commitMilliseconds,s.durabilityLagMilliseconds,s.durableGeneration,s.requestedGeneration),1248,12);
     }
-    uiTextRenderer_.render(renderer_, 345.0F, 155.0F, approaches.c_str());
-    if (state->currentWave < state->wavePlans.size())
-    {
-        const auto countdown = fmt::format("NEXT WAVE IN {}s",
-            static_cast<unsigned>(std::ceil(std::max(0.0F,
-                state->wavePlans[state->currentWave].releaseSeconds - state->elapsedSeconds))));
-        uiTextRenderer_.render(renderer_, 690.0F, 155.0F, countdown.c_str());
-    }
-    uiTextRenderer_.render(renderer_, kDefenseAbandon.x + 10.0F, kDefenseAbandon.y + 9.0F,
-                           "ESC MENU: SAVE / ABANDON DEFENSE");
-    if (gameSession_.baseDefenseSaveBlocked())
-    {
-        SDL_SetRenderDrawColor(renderer_, 145, 66, 40, 255);
-        SDL_RenderFillRect(renderer_, &kDefenseRetry);
-        uiTextRenderer_.render(renderer_, kDefenseRetry.x + 10.0F, kDefenseRetry.y + 9.0F,
-                               "SAVE PROTECTION PAUSED | RETRY");
-        uiTextRenderer_.render(renderer_, 345.0F, 211.0F,
-                               gameSession_.persistenceMessage().c_str());
-    }
-    if (developerPerformanceOverlayOpen_)
-    {
-        const auto runtime = world.baseDefenseMetrics();
-        const auto simulation = fmt::format(
-            "BASE SIM {:.2f}ms | NAV {:.2f}ms / {} | ACTORS {}", runtime.updateMilliseconds,
-            runtime.navigationMilliseconds, runtime.navigationQueries, runtime.activeEnemies);
-        uiTextRenderer_.render(renderer_, 16.0F, 562.0F, simulation.c_str());
-        const auto s = gameSession_.baseDefenseCheckpointStatus();
-        const auto text =
-            fmt::format("BASE CHECKPOINT | COPY {:.2f}ms | JSON {:.2f}ms | COMMIT {:.2f}ms | LAG "
-                        "{:.0f}ms | {}/{}",
-                        s.lastCopyMilliseconds, s.lastWriteMetrics.serializationMilliseconds,
-                        s.lastWriteMetrics.commitMilliseconds, s.durabilityLagMilliseconds,
-                        s.durableGeneration, s.requestedGeneration);
-        uiTextRenderer_.render(renderer_, 16.0F, 580.0F, text.c_str());
-    }
+    SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_NONE);
 }
