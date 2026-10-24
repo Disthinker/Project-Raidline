@@ -1,3 +1,16 @@
+# 当前：通行许可与凭证撤离已验收，正在交付
+
+**RL-RAID-CREDENTIAL-EXTRACTION-v1 已获用户验收，正在提交、推送并完成双平台CI后合并。** 已验收候选`1d3fae52cc99`保持；桌面 **Project Raidline Debug** 继续使用同一程序。
+
+- 人类直接授权：“通行许可与凭证撤离 v1 验收通过，请完成提交、推送和合并。”
+- 本地Windows Debug完整2699/2699及原五项3ms通过；源码和程序与验收候选逐项匹配。本次PR、准确HEAD双平台CI及合并尚未完成。
+- state：accepted_delivery_in_progress；task_id：raid-credential-extraction-v1；accepted_candidate_id：RL-RAID-CREDENTIAL-EXTRACTION-v1-local-1d3fae52cc99。
+- 已验收UI和玩法、原存档、固定入口及其他未提交修改保留；本轮不启动下一项开发。
+- [方案与交付记录](../exec-plans/active/raid-credential-extraction-v1.md)；[玩法回查](../acceptance/raid-credential-extraction-v1.md)。实际目录仍为`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`，分支`codex/raid-credential-extraction-v1`，基线main3818de0。
+
+<details>
+<summary>上一项及早期记录（历史）</summary>
+
 # 当前：UI已验收，正在补齐CI验证
 
 **游戏程序保持已验收版本。** 首轮Windows检查通过，Ubuntu发现旧测试的文字采样位置过期；仅同步两处测试坐标，继续同一PR交付。
@@ -1844,6 +1857,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 
 </details>
 
+
+</details>
 
 </details>
 

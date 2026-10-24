@@ -1,4 +1,5 @@
 #include "raid_corpse_search.h"
+#include "raid_credential_extraction.h"
 #include "tactical_device_domain.h"
 #include "raid_lifecycle.h"
 #include "base_wish_expedition.h"
@@ -708,6 +709,15 @@ DeployReceipt executeDeploy(
     snapshot.outpostRestoration = std::move(outpostRestoration);
     snapshot.baseSiteClearance = std::move(baseSiteClearance);
     snapshot.basePerimeterSweep = std::move(basePerimeterSweep);
+    if (regionalMissionCount == 0U && map->credentialExtraction)
+    {
+        snapshot.credentialExtraction = RaidCredentialExtractionSnapshot{
+            *map->credentialExtraction,
+            candidate.raidExtractionPermissions.contains(
+                map->credentialExtraction->permissionId),
+            false,
+            std::string{kRaidCredentialExtractionRulesVersion}};
+    }
     for (std::size_t index = 0;
          index < kRaidIntelligenceCategoryCount;
          ++index)
@@ -1225,6 +1235,10 @@ DeployReceipt executeDeploy(
                        RaidMapAnchorKind::InteriorEntrance,
                        snapshot.interiors[index].exteriorEntrance.size);
         }
+        if (snapshot.credentialExtraction)
+            addRequest(std::string{kRaidAnchorCredentialExtraction},
+                       RaidMapAnchorKind::CredentialExtraction,
+                       snapshot.credentialExtraction->definition.extractionPoint.size);
     }
     else
     {
@@ -1325,6 +1339,16 @@ DeployReceipt executeDeploy(
         }
         snapshot.playerSpawn = player->bounds.position;
         snapshot.extractionPoint = extraction->bounds;
+        if (snapshot.credentialExtraction)
+        {
+            const auto *anchor = placement(kRaidAnchorCredentialExtraction);
+            if (anchor == nullptr)
+                return deployFailure(
+                    RaidLifecycleError::InvalidCommand,
+                    "generated Raid omitted credential extraction anchor",
+                    profile.revision);
+            snapshot.credentialExtraction->definition.extractionPoint = anchor->bounds;
+        }
         if (snapshot.rescue.has_value())
         {
             const auto *anchor = placement(kRaidAnchorRescue);
@@ -1818,6 +1842,28 @@ RaidSettlementReceipt settlePendingRaid(
     for (auto id : abandonedCells) static_cast<void>(candidate.assets.erase(id));
 
     const PendingRaidSnapshot raidSnapshot = *candidate.pendingRaid;
+    if (raidSnapshot.credentialExtraction)
+    {
+        // Pending is removed before final validation below. Validate its
+        // credential contract while it still exists so forged facts cannot
+        // turn into a valid permanent permission during settlement.
+        const ProfileValidationResult validation =
+            validateProfileState(profile, content);
+        if (!validation.valid)
+            return settlementFailure(
+                RaidLifecycleError::InvalidProfile,
+                validation.message, profile.revision, outcome);
+    }
+    std::vector<RaidExtractionPermissionDefinitionId> newlyUnlockedPermissions;
+    if (outcome == RaidResultOutcome::Extracted &&
+        raidSnapshot.credentialExtraction &&
+        raidSnapshot.credentialExtraction->investigationCompleted)
+    {
+        const auto &permission =
+            raidSnapshot.credentialExtraction->definition.permissionId;
+        if (!candidate.raidExtractionPermissions.contains(permission))
+            newlyUnlockedPermissions.push_back(permission);
+    }
     std::vector<ItemDefinitionId> returned;
     if (outcome == RaidResultOutcome::Extracted)
     {
@@ -1974,6 +2020,8 @@ RaidSettlementReceipt settlePendingRaid(
             candidate.worldClock.elapsedWorldMinutes;
     }
     candidate.pendingRaid.reset();
+    for (const auto &permission : newlyUnlockedPermissions)
+        candidate.raidExtractionPermissions.insert(permission);
     static_cast<void>(applyBaseManufacturingThrough(candidate, content));
     candidate.committedSettlements.insert(id);
     candidate.lastRaidResult = LastRaidResult{
@@ -1990,6 +2038,8 @@ RaidSettlementReceipt settlePendingRaid(
             : 0U,
         lostRecordId,
         baseThreatReducedUnits};
+    candidate.lastRaidResult->unlockedExtractionPermissions =
+        std::move(newlyUnlockedPermissions);
     if (raidSnapshot.wishFocus)
         candidate.lastRaidResult->wishReturn = summarizeBaseWishReturn(
             candidate, content, *raidSnapshot.wishFocus,

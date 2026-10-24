@@ -5857,6 +5857,7 @@ void App::update(float deltaTime)
     if (pauseMenu_.isOpen())
     {
         gameSession_.cancelWeaponLightInput();
+        gameSession_.cancelRaidCredentialInteraction();
         if (escapePressed)
         {
             static_cast<void>(pauseMenu_.handleEscape());
@@ -5885,6 +5886,7 @@ void App::update(float deltaTime)
     {
         pauseMenu_.open();
         gameSession_.cancelWeaponLightInput();
+        gameSession_.cancelRaidCredentialInteraction();
         input_.suppressPrimaryPointerUntilRelease();
         return;
     }
@@ -6476,6 +6478,10 @@ void App::renderDebugText()
     else if(world.signalInterruptedVisible())p.signal=gameSession_.canCallSignalExtraction()?tr("信号中断 · 返回后按 F 重试","SIGNAL INTERRUPTED · RETURN AND PRESS F"):tr("信号中断","SIGNAL INTERRUPTED");
     else if(gameSession_.canCallSignalExtraction())p.signal=tr("F 呼叫撤离 · 会吸引附近敌人","F CALL EXTRACTION · ATTRACTS NEARBY ENEMIES");
     if(profile.pendingRaid){
+        if(profile.pendingRaid->credentialExtraction &&
+           profile.pendingRaid->credentialExtraction->investigationCompleted &&
+           !profile.pendingRaid->credentialExtraction->unlockedAtDeploy)
+            p.objective=tr("通行资料已取得 · 成功撤离后登记","TRANSIT DOCUMENTS SECURED | EXTRACT TO REGISTER");
         if(profile.pendingRaid->outpostRestoration)p.objective=gameSession_.outpostRestorationObjectiveSecured()?tr("据点清理完成 · 撤离后恢复路线","OUTPOST SECURED · EXTRACT TO RESTORE ROUTES"):fmt::format("{} {}",tr("清理据点 · 初始敌人剩余","CLEAR OUTPOST · INITIAL HOSTILES"),world.aliveInitialEnemyCount());
         else if(profile.pendingRaid->baseSiteClearance)p.objective=gameSession_.baseSiteClearanceObjectiveSecured()?tr("建家地点已清理 · 撤离解锁","BASE SITE SECURED · EXTRACT TO UNLOCK"):fmt::format("{} {}",tr("清理建家地点 · 初始敌人剩余","CLEAR BASE SITE · INITIAL HOSTILES"),world.aliveInitialEnemyCount());
         else if(profile.pendingRaid->basePerimeterSweep)p.objective=gameSession_.basePerimeterSweepObjectiveSecured()?tr("周边清剿完成 · 撤离降低威胁","PERIMETER SECURED · EXTRACT TO REDUCE THREAT"):fmt::format("{} {}",tr("周边清剿 · 初始敌人剩余","PERIMETER SWEEP · INITIAL HOSTILES"),world.aliveInitialEnemyCount());
@@ -6517,6 +6523,10 @@ void App::renderDebugText()
                 return "HEALING";},*action);
             p.actionActive=true;p.actionFraction=gameSession_.raidActionState().progress();p.action=fmt::format("{} {:.0f}%",name,p.actionFraction*100);
         }
+    }
+    if(world.credentialInvestigationProgress()>0.0F && world.credentialInvestigationInRange()){
+        p.actionActive=true;p.actionFraction=world.credentialInvestigationProgress();
+        p.action=fmt::format("{} {:.0f}%",tr("调查通行资料","INVESTIGATING TRANSIT DOCUMENTS"),p.actionFraction*100);
     }
     if(raid.state()==RaidSessionState::Extracting || raid.state()==RaidSessionState::Extracted){p.actionActive=true;p.actionFraction=raid.extractionProgress();p.action=fmt::format("{} {:.0f}%",tr("撤离中","EXTRACTING"),p.actionFraction*100);}
     const auto light=gameSession_.activeWeaponLight();
@@ -8017,6 +8027,15 @@ void App::renderExtractionPoint()
             label.c_str(),
             false,
             closedLabel.c_str());
+    }
+
+    if (const auto &credential = gameSession_.world().credentialExtractionPoint(); credential)
+    {
+        const bool unlocked = gameSession_.world().credentialExtractionUnlocked();
+        renderZone(*credential, RaidExtractionRoute::Credential,
+            unlocked && raidSession.credentialExtractionOpen(),
+            "CREDENTIAL EXIT | 6s", false,
+            unlocked ? "CREDENTIAL EXIT | WAIT FOR HIGH RISK" : "CREDENTIAL EXIT | PERMISSION REQUIRED");
     }
 
     const bool highRisk = raidSession.phase() == RaidPhase::HighRisk;
@@ -12379,6 +12398,7 @@ void App::renderAlphaRaidLoot()
     {
         return;
     }
+    renderRaidCredentialDocuments();
     const std::optional<RaidSelfRecoveryProjection> recovery =
         gameSession_.raidSelfRecoveryProjection();
     if (recovery.has_value() && !recovery->opened &&
@@ -13176,6 +13196,11 @@ void App::renderRaidTacticalMap()
         map.conditionalExtraction(),
         "L",
         104, 180, 230);
+    renderExtraction(
+        RaidMapExtractionKind::Credential,
+        map.credentialExtraction(),
+        uiTextRenderer_.language() == UiLanguage::SimplifiedChinese ? "凭" : "C",
+        172, 214, 176);
 
     if (tacticalMapAdvancedResourceVisible(map, presentationMode))
     {
@@ -13398,6 +13423,15 @@ void App::renderRaidTacticalMap()
                     gameSession_.conditionalExtractionEligible()
                 ? "OPEN" : "LOCKED");
         uiFinalTextAt(renderer_,uiTextRenderer_,674,640,exitStatus.c_str(),462,11,1);
+    }
+    if (map.credentialExtraction() &&
+        tacticalMapExtractionVisible(map, RaidMapExtractionKind::Credential, presentationMode))
+    {
+        const bool unlocked = gameSession_.world().credentialExtractionUnlocked();
+        const char *status = !unlocked ? "CREDENTIAL EXIT | PERMISSION REQUIRED" :
+            gameSession_.world().raidSession().credentialExtractionOpen() ?
+            "CREDENTIAL EXIT | 6s | NO WEIGHT LIMIT" : "CREDENTIAL EXIT | WAIT FOR HIGH RISK";
+        uiFinalTextAt(renderer_,uiTextRenderer_,144,644,status,500,11,1);
     }
     const RaidOperationProjection operation =
         gameSession_.raidOperationProjection();

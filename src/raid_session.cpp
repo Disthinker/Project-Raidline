@@ -19,6 +19,8 @@ RaidSession::RaidSession(
           config_.raidDurationSeconds <= 0.0F)) ||
         !std::isfinite(config_.extractionDurationSeconds) ||
         config_.extractionDurationSeconds <= 0.0F ||
+        !std::isfinite(config_.credentialExtractionDurationSeconds) ||
+        config_.credentialExtractionDurationSeconds < 0.0F ||
         (config_.highRisk.enabled &&
          (!std::isfinite(config_.highRisk.regularPhaseDurationSeconds) ||
           config_.highRisk.regularPhaseDurationSeconds <= 0.0F ||
@@ -69,7 +71,8 @@ void RaidSession::update(
     bool playerInNormalExtractionPoint,
     bool playerInEmergencyExtractionPoint,
     bool playerInConditionalExtractionPoint,
-    bool signalCallRequested) noexcept
+    bool signalCallRequested,
+    bool playerInCredentialExtractionPoint) noexcept
 {
     enteredHighRiskLastUpdate_ = false;
     signalCalledLastUpdate_ = false;
@@ -92,6 +95,9 @@ void RaidSession::update(
         case RaidExtractionRoute::EmergencyConditional:
             remainsInRoute = playerInConditionalExtractionPoint;
             break;
+        case RaidExtractionRoute::Credential:
+            remainsInRoute = playerInCredentialExtractionPoint;
+            break;
         case RaidExtractionRoute::None:
             break;
         }
@@ -113,6 +119,12 @@ void RaidSession::update(
         {
             state_ = RaidSessionState::Extracting;
             extractionRoute_ = RaidExtractionRoute::EmergencyConditional;
+        }
+        else if (credentialExtractionOpen() &&
+                 playerInCredentialExtractionPoint)
+        {
+            state_ = RaidSessionState::Extracting;
+            extractionRoute_ = RaidExtractionRoute::Credential;
         }
         else if (emergencyExtractionOpen() &&
                  playerInEmergencyExtractionPoint && signalCallRequested)
@@ -196,6 +208,15 @@ bool RaidSession::interruptSignalExtraction() noexcept
 {
     if (state_ != RaidSessionState::Extracting ||
         extractionRoute_ != RaidExtractionRoute::EmergencySignal)
+        return false;
+    cancelExtraction();
+    return true;
+}
+
+bool RaidSession::interruptCredentialExtraction() noexcept
+{
+    if (state_ != RaidSessionState::Extracting ||
+        extractionRoute_ != RaidExtractionRoute::Credential)
         return false;
     cancelExtraction();
     return true;
@@ -314,6 +335,12 @@ bool RaidSession::enteredHighRiskLastUpdate() const noexcept
     return enteredHighRiskLastUpdate_;
 }
 
+bool RaidSession::credentialExtractionOpen() const noexcept
+{
+    return config_.highRisk.enabled && phase_ == RaidPhase::HighRisk &&
+        config_.credentialExtractionDurationSeconds > 0.0F;
+}
+
 float RaidSession::highRiskTimeElapsed() const noexcept
 {
     return highRiskTimeElapsed_;
@@ -327,6 +354,8 @@ float RaidSession::activeExtractionDuration() const noexcept
         return config_.highRisk.emergencyExtractionDurationSeconds;
     case RaidExtractionRoute::EmergencyConditional:
         return config_.highRisk.conditionalExtractionDurationSeconds;
+    case RaidExtractionRoute::Credential:
+        return config_.credentialExtractionDurationSeconds;
     case RaidExtractionRoute::None:
     case RaidExtractionRoute::Normal:
         return config_.extractionDurationSeconds;

@@ -309,6 +309,8 @@ add_library(raidline_domain STATIC
     src/profile_combat_domain.h
     src/raid_corpse_search.cpp
     src/raid_corpse_search.h
+    src/raid_credential_extraction.cpp
+    src/raid_credential_extraction.h
     src/raid_visibility.cpp
     src/raid_visibility.h
     src/raid_lifecycle.cpp
@@ -501,6 +503,7 @@ add_library(raidline_sdl_client STATIC
     src/ui_foundation.h
     src/ui_discrete_press.h
     src/app_ui_final.cpp
+    src/app_raid_credential.cpp
     src/ui_item_details_presentation.cpp
     src/ui_item_details_presentation.h
     src/ui_raid_hud_presentation.cpp
@@ -812,6 +815,10 @@ raidline_add_test(
     raidline::domain)
 raidline_add_test(RaidSceneContainerTest tests/test_raid_scene_containers.cpp raidline::services)
 raidline_add_test(RaidCorpseSearchTest tests/test_raid_corpse_search.cpp raidline::services)
+raidline_add_test(RaidCredentialDataTest tests/test_raid_credential_data.cpp raidline::services)
+raidline_add_test(RaidCredentialRuntimeTest tests/test_raid_credential_runtime.cpp raidline::services)
+raidline_add_test(RaidCredentialExtractionTest tests/test_raid_credential_extraction.cpp raidline::services)
+raidline_add_test(RaidCredentialSessionTest tests/test_raid_credential_session.cpp raidline::sdl_client)
 raidline_add_test(RaidIndoorVisibilityTest tests/test_raid_indoor_visibility.cpp raidline::services)
 raidline_add_test(RaidIndoorVisibilityUiTest tests/test_raid_indoor_visibility_ui.cpp raidline::sdl_client)
 raidline_add_test(RaidLightConeVisibilityTest tests/test_raid_light_cone_visibility.cpp raidline::services)

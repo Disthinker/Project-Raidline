@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "game_session.h"
+#include "raid_credential_legacy_fixture.h"
 #include "alpha_content_ids.h"
 #include "base_world.h"
 
@@ -761,6 +762,7 @@ TEST(GameSessionTest, LegacyPendingRaidRollsBackBeforeIndependentPageMigration)
                       MapDefinitionId{"map.raid.frontier_exchange"}},
         CommandContext{legacy.revision, "legacy-page-deploy"}).succeeded);
     ASSERT_TRUE(legacy.pendingRaid->startingAssets);
+    stripCredentialExtractionForLegacySnapshot(legacy);
     legacy.assets.findMutable(rifle)->currentDurability = 1234;
     ASSERT_TRUE(validateProfileState(legacy, content).valid);
     const auto original = serializeProfileEnvelope(legacy, content.contentVersion(), 54);

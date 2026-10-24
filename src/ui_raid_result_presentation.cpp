@@ -58,6 +58,8 @@ std::string uiRaidResultContextKey(const std::string &profileId,
         key.number(result->lostRaidRecordId.has_value());
         if (result->lostRaidRecordId) key.add(*result->lostRaidRecordId);
         key.number(result->baseThreatReducedUnits);
+        key.number(result->unlockedExtractionPermissions.size());
+        for (const auto &id : result->unlockedExtractionPermissions) key.add(id.value());
         key.number(result->wishReturn.has_value());
         if (result->wishReturn) {
             const auto &wish = *result->wishReturn;
@@ -129,6 +131,8 @@ UiRaidResultProjection projectUiRaidResult(const std::string &profileId,
     // A zero is available in details without occupying a primary summary row.
     if (p.currencyDelta != 0)
         p.summaryLines.push_back(text("CURRENCY CHANGE") + ": " + signedNumber(p.currencyDelta));
+    if (p.extracted && !result.unlockedExtractionPermissions.empty())
+        p.summaryLines.push_back(text("FRONTIER TRANSIT PERMIT REGISTERED"));
     if (p.summaryLines.empty()) p.summaryLines.push_back(text("SETTLEMENT RECORDED"));
 
     p.detailLines.push_back(text("RETURN / REGROUP TRAVEL") + ": " +

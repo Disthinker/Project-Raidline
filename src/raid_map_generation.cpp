@@ -1221,6 +1221,7 @@ bool districtKindMatchesAnchor(
             district == RaidDistrictKind::OpenGround;
     case RaidMapAnchorKind::NormalExtraction:
     case RaidMapAnchorKind::EmergencyExtraction:
+    case RaidMapAnchorKind::CredentialExtraction:
         return district == RaidDistrictKind::Highway ||
             district == RaidDistrictKind::Logistics;
     case RaidMapAnchorKind::ConditionalExtraction:
@@ -1383,6 +1384,21 @@ std::vector<RaidAnchorPlacementSnapshot> placeAnchors(
                 {
                     continue;
                 }
+            }
+            // Landmark structures are mandatory colliders appended after
+            // anchor placement. Unlike random props they do not pass through
+            // the later occupied-cell check, so reserve them explicitly for
+            // the new route without moving any preceding accepted anchor.
+            if (request.kind == RaidMapAnchorKind::CredentialExtraction &&
+                std::any_of(landmarks.begin(), landmarks.end(),
+                    [&](const RaidLandmarkPlacementSnapshot &landmark)
+                    {
+                        return std::any_of(landmark.structures.begin(),
+                            landmark.structures.end(), [&](ContentRect structure)
+                            { return overlaps(inflated(structure, 80.0F), bounds); });
+                    }))
+            {
+                continue;
             }
             if (requiredLandmark != nullptr)
             {

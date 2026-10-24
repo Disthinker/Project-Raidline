@@ -1,4 +1,5 @@
 #include "raid_corpse_search.h"
+#include "raid_credential_extraction.h"
 #include "game_session.h"
 #include "base_defense_preparation.h"
 #include "home_founding_domain.h"
@@ -725,6 +726,11 @@ bool GameSession::canCallSignalExtraction(bool inventoryOpen) const noexcept
     return world_->canCallSignalExtraction(input);
 }
 
+void GameSession::cancelRaidCredentialInteraction() noexcept
+{
+    if (world_) world_->interruptCredentialInteraction();
+}
+
 GameSessionState GameSession::state() const noexcept
 {
     return state_;
@@ -1173,6 +1179,7 @@ bool GameSession::deployAlpha(
         }
         worldConfig.normalExtractionDurationSeconds =
             map.raidRules.extractionDurationSeconds;
+        worldConfig.credentialExtraction = snapshot.credentialExtraction;
         worldConfig.intelligence = snapshot.intelligence;
         if (snapshot.rescue.has_value() && !snapshot.rescue->secured)
         {
@@ -4032,6 +4039,12 @@ void GameSession::updateAlphaRaid(
         simulationInput.interactJustPressed = false;
         simulationInput.interactPressed = false;
     }
+    // Existing scene storage and loose items retain the same F priority.
+    // Only query them around the new point, outside the enemy/vision hot path.
+    simulationInput.credentialInvestigationAllowed =
+        raidWorldInteractionAvailable(input.inventoryOpen) &&
+        (!world_->credentialInvestigationInRange() ||
+         (!nearbyRaidSceneContainer() && !nearbyRaidLoot()));
     if (fireSuppressedUntilRelease_)
     {
         if (rawInput.firePressed)
@@ -4308,6 +4321,29 @@ void GameSession::updateAlphaRaid(
         static_cast<void>(secureOrdinarySurvivorRescue());
     }
     advanceAlphaMedicalStatus(deltaTime);
+
+    if (const auto fact = world_->pendingCredentialInvestigation())
+    {
+        if (world_->player().isDead() || world_->player().isControlled() ||
+            (lastIncomingDamage_ && lastIncomingDamage_->damageApplied > 0))
+        {
+            world_->cancelCredentialInvestigationInteraction();
+        }
+        else
+        {
+            ProfileState candidate = profile_;
+            const auto recorded = recordRaidCredentialInvestigation(
+                candidate, publishedContentRegistry(), *fact);
+            if (!recorded.valid ||
+                !commitProfileCandidate(std::move(candidate), false))
+            {
+                persistenceMessage_ = recorded.message;
+                state_ = GameSessionState::SettlementBlocked;
+                return;
+            }
+            world_->acknowledgeCredentialInvestigation();
+        }
+    }
 
     if (profile_.pendingRaid && profile_.pendingRaid->selfRecovery.has_value() &&
         !profile_.pendingRaid->selfRecovery->opened)
@@ -4706,6 +4742,8 @@ void GameSession::updateAlphaRaid(
         !world_->raidSession().signalCalledLastUpdate() &&
         !raidActionState_.active().has_value() &&
         !world_->highRiskControlInteractionInRange() &&
+        !(simulationInput.credentialInvestigationAllowed &&
+          world_->credentialInvestigationInRange()) &&
         !world_->ordinarySurvivorRescueInteractionInRange())
     {
         if (const auto loot = nearbyRaidLoot())
