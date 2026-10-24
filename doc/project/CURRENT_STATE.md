@@ -1,8 +1,97 @@
-# 当前：对局结果界面 v1 已验收，正在交付
+# 当前：基地显示减负已验收，正在交付
 
-用户已验收候选 **fc00d531a705**，并授权提交、推送和合并。当前正在交付；本轮不启动下一项开发。
+用户已通过当前候选复验，正在完成提交、推送与合并。交付后结束本轮UI专项。
 
-本轮不安排或启动下一任务。
+- state：accepted_delivering；task_id：ui-final-consolidation；fix_plan_version：RL-UI-BASE-DECLUTTER-v1；parent_plan_version：RL-UI-FINAL-CONSOLIDATION-v1。
+- accepted_candidate_id：`RL-UI-BASE-DECLUTTER-v1-local-544b4a735d34`；acceptance_source：2026-10-24主控直接人类原文“基地显示减负 v1 复验通过，请完成提交、推送和合并。”。本次明确授权提交、推送和合并。
+- 已验收源码488文件SHA256：`544b4a735d34afa76fee258a91967c75e0c8e7fb0b100c56cc2283827cb5125c`；程序SHA256：`d4caf356cbe3374415b52d995614d014665c81bccf6769847ecb45d02ca7c5ee`，交付前重新核对一致。
+- Windows本地构建、UI专项50/50、完整2644/2644及原五项3ms通过。准确PR双平台CI尚未执行，须通过后再合并；不得用前序主线CI代替。
+- 交付范围为原UI收官与本次修正共32文件；原25份其他脏文档和.codex/tmp不提交。原存档、固定入口及其他工作区修改保持。
+- 实际目录`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`，分支codex/ui-final-consolidation-v1，已核对origin/main与开发基线均为`5f534963e13bb42dfd154e45cf243e279978342a`。
+- 本次结束UI专项；不启动下一开发任务，不启动游戏。准确提交、PR、CI及合并结果将在本记录与支持证据中继续记录。
+- 支持证据：`C:\Users\Administrator\Documents\美术资源生成\tmp\ui-base-declutter-v1-20261024\delivery`；冻结及本地验证证据位于上一级目录。
+
+<details>
+<summary>验收前方案、修复与检查历史</summary>
+
+以下待复验、待批准及禁止交付字段为历史；当前以上方人类验收与交付授权为准。
+
+# 当前：基地显示减负已修正，待复验
+
+**候选 544b4a735d34 已冻结。** 基地底部大框与设施长台账已精简，保留原管理页、紧凑伤病/战斗状态及保存风险提示。
+
+继续使用原桌面 **Project Raidline Debug**，按[简短复验清单](../acceptance/ui-final-consolidation-v1.md)检查。[任务记录](../exec-plans/active/ui-final-consolidation-v1.md)保留完整范围和证据。
+
+- state：awaiting_human_acceptance；task_id：ui-final-consolidation；fix_plan_version：RL-UI-BASE-DECLUTTER-v1；parent_plan_version：RL-UI-FINAL-CONSOLIDATION-v1；pending_request：无。
+- candidate_id：`RL-UI-BASE-DECLUTTER-v1-local-544b4a735d34`；source：`544b4a735d34afa76fee258a91967c75e0c8e7fb0b100c56cc2283827cb5125c`；program：`d4caf356cbe3374415b52d995614d014665c81bccf6769847ecb45d02ca7c5ee`。尚无人类复验或accepted_candidate。
+- Windows本地全目标构建、UI专项50/50、完整2644/2644及原五项3ms通过；原157份测试源码字节不变。本未提交候选没有新远端CI。
+- approval_source：2026-10-24主控直接人类原文“同意 RL-UI-BASE-DECLUTTER-v1，请按方案修正，保留已验收的UI和玩法行为、原存档、固定测试入口及3ms性能门槛。完成后提供简洁的复验清单，暂不提交、推送或合并。”。
+- 实际目录`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`，分支codex/ui-final-consolidation-v1，HEAD`5f534963e13bb42dfd154e45cf243e279978342a`。父UI和本修正构成同一32文件联合交付范围。
+- 原存档、固定入口及无关修改保持；不提交、推送、合并或启动游戏，候选保持冻结等复验。验收交付后结束UI专项，不自动启动下一任务。
+
+<details>
+<summary>批准前修正方案与原候选历史</summary>
+
+以下状态与旧候选均为历史，当前以上方为准。
+
+# 当前：基地常驻显示修正方案待批准
+
+用户实机截图指出：底部面板过大，设施文字过多、堆叠。**RL-UI-BASE-DECLUTTER-v1 已完成诊断与方案，尚未修复。** 这是本次UI收官候选的验收修正，不另开下一轮UI专项。
+
+[查看精简方案](../exec-plans/active/ui-final-consolidation-v1.md)。确认该版本后再实施，提供新候选复验。
+
+- state：awaiting_fix_approval；task_id：ui-final-consolidation；parent_plan_version：RL-UI-FINAL-CONSOLIDATION-v1；fix_plan_version：RL-UI-BASE-DECLUTTER-v1；pending_request：无。
+- fix_approval_source：无。2026-10-24用户截图是反馈来源，未当作本版本修复批准；当前候选没有通过本项验收。
+- parent_candidate_id：RL-UI-FINAL-CONSOLIDATION-v1-local-3a67e1a7b83d；source/program指纹均已重新核对不变。没有新修复程序或新测试通过结论。
+- 原桌面Project Raidline Debug、原存档和其他工作区修改保持。未修改代码、测试、资源；未构建、启动游戏、提交、推送或合并。
+- 范围限基地日常HUD和设施世界标签；保留原管理页、近距交互判定、风险/保存失败提示及原五项3ms门槛。验收交付后结束UI专项。
+
+<details>
+<summary>原收官候选与检查记录</summary>
+
+以下通过数字对应未改动的原候选，不是待批准修正的验证结果；当前以上方为准。
+
+# 当前：全部剩余UI已完成，待联合验收
+
+**候选 3a67e1a7b83d 已冻结。** 基地管理与防守、独立详情、战斗HUD、地图与辅助界面一次收口；已验收页面保留并完成回归。
+
+继续使用桌面 **Project Raidline Debug**，按[一份联合验收清单](../acceptance/ui-final-consolidation-v1.md)试玩。[任务记录](../exec-plans/active/ui-final-consolidation-v1.md)保留完整证据。
+
+- state：awaiting_human_acceptance；task_id：ui-final-consolidation；version：RL-UI-FINAL-CONSOLIDATION-v1；pending_request：无。
+- candidate_id：`RL-UI-FINAL-CONSOLIDATION-v1-local-3a67e1a7b83d`；源码：`3a67e1a7b83d78efde18ed9518d1a5cab4661f88959545a9220e07ff158aae7f`；程序：`7f553f6bb6bec52cbb0e05703f1e6c2a9f30e62a517f361656d6012e1565e2de`。
+- Windows本地全目标构建与2636/2636检查通过，原五项3ms保持；原存档、固定入口和无关工作区修改保留。尚无本候选远端CI或人工验收。
+- 未提交、推送、合并或启动游戏；等待本候选验收，不继续改动游戏。验收交付后结束UI专项，不自动启动下一任务。
+- approval_source：2026-10-24主控直接人类原文“同意 RL-UI-FINAL-CONSOLIDATION-v1，请按方案一次性完成剩余所有UI，保留已验收的UI和玩法行为、原存档、固定测试入口及3ms性能门槛。完成后提供一份简洁的联合验收清单，暂不提交、推送或合并；本次交付后不再继续UI专项优化。”。
+- 实际目录`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`；分支`codex/ui-final-consolidation-v1`；HEAD`5f534963e13bb42dfd154e45cf243e279978342a`。
+
+<details>
+<summary>批准前规划与前序交付历史</summary>
+
+以下“待批准”“未实施”文字属于历史，当前以上方为准。
+
+# 当前：全部剩余UI一次性收官方案待批准
+
+**RL-UI-FINAL-CONSOLIDATION-v1 已完成规划，尚未实施。** 策划与主控已核对全部现有UI入口：剩余旧页一次收口，已验收页面保留主体；内部五个工作包，最终一个候选、一份联合验收清单。
+
+本次验收交付后结束主动UI专项，不再安排下一张美化页面。真实Bug和新玩法必需界面按原流程另行处理，不重新开启UI专项。
+
+[查看完整方案](../exec-plans/active/ui-final-consolidation-v1.md)。当前程序及原桌面 **Project Raidline Debug** 保持原样。
+
+- task_id：ui-final-consolidation；plan_version：RL-UI-FINAL-CONSOLIDATION-v1；state：awaiting_plan_approval；pending_request：无。
+- planning_source：2026-10-24直接人类请求一次完成剩余全部UI并收官；尚无本版本实施批准、候选或验收。
+- 策划四元组已核验，role planner／status proposed_readonly。没有改代码、启动游戏、构建测试、切分支或Git交付。
+- 基线为已交付main5f53496；前序PR191／main双平台2594/2594及五项3ms通过，不能替代本任务的新验证。
+
+<details>
+<summary>已交付任务与前序历史</summary>
+
+以下为历史记录，当前以上方待批准方案为准。
+
+# 当前：对局结果界面 v1 已交付
+
+已提交并推送`7694e68`，[PR191](https://github.com/Disthinker/Project-Raidline/pull/191)已普通合并为`5f53496`。PR与合并后main的Windows／Ubuntu均各2594/2594通过，原五项3ms全部通过。
+
+策划已只读确认交付；本轮未安排或启动下一任务。
 
 - 交付范围：结果标题、8条分页带回记录、按需详情和固定返营按钮，原结算与存档规则保持。
 - 保留原桌面 **Project Raidline Debug**；已验收程序与其他工作区修改未变。
@@ -11,7 +100,7 @@
 <details>
 <summary>授权、版本与保护证据</summary>
 
-- task_id：ui-raid-result；plan_version：RL-UI-RAID-RESULT-v1；state：accepted_pending_delivery；pending_request：无。
+- task_id：ui-raid-result；plan_version：RL-UI-RAID-RESULT-v1；state：delivered；pending_request：无。
 - candidate_id 与 accepted_candidate_id：RL-UI-RAID-RESULT-v1-local-fc00d531a705；acceptance_source：2026-10-23主控直接人类原文“对局结果界面 v1 验收通过，请完成提交、推送和合并。”。
 - 仅交付12项；23份无关脏文档及五工作区其他修改保持。程序、资源与固定入口未变，未启动游戏。
 - [任务记录](../exec-plans/active/ui-raid-result-v1.md)保留Git、双平台CI与保护证据。
@@ -1693,6 +1782,19 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 </details>
 
 </details>
+
+</details>
+
+</details>
+
+</details>
+
+
+</details>
+
+
+</details>
+
 
 </details>
 

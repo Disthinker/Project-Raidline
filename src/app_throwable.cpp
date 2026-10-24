@@ -55,15 +55,12 @@ void App::updateThrowableInput(GameplayInput &input)
 }
 void App::renderThrowableUi()
 {
-    if(!gameSession_.world().raidSession().isActive() || !gameSession_.world().noiseDecoyEnabled() ||
-        inventoryOverlayState_.isOpen() || tacticalMapOpen_ || developerWeaponPanelOpen_)return;
-    const auto text=[&](float x,float y,const std::string &s){SDL_SetRenderDrawColor(renderer_,235,232,207,255);uiTextRenderer_.render(renderer_,x,y,s.c_str());};
-    if(throwableWheelOpen_){
-        renderQuickWheel(UiQuickWheelKind::Throwable, throwableWheelOptions_, throwableWheelSelected_);
-    }else if(selectedThrowable_)text(16,592,"LEFT CLICK THROW | RIGHT CLICK / ESC CANCEL");
-    else if(!medicalWheelOpen_)text(16,692,"4 THROWABLES | CHEST RIG");
-    if(!throwableWheelOpen_ && !medicalWheelOpen_ && !uiMessage_.empty() && (uiMessage_.find("DECOY")!=std::string::npos || uiMessage_.find("PRESS 4")!=std::string::npos))
-        text(16,570,uiMessage_);
+    if(!gameSession_.world().raidSession().isActive() || !gameSession_.world().noiseDecoyEnabled() || inventoryOverlayState_.isOpen() || tacticalMapOpen_ || developerWeaponPanelOpen_ || developerRangePanelOpen_)return;
+    if(throwableWheelOpen_)renderQuickWheel(UiQuickWheelKind::Throwable,throwableWheelOptions_,throwableWheelSelected_);
+    else if(selectedThrowable_){
+        const SDL_FRect panel{434,424,412,46};uiFinalPanel(renderer_,panel);
+        uiFinalText(renderer_,uiTextRenderer_,{446,430,388,38},"LEFT CLICK THROW | RIGHT CLICK / ESC CANCEL",13,2);
+    }else if(!medicalWheelOpen_)uiFinalText(renderer_,uiTextRenderer_,{780,666,390,24},"4 THROWABLES | CHEST RIG",12,1);
 }
 void App::renderNoiseDecoyWorld()
 {
@@ -91,18 +88,25 @@ void App::renderNoiseDecoyWorld()
     }
     SDL_SetRenderDrawBlendMode(renderer_,blend);
 }
-void App::renderProfileDecoyDetails(const AssetRecord &asset,const ItemDefinition &definition)
+void App::renderProfileDecoyDetails(const AssetRecord &asset, const ItemDefinition &definition)
 {
-    const SDL_FRect panel{40,70,1200,600},back{860,92,340,32};
-    SDL_SetRenderDrawColor(renderer_,24,29,30,250);SDL_RenderFillRect(renderer_,&panel);
-    SDL_SetRenderDrawColor(renderer_,43,60,65,255);SDL_RenderFillRect(renderer_,&back);
-    const auto text=[&](float x,float y,const std::string &s){SDL_SetRenderDrawColor(renderer_,232,225,201,255);uiTextRenderer_.render(renderer_,x,y,s.c_str());};
-    text(70,100,"DECOY DETAILS");text(866,100,"BACK TO INVENTORY");text(70,155,definition.displayName);
-    text(70,215,fmt::format("数量 {} | 单个重量 {} 克 | 1 × 1 格",asset.quantity,definition.unitWeightGrams));
-    text(70,270,"放入胸挂；按住4选择，松开瞄准，左键投掷。");
-    text(70,315,"右键或Esc取消；只有确认投掷成功才消耗一个。");
-    text(70,360,"投掷450，吸引500，持续6秒；声音不穿墙、不跨空间。");
-    text(70,405,"引开未发现你的普通感染者；不会解除正在进行的追击。");
-    text(70,450,"仅普通出击可用；不消耗电池，不造成伤害。");
-    text(70,525,"当前图形和声响为占位反馈。");
+    const auto model = projectUiItemDetails(gameSession_.profile(), publishedContentRegistry(), asset.instanceId, uiTextRenderer_.language());
+    if (!model) return;
+    if (itemDetailsInteraction_.synchronize({asset.instanceId, 0, gameSession_.profile().revision, 0,
+        uiTextRenderer_.language(), gameSession_.alphaRaidActive()})) deviceBatteryDrag_.reset();
+    uiFinalPanel(renderer_, uiItemDetailsPanel());
+    uiFinalTextAt(renderer_, uiTextRenderer_, 70, 96, model->title, 600, 22);
+    renderFoundationButton(21000, uiItemDetailsBack(), "BACK TO INVENTORY", true, false, false, {}, 14);
+    uiFinalTextAt(renderer_, uiTextRenderer_, 70, 148, model->name, 1120, 20);
+    uiFinalPanel(renderer_, {70, 184, 540, 258});
+    renderBaseSupplyImage(definition.definitionId, uiItemDetailsImage(model->kind));
+    for (std::size_t i = 0; i < model->metrics.size(); ++i) {
+        const auto r = uiItemDetailsMetric(model->kind, i);
+        uiFinalText(renderer_, uiTextRenderer_, {r.x, r.y, r.w, 23}, model->metrics[i].label, 12, 1, {157, 181, 174, 255});
+        uiFinalText(renderer_, uiTextRenderer_, {r.x, r.y + 29, r.w, 31}, model->metrics[i].value, 20);
+    }
+    uiFinalText(renderer_, uiTextRenderer_, {70, 452, 1120, 31}, model->status, 16, 1, {113, 191, 179, 255});
+    for (std::size_t i = 0; i < model->notes.size(); ++i)
+        uiFinalText(renderer_, uiTextRenderer_, {84, 300 + static_cast<float>(i) * 34, 512, 34}, model->notes[i], 12, 2);
+    renderUiItemDetailsFeedback(renderer_, uiTextRenderer_, itemDetailsInteraction_, model->kind, uiMessage_);
 }

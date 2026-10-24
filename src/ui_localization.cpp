@@ -15,6 +15,7 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
     {
+     {"HOVER WEAPON FOR STATUS | RIGHT-CLICK ACTIONS | H HIDE HINTS", "悬停武器查看状态 · 右键操作 · H 隐藏提示"},
      {"PRODUCTION PLAN CHANGED - CHECK AND CLICK AGAIN", "生产方案已变化，请核对后重新点击"},
      {"CLOSE WORKSHOP", "关闭"},
      {"WORKERS COMMITTED", "占用人员"},

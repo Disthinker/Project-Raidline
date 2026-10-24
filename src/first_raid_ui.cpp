@@ -4,6 +4,7 @@
 #include <fmt/core.h>
 
 #include "first_raid_guidance.h"
+#include "ui_raid_hud_presentation.h"
 
 const WeaponSupplyProjection &App::weaponSupply(bool includeStash) {
   const auto &profile = gameSession_.profile();
@@ -20,21 +21,11 @@ const WeaponSupplyProjection &App::weaponSupply(bool includeStash) {
 
 void App::renderFirstRaidHintCard(const std::vector<std::string> &lines,
                                   float x, float y, float width) {
-  if (lines.empty())
-    return;
-  SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-  const SDL_FRect card{x, y, width,
-                       12.0F + 18.0F * static_cast<float>(lines.size())};
-  SDL_SetRenderDrawColor(renderer_, 15, 27, 29, 242);
-  SDL_RenderFillRect(renderer_, &card);
-  SDL_SetRenderDrawColor(renderer_, 105, 158, 146, 255);
-  SDL_RenderRect(renderer_, &card);
-  SDL_SetRenderDrawColor(renderer_, 232, 237, 218, 255);
-  for (const auto &line : lines) {
-    uiTextRenderer_.render(renderer_, x + 10.0F, y + 6.0F, line.c_str());
-    y += 18.0F;
-  }
-  SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+  if (lines.empty()) return;
+  const auto card=uiAuxiliaryHintRect(lines.size(),x,y,width);
+  uiFinalPanel(renderer_,card);
+  for(std::size_t i=0;i<lines.size() && i<6;++i)
+    uiFinalText(renderer_,uiTextRenderer_,{card.x+10,card.y+5+22.0F*static_cast<float>(i),card.w-20,22},lines[i],12,1);
 }
 
 std::vector<std::string> App::weaponSupplyTooltipLines(AssetInstanceId weaponId,
@@ -57,7 +48,8 @@ void App::renderFirstRaidHints() {
       gameSession_.world().isAlphaRaidWorld())
     return;
   if (gameFlow_.state() == GameFlowState::MainMenu || pauseMenu_.isOpen() ||
-      developerWeaponPanelOpen_ || tacticalMapOpen_ || medicalWheelOpen_ ||
+      developerWeaponPanelOpen_ || developerRangePanelOpen_ || developerPerformanceOverlayOpen_ ||
+      tacticalMapOpen_ || medicalWheelOpen_ || throwableWheelOpen_ ||
       baseConstructionPanelOpen_ || basePlacementState_ ||
       baseFixedFacilityPlacementState_)
     return;
@@ -72,11 +64,7 @@ void App::renderFirstRaidHints() {
       (gameFlow_.state() == GameFlowState::Base &&
        gameFlow_.activeBaseFacility() == BaseFacilityKind::Storage);
   if (inventory) {
-    renderFirstRaidHintCard({"HOVER EQUIPPED WEAPON FOR FIRE STATUS, SPARES "
-                             "AND NEXT ACTION | H HIDE HINTS",
-                             "DRAG TO EQUIP | AMMO TO MAGAZINE | MAGAZINE TO "
-                             "WEAPON | RIGHT-CLICK FOR ACTIONS"},
-                            20.0F, 2.0F, 1240.0F);
+    renderFirstRaidHintCard({"HOVER WEAPON FOR STATUS | RIGHT-CLICK ACTIONS | H HIDE HINTS"},20.0F,2.0F,1240.0F);
     return;
   }
   std::vector<std::string> lines;
@@ -87,9 +75,9 @@ void App::renderFirstRaidHints() {
     lines = projectFirstRaidReturnGuidance(gameSession_.profile());
     lines.emplace_back("FIRST RAID GUIDANCE | H HIDE HINTS");
     renderFirstRaidHintCard(
-        lines, 260.0F,
-        gameFlow_.state() == GameFlowState::RaidResult ? 568.0F : 92.0F,
-        760.0F);
+        lines, gameFlow_.state() == GameFlowState::RaidResult ? 260.0F : 640.0F,
+        gameFlow_.state() == GameFlowState::RaidResult ? 568.0F : 132.0F,
+        gameFlow_.state() == GameFlowState::RaidResult ? 760.0F : 620.0F);
     return;
   }
   if (gameFlow_.state() == GameFlowState::Base) {
@@ -112,6 +100,6 @@ void App::renderFirstRaidHints() {
     lines = projectFirstRaidRiskGuidance(gameSession_).lines;
     if (!lines.empty())
       lines.emplace_back("FIRST RAID | H HIDE HINTS FOR THIS RUN");
-    renderFirstRaidHintCard(lines, 640.0F, 590.0F, 620.0F);
+    renderFirstRaidHintCard(lines, 800.0F, 200.0F, 464.0F);
   }
 }

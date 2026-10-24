@@ -104,6 +104,8 @@ UiWindowSize App::availableUiWindowArea() const noexcept {
           std::max(1, area.h - top - bottom)};
 }
 void App::applyUiWindowSize(std::size_t index) {
+  finalDiscretePress_.cancel();
+  itemDetailsInteraction_ = {}; deviceBatteryDrag_.reset();
   if (index >= kUiWindowSizes.size() || !window_ || !renderer_)
     return;
   const auto requested = kUiWindowSizes[index];
@@ -224,11 +226,14 @@ void App::renderFoundationButton(int id, SDL_FRect bounds,
   float scaleX = 1, scaleY = 1;
   SDL_GetRenderScale(renderer_, &scaleX, &scaleY);
   SDL_SetRenderScale(renderer_, scaleX * zoom, scaleY * zoom);
+  const int size = fontSize ? fontSize : (id>=3100 && id<3150?14:18);
+  const float labelHeight = std::ceil(size * 1.4F);
+  const float inset = std::min(12.0F, bounds.w * 0.12F);
   uiTextRenderer_.renderBox(renderer_,
-                            {(bounds.x + 12) / zoom,
-                             (bounds.y + bounds.h * 0.5F) / zoom - 12.6F,
-                             (bounds.w - 24) / zoom, 25.2F},
-                            label, {fontSize ? fontSize : (id>=3100 && id<3150?14:18), UiTextAlign::Center, 1});
+                            {(bounds.x + inset) / zoom,
+                             (bounds.y + bounds.h * 0.5F) / zoom - labelHeight * 0.5F,
+                             (bounds.w - inset * 2) / zoom, labelHeight},
+                            label, {size, UiTextAlign::Center, 1});
   SDL_SetRenderScale(renderer_, scaleX, scaleY);
   if (hover && uiClockSeconds_ - uiHoverStarted_ >= 0.4F)
     uiHoveredHint_ = hint;
@@ -273,11 +278,10 @@ void App::renderFoundationSettings(bool paused) {
                          false, "ESC RETURNS TO THE PREVIOUS MENU");
   color(renderer_, muted);
   const std::string_view message =
-      !uiHoveredHint_.empty() ? std::string_view{uiHoveredHint_}
-      : !uiMessage_.empty()
-          ? std::string_view{uiMessage_}
+      !uiMessage_.empty() ? std::string_view{uiMessage_}
+      : !uiHoveredHint_.empty() ? std::string_view{uiHoveredHint_}
           : "ONLY WINDOW SIZES THAT FIT THIS DISPLAY ARE SHOWN";
-  uiTextRenderer_.renderBox(renderer_, {320, 458, 640, 82}, message, {16});
+  renderFinalFeedback({320, 458, 640, 82}, message);
 }
 void App::renderFoundationMenu(bool paused) {
   uiHoveredHint_.clear();
@@ -298,11 +302,13 @@ void App::renderFoundationMenu(bool paused) {
   uiTextRenderer_.renderBox(renderer_, {352, 169, 576, 48},
                             paused ? "PAUSED" : "PROJECT RAIDLINE", {28});
   color(renderer_, muted);
-  uiTextRenderer_.renderBox(renderer_, {352, 230, 576, 70},
+  if (paused)
+    uiTextRenderer_.renderBox(renderer_, {352, 230, 576, 40}, "ESC TO CONTINUE", {16});
+  else renderFinalFeedback({352, 230, 576, 70},
                             paused               ? "ESC TO CONTINUE"
                             : uiMessage_.empty() ? "CHOOSE HOW TO BEGIN"
                                                  : std::string_view{uiMessage_},
-                            {16});
+                            14);
   if (paused) {
     constexpr std::array<const char *, 4> labels{
         "CONTINUE GAME", "SETTINGS", "EXIT TO MAIN MENU", "EXIT TO DESKTOP"};
@@ -319,13 +325,19 @@ void App::renderFoundationMenu(bool paused) {
                                    : "ABANDON DEFENSE...",
           true, true, false, "CONFIRM ABANDON: PUBLIC SOFT LOSS");
     color(renderer_, muted);
-    uiTextRenderer_.renderBox(
-        renderer_, {352, 574, 576, 70},
-        !uiHoveredHint_.empty() ? std::string_view{uiHoveredHint_}
+    const std::string defenseFeedback = gameSession_.baseDefenseActive()
+        ? std::string{"CONFIRM ABANDON: PUBLIC SOFT LOSS"} +
+              (uiMessage_.empty() ? std::string{} : "\n" + uiMessage_)
+        : std::string{};
+    renderFinalFeedback(
+        {352, 574, 576, 70},
+        !defenseFeedback.empty() ? std::string_view{defenseFeedback}
+        : !uiMessage_.empty() ? std::string_view{uiMessage_}
+        : !uiHoveredHint_.empty() ? std::string_view{uiHoveredHint_}
         : gameSession_.baseDefenseActive()
             ? "CONFIRM ABANDON: PUBLIC SOFT LOSS"
             : "ESC CONTINUES | RAID EXIT RESTORES GEAR; RESCUES PERSIST",
-        {14});
+        14);
   } else {
     const std::array<const char *, 4> labels{
         "CONTINUE GAME",

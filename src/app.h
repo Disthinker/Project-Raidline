@@ -40,6 +40,11 @@
 #include "ui_lost_recovery_presentation.h"
 #include "ui_regional_operations_presentation.h"
 #include "ui_raid_result_presentation.h"
+#include "ui_discrete_press.h"
+#include "ui_item_details_presentation.h"
+#include "ui_raid_hud_presentation.h"
+#include "ui_base_management_presentation.h"
+#include "ui_base_defense_presentation.h"
 #include "weapon_supply_projection.h"
 
 enum class MainMenuCommand
@@ -173,6 +178,12 @@ private:
     friend struct UiRegionalOperationsTestAccess;
     friend struct UiRaidResultTestAccess;
     friend struct UiFoundationTestAccess;
+    friend struct UiFinalConsolidationTestAccess;
+    friend struct UiFinalContainersTestAccess;
+    friend struct UiBaseManagementTestAccess;
+    friend struct UiBaseDefensePresentationTestAccess;
+    friend struct UiItemDetailsTestAccess;
+    friend struct UiRaidHudTestAccess;
     friend struct BaseSiegeUiTestAccess;
     friend struct FortificationBuildUiTestAccess;
     friend struct WeaponInventoryUiTestAccess;
@@ -227,6 +238,34 @@ private:
     bool uiPointerInside_{true};
     bool uiPointerPressed_{};
     std::string uiHoveredHint_;
+    UiDiscretePress finalDiscretePress_;
+    UiItemDetailsInteraction itemDetailsInteraction_;
+    void handleProfileDetailsNavigation(const InventoryNavigationEvent &);
+    bool finalDiscreteSubmitted_{};
+    float baseFinalFeedbackScroll_{};
+    bool baseFinalDetailsOpen_{};
+    std::string baseFinalFeedbackKey_;
+    float finalFeedbackScroll_{};
+    std::string finalFeedbackKey_;
+    std::string baseToastMessage_, baseToastProfileId_;
+    float baseToastSeconds_{};
+    bool baseToastInBase_{};
+    void updateBasePresentation(float deltaTime);
+    [[nodiscard]] bool baseWorldHudVisible() const;
+    [[nodiscard]] bool baseCombatStatusVisible() const;
+    struct DeferredWorldLabel { Vec2 position; std::string text; };
+    std::vector<DeferredWorldLabel> deferredWorldLabels_;
+    bool deferWorldLabels_{};
+    int baseManagementActionAt(MousePosition position) const;
+    bool handleBaseFinalDetailsClick(MousePosition position);
+    void resetBaseFinalDetailsUi();
+    int finalDiscreteActionAt(Vec2 point) const;
+    std::string finalDiscreteContext() const;
+    bool routeFinalDiscretePointer(SDL_Event &event);
+    void renderBaseDailyHud();
+    void renderBaseCombatVitals();
+    void renderFinalFeedback(SDL_FRect bounds, std::string_view message, int size = 14);
+    bool routeFinalFeedbackWheel(const SDL_Event &event);
     [[nodiscard]] UiViewport windowUiViewport() const noexcept;
     [[nodiscard]] UiWindowSize availableUiWindowArea() const noexcept;
     void applyUiWindowSize(std::size_t index);
@@ -774,6 +813,8 @@ private:
     void renderScreenPrimaryButton(
         const char *label);
     void renderBackground(bool drawOutdoorDetails = true);
+    SDL_FRect worldLabelBounds(float x, float y, std::string_view label);
+    void renderWorldLabel(float x, float y, std::string_view label);
     void renderExtractionPoint();
     void renderRaidSpacePortal();
     void renderStorageCabinet();

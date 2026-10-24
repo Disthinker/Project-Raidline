@@ -1,8 +1,138 @@
 #include "ui_foundation.h"
+#include "ui_text_renderer.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <nlohmann/json.hpp>
+
+void uiFinalPanel(SDL_Renderer *renderer, const SDL_FRect &bounds, bool warning) {
+  if (!renderer || bounds.w <= 0 || bounds.h <= 0) return;
+  SDL_BlendMode previous{};
+  SDL_GetRenderDrawBlendMode(renderer, &previous);
+  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+  SDL_SetRenderDrawColor(renderer, 21, 29, 31, 244);
+  SDL_RenderFillRect(renderer, &bounds);
+  SDL_SetRenderDrawColor(renderer, warning ? 199 : 77, warning ? 137 : 112,
+                         warning ? 101 : 108, 255);
+  SDL_RenderRect(renderer, &bounds);
+  const SDL_FRect accent{bounds.x, bounds.y, 3, bounds.h};
+  SDL_RenderFillRect(renderer, &accent);
+  SDL_SetRenderDrawBlendMode(renderer, previous);
+}
+
+void uiFinalText(SDL_Renderer *renderer, UiTextRenderer &text,
+                 const SDL_FRect &bounds, std::string_view label, int size,
+                 int maximumLines, SDL_Color color) {
+  if (!renderer || label.empty()) return;
+  SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+  text.renderBox(renderer, bounds, label,
+                 {size, UiTextAlign::Left, maximumLines});
+}
+
+void uiFinalTextAt(SDL_Renderer *renderer, UiTextRenderer &text, float x, float y,
+                   std::string_view label, float width, int size,
+                   int maximumLines, SDL_Color color) {
+  if (width <= 0) width = std::max(1.0F, 1260.0F - x);
+  const float lineHeight = std::ceil(size * 1.4F);
+  const float height = maximumLines > 0 ? lineHeight * maximumLines
+                                       : std::max(lineHeight, 708.0F - y);
+  uiFinalText(renderer, text, {x, y, width, height}, label, size, maximumLines,
+              color);
+}
+
+SDL_FRect uiFinalWorldLabelBounds(const SDL_FRect &labelBounds,
+                                 const SDL_FRect &avatarBounds,
+                                 const SDL_FRect &visibleWorld,
+                                 const std::function<bool(const SDL_FRect &)> &candidateAllowed) {
+  const auto valid = [](const SDL_FRect &rect) {
+    return std::isfinite(rect.x) && std::isfinite(rect.y) &&
+           std::isfinite(rect.w) && std::isfinite(rect.h) &&
+           rect.w > 0 && rect.h > 0;
+  };
+  const auto intersects = [](const SDL_FRect &first, const SDL_FRect &second) {
+    return first.x < second.x + second.w && first.x + first.w > second.x &&
+           first.y < second.y + second.h && first.y + first.h > second.y;
+  };
+  const auto backplate = [](const SDL_FRect &rect) {
+    return SDL_FRect{rect.x - 4, rect.y - 2, rect.w + 8, rect.h + 2};
+  };
+  if (!valid(labelBounds) || !valid(avatarBounds) || !valid(visibleWorld) ||
+      !intersects(labelBounds, visibleWorld) ||
+      !intersects(avatarBounds, visibleWorld) ||
+      !intersects(backplate(labelBounds), avatarBounds)) return labelBounds;
+
+  const std::array<SDL_FRect, 4> candidates{{
+      {avatarBounds.x + avatarBounds.w + 8, labelBounds.y,
+       labelBounds.w, labelBounds.h},
+      {avatarBounds.x - labelBounds.w - 8, labelBounds.y,
+       labelBounds.w, labelBounds.h},
+      {labelBounds.x, avatarBounds.y + avatarBounds.h + 6,
+       labelBounds.w, labelBounds.h},
+      {labelBounds.x, avatarBounds.y - labelBounds.h - 6,
+       labelBounds.w, labelBounds.h}}};
+  for (const auto &candidate : candidates) {
+    const auto back = backplate(candidate);
+    if (back.x >= visibleWorld.x && back.y >= visibleWorld.y &&
+        back.x + back.w <= visibleWorld.x + visibleWorld.w &&
+        back.y + back.h <= visibleWorld.y + visibleWorld.h &&
+        !intersects(back, avatarBounds) &&
+        (!candidateAllowed || candidateAllowed(candidate))) return candidate;
+  }
+  return labelBounds;
+}
+
+void uiFinalWorldLabel(SDL_Renderer *renderer, UiTextRenderer &text, float x,
+                       float y, std::string_view label,
+                       const SDL_FRect &avatarBounds,
+                       const SDL_FRect &visibleWorld) {
+  if (!renderer || label.empty() || !std::isfinite(x) || !std::isfinite(y)) return;
+  const auto localized = localizeUiText(text.language(), label);
+  const float width = std::clamp(text.measure(localized, 12), 24.0F, 280.0F);
+  const auto bounds = uiFinalWorldLabelBounds({x, y, width, 18}, avatarBounds,
+                                             visibleWorld);
+  SDL_BlendMode blend{};
+  SDL_GetRenderDrawBlendMode(renderer, &blend);
+  Uint8 r{}, g{}, b{}, a{};
+  SDL_GetRenderDrawColor(renderer, &r, &g, &b, &a);
+  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+  SDL_SetRenderDrawColor(renderer, 17, 26, 27, 205);
+  const SDL_FRect back{bounds.x - 4, bounds.y - 2, bounds.w + 8, bounds.h + 2};
+  SDL_RenderFillRect(renderer, &back);
+  uiFinalText(renderer, text, bounds, label, 12, 1, {222, 231, 226, 255});
+  SDL_SetRenderDrawColor(renderer, r, g, b, a);
+  SDL_SetRenderDrawBlendMode(renderer, blend);
+}
+
+void uiFinalScrollableText(SDL_Renderer *renderer, UiTextRenderer &text,
+                           const SDL_FRect &bounds, std::string_view label,
+                           float &lineOffset, int size) {
+  if (!renderer || bounds.w <= 16 || bounds.h < size * 1.4F) return;
+  const auto localized = localizeUiText(text.language(), label);
+  const auto lines = wrapUiText(localized, bounds.w - 10, 0,
+      [&](auto value) { return text.measure(value, size); });
+  const float height = std::ceil(size * 1.4F);
+  const auto fitting = static_cast<std::size_t>(std::max(1.0F, std::floor(bounds.h / height)));
+  const bool scroll = lines.size() > fitting;
+  const std::size_t visible = scroll ? std::max(std::size_t{1}, fitting - 1) : fitting;
+  const std::size_t maximum = lines.size() > visible ? lines.size() - visible : 0;
+  lineOffset = std::clamp(lineOffset, 0.0F, static_cast<float>(maximum));
+  const auto first = static_cast<std::size_t>(lineOffset);
+  for (std::size_t i = 0; i < visible && first + i < lines.size(); ++i)
+    uiFinalText(renderer, text, {bounds.x, bounds.y + i * height, bounds.w - 10, height},
+        lines[first + i].text, size, 1);
+  if (scroll) {
+    const auto hint = text.language() == UiLanguage::SimplifiedChinese
+        ? "滚轮查看完整信息" : "SCROLL FOR FULL MESSAGE";
+    uiFinalText(renderer, text, {bounds.x, bounds.y + bounds.h - 14, bounds.w - 10, 14},
+        hint, 10, 1, {154, 191, 179, 255});
+    SDL_SetRenderDrawColor(renderer, 113, 191, 179, 255);
+    const float trackHeight = std::max(12.0F, bounds.h - 16);
+    const float thumbHeight = std::max(8.0F, trackHeight * visible / lines.size());
+    const SDL_FRect thumb{bounds.x + bounds.w - 3,
+        bounds.y + (trackHeight - thumbHeight) * first / std::max(std::size_t{1}, maximum), 2, thumbHeight};
+    SDL_RenderFillRect(renderer, &thumb);
+  }
+}
 
 namespace {
 bool knownSize(UiWindowSize size) {

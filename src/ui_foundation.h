@@ -37,3 +37,29 @@ using UiMeasureText = std::function<float(std::string_view)>;
 [[nodiscard]] SDL_FRect uiSettingsBackButton() noexcept;
 [[nodiscard]] bool uiContains(const SDL_FRect &bounds, Vec2 point) noexcept;
 [[nodiscard]] float uiHoverAmount(float elapsedSeconds) noexcept;
+
+class UiTextRenderer;
+// Small client paint helpers shared by the remaining legacy surfaces. They do
+// not own input, domain state or a separate layout coordinate system.
+void uiFinalPanel(SDL_Renderer *renderer, const SDL_FRect &bounds,
+                  bool warning = false);
+void uiFinalText(SDL_Renderer *renderer, UiTextRenderer &text,
+                 const SDL_FRect &bounds, std::string_view label,
+                 int size = 14, int maximumLines = 1,
+                 SDL_Color color = {222, 231, 226, 255});
+void uiFinalTextAt(SDL_Renderer *renderer, UiTextRenderer &text, float x, float y,
+                   std::string_view label, float width = 0, int size = 14,
+                   int maximumLines = 1,
+                   SDL_Color color = {222, 231, 226, 255});
+// World coordinates only. A hidden/offscreen label keeps its original position;
+// this helper never grants visibility or changes the caller's render clipping.
+[[nodiscard]] SDL_FRect uiFinalWorldLabelBounds(
+    const SDL_FRect &labelBounds, const SDL_FRect &avatarBounds = {},
+    const SDL_FRect &visibleWorld = {},
+    const std::function<bool(const SDL_FRect &)> &candidateAllowed = {});
+void uiFinalWorldLabel(SDL_Renderer *renderer, UiTextRenderer &text, float x,
+                       float y, std::string_view label,
+                       const SDL_FRect &avatarBounds = {},
+                       const SDL_FRect &visibleWorld = {});
+void uiFinalScrollableText(SDL_Renderer *, UiTextRenderer &, const SDL_FRect &,
+                           std::string_view, float &lineOffset, int size = 14);

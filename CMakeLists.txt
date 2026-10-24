@@ -499,6 +499,16 @@ add_library(raidline_sdl_client STATIC
     src/ui_localization.h
     src/ui_foundation.cpp
     src/ui_foundation.h
+    src/ui_discrete_press.h
+    src/app_ui_final.cpp
+    src/ui_item_details_presentation.cpp
+    src/ui_item_details_presentation.h
+    src/ui_raid_hud_presentation.cpp
+    src/ui_raid_hud_presentation.h
+    src/ui_base_management_presentation.cpp
+    src/ui_base_management_presentation.h
+    src/ui_base_defense_presentation.cpp
+    src/ui_base_defense_presentation.h
     src/app_ui_foundation.cpp
     src/app_ui_weapon_components.cpp
     src/app_ui_regional_operations.cpp
@@ -1047,3 +1057,8 @@ raidline_add_test(UiBaseDeploymentTest tests/test_ui_base_deployment.cpp raidlin
 raidline_add_test(UiLostRecoveryTest tests/test_ui_lost_recovery.cpp raidline::sdl_client)
 raidline_add_test(UiRegionalOperationsTest tests/test_ui_regional_operations.cpp raidline::sdl_client)
 raidline_add_test(UiRaidResultTest tests/test_ui_raid_result.cpp raidline::sdl_client)
+raidline_add_test(UiItemDetailsTest tests/test_ui_item_details.cpp raidline::sdl_client)
+raidline_add_test(UiFinalConsolidationTest tests/test_ui_final_consolidation.cpp raidline::sdl_client)
+raidline_add_test(UiFinalContainersTest tests/test_ui_final_containers.cpp raidline::sdl_client)
+raidline_add_test(UiRaidHudTest tests/test_ui_raid_hud.cpp raidline::sdl_client)
+raidline_add_test(UiBaseManagementTest tests/test_ui_base_management.cpp raidline::sdl_client)

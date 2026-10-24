@@ -54,6 +54,10 @@ void App::handleBaseSupplyEvent(const UiBaseSupplyEvent &event) {
     refreshBaseSupplyRows(event.kind != UiBaseSupplyEventKind::Move);
     if (event.kind == UiBaseSupplyEventKind::Wheel) {
         supplyUi_.press.reset();
+        if (uiContains({540,608,676,48},event.position)) {
+            finalFeedbackScroll_ = std::max(0.0F, finalFeedbackScroll_ + event.pageDelta * 2.0F);
+            return;
+        }
         if (uiContains(uiBaseSupplyListRect(), event.position) && event.pageDelta) {
             supplyUi_.page(event.pageDelta, supplyRows_.size()); uiMessage_.clear();
         }
@@ -213,6 +217,6 @@ void App::renderBaseSupply() {
     button(Control::Main,action,enabled,supplyUi_.tab==Tab::Recycle);
     button(Control::Relief,supplyReliefEligible_?"CLAIM RELIEF BATCH":"RELIEF NOT REQUIRED",supplyReliefEligible_);
     button(Control::Components,"WEAPON COMPONENTS");
-    text({540,608,676,48},uiMessage_.empty()?"SELECTING DOES NOT TRADE | ESC CLOSE":uiMessage_,12);
+    renderFinalFeedback({540,608,676,48},uiMessage_.empty()?"SELECTING DOES NOT TRADE | ESC CLOSE":uiMessage_,12);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
