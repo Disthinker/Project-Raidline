@@ -544,12 +544,14 @@ std::optional<BaseFacilityKind> BaseWorld::update(
     if (shooting_.shotFiredLastUpdate() &&
         playerZone == HomeRegionSafetyZone::Perimeter)
     {
+        const float noiseRadius = 1500.0F *
+            shooting_.shotAcousticsLastUpdate().noiseRadiusMultiplier;
         for (auto &enemy : perimeterEnemies_)
         {
             const Vec2 p = enemy.position();
             const float dx = p.x + enemy.size().x * 0.5F - playerCenter.x;
             const float dy = p.y + enemy.size().y * 0.5F - playerCenter.y;
-            if (dx * dx + dy * dy <= 1500.0F * 1500.0F)
+            if (dx * dx + dy * dy <= noiseRadius * noiseRadius)
                 enemy.hearTarget(playerCenter);
         }
     }
@@ -853,6 +855,11 @@ BaseWorld::hitResultsLastUpdate() const noexcept
 bool BaseWorld::shotFiredLastUpdate() const noexcept
 {
     return shooting_.shotFiredLastUpdate();
+}
+
+WeaponAcousticsDefinition BaseWorld::shotAcousticsLastUpdate() const noexcept
+{
+    return shooting_.shotAcousticsLastUpdate();
 }
 
 WeaponAccuracyProjection BaseWorld::weaponAccuracyProjection() const noexcept

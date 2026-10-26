@@ -396,6 +396,7 @@ public:
     [[nodiscard]] bool weaponAimBeyondEffectiveRange() const noexcept;
     [[nodiscard]] bool weaponAimBeyondMaximumRange() const noexcept;
     [[nodiscard]] bool shotFiredLastUpdate() const noexcept;
+    [[nodiscard]] WeaponAcousticsDefinition shotAcousticsLastUpdate() const noexcept;
     [[nodiscard]] std::size_t enemiesAlertedLastUpdate() const noexcept;
     [[nodiscard]] std::size_t navigationQueriesLastUpdate() const noexcept;
     [[nodiscard]] const RaidSimulationWorkload &

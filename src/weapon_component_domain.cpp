@@ -61,6 +61,9 @@ WeaponUseDefinition effectiveWeaponUse(const ProfileState &profile, const Conten
         ergonomics += component.ergonomics;
         accuracy += component.accuracy;
         range += component.effectiveRange;
+        result.acoustics.noiseRadiusMultiplier *= component.acoustics.noiseRadiusMultiplier;
+        result.acoustics.fireGain *= component.acoustics.fireGain;
+        result.acoustics.outdoorTailGain *= component.acoustics.outdoorTailGain;
     }
     const auto adjusted = [](std::uint32_t base, int delta) { return static_cast<std::uint32_t>(std::clamp(static_cast<int>(base) + delta, 0, 100)); };
     result.recoilControl = adjusted(result.recoilControl, recoil);
@@ -91,7 +94,7 @@ WeaponComponentPlan prepare(ProfileState &candidate, const ContentRegistry &cont
     for (const auto &definition : content.items())
         platform |= definition.weaponComponent && definition.weaponComponent->weaponDefinitionId == weapon->definitionId;
     if (!platform) return reject(DomainErrorCode::IncompatibleEquipment, "UNSUPPORTED WEAPON PLATFORM");
-    if (command.slot != WeaponComponentSlot::Barrel && command.slot != WeaponComponentSlot::Handguard && command.slot != WeaponComponentSlot::Grip && command.slot != WeaponComponentSlot::Light)
+    if (command.slot != WeaponComponentSlot::Barrel && command.slot != WeaponComponentSlot::Handguard && command.slot != WeaponComponentSlot::Grip && command.slot != WeaponComponentSlot::Light && command.slot != WeaponComponentSlot::Muzzle)
         return reject(DomainErrorCode::IncompatibleEquipment, "INVALID COMPONENT SLOT");
     if (command.componentAssetId)
     {

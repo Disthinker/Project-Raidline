@@ -270,11 +270,14 @@ TEST_F(UiWeaponComponentsTest, ReturnCoordinatesUseIsolatedWarehousePageMapping)
     EXPECT_EQ(uiComponentStashDestination(profile(), content, {0, 8}), "STASH PAGE 4 (1, 1)");
 }
 TEST_F(UiWeaponComponentsTest, ThreeWindowSizesAndBothLanguagesRenderAllImportantStates) {
+    const auto suppressor = create(ItemDefinitionId{"item.component.suppressor_5_45"});
+    ASSERT_NE(suppressor, 0U);
     for (const auto size : kUiWindowSizes) for (const auto language : {UiLanguage::SimplifiedChinese, UiLanguage::English}) {
         detach(); attach(size.width, size.height); A::text(*app).setLanguage(language);
         const auto suffix = std::to_string(size.width) + (language == UiLanguage::SimplifiedChinese ? "-zh" : "-en");
         A::open(*app, find(rifle)); draw("current-" + suffix);
         select(find(barrel)); draw("preview-" + suffix);
+        slot(WeaponComponentSlot::Muzzle); select(suppressor); draw("suppressor-preview-" + suffix);
         slot(WeaponComponentSlot::Grip); select(find(grip)); draw("rejected-" + suffix);
         A::message(*app) = std::string(12, ' ') + "STASH SPACE REQUIRED FOR ALL REMOVED COMPONENTS\n" + std::string(250, 'W');
         draw("long-reason-" + suffix); wheel(center(uiComponentDetails()), 3); draw("scrolled-" + suffix);
@@ -333,4 +336,69 @@ TEST_F(UiWeaponComponentsTest, EmptyWeaponListIsReadableAndDoesNotSendEmptyComma
         A::text(*app).setLanguage(language); draw(language == UiLanguage::English ? "empty-en" : "empty-zh"); control(Control::Confirm);
     }
     EXPECT_FALSE(A::action(*app)); EXPECT_EQ(profileStateFingerprint(profile()), before);
+}
+
+TEST_F(UiWeaponComponentsTest, EverySlotIncludingMuzzleHasItsOwnHitTargetAndKeepsBrowsingReadOnly) {
+    const auto before = profileStateFingerprint(profile());
+    const auto &rows = A::rows(*app);
+    ASSERT_EQ(rows.installed.size(), 5U);
+    for (std::size_t i = 0; i < kUiComponentSlotCount; ++i) {
+        const auto box = uiComponentSlot(i);
+        const auto hit = hitUiWeaponComponents(center(box), rows, 0, 0, std::nullopt);
+        ASSERT_TRUE(hit);
+        EXPECT_EQ(hit->control, Control::Slot);
+        EXPECT_EQ(hit->index, i);
+        EXPECT_GE(box.x, 338.0F);
+        EXPECT_LE(box.x + box.w, 806.0F);
+        if (i) EXPECT_LT(uiComponentSlot(i - 1).x + uiComponentSlot(i - 1).w, box.x);
+        slot(static_cast<WeaponComponentSlot>(i));
+        EXPECT_FALSE(A::action(*app));
+    }
+    EXPECT_EQ(static_cast<std::size_t>(WeaponComponentSlot::Muzzle), 4U);
+    control(Control::Confirm);
+    EXPECT_EQ(profileStateFingerprint(profile()), before);
+}
+
+TEST_F(UiWeaponComponentsTest, MuzzlePreviewAndConfirmationUseOneSuppressorWithoutRailAndRestoreDefaults) {
+    const ItemDefinitionId suppressor{"item.component.suppressor_5_45"};
+    const auto part = create(suppressor), weapon = find(rifle);
+    ASSERT_NE(part, 0U);
+    A::open(*app, weapon);
+    slot(WeaponComponentSlot::Muzzle);
+    const auto original = profileStateFingerprint(profile());
+    select(part);
+    ASSERT_TRUE(A::preview(*app));
+    ASSERT_TRUE(A::preview(*app)->canCommit) << A::preview(*app)->message;
+    EXPECT_EQ(profileStateFingerprint(profile()), original);
+    EXPECT_EQ(A::preview(*app)->after.handlingSpeed + 8U, A::preview(*app)->before.handlingSpeed);
+    EXPECT_FLOAT_EQ(A::preview(*app)->before.acoustics.noiseRadiusMultiplier, 1.0F);
+    EXPECT_FLOAT_EQ(A::preview(*app)->after.acoustics.noiseRadiusMultiplier, 0.5F);
+    for (const auto language : {UiLanguage::SimplifiedChinese, UiLanguage::English}) {
+        A::text(*app).setLanguage(language);
+        draw(language == UiLanguage::English ? "suppressor-preview-en" : "suppressor-preview-zh");
+    }
+    control(Control::Confirm);
+    EXPECT_EQ(std::get<InstalledWeaponComponentLocation>(profile().assets.find(part)->location).weaponAssetId, weapon);
+    EXPECT_EQ(A::rows(*app).installed[4], part);
+    EXPECT_FLOAT_EQ(effectiveWeaponUse(profile(), content, weapon).acoustics.fireGain, 0.55F);
+    select(0);
+    ASSERT_TRUE(A::preview(*app)->canCommit);
+    EXPECT_FLOAT_EQ(A::preview(*app)->after.acoustics.noiseRadiusMultiplier, 1.0F);
+    control(Control::Confirm);
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(profile().assets.find(part)->location));
+    EXPECT_EQ(effectiveWeaponUse(profile(), content, weapon), content.item(rifle).weaponUse.value());
+}
+
+TEST_F(UiWeaponComponentsTest, SuppressorDetailsAndShortNamesAreChineseAndUseDeclaredCapability) {
+    const auto &definition = content.item(ItemDefinitionId{"item.component.suppressor_5_45"});
+    AssetRecord part;
+    part.definitionId = definition.definitionId;
+    part.quantity = 1;
+    const auto summary = projectUiItemSummary(part, definition);
+    EXPECT_EQ(compactUiItemName(definition, UiLanguage::SimplifiedChinese), "消音器");
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, definition.displayName), "5.45 消音器");
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "MUZZLE"), "枪口");
+    EXPECT_NE(std::find(summary.begin(), summary.end(), "SHOT NOISE RANGE 50%"), summary.end());
+    EXPECT_NE(std::find(summary.begin(), summary.end(), "HANDLING -8"), summary.end());
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "SHOT NOISE RANGE 50%"), "枪声范围 50%");
 }

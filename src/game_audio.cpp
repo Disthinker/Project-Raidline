@@ -1,6 +1,7 @@
 #include "game_audio.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <utility>
 
@@ -74,9 +75,9 @@ void GameAudioOutput::shutdown() noexcept
     }
 }
 
-void GameAudioOutput::play(SoundEventId event) noexcept
+void GameAudioOutput::play(SoundEventId event, float gainMultiplier) noexcept
 {
-    startVoice(event, false);
+    startVoice(event, false, gainMultiplier);
 }
 
 void GameAudioOutput::setAmbience(std::optional<SoundEventId> event) noexcept
@@ -194,9 +195,11 @@ std::shared_ptr<const std::vector<float>> GameAudioOutput::loadWave(
 
 void GameAudioOutput::startVoice(
     SoundEventId event,
-    bool ignoreCooldown) noexcept
+    bool ignoreCooldown,
+    float gainMultiplier) noexcept
 {
-    if (stream_ == nullptr)
+    if (stream_ == nullptr || !std::isfinite(gainMultiplier) ||
+        gainMultiplier <= 0.0F || gainMultiplier > 1.0F)
     {
         return;
     }
@@ -252,7 +255,7 @@ void GameAudioOutput::startVoice(
         event,
         samples,
         0U,
-        loaded.definition.gain,
+        loaded.definition.gain * gainMultiplier,
         loaded.definition.loop});
 }
 

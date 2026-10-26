@@ -1077,3 +1077,7 @@ raidline_add_test(UiFinalConsolidationTest tests/test_ui_final_consolidation.cpp
 raidline_add_test(UiFinalContainersTest tests/test_ui_final_containers.cpp raidline::sdl_client)
 raidline_add_test(UiRaidHudTest tests/test_ui_raid_hud.cpp raidline::sdl_client)
 raidline_add_test(UiBaseManagementTest tests/test_ui_base_management.cpp raidline::sdl_client)
+
+raidline_add_test(WeaponSuppressorAcousticsTest tests/test_weapon_suppressor_acoustics.cpp raidline::services)
+raidline_add_test(WeaponSuppressorSaveTest tests/test_weapon_suppressor_save.cpp raidline::services)
+raidline_add_test(WeaponSuppressorRuntimeTest tests/test_weapon_suppressor_runtime.cpp raidline::services)

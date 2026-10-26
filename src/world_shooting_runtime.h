@@ -89,6 +89,7 @@ public:
     [[nodiscard]] HitFeedbackPresentationSnapshot hitFeedbackPresentation() const noexcept
     { return hitFeedbackPresentation_.snapshot(); }
     [[nodiscard]] bool shotFiredLastUpdate() const noexcept;
+    [[nodiscard]] WeaponAcousticsDefinition shotAcousticsLastUpdate() const noexcept;
     [[nodiscard]] float spreadDegrees() const noexcept;
     [[nodiscard]] float visualRecoilPixels() const noexcept;
     [[nodiscard]] WeaponAccuracyProjection accuracyProjection() const noexcept;
@@ -133,5 +134,7 @@ private:
     ParticleSystem particleSystem_;
     std::vector<HitResult> hitResultsLastUpdate_;
     bool shotFiredLastUpdate_{};
+    WeaponAcousticsDefinition weaponAcoustics_;
+    WeaponAcousticsDefinition shotAcousticsLastUpdate_;
     bool aimInputRebasePending_{};
 };

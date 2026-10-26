@@ -2950,7 +2950,8 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion >= 54 && contentVersion == "quick-melee-self-defense-content-66") ||
             (schemaVersion >= 54 && contentVersion == "raid-noise-decoy-content-67") ||
             (schemaVersion >= 56 && contentVersion == "ui-unified-chest-rig-content-68") ||
-            (schemaVersion >= 57 && contentVersion == "raid-credential-extraction-content-69");
+            (schemaVersion >= 57 && contentVersion == "raid-credential-extraction-content-69") ||
+            (schemaVersion >= 57 && contentVersion == "base-field-medical-supplies-content-70");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -4843,14 +4844,15 @@ SaveWriteResult SaveRepository::save(
     }
     const auto isPreFieldMedicalContentSource = [&](const std::filesystem::path &path, bool valid)
     {
-        if (!valid || contentVersion != "base-field-medical-supplies-content-70")
+        if (!valid || (contentVersion != "base-field-medical-supplies-content-70" &&
+                       contentVersion != "weapon-suppressor-acoustics-content-71"))
             return false;
         const auto bytes = readText(path);
         if (!bytes) return false;
         try
         {
-            return Json::parse(*bytes).at("content_version").get<std::string>() !=
-                contentVersion;
+            const auto sourceContent = Json::parse(*bytes).at("content_version").get<std::string>();
+            return sourceContent != contentVersion && sourceContent != "base-field-medical-supplies-content-70";
         }
         catch (...)
         {
@@ -4867,6 +4869,36 @@ SaveWriteResult SaveRepository::save(
         const auto preserved = preserveLayoutMigrationSources(
             validPrimary ? SaveLoadStatus::LoadedPrimary : SaveLoadStatus::RecoveredBackup,
             "field-medical-supplies-v1");
+        if (!preserved.succeeded)
+        {
+            std::filesystem::remove(temporaryPath_, error);
+            return {false, preserved.message};
+        }
+    }
+    const auto isPreSuppressorContentSource = [&](const std::filesystem::path &path, bool valid)
+    {
+        if (!valid || contentVersion != "weapon-suppressor-acoustics-content-71")
+            return false;
+        const auto bytes = readText(path);
+        if (!bytes) return false;
+        try
+        {
+            return Json::parse(*bytes).at("content_version").get<std::string>() != contentVersion;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    };
+    if (isPreSuppressorContentSource(primaryPath_, validPrimary) ||
+        isPreSuppressorContentSource(backupPath_, validBackup))
+    {
+        // Muzzle compatibility is static content, not a new save schema. Keep
+        // immutable old definitions' sources before ordinary backup rotation
+        // or pending-Raid mirroring can replace either recovery source.
+        const auto preserved = preserveLayoutMigrationSources(
+            validPrimary ? SaveLoadStatus::LoadedPrimary : SaveLoadStatus::RecoveredBackup,
+            "weapon-suppressor-acoustics-v1");
         if (!preserved.succeeded)
         {
             std::filesystem::remove(temporaryPath_, error);

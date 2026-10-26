@@ -3,13 +3,53 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include <gtest/gtest.h>
 #include <SDL3/SDL.h>
 
 #include "sound_event.h"
+#include "game_audio.h"
+
+struct GameAudioTestAccess
+{
+    static bool prepareSoftwareStream(GameAudioOutput &output)
+    {
+        const SDL_AudioSpec specification{SDL_AUDIO_F32, 1, 48000};
+        output.stream_ = SDL_CreateAudioStream(&specification, &specification);
+        if (output.stream_ == nullptr) return false;
+        output.masterGain_ = 0.72F;
+        for (const auto event : {SoundEventId::WeaponRifleFire, SoundEventId::WeaponFireTailOutdoor})
+        {
+            GameAudioOutput::LoadedEvent loaded;
+            loaded.definition.id = event;
+            loaded.definition.gain = event == SoundEventId::WeaponRifleFire ? 0.90F : 0.35F;
+            loaded.definition.maxInstances = 8;
+            loaded.variants.push_back(std::make_shared<const std::vector<float>>(16U, 0.25F));
+            output.events_[static_cast<std::size_t>(event)] = std::move(loaded);
+        }
+        return true;
+    }
+    static std::vector<float> voiceGains(const GameAudioOutput &output)
+    {
+        std::scoped_lock lock{output.voicesMutex_};
+        std::vector<float> gains;
+        for (const auto &voice : output.voices_) gains.push_back(voice.gain);
+        return gains;
+    }
+    static float eventGain(const GameAudioOutput &output, SoundEventId event)
+    {
+        return output.events_[static_cast<std::size_t>(event)]->definition.gain;
+    }
+    static bool riflePlayed(const GameAudioOutput &output)
+    {
+        return output.events_[static_cast<std::size_t>(SoundEventId::WeaponRifleFire)]->hasPlayed;
+    }
+    static float masterGain(const GameAudioOutput &output) { return output.masterGain_; }
+};
 
 namespace
 {
@@ -50,6 +90,42 @@ TEST(GameAudioTest, StableEventNamesRoundTrip)
         EXPECT_EQ(*parsed, id);
     }
     EXPECT_FALSE(parseSoundEventId("weapon.unknown").has_value());
+}
+
+TEST(GameAudioTest, SinglePlayGainLeavesOtherVoicesAndAuthoredVolumesUnchanged)
+{
+    GameAudioOutput output;
+    ASSERT_TRUE(GameAudioTestAccess::prepareSoftwareStream(output)) << SDL_GetError();
+    output.play(SoundEventId::WeaponRifleFire, 0.55F);
+    output.play(SoundEventId::WeaponRifleFire);
+    output.play(SoundEventId::WeaponFireTailOutdoor, 0.25F);
+    output.play(SoundEventId::WeaponFireTailOutdoor);
+    const auto gains = GameAudioTestAccess::voiceGains(output);
+    ASSERT_EQ(gains.size(), 4U);
+    EXPECT_FLOAT_EQ(gains[0], 0.90F * 0.55F);
+    EXPECT_FLOAT_EQ(gains[1], 0.90F);
+    EXPECT_FLOAT_EQ(gains[2], 0.35F * 0.25F);
+    EXPECT_FLOAT_EQ(gains[3], 0.35F);
+    EXPECT_FLOAT_EQ(GameAudioTestAccess::eventGain(output, SoundEventId::WeaponRifleFire), 0.90F);
+    EXPECT_FLOAT_EQ(GameAudioTestAccess::eventGain(output, SoundEventId::WeaponFireTailOutdoor), 0.35F);
+    EXPECT_FLOAT_EQ(GameAudioTestAccess::masterGain(output), 0.72F);
+}
+
+TEST(GameAudioTest, InvalidOrSilentSinglePlayDoesNotQueueOrAdvanceEventState)
+{
+    GameAudioOutput output;
+    ASSERT_TRUE(GameAudioTestAccess::prepareSoftwareStream(output)) << SDL_GetError();
+    for (const float gain : {0.0F, -0.1F, 1.01F,
+             std::numeric_limits<float>::quiet_NaN(),
+             std::numeric_limits<float>::infinity()})
+        output.play(SoundEventId::WeaponRifleFire, gain);
+    EXPECT_TRUE(GameAudioTestAccess::voiceGains(output).empty());
+    EXPECT_FALSE(GameAudioTestAccess::riflePlayed(output));
+    output.play(SoundEventId::WeaponRifleFire);
+    const auto gains = GameAudioTestAccess::voiceGains(output);
+    ASSERT_EQ(gains.size(), 1U);
+    EXPECT_FLOAT_EQ(gains[0], 0.90F);
+    EXPECT_TRUE(GameAudioTestAccess::riflePlayed(output));
 }
 
 TEST(GameAudioTest, PublishedBankDefinesLoadableRuntimeWaves)

@@ -1,3 +1,17 @@
+# 当前：消音器与枪声取舍 v1 已通过人工验收
+
+**用户已验收候选`d0b4a091f1fa`，并明确授权提交、推送和合并。** 主控按原门槛交付，不开始下一任务。
+
+- state：`accepted_delivering`；task_id：`weapon-suppressor-acoustics-v1`；plan_version：`RL-WEAPON-SUPPRESSOR-ACOUSTICS-v1`。
+- candidate_id / accepted_candidate_id：`RL-WEAPON-SUPPRESSOR-ACOUSTICS-v1-local-d0b4a091f1fa`；acceptance_source：2026-10-26本主控线程用户“验收通过，请提交、推送和合并”。
+- [交付记录](../exec-plans/active/weapon-suppressor-acoustics-v1.md)；[已通过验收清单](../acceptance/weapon-suppressor-acoustics-v1.md)。原桌面入口和已验收程序保持。
+- 同一候选本地完整2765项与原五项3ms通过；准确PR双平台与合并后main CI尚未运行。
+- 实际目录`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`，分支`codex/weapon-suppressor-acoustics-v1`，交付基线`7ee8600`。其余未提交修改和验收后玩家数据保留，开发代理不启动游戏。
+- pending_request：无。不启动下一任务；不追加只为复制CI状态的提交。
+
+<details>
+<summary>上一项及更早交付记录（历史）</summary>
+
 # 当前：野战医疗补给分装 v1 已通过人工验收
 
 **用户已验收此功能，并明确授权提交、推送与合并。** 本任务不继续开展UI专项，也不自动启动下一功能。
@@ -1870,6 +1884,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 
 </details>
 
+
+</details>
 
 </details>
 

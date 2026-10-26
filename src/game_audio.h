@@ -28,12 +28,14 @@ public:
     [[nodiscard]] bool initialize(
         const std::filesystem::path &assetRoot) noexcept;
     void shutdown() noexcept;
-    void play(SoundEventId event) noexcept;
+    // The multiplier belongs to this voice only; authored and master gains stay unchanged.
+    void play(SoundEventId event, float gainMultiplier = 1.0F) noexcept;
     void setAmbience(std::optional<SoundEventId> event) noexcept;
     [[nodiscard]] bool available() const noexcept;
     [[nodiscard]] const std::string &lastError() const noexcept;
 
 private:
+    friend struct GameAudioTestAccess;
     struct LoadedEvent
     {
         SoundEventDefinition definition;
@@ -66,7 +68,8 @@ private:
     [[nodiscard]] static std::shared_ptr<const std::vector<float>> loadWave(
         const std::filesystem::path &path,
         std::string &error) noexcept;
-    void startVoice(SoundEventId event, bool ignoreCooldown) noexcept;
+    void startVoice(SoundEventId event, bool ignoreCooldown,
+                    float gainMultiplier = 1.0F) noexcept;
 
     static void audioCallback(
         void *userdata,

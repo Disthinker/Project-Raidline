@@ -61,7 +61,7 @@ UiWeaponComponentsProjection projectUiWeaponComponents(const ProfileState &p, co
 }
 SDL_FRect uiComponentWeaponRow(std::size_t i) noexcept { return {64, 188 + 56.0F * i, 254, 50}; }
 SDL_FRect uiComponentChoiceRow(std::size_t i) noexcept { return {338, 330 + 35.0F * i, 468, 32}; }
-SDL_FRect uiComponentSlot(std::size_t i) noexcept { return {338 + 118.0F * i, 222, 112, 58}; }
+SDL_FRect uiComponentSlot(std::size_t i) noexcept { return {338 + 95.0F * i, 222, 88, 58}; }
 SDL_FRect uiComponentDetails() noexcept { return {844, 418, 358, 148}; }
 SDL_FRect uiComponentControl(UiComponentControl c) noexcept {
     switch (c) {
@@ -82,7 +82,7 @@ std::optional<UiComponentHit> hitUiWeaponComponents(Vec2 p, const UiWeaponCompon
         n = choicePage * kUiComponentPageSize + i;
         if (n < rows.choices.size() && uiContains(uiComponentChoiceRow(i), p)) return UiComponentHit{UiComponentControl::Choice, 0, rows.choices[n].id};
     }
-    for (std::size_t i = 0; i < 4; ++i) if (uiContains(uiComponentSlot(i), p)) return UiComponentHit{UiComponentControl::Slot, i};
+    for (std::size_t i = 0; i < kUiComponentSlotCount; ++i) if (uiContains(uiComponentSlot(i), p)) return UiComponentHit{UiComponentControl::Slot, i};
     for (auto c : {UiComponentControl::WeaponPrevious, UiComponentControl::WeaponNext, UiComponentControl::ChoicePrevious,
                    UiComponentControl::ChoiceNext, UiComponentControl::Confirm, UiComponentControl::Back})
         if (uiContains(uiComponentControl(c), p)) return UiComponentHit{c, 0, 0, c == UiComponentControl::Confirm ? command : std::nullopt};

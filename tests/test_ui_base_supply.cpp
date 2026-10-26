@@ -113,7 +113,8 @@ protected:
 }
 
 TEST_F(UiBaseSupplyTest, EveryCatalogRowReachableAndBrowsingNeverTrades) {
-    const auto before=profileStateFingerprint(profile());const auto ids=content.fixedSupplyItemIds();ASSERT_EQ(ids.size(),27);
+    const auto before=profileStateFingerprint(profile());const auto ids=content.fixedSupplyItemIds();ASSERT_EQ(ids.size(),28);
+    EXPECT_NE(std::find(ids.begin(), ids.end(), ItemDefinitionId{"item.component.suppressor_5_45"}), ids.end());
     for(const auto &id:ids) {select(id);draw("catalog");}
     tab(Tab::Recycle);control(Control::Next);tab(Tab::Maintenance);tab(Tab::Purchase);
     EXPECT_EQ(profileStateFingerprint(profile()),before);EXPECT_FALSE(A::state(*app).selection);
