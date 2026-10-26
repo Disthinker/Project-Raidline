@@ -6,7 +6,8 @@
 namespace {
 using Control = UiComponentControl;
 using Kind = UiComponentEventKind;
-constexpr const char *slots[]{"BARREL", "HANDGUARD", "GRIP", "WEAPON LIGHT"};
+constexpr const char *slots[]{"BARREL", "HANDGUARD", "GRIP", "WEAPON LIGHT", "MUZZLE"};
+static_assert(std::size(slots) == kUiComponentSlotCount);
 bool samePlan(const WeaponComponentPlan &a, const WeaponComponentPlan &b) {
     if (a.canCommit != b.canCommit || a.revision != b.revision || a.before != b.before ||
         a.after != b.after || a.returned.size() != b.returned.size()) return false;
@@ -189,7 +190,7 @@ void App::renderWeaponComponents() {
         renderBaseSupplyImage(weapon->definitionId, {350, 140, 444, 52});
         text({338, 194, 468, 24}, content.item(weapon->definitionId).displayName, 14, UiTextAlign::Center, 1);
     } else text({350, 155, 444, 50}, "SELECT AN ACCESSIBLE WEAPON", 14, UiTextAlign::Center);
-    for (std::size_t i = 0; i < 4; ++i) {
+    for (std::size_t i = 0; i < kUiComponentSlotCount; ++i) {
         const auto box = uiComponentSlot(i);
         renderFoundationButton(3440 + static_cast<int>(i), box, "", componentWeapon_ != 0, false, static_cast<std::size_t>(componentSlot_) == i, {}, 14);
         text({box.x + 10, box.y + 6, box.w - 20, 22}, uiTextRenderer_.language() == UiLanguage::English && i == 3 ? "LIGHT" : slots[i], 12, UiTextAlign::Center, 1);
@@ -226,12 +227,12 @@ void App::renderWeaponComponents() {
     if (componentRows_.current) {
         const auto &current = *componentRows_.current;
         const auto stat = [&](int row, const char *label, double before, double after, bool range = false) {
-            const float y = 240 + row * 24.0F;
+            const float y = 240 + row * 21.0F;
             const auto number = [range](double value) { return range ? fmt::format("{:.1f}", value) : fmt::format("{:.0f}", value); };
-            text({844, y, 152, 22}, label, 12);
-            text({996, y, 66, 22}, number(before), 14, UiTextAlign::Right);
-            text({1062, y, 70, 22}, plan && plan->canCommit ? number(after) : "—", 14, UiTextAlign::Right);
-            text({1132, y, 70, 22}, plan && plan->canCommit ? ((after > before ? "+" : "") + number(after - before)) : "—", 14, UiTextAlign::Right, 1, !plan || !plan->canCommit || after == before);
+            text({844, y, 152, 20}, label, 12);
+            text({996, y, 66, 20}, number(before), 14, UiTextAlign::Right);
+            text({1062, y, 70, 20}, plan && plan->canCommit ? number(after) : "—", 14, UiTextAlign::Right);
+            text({1132, y, 70, 20}, plan && plan->canCommit ? ((after > before ? "+" : "") + number(after - before)) : "—", 14, UiTextAlign::Right, 1, !plan || !plan->canCommit || after == before);
         };
         const auto &after = plan && plan->canCommit ? plan->after : current;
         stat(0, "RECOIL CONTROL", current.recoilControl, after.recoilControl);
@@ -240,6 +241,8 @@ void App::renderWeaponComponents() {
         stat(3, "ERGONOMICS", current.ergonomics, after.ergonomics);
         stat(4, "ACCURACY", current.accuracy, after.accuracy);
         stat(5, "EFFECTIVE RANGE", current.effectiveRange, after.effectiveRange, true);
+        stat(6, "SHOT NOISE %", current.acoustics.noiseRadiusMultiplier * 100.0,
+             after.acoustics.noiseRadiusMultiplier * 100.0);
     }
     text({844, 390, 358, 22}, "DETAILS AND RETURN", 14);
     std::vector<std::string> details;
@@ -252,6 +255,12 @@ void App::renderWeaponComponents() {
     if (const auto *weapon = p.assets.find(componentWeapon_)) add("WEAPON NAME: " + localizeUiText(uiTextRenderer_.language(), content.item(weapon->definitionId).displayName));
     if (componentActionSelected_) {
         if (const auto *part = p.assets.find(componentChoice_)) add("SELECTED PART: " + localizeUiText(uiTextRenderer_.language(), content.item(part->definitionId).displayName));
+    }
+    if (componentRows_.current &&
+        (componentRows_.current->acoustics.noiseRadiusMultiplier < 1.0F ||
+         (plan && plan->canCommit && plan->after.acoustics.noiseRadiusMultiplier < 1.0F))) {
+        add("NEARBY ENEMIES AND THEIR GROUP MAY STILL HEAR YOU");
+        add("LOWER SHOT AUDIO IS TEMPORARY FEEDBACK");
     }
     if (plan && plan->canCommit) {
         if (plan->returned.empty()) add("NO COMPONENTS WILL BE REMOVED");

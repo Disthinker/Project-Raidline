@@ -165,6 +165,7 @@ public:
     [[nodiscard]] HitFeedbackPresentationSnapshot hitFeedbackPresentation() const noexcept
     { return shooting_.hitFeedbackPresentation(); }
     [[nodiscard]] bool shotFiredLastUpdate() const noexcept;
+    [[nodiscard]] WeaponAcousticsDefinition shotAcousticsLastUpdate() const noexcept;
     [[nodiscard]] WeaponAccuracyProjection
     weaponAccuracyProjection() const noexcept;
     [[nodiscard]] Vec2 weaponAimWorldPosition() const noexcept;

@@ -154,6 +154,19 @@ struct ArmorProtectionDefinition
         const ArmorProtectionDefinition &) = default;
 };
 
+// Static weapon capability; simulation freezes it for the successful shot.
+// AI hearing and client playback deliberately consume separate multipliers.
+struct WeaponAcousticsDefinition
+{
+    float noiseRadiusMultiplier{1.0F};
+    float fireGain{1.0F};
+    float outdoorTailGain{1.0F};
+
+    friend bool operator==(
+        const WeaponAcousticsDefinition &,
+        const WeaponAcousticsDefinition &) = default;
+};
+
 struct WeaponUseDefinition
 {
     bool automaticFire{};
@@ -167,6 +180,7 @@ struct WeaponUseDefinition
     float effectiveRange{};
     float maximumRange{};
     float logicalBallisticSpeed{};
+    WeaponAcousticsDefinition acoustics;
 
     friend bool operator==(
         const WeaponUseDefinition &,
@@ -310,7 +324,7 @@ enum class BaseSupplyCategory
 
 // 一种物品的共享静态数据。
 // 它不代表世界中某一个具体物品，也不拥有 Texture。
-enum class WeaponComponentSlot { Barrel, Handguard, Grip, Light };
+enum class WeaponComponentSlot { Barrel, Handguard, Grip, Light, Muzzle };
 
 struct MeleeUseDefinition
 {
@@ -338,6 +352,7 @@ struct WeaponComponentDefinition
     int accuracy{};
     float effectiveRange{};
     bool providesLightMount{}, requiresLightMount{};
+    WeaponAcousticsDefinition acoustics;
 };
 
 struct NoiseDecoyUseDefinition

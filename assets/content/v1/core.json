@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "base-field-medical-supplies-content-70",
+  "content_version": "weapon-suppressor-acoustics-content-71",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -551,6 +551,26 @@
       "market_buy_price": 20,
       "maximum_charges": 600000,
       "battery": true
+    },
+    {
+      "id": "item.component.suppressor_5_45",
+      "display_name": "5.45 Suppressor",
+      "category": "weapon_component",
+      "inventory": {"width": 2, "height": 1, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 350,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 40, "y": 24}, "pickup_size": {"x": 48, "y": 32}},
+      "inventory_texture": "items/inventory/unpublished_component.png",
+      "world_texture": "items/world/unpublished_component.png",
+      "market_buy_price": 240,
+      "market_recycle_price": 60,
+      "weapon_component": {
+        "weapon": "item.weapon.rifle_5_45_service",
+        "slot": "muzzle",
+        "handling_speed": -8,
+        "acoustics": {"noise_radius_multiplier": 0.5, "fire_gain": 0.55, "outdoor_tail_gain": 0.25}
+      }
     },
     {
       "id": "item.component.precision_barrel",
@@ -2007,6 +2027,7 @@
       "id": "loot.frontier.fabrication_stock_v1",
       "roll_count": 1,
       "entries": [
+        {"item": "item.component.suppressor_5_45", "weight": 10, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.component.rail_handguard", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},{"item": "item.component.vertical_grip", "weight": 5, "minimum_quantity": 1, "maximum_quantity": 1},
         {"item": "item.loot.industrial_fasteners", "weight": 25, "minimum_quantity": 1, "maximum_quantity": 3},
         {"item": "item.loot.copper_wire_spool", "weight": 20, "minimum_quantity": 1, "maximum_quantity": 1},

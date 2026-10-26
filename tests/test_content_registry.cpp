@@ -127,7 +127,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "base-field-medical-supplies-content-70");
+        "weapon-suppressor-acoustics-content-71");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -259,7 +259,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.category, BaseSupplyCategory::Recreation);
     EXPECT_EQ(comfort.requiredContribution, 14U);
     EXPECT_FALSE(comfort.sourceHint.empty());
-    ASSERT_EQ(registry.items().size(), 59U);
+    ASSERT_EQ(registry.items().size(), 60U);
     const auto &light = registry.item(ItemDefinitionId{"item.component.weapon_flashlight_basic"});
     const auto &battery = registry.item(ItemDefinitionId{"item.battery.universal"});
     ASSERT_TRUE(light.weaponLight);
@@ -2011,6 +2011,92 @@ TEST(ContentRegistryTest, FieldMedicalRecipesPreserveExistingProductionAndSingle
     EXPECT_EQ(medkit.marketRecyclePrice, 15U);
 }
 
+TEST(ContentRegistryTest, SuppressorPublishesSinglePlatformTradeoffAndOneExistingLootSource)
+{
+    const auto &content = publishedContentRegistry();
+    const ItemDefinitionId id{"item.component.suppressor_5_45"};
+    const auto &part = content.item(id);
+    EXPECT_EQ(part.category, ItemCategory::WeaponComponent);
+    EXPECT_EQ(part.inventoryWidthCells, 2);
+    EXPECT_EQ(part.inventoryHeightCells, 1);
+    EXPECT_TRUE(part.canRotate);
+    EXPECT_EQ(part.maxStackSize, 1U);
+    EXPECT_EQ(part.unitWeightGrams, 350U);
+    EXPECT_EQ(part.marketBuyPrice, 240U);
+    EXPECT_EQ(part.marketRecyclePrice, 60U);
+    EXPECT_FALSE(part.visualAssetsPublished);
+    EXPECT_EQ(part.inventoryTexturePath, content.item(ItemDefinitionId{"item.component.vertical_grip"}).inventoryTexturePath);
+    EXPECT_EQ(part.worldTexturePath, content.item(ItemDefinitionId{"item.component.vertical_grip"}).worldTexturePath);
+    ASSERT_TRUE(part.weaponComponent);
+    const auto &component = *part.weaponComponent;
+    EXPECT_EQ(component.slot, WeaponComponentSlot::Muzzle);
+    EXPECT_EQ(component.weaponDefinitionId, ItemDefinitionId{"item.weapon.rifle_5_45_service"});
+    EXPECT_EQ(component.handlingSpeed, -8);
+    EXPECT_EQ(component.recoilControl, 0);
+    EXPECT_EQ(component.stability, 0);
+    EXPECT_EQ(component.ergonomics, 0);
+    EXPECT_EQ(component.accuracy, 0);
+    EXPECT_FLOAT_EQ(component.effectiveRange, 0.0F);
+    EXPECT_FALSE(component.requiresUnderbarrel);
+    EXPECT_FALSE(component.requiresLightMount);
+    EXPECT_FLOAT_EQ(component.acoustics.noiseRadiusMultiplier, 0.5F);
+    EXPECT_FLOAT_EQ(component.acoustics.fireGain, 0.55F);
+    EXPECT_FLOAT_EQ(component.acoustics.outdoorTailGain, 0.25F);
+    EXPECT_EQ(std::count(content.fixedSupplyItemIds().begin(), content.fixedSupplyItemIds().end(), id), 1);
+    std::size_t entries{};
+    for (const auto &table : content.lootTables())
+        for (const auto &entry : table.entries)
+            if (entry.itemDefinitionId == id)
+            {
+                ++entries;
+                EXPECT_EQ(table.id, LootTableDefinitionId{"loot.frontier.fabrication_stock_v1"});
+                EXPECT_EQ(table.rollCount, 1U);
+                EXPECT_EQ(entry.weight, 10U);
+                EXPECT_EQ(entry.minimumQuantity, 1U);
+                EXPECT_EQ(entry.maximumQuantity, 1U);
+            }
+    EXPECT_EQ(entries, 1U);
+    for (const auto &definition : content.items())
+    {
+        if (definition.weaponUse)
+            EXPECT_EQ(definition.weaponUse->acoustics, WeaponAcousticsDefinition{});
+        if (definition.weaponComponent && definition.definitionId != id)
+            EXPECT_EQ(definition.weaponComponent->acoustics, WeaponAcousticsDefinition{});
+    }
+}
+
+TEST(ContentRegistryTest, SuppressorRejectsInvalidAcousticsSlotsAndWeaponReferences)
+{
+    const auto original = hospitalContentCandidateJson();
+    const auto itemIndex = [&]
+    {
+        const auto &items = original.at("items");
+        for (std::size_t i{}; i < items.size(); ++i)
+            if (items[i].at("id") == "item.component.suppressor_5_45") return i;
+        throw std::logic_error{"missing suppressor fixture"};
+    }();
+    for (const auto *field : {"noise_radius_multiplier", "fire_gain", "outdoor_tail_gain"})
+        for (const auto &value : std::vector<nlohmann::json>{-0.1, 1.1, "not-a-number", nullptr})
+        {
+            SCOPED_TRACE(field);
+            auto invalid = original;
+            invalid["items"][itemIndex]["weapon_component"]["acoustics"][field] = value;
+            EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid.dump())), ContentRegistryError);
+        }
+    auto invalid = original;
+    invalid["items"][itemIndex]["weapon_component"]["acoustics"]["noise_radius_multiplier"] = 0;
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid.dump())), ContentRegistryError);
+    invalid = original;
+    invalid["items"][itemIndex]["weapon_component"]["slot"] = "barrel";
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid.dump())), ContentRegistryError);
+    invalid = original;
+    invalid["items"][itemIndex]["weapon_component"]["weapon"] = "item.weapon.missing_platform";
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid.dump())), ContentRegistryError);
+    invalid = original;
+    invalid["items"][itemIndex]["weapon_component"]["weapon"] = "item.medical.medkit_alpha";
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid.dump())), ContentRegistryError);
+}
+
 TEST(ContentRegistryTest, FieldBandageRollPublishesThreeLightBleedingUsesAndExistingArt)
 {
     const auto &content = publishedContentRegistry();
@@ -2067,7 +2153,7 @@ TEST(ContentRegistryTest, FieldBandageRollIsManufacturedOnlyAndCannotIncreaseRec
 TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDefinitions)
 {
     const auto original = hospitalContentCandidateJson();
-    ASSERT_EQ(original.at("content_version"), "base-field-medical-supplies-content-70");
+    ASSERT_EQ(original.at("content_version"), "weapon-suppressor-acoustics-content-71");
     for (const auto *required : {"fortifications", "enemy_combat_definitions"})
     {
         SCOPED_TRACE(required);

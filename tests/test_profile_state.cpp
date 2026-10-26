@@ -147,6 +147,7 @@ TEST(ProfileStateTest, NewPublishedProfileCreatesLegacyCatalogAndExcludesPurchas
                      definition.maxStackSize == 1U);
             });
         if (definition.weaponLight || definition.battery || definition.meleeUse || definition.noiseDecoyUse ||
+            (definition.weaponComponent && definition.weaponComponent->slot == WeaponComponentSlot::Muzzle) ||
             definition.definitionId == ItemDefinitionId{"item.medical.bandage_roll_basic"}) {
             EXPECT_EQ(stored, profile.assets.records().end()) << definition.definitionId.value();
             continue;
@@ -159,6 +160,34 @@ TEST(ProfileStateTest, NewPublishedProfileCreatesLegacyCatalogAndExcludesPurchas
                 << definition.definitionId.value();
         }
     }
+}
+
+TEST(ProfileStateTest, SuppressorIsNeverGrantedByNewOrCompatibilityWarehouseCatalogs)
+{
+    const auto &content = publishedContentRegistry();
+    const ItemDefinitionId suppressor{"item.component.suppressor_5_45"};
+    auto count = [&](const ProfileState &profile)
+    {
+        return std::count_if(profile.assets.records().begin(), profile.assets.records().end(),
+            [&](const auto &entry) { return entry.second.definitionId == suppressor; });
+    };
+    auto published = makeNewPublishedProfile("suppressor-not-free", content);
+    EXPECT_EQ(count(published), 0);
+    published.committedTransactions.erase("bootstrap.warehouse_catalog.content_54");
+    const auto legacyGrant = grantPublishedWarehouseCatalog(published, content);
+    ASSERT_TRUE(legacyGrant.succeeded) << legacyGrant.message;
+    EXPECT_EQ(legacyGrant.addedDefinitionCount, 0U);
+    EXPECT_EQ(count(published), 0);
+    auto developer = makeNewAlphaProfile("suppressor-no-developer-grant", content);
+    const auto developerGrant = grantDeveloperWarehouseCatalog(developer, content);
+    ASSERT_TRUE(developerGrant.succeeded) << developerGrant.message;
+    EXPECT_EQ(count(developer), 0);
+    const auto after = profileStateFingerprint(developer);
+    const auto repeated = grantDeveloperWarehouseCatalog(developer, content);
+    EXPECT_TRUE(repeated.succeeded);
+    EXPECT_TRUE(repeated.alreadyGranted);
+    EXPECT_EQ(profileStateFingerprint(developer), after);
+    EXPECT_EQ(count(developer), 0);
 }
 
 TEST(ProfileStateTest, ContentBetaLoadoutWeightSeparatesLightAndHeavyExtraction)

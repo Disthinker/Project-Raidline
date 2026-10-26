@@ -2455,6 +2455,11 @@ bool GameplayWorld::shotFiredLastUpdate() const noexcept
     return shooting_.shotFiredLastUpdate();
 }
 
+WeaponAcousticsDefinition GameplayWorld::shotAcousticsLastUpdate() const noexcept
+{
+    return shooting_.shotAcousticsLastUpdate();
+}
+
 std::size_t GameplayWorld::enemiesAlertedLastUpdate() const noexcept
 {
     return enemiesAlertedLastUpdate_;

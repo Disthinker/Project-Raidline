@@ -33,6 +33,7 @@ std::string compactUiItemName(const ItemDefinition &d,UiLanguage language) {
         {"item.medical.tourniquet_basic","Tourniquet","止血带"},
         {"item.medical.painkiller_basic","Painkiller","止痛药"},
         {"item.throwable.noise_decoy","Decoy","诱饵"},
+        {"item.component.suppressor_5_45","Suppressor","消音器"},
         {"item.container.chest_rig_small","Light rig","小胸挂"},
         {"item.container.chest_rig_patrol","Patrol rig","巡逻胸挂"},
         {"item.container.chest_rig_assault","Assault rig","突击胸挂"}
@@ -121,6 +122,13 @@ std::vector<std::string> projectUiItemSummary(
     }
     if (definition.medicalUse)
         lines.push_back(fmt::format("REMAINING USES {}", asset.remainingCharges));
+    if (definition.weaponComponent &&
+        definition.weaponComponent->acoustics.noiseRadiusMultiplier < 1.0F) {
+        lines.push_back(fmt::format("SHOT NOISE RANGE {:.0f}%",
+            definition.weaponComponent->acoustics.noiseRadiusMultiplier * 100.0F));
+        lines.push_back(fmt::format("HANDLING {:+}", definition.weaponComponent->handlingSpeed));
+        lines.emplace_back("5.45 SERVICE RIFLE ONLY");
+    }
     return lines;
 }
 

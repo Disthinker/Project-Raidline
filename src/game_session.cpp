@@ -4294,7 +4294,8 @@ void GameSession::updateAlphaRaid(
                 std::terminate();
             }
         }
-        world_->emitPlayerNoise(kUnsuppressedGunshotNoiseRadius);
+        world_->emitPlayerNoise(kUnsuppressedGunshotNoiseRadius *
+            world_->shotAcousticsLastUpdate().noiseRadiusMultiplier);
         if (!input.developerInfiniteAmmo)
         {
             ++weaponFaultSequence_;

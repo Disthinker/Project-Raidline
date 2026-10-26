@@ -836,7 +836,7 @@ ContentRegistry ContentRegistry::fromJson(
             registry.contentVersion_ == "base-fortification-foundation-content-61" ||
             registry.contentVersion_ == "hospital-raid-theme-content-62" ||
             registry.contentVersion_ == "weapon-components-content-63" ||
-            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70");
+            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71");
 
         if (root.contains("fortifications"))
         {
@@ -862,7 +862,7 @@ ContentRegistry ContentRegistry::fromJson(
         if ((registry.contentVersion_ == "base-fortification-foundation-content-61" ||
              registry.contentVersion_ == "hospital-raid-theme-content-62" ||
              registry.contentVersion_ == "weapon-components-content-63" ||
-             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70")) &&
+             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71")) &&
             !registry.fortifications_.contains(kWoodBarricadeDefinition))
             fail("wood barricade definition is required by content 61");
 
@@ -1673,6 +1673,7 @@ ContentRegistry ContentRegistry::fromJson(
                 else if (slot == "handguard") component.slot = WeaponComponentSlot::Handguard;
                 else if (slot == "grip") component.slot = WeaponComponentSlot::Grip;
                 else if (slot == "light") component.slot = WeaponComponentSlot::Light;
+                else if (slot == "muzzle") component.slot = WeaponComponentSlot::Muzzle;
                 else fail("unknown weapon component slot");
                 component.providesUnderbarrel = c.value("provides_underbarrel", false);
                 component.requiresUnderbarrel = c.value("requires_underbarrel", false);
@@ -1684,6 +1685,19 @@ ContentRegistry ContentRegistry::fromJson(
                 component.ergonomics = c.value("ergonomics", 0);
                 component.accuracy = c.value("accuracy", 0);
                 component.effectiveRange = c.value("effective_range", 0.0F);
+                if (c.contains("acoustics"))
+                {
+                    const auto &a = requiredObject(c, "acoustics");
+                    component.acoustics.noiseRadiusMultiplier = a.at("noise_radius_multiplier").get<float>();
+                    component.acoustics.fireGain = a.at("fire_gain").get<float>();
+                    component.acoustics.outdoorTailGain = a.at("outdoor_tail_gain").get<float>();
+                }
+                const auto &acoustics = component.acoustics;
+                if (!std::isfinite(acoustics.noiseRadiusMultiplier) || acoustics.noiseRadiusMultiplier <= 0.0F || acoustics.noiseRadiusMultiplier > 1.0F ||
+                    !std::isfinite(acoustics.fireGain) || acoustics.fireGain < 0.0F || acoustics.fireGain > 1.0F ||
+                    !std::isfinite(acoustics.outdoorTailGain) || acoustics.outdoorTailGain < 0.0F || acoustics.outdoorTailGain > 1.0F ||
+                    (component.slot != WeaponComponentSlot::Muzzle && acoustics != WeaponAcousticsDefinition{}))
+                    fail("invalid weapon component acoustics");
                 if (definition.category != ItemCategory::WeaponComponent || definition.maxStackSize != 1 ||
                     (component.providesUnderbarrel && component.slot != WeaponComponentSlot::Handguard) ||
                     (component.providesLightMount && component.slot != WeaponComponentSlot::Handguard) ||

@@ -173,6 +173,9 @@ bool WorldShootingRuntime::restoreCheckpoint(const WorldShootingCheckpoint &s)
         return true;
     }
     WorldShootingRuntime candidate;
+    // Static component capability is derived from the current asset tree by
+    // the activity before restoring its transient shot/aim checkpoint.
+    candidate.weaponAcoustics_ = weaponAcoustics_;
     const auto &f = s.fireConfig;
     candidate.weaponFire_ = WeaponFireState{WeaponFireConfig{
         f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9],
@@ -241,6 +244,7 @@ void WorldShootingRuntime::beginFrame(float deltaTime) noexcept
 {
     hitResultsLastUpdate_.clear();
     shotFiredLastUpdate_ = false;
+    shotAcousticsLastUpdate_ = {};
     if (!std::isfinite(deltaTime) || deltaTime <= 0.0F)
     {
         return;
@@ -329,6 +333,7 @@ WorldShootingAdvance WorldShootingRuntime::advanceShots(
     if (shot.has_value())
     {
         shotFiredLastUpdate_ = true;
+        shotAcousticsLastUpdate_ = weaponAcoustics_;
         const float muzzleDistance = shooterExtent * 0.5F +
             kShotExtent * 0.5F;
         const Vec2 shotOrigin{
@@ -543,6 +548,7 @@ void WorldShootingRuntime::configureWeapon(
     weaponBaseDamage_ = definition.baseDamage;
     weaponMaximumRange_ = definition.maximumRange;
     weaponLogicalBallisticSpeed_ = definition.logicalBallisticSpeed;
+    weaponAcoustics_ = definition.acoustics;
     weaponTracerStyle_ = TracerStyle::Weak;
     weaponTracerLength_ = handling.weakTracerLength;
     weaponTracerOpacity_ = handling.weakTracerOpacity;
@@ -598,6 +604,7 @@ void WorldShootingRuntime::clearSpatialTransientPresentation() noexcept
     hitFeedbackPresentation_.reset();
     hitResultsLastUpdate_.clear();
     shotFiredLastUpdate_ = false;
+    shotAcousticsLastUpdate_ = {};
 }
 
 const std::vector<LogicalBallisticFlight> &
@@ -661,6 +668,11 @@ WorldShootingRuntime::hitResultsLastUpdate() const noexcept
 bool WorldShootingRuntime::shotFiredLastUpdate() const noexcept
 {
     return shotFiredLastUpdate_;
+}
+
+WeaponAcousticsDefinition WorldShootingRuntime::shotAcousticsLastUpdate() const noexcept
+{
+    return shotAcousticsLastUpdate_;
 }
 
 float WorldShootingRuntime::spreadDegrees() const noexcept

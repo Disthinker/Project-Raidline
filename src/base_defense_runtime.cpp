@@ -496,9 +496,13 @@ void BaseDefenseRuntime::advance(const GameplayInput &input, float dt, Vec2 play
             [&](Vec2 a,Vec2 b){return blockerIndex_->hasLineOfSight(a,b) && fortifications_.lineOfSight(a,b);});
         // Hearing does not replace the wave objective or replay enemy movement.
         if (shooting.shotFiredLastUpdate() && playerExposed(playerCenter))
+        {
+            const float noiseRadius = 1500.0F *
+                shooting.shotAcousticsLastUpdate().noiseRadiusMultiplier;
             for (auto &enemy : enemies_)
-                if (distance(center(enemy), playerCenter) < 1500)
+                if (distance(center(enemy), playerCenter) < noiseRadius)
                     enemy.hearTarget(playerCenter);
+        }
     }
     // Shot removal invalidates squad membership. Export only the surviving
     // coordinator state, never the pre-shot vector indices.

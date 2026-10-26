@@ -3056,11 +3056,13 @@ void App::updateBase(float deltaTime)
     if (baseWorld.shotFiredLastUpdate())
     {
         const auto tuning = gameSession_.developerWeaponTuning();
+        const auto &acoustics = baseWorld.shotAcousticsLastUpdate();
         gameAudio_.play(
             tuning.has_value() && tuning->weaponUse.automaticFire
                 ? SoundEventId::WeaponRifleFire
-                : SoundEventId::WeaponPistolFire);
-        gameAudio_.play(SoundEventId::WeaponFireTailOutdoor);
+                : SoundEventId::WeaponPistolFire, acoustics.fireGain);
+        gameAudio_.play(SoundEventId::WeaponFireTailOutdoor,
+                        acoustics.outdoorTailGain);
     }
     for (const HitResult &hit : baseWorld.hitResultsLastUpdate())
     {
@@ -6232,11 +6234,13 @@ void App::update(float deltaTime)
     if (gameSession_.world().shotFiredLastUpdate())
     {
         const auto tuning = gameSession_.developerWeaponTuning();
+        const auto &acoustics = gameSession_.world().shotAcousticsLastUpdate();
         gameAudio_.play(
             tuning.has_value() && tuning->weaponUse.automaticFire
                 ? SoundEventId::WeaponRifleFire
-                : SoundEventId::WeaponPistolFire);
-        gameAudio_.play(SoundEventId::WeaponFireTailOutdoor);
+                : SoundEventId::WeaponPistolFire, acoustics.fireGain);
+        gameAudio_.play(SoundEventId::WeaponFireTailOutdoor,
+                        acoustics.outdoorTailGain);
     }
     for (const HitResult &hit : gameSession_.world().hitResultsLastUpdate())
     {
