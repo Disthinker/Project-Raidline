@@ -6113,6 +6113,7 @@ void App::update(float deltaTime)
         !developerWeaponPanelOpen_)
     {
         if (!throwableWheelOpen_ && !selectedThrowable_ && !gameSession_.world().noiseDecoy().flight() &&
+            !gameSession_.world().grenade().flight() &&
             input_.wasActionJustPressed(GameAction::Heal) &&
             !gameSession_.raidActionState().active().has_value())
         {
@@ -6230,6 +6231,8 @@ void App::update(float deltaTime)
     consumePresentationAudioEvents();
     for (unsigned pulse=0; pulse<gameSession_.world().noiseDecoy().pulsesLastUpdate(); ++pulse)
         gameAudio_.play(SoundEventId::NoiseDecoyPulse);
+    if(gameSession_.world().grenadeExplodedLastUpdate())
+        gameAudio_.play(SoundEventId::ImpactObstacle); // Existing P0 placeholder, not a new explosion sample.
 
     if (gameSession_.world().shotFiredLastUpdate())
     {
@@ -14035,7 +14038,7 @@ void App::renderProfileWeaponDetails()
     const auto &asset = *profile.assets.find(*profileDetailsAsset_);
     const auto &definition = content.item(asset.definitionId);
     if (model->kind == UiItemDetailsKind::Melee) { renderProfileMeleeDetails(asset, definition); return; }
-    if (model->kind == UiItemDetailsKind::Decoy) { renderProfileDecoyDetails(asset, definition); return; }
+    if (model->kind == UiItemDetailsKind::Decoy || model->kind == UiItemDetailsKind::Grenade) { renderProfileDecoyDetails(asset, definition); return; }
     const auto choose = [&](const char *zh, const char *en) { return uiTextRenderer_.language() == UiLanguage::SimplifiedChinese ? zh : en; };
     const bool inRaid = gameSession_.alphaRaidActive();
     const auto binding = findWeaponLight(profile, content, asset.instanceId);

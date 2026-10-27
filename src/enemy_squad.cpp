@@ -70,6 +70,8 @@ namespace
         CellMembers members;
         std::array<CellMembers, 9> adjacent{};
         std::size_t adjacentCount{};
+        std::size_t candidateBegin{};
+        std::size_t candidateEnd{};
     };
 
     EnemyCell enemyCell(Vec2 position, float cellSize) noexcept
@@ -228,6 +230,10 @@ EnemySquadCoordinator::decide(
 
     const float radiusSquared =
         config_.separationRadius * config_.separationRadius;
+    // Input storage is immutable for this call. The inner neighbor merge uses
+    // validated original indices; avoid repeatedly resolving the same checked
+    // vector/array access for every directed pair in a dense crowd.
+    const auto *const memberData = members.data();
     // All spatial data below belongs to this call. Each valid member enters
     // one cell, ordered by its original input index within that cell.
     std::vector<CellMember> cellMembers;
@@ -291,6 +297,34 @@ EnemySquadCoordinator::decide(
             }
         }
     }
+    // All members in one cell visit exactly the same sorted candidate list.
+    // Merge it once for that cell, retaining original input order. Each input
+    // member appears in at most nine such lists; nothing survives this call.
+    std::vector<std::size_t> neighborCandidates;
+    neighborCandidates.reserve(cellMembers.size());
+    for (auto &cell : neighborCells)
+    {
+        cell.candidateBegin = neighborCandidates.size();
+        auto cursors = cell.adjacent;
+        auto *const cursorData = cursors.data();
+        std::size_t active = cell.adjacentCount;
+        while (active != 0U)
+        {
+            std::size_t selected{};
+            std::size_t neighborIndex = cursorData[0].first->index;
+            for (std::size_t candidate{1U}; candidate < active; ++candidate)
+                if (cursorData[candidate].first->index < neighborIndex)
+                {
+                    selected = candidate;
+                    neighborIndex = cursorData[candidate].first->index;
+                }
+            if (++cursorData[selected].first == cursorData[selected].last)
+                cursorData[selected] = cursorData[--active];
+            neighborCandidates.push_back(neighborIndex);
+        }
+        cell.candidateEnd = neighborCandidates.size();
+    }
+    const auto *const candidateData = neighborCandidates.data();
     for (std::size_t index{0U};
          index < members.size();
          ++index)
@@ -299,24 +333,12 @@ EnemySquadCoordinator::decide(
             continue;
 
         Vec2 separation{};
+        const Vec2 memberPosition = memberData[index].position;
         const auto &cell = neighborCells[memberCells[index]];
-        auto cursors = cell.adjacent;
-        std::size_t active = cell.adjacentCount;
-        // Merge the already sorted ranges instead of copying and sorting
-        // candidates for every member. Preserve the exact old accumulation
-        // order, including overlapping actors and candidate-work metrics.
-        while (active != 0U)
+        for (const auto *cursor = candidateData + cell.candidateBegin;
+             cursor != candidateData + cell.candidateEnd; ++cursor)
         {
-            std::size_t selected{};
-            std::size_t neighborIndex = cursors[0].first->index;
-            for (std::size_t candidate{1U}; candidate < active; ++candidate)
-                if (cursors[candidate].first->index < neighborIndex)
-                {
-                    selected = candidate;
-                    neighborIndex = cursors[candidate].first->index;
-                }
-            if (++cursors[selected].first == cursors[selected].last)
-                cursors[selected] = cursors[--active];
+            const std::size_t neighborIndex = *cursor;
             if (neighborIndex == index)
                 continue;
             if (metrics != nullptr)
@@ -325,10 +347,8 @@ EnemySquadCoordinator::decide(
             }
 
             Vec2 away{
-                members[index].position.x -
-                    members[neighborIndex].position.x,
-                members[index].position.y -
-                    members[neighborIndex].position.y};
+                memberPosition.x - memberData[neighborIndex].position.x,
+                memberPosition.y - memberData[neighborIndex].position.y};
             const float distanceSquared = lengthSquared(away);
             if (!std::isfinite(distanceSquared) ||
                 distanceSquared >= radiusSquared)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -364,6 +365,33 @@ struct NoiseDecoyUseDefinition
     float pulseIntervalSeconds{1.0F};
 };
 
+struct GrenadeUseDefinition
+{
+    float range{450.0F};
+    float flightSeconds{0.5F};
+    float fuseSeconds{1.5F};
+    float radius{160.0F};
+    float coreRadius{60.0F};
+    int coreDamage{24};
+    int edgeDamage{4};
+    int penetration{3};
+    int armorDamage{6};
+    float noiseRadius{1200.0F};
+
+    [[nodiscard]] bool valid() const noexcept
+    {
+        return std::isfinite(range) && range > 0.0F && range <= 1000.0F &&
+            std::isfinite(flightSeconds) && flightSeconds > 0.0F && flightSeconds <= 5.0F &&
+            std::isfinite(fuseSeconds) && fuseSeconds > 0.0F && fuseSeconds <= 30.0F &&
+            std::isfinite(radius) && radius > 0.0F && radius <= 1000.0F &&
+            std::isfinite(coreRadius) && coreRadius > 0.0F && coreRadius < radius &&
+            coreDamage > 0 && coreDamage <= 1000 && edgeDamage > 0 && edgeDamage <= coreDamage &&
+            penetration >= 0 && penetration <= 100 && armorDamage >= 0 && armorDamage <= 1000 &&
+            std::isfinite(noiseRadius) && noiseRadius > 0.0F && noiseRadius <= 3000.0F;
+    }
+    friend bool operator==(const GrenadeUseDefinition &, const GrenadeUseDefinition &) = default;
+};
+
 struct ItemDefinition
 {
     ItemDefinitionId definitionId;
@@ -433,6 +461,7 @@ struct ItemDefinition
     std::uint32_t baseConstructionMaterialValue{};
     std::optional<MeleeUseDefinition> meleeUse;
     std::optional<NoiseDecoyUseDefinition> noiseDecoyUse;
+    std::optional<GrenadeUseDefinition> grenadeUse;
 };
 
 [[nodiscard]] bool itemCanEquipInSlot(

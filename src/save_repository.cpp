@@ -2951,7 +2951,8 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion >= 54 && contentVersion == "raid-noise-decoy-content-67") ||
             (schemaVersion >= 56 && contentVersion == "ui-unified-chest-rig-content-68") ||
             (schemaVersion >= 57 && contentVersion == "raid-credential-extraction-content-69") ||
-            (schemaVersion >= 57 && contentVersion == "base-field-medical-supplies-content-70");
+            (schemaVersion >= 57 && contentVersion == "base-field-medical-supplies-content-70") ||
+            (schemaVersion >= 57 && contentVersion == "weapon-suppressor-acoustics-content-71");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -4845,14 +4846,16 @@ SaveWriteResult SaveRepository::save(
     const auto isPreFieldMedicalContentSource = [&](const std::filesystem::path &path, bool valid)
     {
         if (!valid || (contentVersion != "base-field-medical-supplies-content-70" &&
-                       contentVersion != "weapon-suppressor-acoustics-content-71"))
+                       contentVersion != "weapon-suppressor-acoustics-content-71" &&
+                       contentVersion != "raid-fragmentation-grenade-content-72"))
             return false;
         const auto bytes = readText(path);
         if (!bytes) return false;
         try
         {
             const auto sourceContent = Json::parse(*bytes).at("content_version").get<std::string>();
-            return sourceContent != contentVersion && sourceContent != "base-field-medical-supplies-content-70";
+            return sourceContent != contentVersion && sourceContent != "base-field-medical-supplies-content-70" &&
+                sourceContent != "weapon-suppressor-acoustics-content-71";
         }
         catch (...)
         {
@@ -4877,13 +4880,15 @@ SaveWriteResult SaveRepository::save(
     }
     const auto isPreSuppressorContentSource = [&](const std::filesystem::path &path, bool valid)
     {
-        if (!valid || contentVersion != "weapon-suppressor-acoustics-content-71")
+        if (!valid || (contentVersion != "weapon-suppressor-acoustics-content-71" &&
+                       contentVersion != "raid-fragmentation-grenade-content-72"))
             return false;
         const auto bytes = readText(path);
         if (!bytes) return false;
         try
         {
-            return Json::parse(*bytes).at("content_version").get<std::string>() != contentVersion;
+            const auto sourceContent = Json::parse(*bytes).at("content_version").get<std::string>();
+            return sourceContent != contentVersion && sourceContent != "weapon-suppressor-acoustics-content-71";
         }
         catch (...)
         {
@@ -4899,6 +4904,36 @@ SaveWriteResult SaveRepository::save(
         const auto preserved = preserveLayoutMigrationSources(
             validPrimary ? SaveLoadStatus::LoadedPrimary : SaveLoadStatus::RecoveredBackup,
             "weapon-suppressor-acoustics-v1");
+        if (!preserved.succeeded)
+        {
+            std::filesystem::remove(temporaryPath_, error);
+            return {false, preserved.message};
+        }
+    }
+    const auto isPreGrenadeContentSource = [&](const std::filesystem::path &path, bool valid)
+    {
+        if (!valid || contentVersion != "raid-fragmentation-grenade-content-72")
+            return false;
+        const auto bytes = readText(path);
+        if (!bytes) return false;
+        try
+        {
+            return Json::parse(*bytes).at("content_version").get<std::string>() != contentVersion;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    };
+    if (isPreGrenadeContentSource(primaryPath_, validPrimary) ||
+        isPreGrenadeContentSource(backupPath_, validBackup))
+    {
+        // Grenades add static content and ordinary stack instances, not a new
+        // save schema. Preserve the actual old source bytes before rotation or
+        // a pending-Raid mirror can consume either recovery source.
+        const auto preserved = preserveLayoutMigrationSources(
+            validPrimary ? SaveLoadStatus::LoadedPrimary : SaveLoadStatus::RecoveredBackup,
+            "raid-fragmentation-grenade-v1");
         if (!preserved.succeeded)
         {
             std::filesystem::remove(temporaryPath_, error);

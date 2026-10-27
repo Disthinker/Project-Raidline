@@ -5,6 +5,7 @@
 #include "navigation_refresh_selection.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <exception>
 #include <limits>
@@ -138,6 +139,25 @@ namespace
             *blockersExamined += queryScratch.size();
         }
 
+        if(currentPosition.x==requestedPosition.x && currentPosition.y==requestedPosition.y)
+            return requestedPosition;
+        // Keep the original broad-phase work count and original wall order.
+        // Both axis solvers only clamp within this complete swept box, so a
+        // strictly disjoint wall cannot affect either result (including slides).
+        const auto candidates=queryScratch.size();
+        auto *const indices=queryScratch.data();
+        const auto allBounds=blockerIndex.allBlockerBounds();
+        const auto *const bounds=allBounds.data();
+        [[maybe_unused]] const auto boundCount=allBounds.size();
+        std::size_t kept{};
+        for(std::size_t i=0;i<candidates;++i) {
+            const auto id=indices[i];assert(id<boundCount);const auto &wall=bounds[id];
+            if(wall.position.x+wall.size.x<minimumX || wall.position.x>maximumX ||
+               wall.position.y+wall.size.y<minimumY || wall.position.y>maximumY)continue;
+            indices[kept++]=id;
+        }
+        queryScratch.resize(kept);
+
         Rect resolvedBounds{currentPosition, actorSize};
         float resolvedX = requestedPosition.x;
         for (const std::size_t blocker : queryScratch)
@@ -145,7 +165,7 @@ namespace
             resolvedX = resolveHorizontalCollision(
                 resolvedBounds,
                 resolvedX,
-                blockerIndex.blockerBounds(blocker));
+                bounds[blocker]);
         }
         resolvedBounds.position.x = resolvedX;
 
@@ -155,7 +175,7 @@ namespace
             resolvedY = resolveVerticalCollision(
                 resolvedBounds,
                 resolvedY,
-                blockerIndex.blockerBounds(blocker));
+                bounds[blocker]);
         }
         return Vec2{resolvedX, resolvedY};
     }
@@ -281,6 +301,7 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
     worldSize_ = config.worldSize;
     lightConeObservationEnabled_ = config.lightConeObservationEnabled;
     noiseDecoyEnabled_ = config.noiseDecoyEnabled && !config.developerRange;
+    grenadeEnabled_ = config.grenadeEnabled && !config.developerRange;
     alphaRaidWorld_ = true;
     deferPlayerDamageResolution_ = config.deferPlayerDamageResolution;
     ballisticBlockers_ = std::move(config.ballisticBlockers);
@@ -1051,9 +1072,13 @@ void GameplayWorld::tryPickupOne()
 
 void GameplayWorld::update(
     const GameplayInput &input,
-    float deltaTime)
+    float deltaTime,
+    const std::function<bool()> &commitGrenade)
 {
     spaceTransitionedLastUpdate_ = false;
+    grenadeExplodedLastUpdate_=false;
+    if(std::isfinite(deltaTime) && deltaTime>0)grenadeFlashSeconds_=std::max(0.0F,grenadeFlashSeconds_-deltaTime);
+    if(grenadeFlashSeconds_<=0)lastGrenadeExplosion_.reset();
     enemyObservationCache_.clear(); // Bound to this simulation frame; never retain removed actors.
     enemyObservationIndexReady_ = false;
     shooting_.beginFrame(deltaTime);
@@ -1064,6 +1089,8 @@ void GameplayWorld::update(
     if (!raidSession_.isActive())
     {
         noiseDecoy_.clear();
+        grenade_.clear();
+        grenadeInvestigations_.clear();
         return;
     }
 
@@ -1141,7 +1168,7 @@ void GameplayWorld::update(
     const bool wasCallingSignal =
         raidSession_.extractionRoute() == RaidExtractionRoute::EmergencySignal;
     const bool playerInCredentialExtraction =
-        input.extractionEligible && inOutdoorRaidSpace() &&
+        !grenade_.active() && input.extractionEligible && inOutdoorRaidSpace() &&
         !controlsSuppressedAtFrameStart && !player_.isControlled() &&
         !input.inventoryOpen && !input.throwableModal &&
         !input.freezeObservationDirection && !spaceTransitionedLastUpdate_ &&
@@ -1156,12 +1183,12 @@ void GameplayWorld::update(
         static_cast<void>(raidSession_.interruptSignalExtraction());
     raidSession_.update(
         deltaTime,
-        input.extractionEligible && inOutdoorRaidSpace() &&
+        !grenade_.active() && input.extractionEligible && inOutdoorRaidSpace() &&
             !player_.isControlled() && extractionPoint_.contains(
                 playerCenter(player_)),
-        input.extractionEligible && !player_.isControlled() &&
+        !grenade_.active() && input.extractionEligible && !player_.isControlled() &&
             playerInEmergencyExtraction,
-        input.extractionEligible && !player_.isControlled() &&
+        !grenade_.active() && input.extractionEligible && !player_.isControlled() &&
             playerInConditionalExtraction,
         input.interactJustPressed && !controlsSuppressedAtFrameStart &&
             !spaceTransitionedLastUpdate_ && canCallSignalExtraction(input),
@@ -1206,6 +1233,13 @@ void GameplayWorld::update(
                 highRiskTimeBeforeUpdate));
 
     updateNoiseDecoy(deltaTime);
+    updateGrenadeInvestigations(deltaTime);
+    if(grenadeEnabled_)grenade_.advance(activeRaidSpaceId(),deltaTime);
+    // Service-owned Profile damage joins this one immediate simulation event.
+    // The callback is never retained by a world/copy. Retire blast victims
+    // before taking actor references or permitting their AI/contact this frame.
+    if(grenade_.pendingExplosion() && commitGrenade && !commitGrenade())return;
+    if(!raidSession_.isActive())return;
 
     // Bounded substeps keep attack phase transitions and one-shot hit
     // opportunities observable even when a render frame is long.
@@ -1311,8 +1345,9 @@ void GameplayWorld::update(
             }
 
             const Vec2 enemyPosition = enemyCenter(enemy);
-            const bool hasNoiseInvestigation=noiseDecoy_.investigations().contains(enemy.combatTargetId());
-            const bool investigatingNoise=noiseDecoyEnabled_ && hasNoiseInvestigation;
+            const bool hasNoiseInvestigation=noiseDecoy_.investigations().contains(enemy.combatTargetId()) ||
+                grenadeInvestigations_.contains(enemy.combatTargetId());
+            const bool investigatingNoise=(noiseDecoyEnabled_ || grenadeEnabled_) && hasNoiseInvestigation;
             const bool outsideAcquisition=distanceSquared(enemyPosition,playerPosition) >
                 enemy.acquireTargetDistance()*enemy.acquireTargetDistance();
             // Unaware actors cannot acquire a player beyond acquisition range;
@@ -1324,7 +1359,7 @@ void GameplayWorld::update(
                  (enemy.awarenessState()==EnemyAwarenessState::Unaware &&
                   ((encounter.kind==RaidEncounterKind::Patrol && !encounter.patrolPoints.empty()) ||
                    (encounter.kind==RaidEncounterKind::Guard && distanceSquared(enemyPosition,encounter.home)>64.0F*64.0F))));
-            const bool skipNoiseSight=noiseDecoyEnabled_ && !existingRouteNeedsSight && outsideAcquisition &&
+            const bool skipNoiseSight=(noiseDecoyEnabled_ || grenadeEnabled_) && !existingRouteNeedsSight && outsideAcquisition &&
                 (enemy.awarenessState()==EnemyAwarenessState::Unaware ||
                  (investigatingNoise && enemy.awarenessState()==EnemyAwarenessState::Searching)) &&
                 enemy.attackPhase()==EnemyAttackPhase::Idle;
@@ -2582,7 +2617,7 @@ GameplayWorld::takePlayerDamageObservations()
 
 bool GameplayWorld::canCallSignalExtraction(const GameplayInput &input) const noexcept
 {
-    return input.extractionEligible && !input.inventoryOpen &&
+    return !grenade_.active() && input.extractionEligible && !input.inventoryOpen &&
         !raidSpacePortalInteractionInRange() &&
         !(input.conditionalExtractionEligible && conditionalExtractionPoint_.has_value() &&
           conditionalExtractionPoint_->contains(playerCenter(player_))) &&
@@ -3184,7 +3219,7 @@ std::size_t GameplayWorld::outdoorAliveEnemyCount() const noexcept
 bool GameplayWorld::tryTransitionRaidSpace(
     const GameplayInput &input) noexcept
 {
-    if (!input.interactJustPressed || input.inventoryOpen ||
+    if (grenade_.active() || !input.interactJustPressed || input.inventoryOpen ||
         player_.isControlled() || !raidSession_.isActive())
     {
         return false;
@@ -3484,6 +3519,7 @@ void GameplayWorld::consumeEnemyRemovals(std::span<const EnemyRemovalFact> death
     for (const auto &death:deaths)
     {
         noiseDecoy_.forget(death.id);
+        grenadeInvestigations_.erase(death.id);
         if (death.reason!=EnemyRemovalReason::Death) continue;
         score_+=kScorePerEnemy;
         const auto source=corpseSources_.find(death.id);

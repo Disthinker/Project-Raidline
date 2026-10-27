@@ -5,7 +5,7 @@ bool GameSession::canSelectNoiseDecoy() const
     return alphaRaidActive_ && !developerRange_ && state_==GameSessionState::InRaid &&
         profile_.pendingRaid && world_ && world_->noiseDecoyEnabled() && world_->raidSession().isActive() &&
         !world_->player().isDead() && !world_->player().isControlled() &&
-        !world_->noiseDecoy().flight() && world_->melee().recoverySeconds()<=0;
+        !world_->noiseDecoy().flight() && !world_->grenade().active() && world_->melee().recoverySeconds()<=0;
 }
 bool GameSession::beginNoiseDecoySelection()
 {
@@ -39,7 +39,7 @@ InventoryReceipt GameSession::throwNoiseDecoy(AssetInstanceId id,Vec2 aim,const 
 }
 void GameSession::prepareNoiseDecoyInput(GameplayInput &input,const GameplayInput &raw)
 {
-    const bool blocked=input.throwableModal || world_->noiseDecoy().flight().has_value();
+    const bool blocked=input.throwableModal || world_->noiseDecoy().flight().has_value() || world_->grenade().flight().has_value();
     if(!raw.firePressed && !raw.fireJustPressed)decoyFireSuppressedUntilRelease_=false;
     if(blocked && (raw.firePressed || raw.fireJustPressed))decoyFireSuppressedUntilRelease_=true;
     if(blocked || decoyFireSuppressedUntilRelease_)input.firePressed=input.fireJustPressed=false;

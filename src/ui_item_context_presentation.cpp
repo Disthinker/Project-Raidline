@@ -33,6 +33,7 @@ std::string compactUiItemName(const ItemDefinition &d,UiLanguage language) {
         {"item.medical.tourniquet_basic","Tourniquet","止血带"},
         {"item.medical.painkiller_basic","Painkiller","止痛药"},
         {"item.throwable.noise_decoy","Decoy","诱饵"},
+        {"item.throwable.frag_grenade_basic","Frag","破片"},
         {"item.component.suppressor_5_45","Suppressor","消音器"},
         {"item.container.chest_rig_small","Light rig","小胸挂"},
         {"item.container.chest_rig_patrol","Patrol rig","巡逻胸挂"},
@@ -57,6 +58,8 @@ std::vector<UiItemActionEntry> projectUiItemActions(
         result = {{UiItemAction::MeleeDetails, "MELEE DETAILS"}};
     if (definition.noiseDecoyUse)
         result = {{UiItemAction::DecoyDetails, "DECOY DETAILS"}};
+    if (definition.grenadeUse)
+        result = {{UiItemAction::DecoyDetails, "GRENADE DETAILS"}};
     if (const auto action = queryProfileContextAction(profile, content, id, inRaid)) {
         switch (*action) {
         case ProfileContextActionKind::UnloadMagazine:

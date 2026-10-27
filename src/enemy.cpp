@@ -657,6 +657,15 @@ void Enemy::hearTarget(Vec2 targetPosition) noexcept
   }
 }
 
+void Enemy::investigateSound(Vec2 position) noexcept
+{
+  if (isDead() || awarenessState()==EnemyAwarenessState::Alerted ||
+      !std::isfinite(position.x) || !std::isfinite(position.y)) return;
+  ai_.awarenessState_=EnemyAwarenessState::Searching;
+  ai_.lastKnownTargetPosition_=position;
+  ai_.searchTimeRemaining_=ai_.config_.searchMemoryDuration;
+}
+
 bool Enemy::isImpactSlowed() const noexcept
 {
   return impactSlowRemaining_ > 0.0F;
