@@ -1,5 +1,6 @@
 #include "ui_quick_wheel_presentation.h"
 #include "noise_decoy_domain.h"
+#include "grenade_domain.h"
 
 #include <algorithm>
 #include <cmath>
@@ -18,7 +19,7 @@ bool inWornRig(const ProfileState &p,const ContentRegistry &c,const AssetRecord 
        pockets[stored->container.compartmentIndex].pocketKind!=ContainerPocketKind::General)return false;
     const auto &d=c.item(a.definitionId);
     return kind==UiQuickWheelKind::Medical ? d.medicalUse.has_value() && a.remainingCharges>0 :
-        d.noiseDecoyUse.has_value() && a.quantity>0;
+        (d.noiseDecoyUse.has_value() || d.grenadeUse.has_value()) && a.quantity>0;
 }
 }
 std::vector<AssetInstanceId> quickWheelCandidates(const ProfileState &p,const ContentRegistry &c,UiQuickWheelKind kind) {
@@ -69,8 +70,11 @@ std::vector<UiQuickWheelEntry> projectUiQuickWheel(
                 entry.status=entry.usable?"READY TO USE":plan.message;
                 entry.count=fmt::format("x{} / {} USES",entry.quantity,entry.remainingUses);
             } else {
-                entry.usable=noiseDecoyInChestRig(profile,content,id);
-                entry.status=entry.usable?"READY TO SELECT | AIM BEFORE THROWING":"DECOY INVENTORY CHANGED";
+                const auto &definition=content.item(asset->definitionId);
+                entry.usable=definition.grenadeUse ? grenadeInChestRig(profile,content,id) :
+                    noiseDecoyInChestRig(profile,content,id);
+                entry.status=entry.usable?"READY TO SELECT | AIM BEFORE THROWING":
+                    definition.grenadeUse?"GRENADE INVENTORY CHANGED":"DECOY INVENTORY CHANGED";
                 entry.count=fmt::format("x{}",entry.quantity);
             }
         }

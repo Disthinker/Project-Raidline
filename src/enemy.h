@@ -132,6 +132,8 @@ public:
     [[nodiscard]] const std::optional<EnemyArmorState> &torsoArmor() const noexcept { return torsoArmor_; }
     void applyArmorLoss(std::uint32_t loss) noexcept;
     void hearTarget(Vec2 targetPosition) noexcept;
+    // An unexplained sound is a search location, not visual acquisition.
+    void investigateSound(Vec2 position) noexcept;
 
     [[nodiscard]] bool isImpactSlowed() const noexcept;
     [[nodiscard]] float impactSlowRemaining() const noexcept;

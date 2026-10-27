@@ -1126,6 +1126,7 @@ bool GameSession::deployAlpha(
         RaidWorldConfig worldConfig;
         worldConfig.noiseDecoyEnabled = !snapshot.selfRecovery && !snapshot.outpostRestoration &&
             !snapshot.baseSiteClearance && !snapshot.basePerimeterSweep;
+        worldConfig.grenadeEnabled = worldConfig.noiseDecoyEnabled;
         worldConfig.lightConeObservationEnabled =
             candidate.pendingRaid->mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"} ||
             candidate.pendingRaid->mapDefinitionId == MapDefinitionId{"map.raid.hospital_district"};
@@ -1406,7 +1407,7 @@ bool GameSession::startAlphaReload(
     AssetInstanceId weaponAssetId,
     AssetInstanceId magazineAssetId)
 {
-    if (world_ && world_->noiseDecoy().flight()) return false;
+    if (world_ && (world_->noiseDecoy().flight() || world_->grenade().flight())) return false;
     if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
         activeAlphaWeapon() !=
             std::optional<AssetInstanceId>{weaponAssetId} ||
@@ -1444,7 +1445,7 @@ bool GameSession::startAlphaLoadMagazine(
     AssetInstanceId magazineAssetId,
     std::uint32_t quantity)
 {
-    if (world_ && world_->noiseDecoy().flight()) return false;
+    if (world_ && (world_->noiseDecoy().flight() || world_->grenade().flight())) return false;
     const AssetRecord *ammunition = profile_.assets.find(ammunitionAssetId);
     const AssetRecord *magazine = profile_.assets.find(magazineAssetId);
     if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
@@ -1499,7 +1500,7 @@ bool GameSession::startAlphaLoadMagazine(
 
 bool GameSession::startAlphaHeal(AssetInstanceId medkitAssetId)
 {
-    if (world_ && world_->noiseDecoy().flight()) return false;
+    if (world_ && (world_->noiseDecoy().flight() || world_->grenade().flight())) return false;
     const AssetRecord *asset = profile_.assets.find(medkitAssetId);
     if (asset == nullptr)
     {
@@ -1522,7 +1523,7 @@ bool GameSession::startAlphaHeal(AssetInstanceId medkitAssetId)
 
 bool GameSession::startAlphaMedical(AssetInstanceId medicalAssetId)
 {
-    if (world_ && world_->noiseDecoy().flight()) return false;
+    if (world_ && (world_->noiseDecoy().flight() || world_->grenade().flight())) return false;
     if (!alphaRaidActive_ || raidActionState_.active().has_value())
     {
         return false;
@@ -1562,7 +1563,7 @@ bool GameSession::startAlphaWeaponMaintenance(
     AssetInstanceId kitAssetId,
     AssetInstanceId weaponAssetId)
 {
-    if (world_ && world_->noiseDecoy().flight()) return false;
+    if (world_ && (world_->noiseDecoy().flight() || world_->grenade().flight())) return false;
     if (!alphaRaidActive_ || raidActionState_.active().has_value())
     {
         return false;
@@ -1587,7 +1588,7 @@ bool GameSession::startAlphaArmorMaintenance(
     AssetInstanceId kitAssetId,
     AssetInstanceId armorAssetId)
 {
-    if (world_ && world_->noiseDecoy().flight()) return false;
+    if (world_ && (world_->noiseDecoy().flight() || world_->grenade().flight())) return false;
     if (!alphaRaidActive_ || raidActionState_.active().has_value())
     {
         return false;
@@ -1610,7 +1611,7 @@ bool GameSession::startAlphaArmorMaintenance(
 
 bool GameSession::startAlphaWeaponSwitch(EquipmentSlotKind targetSlot)
 {
-    if (world_ && world_->noiseDecoy().flight()) return false;
+    if (world_ && (world_->noiseDecoy().flight() || world_->grenade().flight())) return false;
     if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
         !isWeaponEquipmentSlot(targetSlot) ||
         targetSlot == activeWeaponSlot_)
@@ -1771,7 +1772,7 @@ bool GameSession::observeAlphaWeaponClearMotion(Vec2 delta)
 bool GameSession::startAlphaUnloadMagazine(
     AssetInstanceId magazineAssetId)
 {
-    if (world_ && world_->noiseDecoy().flight()) return false;
+    if (world_ && (world_->noiseDecoy().flight() || world_->grenade().flight())) return false;
     if (!alphaRaidActive_ || raidActionState_.active().has_value())
     {
         return false;
@@ -2895,7 +2896,7 @@ WeaponAmmoReceipt GameSession::executeProfileWeaponAmmo(
     const WeaponAmmoCommand &command,
     std::string transactionId)
 {
-    if (alphaRaidActive_ && world_ && world_->noiseDecoy().flight())
+    if (alphaRaidActive_ && world_ && (world_->noiseDecoy().flight() || world_->grenade().flight()))
         return {false,false,DomainErrorCode::IllegalDestination,"DECOY UNAVAILABLE HERE",profile_.revision,WeaponAmmoResult::Dry,std::nullopt};
     ProfileState candidate = profile_;
     WeaponAmmoReceipt receipt = executeWeaponAmmo(
@@ -4244,7 +4245,7 @@ void GameSession::updateAlphaRaid(
     const bool perimeterSweepActive =
         profile_.pendingRaid && profile_.pendingRaid->basePerimeterSweep.has_value();
     world_->setRaidDaylight(worldClockProjection().timeOfDay == WorldTimeOfDay::Day);
-    world_->update(simulationInput, deltaTime);
+    world_->update(simulationInput, deltaTime, [this]{return processGrenadeExplosion();});
     if(!world_->raidSession().isActive())world_->commitNoiseDecoy({});
     const bool meleeFrame=world_->melee().result().attempted;
     if(meleeFrame)
@@ -4253,9 +4254,6 @@ void GameSession::updateAlphaRaid(
         if(!commitPlayerMelee(*world_,profile_.currentHealth>0 && !world_->player().isControlled()))
         {state_=GameSessionState::SettlementBlocked;return;}
     }
-    const auto corpseDeaths = world_->pendingCorpseDeaths(); // Own values across Profile commits and queue erasure.
-    for (const auto &fact : corpseDeaths)
-        if (revealRaidCorpse(profile_, publishedContentRegistry(), fact)) world_->acknowledgeCorpseDeath(fact.sourceEnemyId);
     if (restorationActive && !outpostRestorationObjectiveSecured_ &&
         world_->aliveInitialEnemyCount() == 0U)
     {
@@ -4312,6 +4310,23 @@ void GameSession::updateAlphaRaid(
     }
 
     if(!meleeFrame)applyAlphaIncomingDamage();
+    if(state_==GameSessionState::SettlementBlocked || !processGrenadeExplosion())return;
+    const auto corpseDeaths = world_->pendingCorpseDeaths(); // Own values across Profile commits and queue erasure.
+    for (const auto &fact : corpseDeaths)
+        if (world_->grenadeExplodedLastUpdate()
+            ? revealRaidCorpseInSimulation(profile_, publishedContentRegistry(), fact)
+            : revealRaidCorpse(profile_, publishedContentRegistry(), fact))
+            world_->acknowledgeCorpseDeath(fact.sourceEnemyId);
+    if(world_->grenade().active()) {
+        const auto pos=world_->player().position();const float half=world_->player().size()/2;
+        const Vec2 center{pos.x+half,pos.y+half};
+        const auto at=[&](const auto &point){return point && point->contains(center);};
+        if((input.interactJustPressed && world_->raidSpacePortalInteractionInRange()) ||
+           (world_->inOutdoorRaidSpace() && (world_->extractionPoint().contains(center) ||
+             at(world_->emergencyExtractionPoint()) || at(world_->conditionalExtractionPoint()) ||
+             at(world_->credentialExtractionPoint()))))
+            persistenceMessage_="LIVE GRENADE | WAIT FOR EXPLOSION";
+    }
     if (lastIncomingDamage_.has_value() &&
         lastIncomingDamage_->damageApplied > 0)
     {
@@ -5012,6 +5027,7 @@ bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
         return false;
     }
     world_->commitNoiseDecoy({});
+    world_->commitGrenade({});
     decoyFireSuppressedUntilRelease_=false;
     raidActionState_.cancel();
     weaponClearGesture_.reset();

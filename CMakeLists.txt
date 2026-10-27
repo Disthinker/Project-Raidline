@@ -211,6 +211,10 @@ endfunction()
 # Economy live in domain, Base/Raid runtime in simulation, orchestration and
 # persistence in services, and SDL input/rendering in the client.
 add_library(raidline_domain STATIC
+    src/grenade_domain.cpp
+    src/grenade_domain.h
+    src/grenade_damage.cpp
+    src/grenade_damage.h
     src/noise_decoy_domain.cpp
     src/noise_decoy_domain.h
     src/melee_attack.cpp
@@ -355,6 +359,9 @@ target_link_libraries(
 add_library(raidline::domain ALIAS raidline_domain)
 
 add_library(raidline_simulation STATIC
+    src/raid_grenade_runtime.cpp
+    src/raid_grenade_runtime.h
+    src/gameplay_world_grenade.cpp
     src/gameplay_world_noise_decoy.cpp
     src/raid_noise_decoy_runtime.cpp
     src/raid_noise_decoy_runtime.h
@@ -426,6 +433,7 @@ target_link_libraries(raidline_simulation PUBLIC raidline::domain)
 add_library(raidline::simulation ALIAS raidline_simulation)
 
 add_library(raidline_services STATIC
+    src/game_session_grenade.cpp
     src/game_session_noise_decoy.cpp
     src/game_session_melee.cpp
     src/base_defense_checkpoint_writer.cpp
@@ -607,7 +615,7 @@ function(raidline_add_test target source module)
         ${module})
     if(target STREQUAL "BaseDefensePerformanceTest" OR target STREQUAL "BaseDailyCheckpointTest"
        OR target STREQUAL "FortificationRuntimeTest" OR target STREQUAL "RaidLightConeVisibilityTest" OR target STREQUAL "WeaponLightTest"
-       OR target STREQUAL "NoiseDecoyTest")
+       OR target STREQUAL "NoiseDecoyTest" OR target STREQUAL "GrenadePerformanceTest")
         # Timing gates need an isolated CPU/allocator, not competition with
         # the concurrent 128-seed map validation and other test processes.
         gtest_discover_tests(${target} PROPERTIES RUN_SERIAL TRUE)
@@ -1081,3 +1089,11 @@ raidline_add_test(UiBaseManagementTest tests/test_ui_base_management.cpp raidlin
 raidline_add_test(WeaponSuppressorAcousticsTest tests/test_weapon_suppressor_acoustics.cpp raidline::services)
 raidline_add_test(WeaponSuppressorSaveTest tests/test_weapon_suppressor_save.cpp raidline::services)
 raidline_add_test(WeaponSuppressorRuntimeTest tests/test_weapon_suppressor_runtime.cpp raidline::services)
+raidline_add_test(GrenadeDomainTest tests/test_grenade_domain.cpp raidline::services)
+raidline_add_test(GrenadeRuntimeTest tests/test_grenade_runtime.cpp raidline::services)
+raidline_add_test(GrenadeSessionTest tests/test_grenade_session.cpp raidline::services)
+raidline_add_test(GrenadePerformanceTest tests/test_grenade_performance.cpp raidline::services)
+raidline_add_test(GrenadeUiTest tests/test_grenade_ui.cpp raidline::sdl_client)
+raidline_add_test(GrenadeSaveTest tests/test_grenade_save.cpp raidline::services)
+raidline_add_test(GrenadeCorpseRuntimeTest tests/test_grenade_corpse_runtime.cpp raidline::services)
+raidline_add_test(GrenadeMovementTest tests/test_grenade_movement.cpp raidline::services)

@@ -15,4 +15,7 @@ struct RaidCorpseDeathFact
 [[nodiscard]] ProfileValidationResult freezeRaidCorpseLoot(ProfileState &, const ContentRegistry &);
 [[nodiscard]] ProfileValidationResult validateRaidCorpseBindings(const ProfileState &, const ContentRegistry &);
 [[nodiscard]] bool revealRaidCorpse(ProfileState &, const ContentRegistry &, const RaidCorpseDeathFact &);
+// Simulation-only: the deployed Profile has already passed full validation.
+// Recheck corpse/loot participants before committing the one-time reveal.
+[[nodiscard]] bool revealRaidCorpseInSimulation(ProfileState &, const ContentRegistry &, const RaidCorpseDeathFact &) noexcept;
 [[nodiscard]] bool raidCorpseAccessible(const ProfileState &, AssetInstanceId, const RaidSpaceDefinitionId &, Vec2);

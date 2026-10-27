@@ -7,7 +7,7 @@ Vec2 center(const Enemy &e) { return {e.position().x+e.size().x/2,e.position().y
 std::optional<NoiseDecoyLanding> GameplayWorld::previewNoiseDecoy(Vec2 aim,const NoiseDecoyUseDefinition &use) const
 {
     if(!noiseDecoyEnabled_ || !raidSession_.isActive() || player_.isControlled() || player_.isDead() ||
-        noiseDecoy_.flight() || melee_.recoverySeconds()>0)return std::nullopt;
+        noiseDecoy_.flight() || grenade_.active() || melee_.recoverySeconds()>0)return std::nullopt;
     const auto p=player_.position();const float s=player_.size();
     return queryNoiseDecoyLanding({p.x+s/2,p.y+s/2},aim,activeRaidSpaceId(),use,activeBlockerIndex());
 }
@@ -37,8 +37,18 @@ void GameplayWorld::updateNoiseDecoy(float seconds)
 }
 std::optional<Vec2> GameplayWorld::noiseInvestigationGoal(Enemy &enemy,bool visible,Vec2 playerPosition)
 {
-    if(!noiseDecoyEnabled_)return std::nullopt;
     const auto id=enemy.combatTargetId();
+    if(const auto investigation=grenadeInvestigations_.find(id);investigation!=grenadeInvestigations_.end()) {
+        const bool discovered=visible && std::hypot(center(enemy).x-playerPosition.x,center(enemy).y-playerPosition.y)
+            <=enemy.acquireTargetDistance();
+        if(enemy.isDead() || enemy.awarenessState()==EnemyAwarenessState::Alerted ||
+           enemy.attackPhase()!=EnemyAttackPhase::Idle || discovered)grenadeInvestigations_.erase(investigation);
+        else if(investigation->second.space==activeRaidSpaceId()) {
+            const auto goal=investigation->second.point;
+            return std::hypot(center(enemy).x-goal.x,center(enemy).y-goal.y)<=20 ? center(enemy):goal;
+        }
+    }
+    if(!noiseDecoyEnabled_)return std::nullopt;
     const auto binding=noiseDecoy_.investigations().find(id);
     if(binding==noiseDecoy_.investigations().end())return std::nullopt;
     // Normal perception wins. A sound never extends acquisition distance or

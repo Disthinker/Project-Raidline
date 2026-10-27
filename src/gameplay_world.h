@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <optional>
 #include <span>
@@ -35,6 +36,7 @@
 #include "world_shooting_runtime.h"
 #include "world_melee_runtime.h"
 #include "raid_noise_decoy_runtime.h"
+#include "raid_grenade_runtime.h"
 
 struct RaidSimulationWorkload
 {
@@ -159,6 +161,7 @@ struct RaidWorldConfig
     bool noiseDecoyEnabled{};
     bool lightConeObservationEnabled{};
     std::optional<RaidCredentialExtractionSnapshot> credentialExtraction;
+    bool grenadeEnabled{};
 };
 
 struct RaidOutdoorLabelProjection
@@ -177,6 +180,23 @@ struct RaidOutdoorPresentationProjection
     std::vector<RaidOutdoorLabelProjection> labels;
     std::size_t queriedChunkCount{};
     std::uint64_t cacheRevision{};
+};
+
+struct GrenadeEnemyDamage
+{
+    CombatTargetId id{};
+    Vec2 position{};
+    int health{};
+    std::optional<EnemyArmorState> armor;
+    CombatDamageResolution damage;
+};
+struct GrenadeExplosionPlan
+{
+    GrenadeExplosion explosion;
+    std::vector<GrenadeEnemyDamage> enemies;
+    std::optional<CombatDamageCommand> playerDamage;
+    Vec2 playerPosition{};
+    int playerHealth{};
 };
 
 class GameplayWorld
@@ -228,7 +248,8 @@ public:
 
     void update(
         const GameplayInput &input,
-        float deltaTime);
+        float deltaTime,
+        const std::function<bool()> &commitGrenade = {});
 
     [[nodiscard]]
     const Player &player() const;
@@ -432,6 +453,15 @@ public:
     [[nodiscard]] const RaidNoiseDecoyRuntime &noiseDecoy() const noexcept { return noiseDecoy_; }
     [[nodiscard]] std::optional<NoiseDecoyLanding> previewNoiseDecoy(Vec2 aim, const NoiseDecoyUseDefinition &) const;
     void commitNoiseDecoy(RaidNoiseDecoyRuntime prepared) noexcept { noiseDecoy_ = std::move(prepared); }
+    [[nodiscard]] bool grenadeEnabled() const noexcept { return grenadeEnabled_; }
+    [[nodiscard]] const RaidGrenadeRuntime &grenade() const noexcept { return grenade_; }
+    [[nodiscard]] std::optional<GrenadeLanding> previewGrenade(Vec2, const GrenadeUseDefinition &) const;
+    void commitGrenade(RaidGrenadeRuntime prepared) noexcept;
+    [[nodiscard]] std::optional<GrenadeExplosionPlan> prepareGrenadeExplosion() const;
+    [[nodiscard]] bool validatePreparedGrenadeExplosion(const GrenadeExplosionPlan &) const;
+    [[nodiscard]] bool commitPreparedGrenadeExplosion(const GrenadeExplosionPlan &);
+    [[nodiscard]] const std::optional<GrenadeExplosion> &lastGrenadeExplosion() const noexcept { return lastGrenadeExplosion_; }
+    [[nodiscard]] bool grenadeExplodedLastUpdate() const noexcept { return grenadeExplodedLastUpdate_; }
 
 
     [[nodiscard]]
@@ -678,6 +708,16 @@ private:
     bool alphaRaidWorld_{};
     bool developerRange_{};
     bool noiseDecoyEnabled_{};
+    friend struct GrenadeTestAccess;
+    bool grenadeEnabled_{};
+    RaidGrenadeRuntime grenade_;
+    std::optional<GrenadeExplosion> lastGrenadeExplosion_;
+    bool grenadeExplodedLastUpdate_{};
+    float grenadeFlashSeconds_{};
+    struct GrenadeInvestigation { RaidSpaceDefinitionId space; Vec2 point{}; float remaining{}; };
+    std::map<CombatTargetId,GrenadeInvestigation> grenadeInvestigations_;
+    void updateGrenadeInvestigations(float);
+    void emitGrenadeNoise(Vec2, float);
     RaidNoiseDecoyRuntime noiseDecoy_;
     void updateNoiseDecoy(float seconds);
     [[nodiscard]] std::optional<Vec2> noiseInvestigationGoal(Enemy &, bool targetVisible, Vec2 playerPosition);

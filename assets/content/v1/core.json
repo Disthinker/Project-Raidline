@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "weapon-suppressor-acoustics-content-71",
+  "content_version": "raid-fragmentation-grenade-content-72",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -1736,6 +1736,32 @@
       "base_contribution": {"security": 20},
       "base_construction_material": 6,
       "market_recycle_price": 80
+    },
+    {
+      "id": "item.throwable.frag_grenade_basic",
+      "display_name": "Basic Fragmentation Grenade",
+      "category": "throwable",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 2,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 24, "y": 24}, "pickup_size": {"x": 24, "y": 24}},
+      "market_buy_price": 160,
+      "market_recycle_price": 40,
+      "unit_weight_grams": 450,
+      "grenade_use": {
+        "range": 450,
+        "flight_seconds": 0.5,
+        "fuse_seconds": 1.5,
+        "radius": 160,
+        "core_radius": 60,
+        "core_damage": 24,
+        "edge_damage": 4,
+        "penetration": 3,
+        "armor_damage": 6,
+        "noise_radius": 1200
+      },
+      "inventory_texture": "items/inventory/unpublished_component.png",
+      "world_texture": "items/world/unpublished_component.png"
     }
   ],
   "loot_tables": [

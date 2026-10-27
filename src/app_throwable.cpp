@@ -11,17 +11,25 @@ void App::cancelThrowableUi()
 void App::updateThrowableInput(GameplayInput &input)
 {
     const bool wasModal=throwableWheelOpen_ || selectedThrowable_.has_value();
+    const bool selectingGrenade=[&]{
+        const auto *selected=selectedThrowable_ ? gameSession_.profile().assets.find(*selectedThrowable_) : nullptr;
+        return selected && publishedContentRegistry().item(selected->definitionId).grenadeUse.has_value();
+    }();
     const bool right=input_.isSecondaryPointerPressed();
     const bool cancel= input_.wasActionJustPressed(GameAction::InventoryCancel) || (right && !throwableRightWasDown_);
     throwableRightWasDown_=right;
     const bool available=windowHasInputFocus_ && !inventoryOverlayState_.isOpen() && !tacticalMapOpen_ &&
         !medicalWheelOpen_ && !developerWeaponPanelOpen_ && !developerWeaponPanelBlocksGameplayThisFrame_ &&
-        !pauseMenu_.isOpen() && gameSession_.canSelectNoiseDecoy();
+        !pauseMenu_.isOpen() && gameSession_.canSelectThrowable();
     bool opened=false;
-    if(!available)cancelThrowableUi();
-    else if(wasModal && cancel){cancelThrowableUi();uiMessage_="DECOY CANCELLED";}
+    if(!available){
+        if(input_.wasActionJustPressed(GameAction::SelectThrowable) && gameSession_.world().grenade().active())
+            uiMessage_="LIVE GRENADE | WAIT FOR EXPLOSION";
+        cancelThrowableUi();
+    }
+    else if(wasModal && cancel){cancelThrowableUi();uiMessage_=selectingGrenade?"GRENADE CANCELLED":"DECOY CANCELLED";}
     else if(input_.wasActionJustPressed(GameAction::SelectThrowable) && !wasModal){
-        if(gameSession_.beginNoiseDecoySelection()){
+        if(gameSession_.beginThrowableSelection()){
             throwableWheelOptions_=quickWheelCandidates(gameSession_.profile(),publishedContentRegistry(),UiQuickWheelKind::Throwable);
             throwableWheelSelected_=0;quickWheelPage_=0;wheelPointerOffset_={};pendingRelativeAimMotion_={};
             throwableWheelOpen_=true;opened=true;uiMessage_.clear();
@@ -39,9 +47,9 @@ void App::updateThrowableInput(GameplayInput &input)
         }
     }else if(selectedThrowable_ && !cancel && input_.wasPrimaryPointerJustPressed()){
         const auto id=*selectedThrowable_;
-        const auto receipt=gameSession_.throwNoiseDecoy(id,gameSession_.world().weaponAimWorldPosition(),
-            {gameSession_.profile().revision,fmt::format("decoy-ui-{}-{}",gameSession_.profile().pendingRaid->raidId,++throwableCommandSequence_)});
-        uiMessage_=receipt.succeeded ? "DECOY THROWN":receipt.message;
+        const auto receipt=gameSession_.throwThrowable(id,gameSession_.world().weaponAimWorldPosition(),
+            {gameSession_.profile().revision,fmt::format("throwable-ui-{}-{}",gameSession_.profile().pendingRaid->raidId,++throwableCommandSequence_)});
+        uiMessage_=receipt.succeeded ? (selectingGrenade?"GRENADE THROWN":"DECOY THROWN") : receipt.message;
         cancelThrowableUi();
     }
     input.throwableModal=input.throwableModal || wasModal || throwableWheelOpen_ || selectedThrowable_.has_value();
@@ -55,7 +63,9 @@ void App::updateThrowableInput(GameplayInput &input)
 }
 void App::renderThrowableUi()
 {
-    if(!gameSession_.world().raidSession().isActive() || !gameSession_.world().noiseDecoyEnabled() || inventoryOverlayState_.isOpen() || tacticalMapOpen_ || developerWeaponPanelOpen_ || developerRangePanelOpen_)return;
+    if(!gameSession_.world().raidSession().isActive() ||
+       (!gameSession_.world().noiseDecoyEnabled() && !gameSession_.world().grenadeEnabled()) ||
+       inventoryOverlayState_.isOpen() || tacticalMapOpen_ || developerWeaponPanelOpen_ || developerRangePanelOpen_)return;
     if(throwableWheelOpen_)renderQuickWheel(UiQuickWheelKind::Throwable,throwableWheelOptions_,throwableWheelSelected_);
     else if(selectedThrowable_){
         const SDL_FRect panel{434,424,412,46};uiFinalPanel(renderer_,panel);
@@ -65,7 +75,7 @@ void App::renderThrowableUi()
 void App::renderNoiseDecoyWorld()
 {
     const auto &world=gameSession_.world();
-    if(!world.noiseDecoyEnabled())return;
+    if(!world.noiseDecoyEnabled() && !world.grenadeEnabled())return;
     SDL_BlendMode blend;SDL_GetRenderDrawBlendMode(renderer_,&blend);SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_BLEND);
     auto marker=[&](Vec2 p,float radius){
         SDL_SetRenderDrawColor(renderer_,224,193,106,230);const SDL_FRect box{p.x-4,p.y-4,8,8};SDL_RenderFillRect(renderer_,&box);
@@ -79,11 +89,42 @@ void App::renderNoiseDecoyWorld()
         SDL_SetRenderDrawColor(renderer_,224,193,106,180);SDL_RenderLine(renderer_,f->landing.origin.x,f->landing.origin.y,p.x,p.y);marker(p,5);
     }
     if(const auto &s=runtime.source();s && s->landing.space==world.activeRaidSpaceId())marker(s->landing.point,8+static_cast<float>(std::fmod(s->elapsed,1.0))*24);
+    const auto grenadeVisible=[&](Vec2 p){return world.raidBoundsObservable({{p.x-6,p.y-6},{12,12}});};
+    const auto grenadeMarker=[&](Vec2 p,float radius,Uint8 alpha){
+        if(!grenadeVisible(p))return;
+        SDL_SetRenderDrawColor(renderer_,220,166,103,alpha);
+        const SDL_FRect box{p.x-3,p.y-3,6,6};SDL_RenderFillRect(renderer_,&box);
+        Vec2 last{p.x+radius,p.y};
+        for(int i=1;i<=32;++i){const float angle=i*6.28318530718F/32;
+            const Vec2 next{p.x+std::cos(angle)*radius,p.y+std::sin(angle)*radius};
+            SDL_RenderLine(renderer_,last.x,last.y,next.x,next.y);last=next;}
+    };
+    const auto &grenade=world.grenade();
+    if(const auto &f=grenade.flight();f && f->landing.space==world.activeRaidSpaceId()){
+        const float progress=std::clamp(static_cast<float>(f->elapsed/f->landing.use.flightSeconds),0.0F,1.0F);
+        const Vec2 p{f->landing.origin.x+(f->landing.point.x-f->landing.origin.x)*progress,
+                     f->landing.origin.y+(f->landing.point.y-f->landing.origin.y)*progress};
+        grenadeMarker(p,5,200);
+    }
+    if(const auto &f=grenade.fuse();f && f->landing.space==world.activeRaidSpaceId())
+        grenadeMarker(f->landing.point,7+static_cast<float>(std::fmod(f->elapsed,0.3))*15,210);
+    if(const auto &e=world.lastGrenadeExplosion();e && e->landing.space==world.activeRaidSpaceId())
+        grenadeMarker(e->landing.point,e->landing.use.radius,world.grenadeExplodedLastUpdate()?95:55);
     if(selectedThrowable_){
         const auto *asset=gameSession_.profile().assets.find(*selectedThrowable_);
-        if(asset){const auto &use=publishedContentRegistry().item(asset->definitionId).noiseDecoyUse;
-            const auto landing=use ? world.previewNoiseDecoy(world.weaponAimWorldPosition(),*use):std::nullopt;
-            if(landing){SDL_SetRenderDrawColor(renderer_,208,192,123,130);SDL_RenderLine(renderer_,landing->origin.x,landing->origin.y,landing->point.x,landing->point.y);marker(landing->point,12);}
+        if(asset){const auto &definition=publishedContentRegistry().item(asset->definitionId);
+            if(definition.grenadeUse){
+                const auto landing=world.previewGrenade(world.weaponAimWorldPosition(),*definition.grenadeUse);
+                if(landing && grenadeVisible(landing->point)){
+                    SDL_SetRenderDrawColor(renderer_,220,166,103,130);
+                    SDL_RenderLine(renderer_,landing->origin.x,landing->origin.y,landing->point.x,landing->point.y);
+                    grenadeMarker(landing->point,12,170);
+                }
+            }else{
+                const auto &use=definition.noiseDecoyUse;
+                const auto landing=use ? world.previewNoiseDecoy(world.weaponAimWorldPosition(),*use):std::nullopt;
+                if(landing){SDL_SetRenderDrawColor(renderer_,208,192,123,130);SDL_RenderLine(renderer_,landing->origin.x,landing->origin.y,landing->point.x,landing->point.y);marker(landing->point,12);}
+            }
         }
     }
     SDL_SetRenderDrawBlendMode(renderer_,blend);

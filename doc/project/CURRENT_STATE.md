@@ -1,3 +1,16 @@
+# 当前：破片手雷 v1 已验收，正在交付
+
+**用户已验收候选`bd5b6011e799`，并授权提交、推送和合并。** 正按原门槛交付，不开始下一任务。
+
+- state：`accepted_delivering`；task_id：`raid-fragmentation-grenade-v1`；plan_version：`RL-RAID-FRAGMENTATION-GRENADE-v1`。
+- candidate_id / accepted_candidate_id：`RL-RAID-FRAGMENTATION-GRENADE-v1-local-bd5b6011e799`；acceptance_source：2026-10-27本主控用户“验收通过，请提交、推送然后合并”。
+- 本地全量2828/2828及原五项、新手雷3ms检查通过；准确PR双平台和合并后main CI待执行。
+- 实际目录`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`，分支`codex/raid-fragmentation-grenade-v1`，交付基线`0ce66ac`；同一已验收程序、固定入口、玩家最新数据和其他修改保留。代理不启动游戏。
+- [交付记录](../exec-plans/active/raid-fragmentation-grenade-v1.md)；[已通过试玩清单](../acceptance/raid-fragmentation-grenade-v1.md)。pending_request：无。
+
+<details>
+<summary>上一项及更早记录（HEAD原文历史）</summary>
+
 # 当前：消音器与枪声取舍 v1 已通过人工验收
 
 **用户已验收候选`d0b4a091f1fa`，并明确授权提交、推送和合并。** 主控按原门槛交付，不开始下一任务。
@@ -1884,6 +1897,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 
 </details>
 
+
+</details>
 
 </details>
 

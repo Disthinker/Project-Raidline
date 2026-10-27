@@ -31,6 +31,8 @@ public:
         std::vector<std::size_t> &output) const;
 
     [[nodiscard]] const Rect &blockerBounds(std::size_t index) const;
+    // Read-only batch view, valid while this immutable index remains alive.
+    [[nodiscard]] std::span<const Rect> allBlockerBounds() const noexcept { return blockerBounds_; }
     [[nodiscard]] std::size_t blockerCount() const noexcept;
     [[nodiscard]] Vec2 worldSize() const noexcept;
     [[nodiscard]] float cellSize() const noexcept;

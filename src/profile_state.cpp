@@ -282,7 +282,7 @@ std::size_t populatePublishedWarehouseCatalog(
             continue;
         }
         // Tactical equipment is purchased, never an automatic catalog grant.
-        if (!definition.weaponLight && !definition.battery && !definition.meleeUse && !definition.noiseDecoyUse &&
+        if (!definition.weaponLight && !definition.battery && !definition.meleeUse && !definition.noiseDecoyUse && !definition.grenadeUse &&
             !(definition.weaponComponent && definition.weaponComponent->slot == WeaponComponentSlot::Muzzle))
             definitions.push_back(&definition);
     }

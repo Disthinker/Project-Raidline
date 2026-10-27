@@ -528,6 +528,9 @@ public:
     [[nodiscard]] bool canSelectNoiseDecoy() const;
     [[nodiscard]] bool beginNoiseDecoySelection();
     [[nodiscard]] InventoryReceipt throwNoiseDecoy(AssetInstanceId, Vec2 aim, const CommandContext &);
+    [[nodiscard]] bool canSelectThrowable() const;
+    [[nodiscard]] bool beginThrowableSelection();
+    [[nodiscard]] InventoryReceipt throwThrowable(AssetInstanceId, Vec2 aim, const CommandContext &);
     void noteBaseFacility(BaseFacilityKind facility);
 
 private:
@@ -545,6 +548,8 @@ private:
     friend struct MeleeUiTestAccess;
     friend struct MeleeTestAccess;
     friend struct NoiseDecoyTestAccess;
+    friend struct GrenadeTestAccess;
+    bool processGrenadeExplosion();
     friend struct NoiseDecoyUiTestAccess;
     friend struct BaseDailyCheckpointTestAccess;
     bool developerRange_{};

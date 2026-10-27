@@ -127,7 +127,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "weapon-suppressor-acoustics-content-71");
+        "raid-fragmentation-grenade-content-72");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -259,7 +259,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.category, BaseSupplyCategory::Recreation);
     EXPECT_EQ(comfort.requiredContribution, 14U);
     EXPECT_FALSE(comfort.sourceHint.empty());
-    ASSERT_EQ(registry.items().size(), 60U);
+    ASSERT_EQ(registry.items().size(), 61U);
     const auto &light = registry.item(ItemDefinitionId{"item.component.weapon_flashlight_basic"});
     const auto &battery = registry.item(ItemDefinitionId{"item.battery.universal"});
     ASSERT_TRUE(light.weaponLight);
@@ -2153,7 +2153,7 @@ TEST(ContentRegistryTest, FieldBandageRollIsManufacturedOnlyAndCannotIncreaseRec
 TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDefinitions)
 {
     const auto original = hospitalContentCandidateJson();
-    ASSERT_EQ(original.at("content_version"), "weapon-suppressor-acoustics-content-71");
+    ASSERT_EQ(original.at("content_version"), "raid-fragmentation-grenade-content-72");
     for (const auto *required : {"fortifications", "enemy_combat_definitions"})
     {
         SCOPED_TRACE(required);

@@ -146,6 +146,82 @@ bool revealRaidCorpse(ProfileState &profile, const ContentRegistry &content, con
     return false;
 }
 
+bool revealRaidCorpseInSimulation(ProfileState &profile, const ContentRegistry &content, const RaidCorpseDeathFact &fact) noexcept
+{
+    try
+    {
+        if (!profile.pendingRaid || !trial(*profile.pendingRaid) || !finite(fact.position) ||
+            fact.spaceId != outdoorRaidSpaceId() || fact.sourceEnemyId.empty() ||
+            !validateRaidCorpseBindings(profile, content).valid) return false;
+        const auto &raid = *profile.pendingRaid;
+        for (const auto &[id, root] : profile.assets.records())
+        {
+            const auto *corpse = std::get_if<RaidCorpseContainerAssetLocation>(&root.location);
+            if (!corpse || corpse->sourceEnemyId != fact.sourceEnemyId || corpse->spaceId != fact.spaceId) continue;
+            if (!id || root.instanceId != id || id >= profile.assets.nextAssetId() || corpse->raidId != raid.raidId) return false;
+            // Preserve the strict entry's once-only rule, including collected loot
+            // and a finite repeated fact at a different position or max revision.
+            if (corpse->deathPosition) return true;
+            if (profile.revision == std::numeric_limits<ProfileRevision>::max()) return false;
+            const auto size = content.map(raid.mapDefinitionId).worldSize;
+            if (!finite(size) || size.x <= 0 || size.y <= 0 || fact.position.x < 0 || fact.position.y < 0 ||
+                fact.position.x > size.x || fact.position.y > size.y) return false;
+            const auto loot = std::find_if(raid.loot.begin(), raid.loot.end(),
+                [id](const auto &entry) { return entry.corpseContainerAssetId == id; });
+            if (loot == raid.loot.end() || loot->collected || !loot->assetId || loot->assetId == id ||
+                loot->assetId >= profile.assets.nextAssetId() || !finite(loot->position) ||
+                loot->position.x < 0 || loot->position.y < 0 || loot->position.x > size.x || loot->position.y > size.y) return false;
+            if (std::count_if(raid.loot.begin(), raid.loot.end(),
+                    [&](const auto &entry) { return entry.assetId == loot->assetId; }) != 1) return false;
+            const auto point = std::find_if(raid.spatialLayout.resourcePoints.begin(), raid.spatialLayout.resourcePoints.end(),
+                [&](const auto &value) { return value.instanceId == loot->resourcePointInstanceId; });
+            if (point == raid.spatialLayout.resourcePoints.end() || loot->resourcePointSlotIndex >= point->capacity) return false;
+            std::size_t pointBase{};
+            for (auto it = raid.spatialLayout.resourcePoints.begin(); it != point; ++it) pointBase += it->capacity;
+            const auto expected = raidResourcePointLootPosition(*point, loot->resourcePointSlotIndex);
+            if (loot->slotIndex != pointBase + loot->resourcePointSlotIndex ||
+                loot->position.x != expected.x || loot->position.y != expected.y) return false;
+            const auto &table = content.lootTable(point->lootTableId);
+            const auto entry = std::find_if(table.entries.begin(), table.entries.end(),
+                [&](const auto &value) { return value.itemDefinitionId == loot->definitionId; });
+            if (entry == table.entries.end() || loot->quantity < entry->minimumQuantity || loot->quantity > entry->maximumQuantity) return false;
+            const auto *item = profile.assets.find(loot->assetId);
+            const auto *stored = item ? std::get_if<StoredAssetLocation>(&item->location) : nullptr;
+            if (!item || item->instanceId != loot->assetId || item->definitionId != loot->definitionId ||
+                !loot->quantity || item->quantity != loot->quantity || !stored ||
+                stored->container != ProfileContainerId::compartment(id, 0)) return false;
+            const auto &definition = content.item(item->definitionId);
+            const auto &rootDefinition = content.item(root.definitionId);
+            if (item->quantity > definition.maxStackSize || !canUseItemOrientation(definition, item->orientation) ||
+                rootDefinition.containerCompartments.empty()) return false;
+            const auto footprint = inventoryFootprint(definition, item->orientation);
+            const auto &compartment = rootDefinition.containerCompartments.front();
+            if (stored->origin.x < 0 || stored->origin.y < 0 || footprint.width <= 0 || footprint.height <= 0 ||
+                footprint.width > compartment.width || footprint.height > compartment.height ||
+                stored->origin.x > compartment.width - footprint.width ||
+                stored->origin.y > compartment.height - footprint.height) return false;
+            // An unrevealed root owns only its one frozen roll. Nothing can be
+            // deposited through a legal inventory operation before the reveal.
+            for (const auto &[otherId, other] : profile.assets.records())
+                if (const auto *location = std::get_if<StoredAssetLocation>(&other.location);
+                    location && location->container.kind == ProfileContainerKind::AssetCompartment &&
+                    location->container.ownerAssetId == id && otherId != loot->assetId) return false;
+            auto *mutableRoot = profile.assets.findMutable(id);
+            auto *location = mutableRoot ? std::get_if<RaidCorpseContainerAssetLocation>(&mutableRoot->location) : nullptr;
+            if (!location) return false;
+            // All fallible queries/allocation precede these nonthrowing writes.
+            location->deathPosition = fact.position;
+            ++profile.revision;
+            return true;
+        }
+    }
+    catch (...)
+    {
+        return false;
+    }
+    return false;
+}
+
 bool raidCorpseAccessible(const ProfileState &profile, AssetInstanceId id, const RaidSpaceDefinitionId &space, Vec2 player)
 {
     const auto *asset = profile.assets.find(id);

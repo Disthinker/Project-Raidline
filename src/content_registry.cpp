@@ -836,7 +836,7 @@ ContentRegistry ContentRegistry::fromJson(
             registry.contentVersion_ == "base-fortification-foundation-content-61" ||
             registry.contentVersion_ == "hospital-raid-theme-content-62" ||
             registry.contentVersion_ == "weapon-components-content-63" ||
-            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71");
+            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71" || registry.contentVersion_ == "raid-fragmentation-grenade-content-72");
 
         if (root.contains("fortifications"))
         {
@@ -862,7 +862,7 @@ ContentRegistry ContentRegistry::fromJson(
         if ((registry.contentVersion_ == "base-fortification-foundation-content-61" ||
              registry.contentVersion_ == "hospital-raid-theme-content-62" ||
              registry.contentVersion_ == "weapon-components-content-63" ||
-             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71")) &&
+             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71" || registry.contentVersion_ == "raid-fragmentation-grenade-content-72")) &&
             !registry.fortifications_.contains(kWoodBarricadeDefinition))
             fail("wood barricade definition is required by content 61");
 
@@ -1628,7 +1628,7 @@ ContentRegistry ContentRegistry::fromJson(
                     definition.maximumCharges || definition.magazineCapacity || itemValue.contains("melee_use") ||
                     itemValue.contains("weapon_component") || itemValue.contains("weapon_light") ||
                     itemValue.contains("ammunition_use") || itemValue.contains("magazine_use") ||
-                    itemValue.value("battery", false) ||
+                    itemValue.value("battery", false) || itemValue.contains("grenade_use") ||
                     use.range > 1000 || use.flightSeconds > 5 || use.radius > 1000 ||
                     use.durationSeconds > 30 || use.pulseIntervalSeconds < 0.1F ||
                     use.pulseIntervalSeconds > use.durationSeconds ||
@@ -1636,8 +1636,44 @@ ContentRegistry ContentRegistry::fromJson(
                     fail("invalid noise decoy capability");
                 definition.noiseDecoyUse = use;
             }
-            if (definition.category == ItemCategory::Throwable && !definition.noiseDecoyUse)
-                fail("throwable requires noise decoy capability");
+            if (itemValue.contains("grenade_use"))
+            {
+                const auto &g = requiredObject(itemValue, "grenade_use");
+                const auto boundedInteger = [&](std::string_view field, std::uint32_t maximum)
+                {
+                    if (!g.contains(std::string{field})) fail(std::string{field} + " is required");
+                    const auto value = optionalUint(g, field);
+                    if (value > maximum) fail(std::string{field} + " exceeds grenade bounds");
+                    return static_cast<int>(value);
+                };
+                GrenadeUseDefinition use{
+                    requiredFiniteFloat(g, "range", true),
+                    requiredFiniteFloat(g, "flight_seconds", true),
+                    requiredFiniteFloat(g, "fuse_seconds", true),
+                    requiredFiniteFloat(g, "radius", true),
+                    requiredFiniteFloat(g, "core_radius", true),
+                    boundedInteger("core_damage", 1000U),
+                    boundedInteger("edge_damage", 1000U),
+                    boundedInteger("penetration", 100U),
+                    boundedInteger("armor_damage", 1000U),
+                    requiredFiniteFloat(g, "noise_radius", true)};
+                if (!use.valid() || definition.category != ItemCategory::Throwable || definition.noiseDecoyUse ||
+                    definition.equipmentSlot || !definition.compatibleEquipmentSlots.empty() ||
+                    !definition.containerCompartments.empty() || definition.basePlacement ||
+                    definition.weaponUse || definition.medicalUse || definition.armorProtection ||
+                    definition.weaponCondition || definition.weaponMaintenance || definition.armorMaintenance ||
+                    definition.maximumCharges || definition.magazineCapacity || definition.maxStackSize > 2U ||
+                    itemValue.contains("melee_use") || itemValue.contains("weapon_component") ||
+                    itemValue.contains("weapon_light") || itemValue.contains("ammunition_use") ||
+                    itemValue.contains("magazine_use") || itemValue.contains("compatible_ammunition") ||
+                    itemValue.contains("compatible_magazine") || itemValue.contains("compatible_magazines") ||
+                    itemValue.contains("base_contribution") || itemValue.contains("base_construction_material") ||
+                    itemValue.value("battery", false))
+                    fail("invalid grenade capability");
+                definition.grenadeUse = use;
+            }
+            if (definition.category == ItemCategory::Throwable && !definition.noiseDecoyUse && !definition.grenadeUse)
+                fail("throwable requires exactly one supported capability");
             if (itemValue.contains("melee_use"))
             {
                 const auto &m = itemValue.at("melee_use");

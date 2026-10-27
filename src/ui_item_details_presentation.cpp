@@ -18,7 +18,7 @@ std::optional<UiItemDetailsProjection> projectUiItemDetails(
     const auto *asset = profile.assets.find(id);
     if (!asset) return std::nullopt;
     const auto &definition = content.item(asset->definitionId);
-    if (!definition.weaponUse && !definition.meleeUse && !definition.noiseDecoyUse)
+    if (!definition.weaponUse && !definition.meleeUse && !definition.noiseDecoyUse && !definition.grenadeUse)
         return std::nullopt;
     UiItemDetailsProjection result;
     result.instanceId = id;
@@ -43,6 +43,25 @@ std::optional<UiItemDetailsProjection> projectUiItemDetails(
             label(language, "装备到快速近战栏，按 V 使用；保留当前枪械。", "Equip in Quick Melee; press V without switching firearms."),
             label(language, "单次命中一个目标；墙体阻挡，护甲减伤。", "One target per swing; walls block and armor reduces damage."),
             label(language, "命中才磨损；局内不能维护，不造成连续硬直。", "Wear on contact only; no raid repairs or stun lock.")};
+    } else if (definition.grenadeUse) {
+        const auto &use = *definition.grenadeUse;
+        result.kind = UiItemDetailsKind::Grenade;
+        result.title = label(language, "手雷详情", "GRENADE DETAILS");
+        metric("数量", "Quantity", fmt::format("{}", asset->quantity));
+        metric("单件重量", "Unit weight", fmt::format("{} g", definition.unitWeightGrams));
+        metric("投掷距离", "Throw range", fmt::format("{:.0f}", use.range));
+        metric("飞行 / 落地引信", "Flight / ground fuse", fmt::format("{:.1f} / {:.1f} s", use.flightSeconds, use.fuseSeconds));
+        metric("核心 / 边缘伤害", "Core / edge damage", fmt::format("{} / {}", use.coreDamage, use.edgeDamage));
+        metric("伤害半径", "Damage radius", fmt::format("{:.0f}", use.radius));
+        result.warning = true;
+        result.status = label(language, "普通对局使用 · 爆炸可能伤及自己", "Regular raids · the explosion can hurt you");
+        result.notes = {
+            label(language, "放入胸挂；按住4选择，松开瞄准，左键投掷。", "Carry in the rig; hold 4, release to aim, click to throw."),
+            label(language, "右键或Esc取消；成功投掷才消耗一枚。", "Right-click or Esc cancels; only a successful throw consumes one."),
+            language == UiLanguage::SimplifiedChinese ?
+                fmt::format("穿甲{} / 甲伤{}；爆伤可自伤，墙体阻挡。", use.penetration, use.armorDamage) :
+                fmt::format("Penetration {} / armor damage {}; walls block blast damage, including self-damage.", use.penetration, use.armorDamage),
+            label(language, "未爆前不能进出建筑或开始撤离。", "Doors and new extraction progress are blocked until it explodes.")};
     } else if (definition.noiseDecoyUse) {
         const auto &use = *definition.noiseDecoyUse;
         result.kind = UiItemDetailsKind::Decoy;
@@ -81,7 +100,7 @@ std::optional<UiItemDetailsProjection> projectUiItemDetails(
 SDL_FRect uiItemDetailsPanel() noexcept { return {40, 48, 1200, 656}; }
 SDL_FRect uiItemDetailsBack() noexcept { return {860, 92, 340, 32}; }
 SDL_FRect uiItemDetailsImage(UiItemDetailsKind kind) noexcept {
-    if (kind == UiItemDetailsKind::Decoy) return {80, 190, 490, 102};
+    if (kind == UiItemDetailsKind::Decoy || kind == UiItemDetailsKind::Grenade) return {80, 190, 490, 102};
     return kind == UiItemDetailsKind::Weapon ? SDL_FRect{80, 190, 490, 124} : SDL_FRect{80, 190, 490, 246};
 }
 SDL_FRect uiItemDetailsMetric(UiItemDetailsKind kind, std::size_t index) noexcept {

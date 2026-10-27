@@ -1,6 +1,7 @@
 #include "raid_space_spatial_index.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <stdexcept>
 
@@ -79,6 +80,13 @@ bool RaidSpaceBlockerIndex::hasLineOfSight(
         return false;
     }
 
+    // Cell membership is deliberately conservative. Dense cells can contain
+    // many walls whose bounds do not meet this ray at all; preserve the exact
+    // interior predicate and boundary semantics for every remaining wall.
+    const float rayLeft=std::min(start.x,end.x),rayRight=std::max(start.x,end.x);
+    const float rayTop=std::min(start.y,end.y),rayBottom=std::max(start.y,end.y);
+    const auto *const blockerData=blockerBounds_.data();
+
     const float minimumX = std::min(start.x, end.x) - maximumHalfExtent_.x;
     const float minimumY = std::min(start.y, end.y) - maximumHalfExtent_.y;
     const float maximumX = std::max(start.x, end.x) + maximumHalfExtent_.x;
@@ -115,16 +123,21 @@ bool RaidSpaceBlockerIndex::hasLineOfSight(
             {
                 continue;
             }
-            for (const std::size_t candidate : cell)
+            const auto *const endCandidate=cell.data()+cell.size();
+            for (const auto *cursor=cell.data(); cursor!=endCandidate; ++cursor)
             {
+                const auto candidate=*cursor;
                 if (blockerTests != nullptr)
                 {
                     ++*blockerTests;
                 }
+                const Rect &bounds=blockerData[candidate];
+                if(bounds.position.x+bounds.size.x<rayLeft || bounds.position.x>rayRight ||
+                   bounds.position.y+bounds.size.y<rayTop || bounds.position.y>rayBottom)continue;
                 if (raidSpaceSegmentIntersectsBlockerInterior(
                         start,
                         end,
-                        blockerBounds_[candidate]))
+                        bounds))
                 {
                     return false;
                 }
@@ -139,6 +152,8 @@ void RaidSpaceBlockerIndex::queryCandidateIndices(
     std::vector<std::size_t> &output) const
 {
     output.clear();
+    std::size_t nonemptyCells{};
+    std::array<std::size_t,8> cellEnds{};
     if (!finite(bounds.position) || !finite(bounds.size) ||
         bounds.size.x < 0.0F || bounds.size.y < 0.0F || cells_.empty())
     {
@@ -163,10 +178,38 @@ void RaidSpaceBlockerIndex::queryCandidateIndices(
         {
             const std::vector<std::size_t> &cell =
                 cells_[row * columns_ + column];
-            output.insert(output.end(), cell.begin(), cell.end());
+            if(!cell.empty()) {
+                ++nonemptyCells;
+                output.insert(output.end(), cell.data(), cell.data() + cell.size());
+                if(nonemptyCells<=cellEnds.size())cellEnds[nonemptyCells-1]=output.size();
+            }
         }
     }
-    std::sort(output.begin(), output.end());
+    // build() visits original indices in ascending order; one cell is already
+    // sorted. Multi-cell queries retain the exact original-index ordering.
+    if(nonemptyCells>1) {
+        // Small local queries dominate actor movement. Merge their already
+        // sorted cell ranges without repeatedly sorting the same dense bucket.
+        // Larger queries retain the original general sort and memory bounds.
+        if(nonemptyCells<=8 && output.size()<=256) {
+            std::array<std::size_t,256> input;
+            std::copy_n(output.data(),output.size(),input.data());
+            struct Range { const std::size_t *first,*last; };
+            std::array<Range,8> ranges;
+            auto *const cursors=ranges.data();std::size_t begin{};
+            for(std::size_t i=0;i<nonemptyCells;++i) {
+                cursors[i]={input.data()+begin,input.data()+cellEnds[i]};begin=cellEnds[i];
+            }
+            std::size_t active=nonemptyCells;auto *write=output.data();
+            while(active) {
+                std::size_t selected{};
+                for(std::size_t i=1;i<active;++i)
+                    if(*cursors[i].first<*cursors[selected].first)selected=i;
+                *write++=*cursors[selected].first++;
+                if(cursors[selected].first==cursors[selected].last)cursors[selected]=cursors[--active];
+            }
+        } else std::sort(output.begin(), output.end());
+    }
 }
 
 const Rect &RaidSpaceBlockerIndex::blockerBounds(std::size_t index) const
