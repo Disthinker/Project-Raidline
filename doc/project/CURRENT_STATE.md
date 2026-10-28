@@ -1,3 +1,15 @@
+# 当前：迅捷感染者 CI v2，正在验证双平台
+
+**本地全量2882/2882通过，候选`b9344c8cd631`已冻结。按用户批准，先提交推送原PR #197验证准确HEAD的Windows／Ubuntu CI；通过后复验，复验前不合并。**
+
+- state：`ci_verification_pending`；task_id：`raid-runner-infected-v1`；fix_plan_version：`RL-RAID-RUNNER-INFECTED-CI-v2`。
+- candidate_id：`RL-RAID-RUNNER-INFECTED-CI-v2-local-b9344c8cd631`；新候选人工验收：无。approval_source：2026-10-28主控用户“同意v2，先验证CI再复验”。
+- 仅改观察候选筛选和精确角度排序；原逐位结果、玩法、存档、固定入口及3ms门槛保持。原CI失败与各版候选程序保留，其他未提交工作和玩家数据保全。
+- 桌面 **Project Raidline Debug** 为同一固定入口。双平台通过后使用[四步复验清单](../acceptance/raid-runner-infected-v1.md)，[技术与证据](../exec-plans/active/raid-runner-infected-v1.md)记录实际结果；代理未启动游戏、不开始下一项任务。
+
+<details>
+<summary>上一记录（完整HEAD历史）</summary>
+
 # 当前：迅捷感染者 CI v1，正在验证双平台
 
 **本地全量2876/2876通过，候选 `261634b9a2b8` 已冻结。按用户批准，先提交推送到原PR #197验证双平台CI；通过后复验，复验前不合并。**
@@ -1923,6 +1935,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 
 </details>
 
+
+</details>
 
 </details>
 

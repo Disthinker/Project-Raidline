@@ -1,3 +1,104 @@
+# 迅捷感染者 CI v2：本地通过，正在验证双平台
+
+**候选`b9344c8cd631`已冻结，本地2882/2882、定向19/19通过。按用户批准先提交推送原PR #197验证双平台；准确新提交的CI尚待完成，新候选复验前不合并。**
+
+- state：`ci_verification_pending`；task_id：`raid-runner-infected-v1`；fix_plan_version：`RL-RAID-RUNNER-INFECTED-CI-v2`。
+- approval_source：2026-10-28用户“同意v2，先验证CI再复验”；新候选尚未人工验收。candidate_id：`RL-RAID-RUNNER-INFECTED-CI-v2-local-b9344c8cd631`。
+- source_sha256：`b9344c8cd631f5c8ff0027b79dc9c3857c851a92a30db4b287195ad56a4d3b28`；program_sha256：`237c04fca8429bc6a01ea040e07ad670484d7426c0aea93cda549efd49d9d02b`。基线`3bb6b665fceb541f45db896546659ffe53dad368`／旧候选`261634b9a2b8`；继续原分支`codex/raid-runner-infected-v1`与[PR #197](https://github.com/Disthinker/Project-Raidline/pull/197)。
+
+## 实际改动
+
+只修改`src/raid_space_query.cpp`与现有迅捷视野等价测试，另提交本任务三份文档，共5文件。Enemy／GameSession、UI、存档、完整几何合法性校验、所有性能测试源码及Debug配置没有改动。
+
+命中后的粗筛范围随当前最近遮挡收紧。每条射线反向粗筛预览一个真实候选，正式结果仍按原候选顺序消费；预览只绑定当前射线及当前灯光范围，未引入跨帧缓存。守卫覆盖浮点死区传播，不能用常数epsilon代替；所有最终射线、角度、逐轴除法及结果保持逐位一致。保守角桶从128细化为512，保留原顺序和额外边界余量；1024未表现出稳定优势，未保留。
+
+大批有限binary32角度用四遍整数基数排序，原角度生成与unique谓词保持。实施前发现180°和100°弧必含零角，故将安全条件精化为“所有同值项位模式一致”：仅一种符号零可精确排序；混合正负零、subnormal、非有限数、非支持表示或小数组均回退原std::sort。独立核证表明两路送入原unique的位序列相同；该实施细节维持获批逐位结果合同。
+
+## 实际检查
+
+最终windows-debug全目标构建完成，增量复核无待编译项；Probe6为19/19，Full1为2882/2882，0失败／跳过。原2876项完整保留，新增6项逐位回归覆盖近远候选顺序、长薄墙擦边、远坐标、零角／重复角、灯光双端点、密集重复与epsilon链。慢oracle及原6项等价测试的24409字节前缀完全保持。
+
+原六项及新增混合性能检查保持串行隔离与3ms门槛；32／100敌人、220障碍、160帧含10预热、150有效样本、p95索引142和完整GameSession更新／观察／逐敌查询／真实死亡清理均未缩减。CSV逐帧射线数与CI-v1冻结样本一致，障碍负载保持，减少的是不可能产生最终最近命中的求交工作。本地实际p95见candidate-source.json，双平台结果另行核对准确提交。
+
+旧CI 40631074705与40636653171失败完整保留；后者Ubuntu为2876/2876通过，Windows2875/2876，100敌人p95=3.6084ms。本次不把本地通过或旧单平台通过冒充新CI。
+
+## 保全与证据
+
+证据根：`C:\Users\Administrator\Documents\美术资源生成\tmp\raid-runner-infected-ci-v2-20261028`。before.json重新保存五目录原始修改和当前玩家数据；原CI-v1程序22466a…、已验收v3程序939562…与内容73分别备份。固定桌面快捷方式保持；代理未启动游戏、制作资源、改变信任／权限／模型或开始下一任务。
+
+提交中的CURRENT_STATE仅含本片入口加完整干净HEAD历史，未夹入其他本地历史；提交钩子后再次逐字节保全。后续只在本任务记录／证据回执更新CI状态，不另建仅复制CI结果的提交。
+
+<details>
+<summary>批准、实施启动及更早失败记录（历史）</summary>
+
+# 迅捷感染者 CI v2：已批准，实施中
+
+**用户已批准 `RL-RAID-RUNNER-INFECTED-CI-v2`，允许先提交、推送原PR #197验证准确HEAD的双平台CI；两平台全部通过后冻结新候选复验，复验前不合并。**
+
+- state：`implementing_v2`；task_id：`raid-runner-infected-v1`；fix_plan_version：`RL-RAID-RUNNER-INFECTED-CI-v2`；approval_source：2026-10-28主控用户明确批准本v2方案。
+- 本轮仅实施同射线最近命中后的保守候选收紧，以及有限非零32位float角度的精确排序优化；特殊值回退原排序。保持原候选相对顺序、逐轴除法与短路顺序、全部原射线和逐位输出。
+- 原六项及新混合性能的源码、32／100敌人、220障碍、160帧含10预热、150有效样本、p95与3ms门槛保持。任何精确对照失败先修正或撤回，不弱化参考断言。
+- 生产限`src/raid_space_query.cpp`，回归在`tests/test_runner_infected_visibility_equivalence.cpp`；不改Enemy／GameSession、存档、UI、完整合法性校验、编译级别或三角函数算法，不引入跨帧缓存。
+- 基线提交`3bb6b665fceb541f45db896546659ffe53dad368`／候选`261634b9a2b8`／程序`22466a663c60`；v1失败证据保留。快照与原始字节在`C:\Users\Administrator\Documents\美术资源生成\tmp\raid-runner-infected-ci-v2-20261028`。本片新候选与新CI尚无；代理不启动游戏，不合并或开始下一任务。
+
+<details>
+<summary>批准前v2方案与CI-v1历史（原文字节保留）</summary>
+
+# 迅捷感染者 CI v2 修复方案（待批准）
+
+**v1已提交推送，但尚不能复验或合并。** Ubuntu全量2876/2876通过；Windows2875/2876，唯一失败为100敌人混合负载，p95为3.6084ms，仍超过3ms。中文裁剪和原六项3ms检查已在两平台通过。
+
+建议批准 **`RL-RAID-RUNNER-INFECTED-CI-v2`**，继续只修性能：保留同一射线、逐位几何结果、玩法、原存档、固定入口及3ms门槛。
+
+## 具体改什么
+
+1. **命中近墙后，及时排除更远的障碍候选。** 当前每条射线的粗筛范围按最初长度建立，后续已经命中近处障碍时仍检查远处候选。拟随最近命中收紧保守包围范围；保留额外浮点误差余量、原候选相对顺序和幸存候选的逐轴除法／短路顺序，不漏掉更近或擦边命中，不减少原始射线或障碍负载。
+2. **减少角度排序的Debug比较开销。** 拟对有限、非零的32位浮点角度使用连续数组的四遍基数排序，保留同一浮点数值顺序；同值且同位模式的项可以互换，后续unique结果不变。含零、非有限数值或不满足浮点表示条件时回退原std::sort，避免改变正负零或特殊值的旧结果。角度生成、去重容差、射线方向与灯光接缝仍用原表达式。
+3. **以原实现作逐位对照，再跑真实完整负载。** 增加最近遮挡、擦边／远坐标、零角／重复角、灯光接缝与候选顺序对照；原六项和新混合性能的源码、32／100敌人、220障碍、160帧含10预热、150有效样本、p95与3ms均保持。先本地全量，再验证准确新提交的Windows／Ubuntu CI。
+
+生产改动限`src/raid_space_query.cpp`的观察几何计算，相关回归放现有迅捷视野等价测试；需要时只补本任务的诊断和文档。不改Enemy／GameSession决策、完整几何合法性校验、存档或UI，不引入跨帧缓存，不改编译优化级别，不近似三角函数、不搬出计时范围。任一精确对照失败即修正或撤回该优化，不弱化参考断言。
+
+## 为什么需要新方案
+
+v1批准的是容器连续填充和原式重复计算整理，已完成并提交。新增局部展开、相同CRT入口调用和原比较器探测均13/13通过，但未得到足够余量，已经撤回并归档。
+
+原提交在本地临时分段诊断中，100敌人观察热点约为：射线求交0.479ms、角度排序／去重0.269ms、拥有式三角形准备0.149ms；完整合法性校验仅一次，约0.033ms，没有可以直接删除的重复校验。这些是本地诊断，不冒充CI各子阶段耗时；CI只确认观察段p95为1.8866ms、更新1.5044ms和逐敌查询0.2922ms，各自p95不可直接相加。
+
+因此v2调整候选筛选和排序算法，需要新的明确批准；当前只写方案，尚未实现这两项算法，也不重跑碰过或扩大其他系统。
+
+## 批准后如何交付
+
+建议本次明确允许：在原分支和PR #197提交、推送直接依赖修复，验证准确HEAD的双平台CI；两平台全部通过后冻结新候选，提供同一固定入口及简洁复验清单。新候选复验前不合并、不开始下一任务、不启动游戏。
+
+若仍不能在保持逐位结果、旧门槛和原负载下通过，保留失败证据并再次说明；不以本地通过或单平台通过替代完整结果。
+
+<details>
+<summary>当前候选、授权与证据</summary>
+
+- task_id：`raid-runner-infected-v1`；state：`awaiting_fix_plan_approval`；approved_fix_plan_version：`RL-RAID-RUNNER-INFECTED-CI-v1`；proposed_fix_plan_version：`RL-RAID-RUNNER-INFECTED-CI-v2`；v2 approval_source：无。
+- v1人类授权：2026-10-28用户“同意，先做CI再复验（推荐）”。不把该授权自动转成v2算法调整的批准，不把旧v3验收转给新候选。
+- 保留候选`RL-RAID-RUNNER-INFECTED-CI-v1-local-261634b9a2b8`，提交`3bb6b665fceb541f45db896546659ffe53dad368`；[PR #197](https://github.com/Disthinker/Project-Raidline/pull/197)开放且未合并，[失败CI 40636653171](https://github.com/Disthinker/Project-Raidline/actions/runs/40636653171)。accepted main仍`77b117d1492d975a2861357a04c60a652d9e73dc`。
+- 新v1候选未人工验收；原v3已验收`08178f45f1dd`／e1374c5与其原失败CI 40631074705均保留。最新一次只提交推送8文件，没有合并或第二次追加提交推送。
+- 当前599源文件与冻结v1候选完全一致，固定程序SHA256仍`22466a663c6066f65a8c003a61a2242a168e45b8b072d2d0e384914977361779`，固定快捷方式保持。源码探测全部归档后恢复，Probe10为13/13；源与程序再次保全通过。
+- 本地原全量2876/2876，CI失败仅上述一项。Windows2876个结果和Ubuntu2876个结果均逐名核对，51个现有Activity参数显示差异按原枚举值作严格一对一匹配，无缺项、重名或跳过。
+- 五目录范围外修改、CURRENT_STATE原历史、21份最新玩家文件、旧v3程序与内容73备份保全。未启动游戏、制作资源或变更信任／权限／模型。
+- 证据根：`C:\Users\Administrator\Documents\美术资源生成\tmp\raid-runner-infected-ci-v1-20261028`；`pr-ci-failure-proof.json`、两平台原日志、`ubuntu-case-proof.json`、`round-2/diagnostic-phases-2.log`、Probe5／6／7／10及`preservation-check.json`。诊断第一次构建因脚本未插入chrono头失败，修正后通过；第一次诊断运行因VS Shell自动切目录而未开始测试，后以SkipAutomaticLocation正确执行。两项属于隔离诊断工具问题，均保留日志。
+
+</details>
+
+<details>
+<summary>v1实施、失败检查与更早记录</summary>
+
+<!-- CI-v1 live status begin -->
+# 迅捷感染者 CI v1：双平台CI未通过
+
+**本次准确提交的CI未通过；保留失败证据，尚未进入新候选复验，不合并。** 候选`RL-RAID-RUNNER-INFECTED-CI-v1-local-261634b9a2b8`，准确提交`3bb6b665fceb541f45db896546659ffe53dad368`；[PR197](https://github.com/Disthinker/Project-Raidline/pull/197)，[CI 40636653171](https://github.com/Disthinker/Project-Raidline/actions/runs/40636653171)。
+
+- state：`ci_failed`；preacceptance_commit_push_authorized：true；merge_before_reacceptance_authorized：false；新候选人工验收：尚无。
+- 本地全量2876/2876、定向13/13通过，32／100混合p95为1.5310／2.1387ms。提交只含获批5个源／测试文件及3个本任务文档；其他工作未夹入。599源文件与冻结程序一致，提交钩子改变的11份历史文档经归档及换行等价检查后逐字节恢复，21份玩家文件／旧程序／固定入口保持。
+- CI逐测试核查、原失败记录、候选与字节保全证据在`C:\Users\Administrator\Documents\美术资源生成\tmp\raid-runner-infected-ci-v1-20261028`。不启动游戏、不合并、不开始下一项任务；下文为提交前记录及历史，以本段实时状态为准。没有新增仅复制CI状态的提交。
+<!-- CI-v1 live status end -->
+
 # 迅捷感染者 CI v1：本地通过，正在验证双平台
 
 **候选 `261634b9a2b8` 已冻结。本地全量2876/2876、最后定向13/13通过；准确新HEAD的Windows与Ubuntu CI尚待完成，完成后再请用户复验。**
@@ -249,6 +350,12 @@ Pressure允许继续接近，Engage另有近身攻击名额。加速只改变移
 ## 实施启动（2026-10-28）
 
 已按本主控用户的明确批准，从已验收main77b117d建立`codex/raid-runner-infected-v1`。开工前已重新保全五目录脏文件、21份玩家数据、旧程序／内容72和固定入口，证据目录`C:\Users\Administrator\Documents\美术资源生成\tmp\raid-runner-infected-v3-20261028`。前文拟实施与待审批文字保留为方案历史，以上方状态和本段为准。本轮连续完成获批范围及检查，不启动游戏、不提交／推送／合并。
+
+</details>
+
+</details>
+
+</details>
 
 </details>
 

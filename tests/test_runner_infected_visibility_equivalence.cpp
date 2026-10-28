@@ -522,3 +522,189 @@ TEST(RunnerInfectedVisibilityEquivalenceTest, PreparedBoundsRejectMalformedViews
              Rect{{1100, 975}, {std::numeric_limits<float>::infinity(), 50}}})
         EXPECT_FALSE(owned.boundsVisible(invalid));
 }
+
+TEST(RunnerInfectedVisibilityEquivalenceTest, NearestHitPreservesNearFarAndInterleavedCandidateOrder)
+{
+    const std::array<BallisticBlocker, 5> geometry{{
+        {11, {{1120, 900}, {0.5F, 250}}},
+        {12, {{1360, 700}, {2, 600}}},
+        {13, {{1720, 500}, {1, 1000}}},
+        {14, {{1500, 980}, {20, 40}}},
+        // This closer horizontal edge is encountered after an existing hit
+        // for some corner rays. Tightening must still admit that nearer hit.
+        {15, {{1080, 1010}, {60, 0.002F}}},
+    }};
+    const std::array<std::array<std::size_t, 5>, 3> orders{{
+        {{0, 1, 2, 3, 4}}, {{4, 3, 2, 1, 0}}, {{2, 0, 3, 4, 1}},
+    }};
+    for (const auto &order : orders)
+        for (const float cell : {32.0F, 128.0F, 1024.0F})
+        {
+            SCOPED_TRACE(::testing::Message() << "first blocker=" << geometry[order[0]].id);
+            std::vector<BallisticBlocker> walls;
+            for (auto position : order) walls.push_back(geometry[position]);
+            const auto index = RaidSpaceBlockerIndex::build({3000, 3000}, walls, cell);
+            ASSERT_TRUE(index);
+            std::vector<std::size_t> candidates;
+            index->queryCandidateIndices({{0, 0}, {3000, 3000}}, candidates);
+            ASSERT_EQ(candidates.size(), geometry.size());
+            for (std::size_t position = 0; position < candidates.size(); ++position)
+                EXPECT_EQ(candidates[position], position);
+            EXPECT_FALSE(index->hasLineOfSight({1000, 1000}, {1800, 1000}));
+            for (const float degrees : {-12.0F, 0.0F, 12.0F})
+                expectIdenticalGeometry({3000, 3000}, walls,
+                    observation({1000, 1000}, heading(degrees)), cell);
+        }
+}
+
+TEST(RunnerInfectedVisibilityEquivalenceTest, TightenedFarCoordinateBoundsKeepCloserGrazingLongThinWalls)
+{
+    const Vec2 origin{22051, 6031};
+    const float infinity = std::numeric_limits<float>::infinity();
+    for (const float cell : {32.0F, 128.0F, 1024.0F})
+        for (const float width : {0.002F, 0.5F})
+            for (const float edge : {std::nextafter(origin.y, -infinity),
+                     origin.y, std::nextafter(origin.y, infinity)})
+                for (const bool reversed : {false, true})
+                {
+                    SCOPED_TRACE(::testing::Message() << "edge=" << edge
+                        << " width=" << width << " reverse=" << reversed);
+                    std::vector<BallisticBlocker> walls{
+                        {1, {{22147, 0}, {width, 14400}}},
+                        {2, {{22551, 0}, {0.5F, 14400}}},
+                        // Its leading corner is closer than either vertical
+                        // wall, within one far-coordinate ULP of the axis.
+                        {3, {{22083, edge}, {1000, width}}},
+                        {4, {{0, 6431}, {25600, width}}},
+                    };
+                    if (reversed) std::reverse(walls.begin(), walls.end());
+                    for (const Vec2 direction : {Vec2{1, 0}, Vec2{1, -0.0F},
+                             Vec2{-1, 0}, Vec2{0, 1}, Vec2{0, -1}, heading(45)})
+                        expectIdenticalGeometry({25600, 14400}, walls,
+                            observation(origin, direction, 180, 1000), cell);
+                }
+}
+
+TEST(RunnerInfectedVisibilityEquivalenceTest, SignedZeroNearZeroAndRepeatedAnglesKeepEveryBoundaryBit)
+{
+    const float positiveZero = 0.0F, negativeZero = -0.0F;
+    const float nearPositive = std::nextafter(positiveZero, 1.0F);
+    const float nearNegative = std::nextafter(positiveZero, -1.0F);
+    const std::vector<BallisticBlocker> walls{
+        {1, {{1200, 1100}, {20, 10}}},
+        {2, {{1200, 1100}, {20, 10}}},
+        {3, {{1400, 1200}, {40, 20}}},
+        {4, {{1200, 900}, {20, 10}}},
+    };
+    // Public inputs cover signed/near-zero directions, arcs with a central
+    // zero, and repeated collinear corners. They make no private-sort claim.
+    for (const float cell : {32.0F, 128.0F, 1024.0F})
+        for (const float aperture : {180.0F, 100.0F, 110.0F})
+            for (const Vec2 direction : {Vec2{1, positiveZero}, Vec2{1, negativeZero},
+                     Vec2{1, nearPositive}, Vec2{1, nearNegative},
+                     Vec2{-1, positiveZero}, Vec2{-1, negativeZero},
+                     heading(0.000001F), heading(-0.000001F)})
+                expectIdenticalGeometry({3000, 3000}, walls,
+                    observation({1000, 1000}, direction, aperture, 1000), cell);
+}
+
+TEST(RunnerInfectedVisibilityEquivalenceTest, RepeatedNonzeroCornerAnglesAndPoweredSeamsKeepCompleteBoundary)
+{
+    // The second rectangle is a twofold scaling about the observer, so all
+    // four corner angles repeat without requiring a zero-angle corner. The
+    // 110-degree enclosing arc has 55 segments and no central arc sample.
+    const std::vector<BallisticBlocker> walls{
+        {1, {{1200, 1100}, {20, 10}}},
+        {2, {{1400, 1200}, {40, 20}}},
+        {3, {{1200, 900}, {20, 10}}},
+        {4, {{1400, 800}, {40, 20}}},
+        {5, {{1200, 1100}, {20, 10}}},
+    };
+    for (const float cell : {32.0F, 128.0F, 1024.0F})
+        for (const auto ranges : {std::array<float, 4>{110, 500, 70, 900},
+                 std::array<float, 4>{70, 900, 110, 500}})
+            for (const float degrees : {0.0F, 0.00001F, -0.00001F, 179.9999F, -179.9999F})
+            {
+                auto key = observation({1000, 1000}, heading(degrees), ranges[0], ranges[1]);
+                key.lightAssetId = 11;
+                key.lightBatteryId = 12;
+                key.lightAngleDegrees = ranges[2];
+                key.lightDistance = ranges[3];
+                // The +/-35-degree range seams remain open, retaining both
+                // endpoints and the original corner/unique ordering.
+                expectIdenticalGeometry({4000, 3000}, walls, key, cell);
+            }
+}
+
+TEST(RunnerInfectedVisibilityEquivalenceTest, DenseRepeatedCornersWithZeroAndNearZeroKeepCompleteBoundary)
+{
+    const std::array<Rect, 4> motifs{{
+        // This forward corner is exactly level with the observer. Together
+        // with repeated positions it exercises equal and near-zero angles in
+        // a large raw angle collection, without assuming a private sort path.
+        {{1200, 1000}, {20, 10}},
+        {{1200, 1100}, {20, 10}},
+        {{1400, 1200}, {40, 20}},
+        {{1200, 900}, {20, 10}},
+    }};
+    std::vector<BallisticBlocker> walls;
+    for (std::uint64_t index = 0; index < 72; ++index)
+        walls.push_back({index + 1, motifs[index % motifs.size()]});
+    ASSERT_EQ(walls.size(), 72U);
+    const float nearPositive = std::nextafter(0.0F, 1.0F);
+    const float nearNegative = std::nextafter(0.0F, -1.0F);
+    for (const float aperture : {110.0F, 180.0F})
+        for (const Vec2 direction : {Vec2{1, 0.0F}, Vec2{1, -0.0F},
+                 Vec2{1, nearPositive}, Vec2{1, nearNegative},
+                 heading(0.000001F), heading(-0.000001F)})
+            expectIdenticalGeometry({3000, 3000}, walls,
+                observation({1000, 1000}, direction, aperture, 1000), 128);
+}
+
+TEST(RunnerInfectedVisibilityEquivalenceTest, EpsilonChainPreservesOriginalOrderedSlabDecisions)
+{
+    constexpr float epsilon = 0.00001F;
+    const std::array<std::array<std::size_t, 4>, 3> orders{{
+        {{0, 1, 2, 3}}, {{3, 2, 1, 0}}, {{1, 3, 0, 2}},
+    }};
+    for (const auto scale : {std::array<float, 2>{1, 0.01F},
+             std::array<float, 2>{2, 0.02F}, std::array<float, 2>{4, 0.04F}})
+    {
+        const Vec2 origin{scale[0], scale[0]};
+        const float base = scale[1];
+        const std::array<float, 4> fronts{
+            base + 2.5F * epsilon, base + 1.8F * epsilon,
+            base + 0.9F * epsilon, base};
+        for (const auto &order : orders)
+            for (const bool farFirst : {false, true})
+            {
+                SCOPED_TRACE(::testing::Message() << "origin=" << origin.x
+                    << " E=" << base << " first chain member=" << order[0]
+                    << " far fillers first=" << farFirst);
+                std::vector<BallisticBlocker> walls;
+                walls.reserve(68);
+                const auto appendFar = [&]
+                {
+                    for (std::uint64_t index = 0; index < 64; ++index)
+                        walls.push_back({100 + index,
+                            {{origin.x + 1.0F + static_cast<float>(index % 4) * 0.25F,
+                                origin.y - 0.2F}, {0.1F, 0.4F}}});
+                };
+                // Retain far-last and also put fillers first. For F,C,D,seed
+                // ordering, the latter exposes seed as the last candidate;
+                // a reverse preview can no longer inspect only distant walls.
+                if (farFirst) appendFar();
+                // F, C, D and seed overlap along the ray. The reference's
+                // leave > enter + epsilon dead zone makes intermediate ordered
+                // decisions relevant even when a probe found a closer rectangle.
+                for (auto member : order)
+                    walls.push_back({static_cast<std::uint64_t>(member + 1),
+                        {{origin.x + fronts[member], origin.y - 0.2F}, {0.1F, 0.4F}}});
+                if (!farFirst) appendFar();
+                ASSERT_EQ(walls.size(), 68U);
+                for (const float degrees : {0.0F, 0.00001F, -0.00001F})
+                    expectIdenticalGeometry({20, 20}, walls,
+                        observation(origin, heading(degrees), 180, 10), 2);
+            }
+    }
+}

@@ -1,6 +1,7 @@
 #include "raid_space_query.h"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -30,6 +31,129 @@ namespace
     bool finitePositive(Vec2 value) noexcept
     {
         return finite(value) && value.x > 0.0F && value.y > 0.0F;
+    }
+
+    // Finite binary32 values have one representation per numeric value,
+    // except signed zero. Preserve the original comparison sort whenever
+    // equal values could have different bits, or denormal comparison could
+    // depend on the caller's floating-point mode. The template keeps the
+    // unsupported-representation fallback well formed on other targets.
+    template <typename Float>
+    void sortConeAngles(std::vector<Float> &angles)
+    {
+        if constexpr (sizeof(Float) != sizeof(std::uint32_t) ||
+                      !std::numeric_limits<Float>::is_iec559 ||
+                      std::numeric_limits<Float>::radix != 2 ||
+                      std::numeric_limits<Float>::digits != 24 ||
+                      std::numeric_limits<Float>::max_exponent != 128)
+        {
+            std::sort(angles.begin(), angles.end());
+        }
+        else
+        {
+            auto *const values = angles.data();
+            const auto count = angles.size();
+            if (count < 256)
+            {
+                std::sort(values, values + count);
+                return;
+            }
+            std::vector<std::uint32_t> keys(count), scratch(count);
+            auto *source = keys.data();
+            auto *destination = scratch.data();
+            std::array<std::size_t, 4 * 256> histogram{};
+            auto *const bins = histogram.data();
+            unsigned zeroSigns{};
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                const auto bits = std::bit_cast<std::uint32_t>(values[i]);
+                const auto magnitude = bits & 0x7fffffffU;
+                const auto exponent = magnitude & 0x7f800000U;
+                if (magnitude == 0)
+                    zeroSigns |= (bits & 0x80000000U) ? 2U : 1U;
+                if (exponent == 0x7f800000U ||
+                    (exponent == 0 && magnitude != 0) || zeroSigns == 3)
+                {
+                    std::sort(values, values + count);
+                    return;
+                }
+                const auto key = bits & 0x80000000U ? ~bits : bits ^ 0x80000000U;
+                source[i] = key;
+                ++bins[key & 255U];
+                ++bins[256 + ((key >> 8) & 255U)];
+                ++bins[512 + ((key >> 16) & 255U)];
+                ++bins[768 + (key >> 24)];
+            }
+            // Every buffer already has live elements. Four stable byte
+            // passes produce the same bit sequence as float < for eligible
+            // values, including a group containing only one sign of zero.
+            for (unsigned pass = 0; pass < 4; ++pass)
+            {
+                auto *const offsets = bins + pass * 256;
+                std::size_t sum{};
+                for (std::size_t bin = 0; bin < 256; ++bin)
+                {
+                    const auto size = offsets[bin];
+                    offsets[bin] = sum;
+                    sum += size;
+                }
+                const auto shift = pass * 8;
+                for (std::size_t i = 0; i < count; ++i)
+                {
+                    const auto key = source[i];
+                    destination[offsets[(key >> shift) & 255U]++] = key;
+                }
+                std::swap(source, destination);
+            }
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                const auto key = source[i];
+                const auto bits = key & 0x80000000U ? key ^ 0x80000000U : ~key;
+                values[i] = std::bit_cast<Float>(bits);
+            }
+        }
+    }
+
+    // The original X-then-Y slabs, with each ray's absolute direction reused.
+    // The entry distance is independent of the initial leave bound; a hit
+    // still requires the original leave > entry + epsilon predicate.
+    bool castConeRay(const Rect &rect, const Vec2 &origin, const Vec2 &direction,
+                     float absoluteX, float absoluteY, float maximum,
+                     float &hitDistance) noexcept
+    {
+        float enter = 0, leave = maximum;
+        if (absoluteX < 1e-7F)
+        {
+            if (!(origin.x >= rect.position.x && origin.x <= rect.position.x + rect.size.x))
+                return false;
+        }
+        else
+        {
+            float a = (rect.position.x - origin.x) / direction.x,
+                  b = (rect.position.x + rect.size.x - origin.x) / direction.x;
+            if (a > b) { const float temporary = a; a = b; b = temporary; }
+            if (enter < a) enter = a;
+            if (b < leave) leave = b;
+            if (!(enter <= leave)) return false;
+        }
+        if (absoluteY < 1e-7F)
+        {
+            if (!(origin.y >= rect.position.y && origin.y <= rect.position.y + rect.size.y))
+                return false;
+        }
+        else
+        {
+            float a = (rect.position.y - origin.y) / direction.y,
+                  b = (rect.position.y + rect.size.y - origin.y) / direction.y;
+            if (a > b) { const float temporary = a; a = b; b = temporary; }
+            if (enter < a) enter = a;
+            if (b < leave) leave = b;
+            if (!(enter <= leave)) return false;
+        }
+        if (!(enter >= 0 && enter <= maximum && leave > enter + 0.00001F))
+            return false;
+        hitDistance = enter;
+        return true;
     }
 
     float distance(Vec2 first, Vec2 second) noexcept
@@ -283,8 +407,8 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
         for (auto &angle : angles)
             for (float seam : {ambientHalf,lightHalf})
                 if (std::abs(std::abs(angle)-seam)<=0.000002F) angle=std::copysign(seam,angle);
+    sortConeAngles(angles);
     auto *const angleData = angles.data();
-    std::sort(angleData, angleData + angles.size());
     const auto *const uniqueEnd = std::unique(angleData, angleData + angles.size(),
         [](float a, float b) { return std::abs(a - b) < 1e-7F; });
     angles.resize(static_cast<std::size_t>(uniqueEnd - angleData));
@@ -320,7 +444,7 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
     // Conservative angular buckets avoid scanning every local rectangle for
     // every ray. Each bounding circle covers its whole rectangle; padded bin
     // ranges may admit extras. Insertion keeps the original blocker order.
-    constexpr std::size_t bucketCount = 128;
+    constexpr std::size_t bucketCount = 512;
     struct BucketRange { std::size_t candidate, first, last; };
     std::vector<BucketRange> bucketRanges;
     bucketRanges.reserve(localBounds.size() * 2);
@@ -375,6 +499,17 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
     for (const auto range : bucketRanges)
         for (std::size_t bin = range.first; bin <= range.last; ++bin)
             angularData[writeOffsetData[bin]++] = range.candidate;
+    // A preview only bounds the broad phase, never the ordered ray result.
+    // The original epsilon can transmit a different accept/reject decision
+    // through a chain of near-equal hits. Budget one worst-case addition gap
+    // per candidate, using the whole radius as a uniform float-ULP bound.
+    // The extra ULP and outward rounding retain uncertain boundary cases.
+    const float hitEpsilon = 0.00001F;
+    const float additionCap = radius + hitEpsilon;
+    const float nextAddition = std::nextafter(additionCap, std::numeric_limits<float>::infinity());
+    const bool previewBudgetValid = std::isfinite(additionCap) && std::isfinite(nextAddition);
+    const double candidateSlack = previewBudgetValid ? static_cast<double>(hitEpsilon) +
+        2 * (static_cast<double>(nextAddition) - additionCap) : 0.0;
     const auto *const lastAngle = angles.data() + angles.size();
     for (auto angleCursor = angles.data(); angleCursor != lastAngle; ++angleCursor)
     {
@@ -412,13 +547,78 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
             if (cap < length) length = cap;
         }
         const Vec2 end{o.x + d.x * length, o.y + d.y * length};
-        const float left = end.x < o.x ? end.x : o.x, right = o.x < end.x ? end.x : o.x;
-        const float top = end.y < o.y ? end.y : o.y, bottom = o.y < end.y ? end.y : o.y;
+        float left = end.x < o.x ? end.x : o.x, right = o.x < end.x ? end.x : o.x;
+        float top = end.y < o.y ? end.y : o.y, bottom = o.y < end.y ? end.y : o.y;
         const float absoluteX = std::abs(d.x), absoluteY = std::abs(d.y);
         const auto bin = bucketFor(angle);
-        const auto *const lastCandidate = angularData + bucketOffsetData[bin + 1];
-        for (auto cursor = angularData + bucketOffsetData[bin]; cursor != lastCandidate; ++cursor)
+        const auto candidateCount = bucketOffsetData[bin + 1] - bucketOffsetData[bin];
+        const auto *const firstCandidate = candidateCount ? angularData + bucketOffsetData[bin] : nullptr;
+        auto previewCursor = candidateCount ? firstCandidate + candidateCount : nullptr;
+        bool previewFound = false;
+        // A reverse coarse scan finds one useful actual slab to preview.
+        // Later entries proven outside the original segment need no second
+        // scan. All surviving decisions are consumed in original order.
+        while (previewCursor != firstCandidate)
         {
+            --previewCursor;
+            const auto &candidate = localData[*previewCursor];
+            const auto &r = candidate.bounds;
+            const float pad = candidate.linePadding;
+            if (r.position.x + r.size.x < left - pad || r.position.x > right + pad ||
+                r.position.y + r.size.y < top - pad || r.position.y > bottom + pad) continue;
+            const float cross = d.x * candidate.relativeCenter.y - d.y * candidate.relativeCenter.x;
+            const float extent = absoluteX * candidate.halfExtent.y + absoluteY * candidate.halfExtent.x;
+            if (std::abs(cross) > extent + pad) continue;
+            previewFound = true;
+            break;
+        }
+        const auto *const lastCandidate = previewFound ? previewCursor + 1 : firstCandidate;
+        float previewEntry{}, previewThreshold{}, coarseLength = length;
+        bool previewHit = false;
+        if (previewFound)
+        {
+            if (work) ++work->blockerTests;
+            previewHit = castConeRay(localData[*previewCursor].bounds, o, d,
+                                     absoluteX, absoluteY, length, previewEntry);
+            if (previewHit)
+            {
+                previewThreshold = previewEntry + hitEpsilon;
+                // A successful preview has finite 0 <= entry < threshold
+                // (or threshold==entry after rounding) < leave <= length.
+                // The positive bounded budget cannot produce NaN; an upper
+                // bound outside this segment simply leaves the old scan.
+                if (previewBudgetValid)
+                {
+                    const double limit = static_cast<double>(previewThreshold) +
+                        static_cast<double>(candidateCount) * candidateSlack;
+                    if (limit < static_cast<double>(length))
+                    {
+                        const float cap = std::nextafter(static_cast<float>(limit),
+                                                        std::numeric_limits<float>::infinity());
+                        if (cap < length)
+                        {
+                            coarseLength = cap;
+                            const Vec2 closestEnd{o.x + d.x * coarseLength, o.y + d.y * coarseLength};
+                            left = closestEnd.x < o.x ? closestEnd.x : o.x;
+                            right = o.x < closestEnd.x ? closestEnd.x : o.x;
+                            top = closestEnd.y < o.y ? closestEnd.y : o.y;
+                            bottom = o.y < closestEnd.y ? closestEnd.y : o.y;
+                        }
+                    }
+                }
+            }
+        }
+        for (auto cursor = firstCandidate; cursor != lastCandidate; ++cursor)
+        {
+            if (cursor == previewCursor)
+            {
+                // Preview leave was min(L0, both axis exits) and exceeded
+                // T=entry+epsilon. With L<=L0 the original acceptance is
+                // exactly L>T. A miss at L0 cannot become a hit at smaller L.
+                // This is current-ray reuse only; count the actual slab once.
+                if (previewHit && length > previewThreshold) length = previewEntry;
+                continue;
+            }
             const auto &candidate = localData[*cursor];
             const auto &r = candidate.bounds;
             const float pad = candidate.linePadding;
@@ -431,28 +631,20 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
             if (std::abs(cross) > extent + pad) continue;
             if (work)
                 ++work->blockerTests;
-            float enter = 0, leave = length;
-            const auto slab =
-                [&](float origin, float movement, float low, float high)
+            float enter{};
+            if (castConeRay(r, o, d, absoluteX, absoluteY, length, enter))
             {
-                if (std::abs(movement) < 1e-7F)
-                    return origin >= low && origin <= high;
-                float a = (low - origin) / movement,
-                      b = (high - origin) / movement;
-                if (a > b)
-                {
-                    const float temporary = a;
-                    a = b;
-                    b = temporary;
-                }
-                if (enter < a) enter = a;
-                if (b < leave) leave = b;
-                return enter <= leave;
-            };
-            if (slab(o.x, d.x, r.position.x, r.position.x + r.size.x) &&
-                slab(o.y, d.y, r.position.y, r.position.y + r.size.y) &&
-                enter >= 0 && enter <= length && leave > enter + 0.00001F)
                 length = enter;
+                // A nearer hit shortens the remaining closed segment. Keep
+                // the original per-blocker padding and candidate order; this
+                // only skips later slabs beyond the current closest hit.
+                if (length < coarseLength) coarseLength = length;
+                const Vec2 closestEnd{o.x + d.x * coarseLength, o.y + d.y * coarseLength};
+                left = closestEnd.x < o.x ? closestEnd.x : o.x;
+                right = o.x < closestEnd.x ? closestEnd.x : o.x;
+                top = closestEnd.y < o.y ? closestEnd.y : o.y;
+                bottom = o.y < closestEnd.y ? closestEnd.y : o.y;
+            }
         }
         const float x = o.x + d.x * length, y = o.y + d.y * length;
         *boundaryWrite++ =
