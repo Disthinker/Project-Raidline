@@ -8,11 +8,11 @@
 #include "game_session.h"
 #include "raid_lifecycle.h"
 #include "raid_credential_legacy_fixture.h"
+#include "raid_runner_legacy_fixture.h"
 #include "save_repository.h"
 
 namespace {
-ProfileState fullLegacyRig(std::string_view name) {
-    const auto &c=publishedContentRegistry();
+ProfileState fullLegacyRig(std::string_view name, const ContentRegistry &c=publishedContentRegistry()) {
     auto p=makeNewAlphaProfile("chest-layout",c);p.chestRigLayoutVersion=0;
     const auto &d=c.item(ItemDefinitionId{"item.container.chest_rig_"+std::string{name}});
     const auto rig=p.assets.create(d,EquippedAssetLocation{EquipmentSlotKind::ChestRig});
@@ -87,7 +87,7 @@ TEST(ChestRigLayoutTest, LegacySaveUpgradesOnceAndPreservesExactSourceBeforeWrit
     const auto again=saves.load(c);ASSERT_TRUE(again.profile);EXPECT_FALSE(again.migratedChestRigLayout);
     EXPECT_EQ(profileStateFingerprint(*again.profile),profileStateFingerprint(*loaded.profile));
     const auto json=nlohmann::json::parse(serializeProfileEnvelope(*again.profile,c.contentVersion()));
-    EXPECT_EQ(json["schema_version"],57);EXPECT_EQ(json["payload"]["chest_rig_layout_version"],1);
+    EXPECT_EQ(json["schema_version"],58);EXPECT_EQ(json["payload"]["chest_rig_layout_version"],1);
 }
 TEST(ChestRigLayoutTest, CorruptPrimaryRecoversLegacyBackupAndKeepsBothSources) {
     const auto &c=publishedContentRegistry();TemporaryDirectory temp;SaveRepository saves{temp.path};
@@ -101,8 +101,10 @@ TEST(ChestRigLayoutTest, CorruptPrimaryRecoversLegacyBackupAndKeepsBothSources) 
     EXPECT_EQ(snapshots,2);
 }
 TEST(ChestRigLayoutTest, PendingRaidAndStartingAssetSnapshotMigrateTogether) {
-    const auto &c=publishedContentRegistry();auto old=fullLegacyRig("patrol");
-    const auto deployed=executeDeploy(old,c,DeployCommand{"old-chest-raid","old-chest-settlement",41,MapDefinitionId{"map.raid.frontier_exchange"}},
+    const auto &c=publishedContentRegistry();
+    const auto oldContent=contentBeforeRunner("raid-noise-decoy-content-67");
+    auto old=fullLegacyRig("patrol",oldContent);
+    const auto deployed=executeDeploy(old,oldContent,DeployCommand{"old-chest-raid","old-chest-settlement",41,MapDefinitionId{"map.raid.frontier_exchange"}},
         {old.revision,"deploy-old-chest"});
     ASSERT_TRUE(deployed.succeeded)<<deployed.message;ASSERT_TRUE(old.pendingRaid->startingAssets);
     stripCredentialExtractionForLegacySnapshot(old);

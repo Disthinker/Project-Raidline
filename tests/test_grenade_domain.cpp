@@ -227,7 +227,7 @@ TEST(GrenadeContentTest, WrongCategoryMixedUseAndOversizedStacksAreRejected)
 TEST(GrenadeContentTest, NewContentStillRequiresTheAcceptedEnemyAndFortificationContracts)
 {
     const auto original = nlohmann::json::parse(publishedContentJson());
-    ASSERT_EQ(original.at("content_version"), "raid-fragmentation-grenade-content-72");
+    ASSERT_EQ(original.at("content_version"), "raid-runner-infected-content-73");
     for (const auto *field : {"enemy_combat_definitions", "fortifications"})
     {
         auto root = original;

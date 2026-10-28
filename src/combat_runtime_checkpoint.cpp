@@ -9,7 +9,11 @@ bool nonnegative(float f) { return std::isfinite(f) && f >= 0; }
 } // namespace
 bool validateEnemyRuntimeCheckpoint(const EnemyRuntimeCheckpoint &e) noexcept
 {
-    return (!e.torsoArmor || e.torsoArmor->valid()) && e.id != 0 && point(e.position) && point(e.size) && point(e.velocity) && e.size[0] > 0 &&
+    return (!e.variant || validEnemyVariantVitals(*e.variant, e.maximumHealth, e.torsoArmor)) &&
+           (!e.visiblePursuitMove || (e.variant && e.variant->movement.visiblePursuitMoveSpeed &&
+                e.movement == 1 && e.awareness == 1 && e.attackPhase == 0 &&
+                (e.role == 0 || e.role == 1))) &&
+           (!e.torsoArmor || e.torsoArmor->valid()) && e.id != 0 && point(e.position) && point(e.size) && point(e.velocity) && e.size[0] > 0 &&
            e.size[1] > 0 && e.health > 0 && e.health <= e.maximumHealth && e.facing <= 1 &&
            e.movement <= 2 && e.role <= 2 && e.awareness <= 2 && e.attackPhase <= 4 &&
            (!e.attackType || *e.attackType <= 2) &&

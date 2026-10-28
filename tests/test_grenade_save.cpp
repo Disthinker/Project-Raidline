@@ -140,7 +140,7 @@ TEST(GrenadeSaveTest, Content71UpgradeKeepsBothByteExactSourcesImmutable)
     EXPECT_EQ(archives(directory.path()),immutable);
     EXPECT_EQ(readBytes(archive(directory.path(),false,primary)),primary);EXPECT_EQ(readBytes(archive(directory.path(),true,backup)),backup);
     const auto current=nlohmann::json::parse(readBytes(repository.primaryPath()));
-    EXPECT_EQ(current.at("schema_version"),57U);EXPECT_EQ(current.at("content_version"),content.contentVersion());
+    EXPECT_EQ(current.at("schema_version"),58U);EXPECT_EQ(current.at("content_version"),content.contentVersion());
 }
 
 TEST(GrenadeSaveTest, PendingMirrorPreservesOldSourcesAndDoesNotRerollFrozenLoot)
@@ -203,7 +203,7 @@ TEST(GrenadeSaveTest, PartialStackSurvivesExtractionAndSchema57DiskRoundTrip)
     const auto loaded=repository.load(content);ASSERT_TRUE(loaded.profile)<<loaded.message;
     EXPECT_EQ(profileStateFingerprint(*loaded.profile),profileStateFingerprint(profile));
     ASSERT_NE(loaded.profile->assets.find(id),nullptr);EXPECT_EQ(loaded.profile->assets.find(id)->quantity,1U);EXPECT_EQ(loaded.profile->assets.find(id)->location,location);
-    EXPECT_EQ(nlohmann::json::parse(readBytes(repository.primaryPath())).at("schema_version"),57U);
+    EXPECT_EQ(nlohmann::json::parse(readBytes(repository.primaryPath())).at("schema_version"),58U);
 }
 
 TEST(GrenadeSaveTest, UnfinishedRaidReopenRestoresPreRaidQuantityWithoutSavingTransientGrenade)

@@ -2,6 +2,7 @@
 
 #include "combat_target.h"
 #include "enemy_attack.h"
+#include "enemy_variant.h"
 #include "medical_types.h"
 
 // A consumed enemy hit, not permission to attack or a persistent transaction.
@@ -21,9 +22,12 @@ struct PlayerDamageObservation
 };
 
 [[nodiscard]] inline PlayerDamageObservation enemyAttackDamageObservation(
-    CombatTargetId source, EnemyAttackType type) noexcept
+    CombatTargetId source, EnemyAttackType type,
+    const std::optional<EnemyVariantSnapshot> &variant = std::nullopt) noexcept
 {
-    const auto damage = enemyAttackCombatDamage(type);
+    const auto damage = variant &&
+        variant->movement.attackProfileVersion == kStandardInfectedAttackProfileVersion
+        ? standardInfectedAttackCombatDamageV1(type) : enemyAttackCombatDamage(type);
     return {damage.baseDamage, damage.region, damage.penetration,
             damage.armorDamage, damage.weakPoint,
             type == EnemyAttackType::Scratch ? WoundSource::Scratch :

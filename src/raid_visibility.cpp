@@ -125,9 +125,11 @@ bool RaidVisibilityProjection::validGeometry() const noexcept
     const float cosLightHalf = std::cos(lightAngleDegrees * 3.14159265358979323846F / 360);
     const float cosHalf =
         std::cos(angleDegrees * 3.14159265358979323846F / 360);
-    for (std::size_t i = 0; i < boundary.size(); ++i)
+    const auto *const points = boundary.data();
+    const auto pointCount = boundary.size();
+    for (std::size_t i = 0; i < pointCount; ++i)
     {
-        const auto p = boundary[i], q = boundary[(i + 1) % boundary.size()];
+        const auto p = points[i], q = points[i + 1 == pointCount ? 0 : i + 1];
         if (!finite(p) || p.x < 0 || p.y < 0 || p.x > worldSize.x ||
             p.y > worldSize.y)
             return false;
@@ -346,10 +348,11 @@ RaidVisibilityBoundsQuery::RaidVisibilityBoundsQuery(
         const Vec2 delta{b.x - a.x, b.y - a.y};
         return Edge{a, delta, std::abs(delta.x), std::abs(delta.y)};
     };
-    for (std::size_t i = 0; i < view.boundary.size(); ++i)
+    const auto *const points = view.boundary.data();
+    const auto pointCount = view.boundary.size();
+    for (std::size_t i = 0; i < pointCount; ++i)
     {
-        const auto p = view.boundary[i],
-                   q = view.boundary[(i + 1) % view.boundary.size()];
+        const auto p = points[i], q = points[i + 1 == pointCount ? 0 : i + 1];
         const auto area = cross(observer_, p, q);
         if (std::abs(area) < 0.00001F)
             continue;

@@ -14,6 +14,24 @@ namespace
   constexpr float kImpactSlowDurationSeconds{0.18F};
   constexpr float kImpactSlowTimeMultiplier{0.28F};
   constexpr float kTimerEpsilon{0.00001F};
+  constexpr float kStandardInfectedWindupMoveSpeedV1{72.0F};
+
+  EnemyAiConfig aiConfigForVariant(const std::optional<EnemyVariantSnapshot> &variant)
+  {
+    EnemyAiConfig config;
+    if (variant)
+    {
+      if (!validEnemyVariantSnapshot(*variant)) throw std::invalid_argument("invalid frozen enemy variant");
+      // Attack profile v1 also freezes attack selection, cooldowns and
+      // perception limits; restoring it must not pick up future defaults.
+      config = EnemyAiConfig{72.0F, 135.0F, 48.0F, 76.0F, 100.0F,
+          170.0F, 0.50F, 4.00F, 0.65F, 360.0F, 460.0F, 8.0F,
+          20.0F, 9.42477796F, 105.0F, 155.0F, std::nullopt};
+      config.normalMoveSpeed = variant->movement.normalMoveSpeed;
+      config.visiblePursuitMoveSpeed = variant->movement.visiblePursuitMoveSpeed;
+    }
+    return config;
+  }
 
   AnimationClip makeEnemyMoveClip()
   {
@@ -58,7 +76,8 @@ Enemy::Enemy(
     Vec2 velocity,
     int maxHealth,
     CombatTargetId combatTargetId,
-    std::optional<EnemyArmorState> torsoArmor)
+    std::optional<EnemyArmorState> torsoArmor,
+    std::optional<EnemyVariantSnapshot> variant)
     : combatTargetId_{combatTargetId},
       position_(position),
       size_(size),
@@ -70,12 +89,17 @@ Enemy::Enemy(
           AnimationPlayMode::Loop},
       health_{maxHealth},
       torsoArmor_{torsoArmor},
+      variant_{variant},
+      attack_{variant ? standardInfectedAttackConfigsV1() : defaultEnemyAttackConfigs()},
+      ai_{aiConfigForVariant(variant)},
       movementState_{
           velocity.x != 0.0F || velocity.y != 0.0F
               ? EnemyMovementState::Normal
               : EnemyMovementState::Stationary}
 {
   if (torsoArmor_ && !torsoArmor_->valid()) throw std::invalid_argument("invalid enemy armor");
+  if (variant_ && !validEnemyVariantVitals(*variant_, maxHealth, torsoArmor_))
+    throw std::invalid_argument("frozen enemy variant vitals mismatch");
 }
 
 CombatTargetId Enemy::combatTargetId() const noexcept
@@ -89,6 +113,7 @@ EnemyRuntimeCheckpoint Enemy::checkpoint() const noexcept
   s.id = combatTargetId_; s.position = checkpointPoint(position_);
   s.size = checkpointPoint(size_); s.velocity = checkpointPoint(velocity_);
   s.torsoArmor = torsoArmor_;
+  s.variant = variant_; s.visiblePursuitMove = visiblePursuitMove_;
   s.health = health_.current(); s.maximumHealth = health_.maximum();
   s.facing = static_cast<std::uint32_t>(facingDirection_);
   s.movement = static_cast<std::uint32_t>(movementState_);
@@ -110,7 +135,8 @@ EnemyRuntimeCheckpoint Enemy::checkpoint() const noexcept
 std::optional<Enemy> Enemy::restoreCheckpoint(const EnemyRuntimeCheckpoint &s)
 {
   if (!validateEnemyRuntimeCheckpoint(s)) return std::nullopt;
-  Enemy e{runtimePoint(s.position), runtimePoint(s.size), runtimePoint(s.velocity), s.maximumHealth, s.id, s.torsoArmor};
+  Enemy e{runtimePoint(s.position), runtimePoint(s.size), runtimePoint(s.velocity), s.maximumHealth, s.id, s.torsoArmor, s.variant};
+  e.visiblePursuitMove_ = s.visiblePursuitMove;
   e.health_ = Health{s.maximumHealth, s.health};
   e.facingDirection_ = static_cast<EnemyFacingDirection>(s.facing);
   e.movementState_ = static_cast<EnemyMovementState>(s.movement);
@@ -173,6 +199,15 @@ EnemyAttackAdvance Enemy::update(
     float worldWidth,
     float worldHeight)
 {
+  // This legacy velocity-only update has no current visual confirmation.
+  if (visiblePursuitMove_)
+  {
+    const float length = std::hypot(velocity_.x, velocity_.y);
+    if (length > 0.0F)
+      velocity_ = {velocity_.x / length * ai_.config().normalMoveSpeed,
+                   velocity_.y / length * ai_.config().normalMoveSpeed};
+    visiblePursuitMove_ = false;
+  }
   if (isDead())
   {
     attack_.reset();
@@ -244,6 +279,7 @@ EnemyAttackAdvance Enemy::updateTowardsTarget(
     std::optional<Vec2> navigationTarget,
     bool allowUnawareNavigation)
 {
+  visiblePursuitMove_ = false;
   if (isDead())
   {
     attack_.reset();
@@ -314,9 +350,10 @@ EnemyAttackAdvance Enemy::updateTowardsTarget(
         worldHeight);
   }
 
-  velocity_ = Vec2{
-      decision.moveDirection.x * ai_.config().normalMoveSpeed,
-      decision.moveDirection.y * ai_.config().normalMoveSpeed};
+  visiblePursuitMove_ = decision.confirmedVisiblePursuit &&
+      ai_.config().visiblePursuitMoveSpeed.has_value();
+  const float speed = visiblePursuitMove_ ? *ai_.config().visiblePursuitMoveSpeed : ai_.config().normalMoveSpeed;
+  velocity_ = Vec2{decision.moveDirection.x * speed, decision.moveDirection.y * speed};
   movementState_ = isMoving()
                        ? EnemyMovementState::Normal
                        : EnemyMovementState::Stationary;
@@ -362,6 +399,7 @@ bool Enemy::tryStartAttack(
 
   const Vec2 normalizedDirection =
       attack_.direction();
+  visiblePursuitMove_ = false;
   if (normalizedDirection.x < 0.0F)
   {
     facingDirection_ = EnemyFacingDirection::Left;
@@ -584,7 +622,11 @@ float Enemy::movementSpeed() const noexcept
   case EnemyMovementState::Stationary:
     return 0.0F;
   case EnemyMovementState::Normal:
-    return ai_.config().normalMoveSpeed;
+    if (variant_ && attack_.type() == EnemyAttackType::Grab &&
+        attack_.phase() == EnemyAttackPhase::Windup)
+      return kStandardInfectedWindupMoveSpeedV1;
+    return visiblePursuitMove_ && ai_.config().visiblePursuitMoveSpeed
+        ? *ai_.config().visiblePursuitMoveSpeed : ai_.config().normalMoveSpeed;
   case EnemyMovementState::Attack:
     return ai_.config().attackMoveSpeed;
   }
@@ -641,6 +683,7 @@ bool Enemy::takeDamage(int damage, EnemyImpactReaction reaction)
   }
   else if (killed)
   {
+    visiblePursuitMove_ = false;
     impactSlowRemaining_ = 0.0F;
     attack_ = EnemyAttackState{};
     velocity_ = {};
@@ -733,11 +776,13 @@ EnemyAttackAdvance Enemy::updateActiveAttack(
   const EnemyAttackAdvance attackAdvance =
       attack_.update(effectiveDeltaTime);
 
+  const float windupMoveSpeed = variant_ ? kStandardInfectedWindupMoveSpeedV1
+      : ai_.config().normalMoveSpeed;
   position_.x += movementDirection.x *
-                 ai_.config().normalMoveSpeed *
+                 windupMoveSpeed *
                  windupMovementTime;
   position_.y += movementDirection.y *
-                 ai_.config().normalMoveSpeed *
+                 windupMoveSpeed *
                  windupMovementTime;
   position_.x +=
       movementDirection.x * attackAdvance.lungeDistance;

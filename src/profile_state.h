@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "content_registry.h"
+#include "enemy_variant.h"
 #include "grid_inventory.h"
 #include "medical_types.h"
 #include "raid_intelligence_types.h"
@@ -351,6 +352,7 @@ struct RaidEnemySnapshot
     std::string encounterGroupInstanceId;
     std::optional<EnemyArmorState> torsoArmor;
     std::string sourceEnemyId;
+    std::optional<EnemyVariantSnapshot> variant;
 
     friend bool operator==(
         const RaidEnemySnapshot &left,
@@ -363,7 +365,7 @@ struct RaidEnemySnapshot
             left.spaceId == right.spaceId &&
             left.encounterGroupInstanceId ==
                 right.encounterGroupInstanceId && left.torsoArmor == right.torsoArmor &&
-            left.sourceEnemyId == right.sourceEnemyId;
+            left.sourceEnemyId == right.sourceEnemyId && left.variant == right.variant;
     }
 };
 

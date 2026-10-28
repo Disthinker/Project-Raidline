@@ -11,7 +11,7 @@ namespace
 bool finite(Vec2 p) { return std::isfinite(p.x) && std::isfinite(p.y); }
 bool trial(const PendingRaidSnapshot &raid)
 {
-    return raid.rulesVersion == kRaidCorpseRulesVersion &&
+    return supportsRaidCorpseRules(raid.rulesVersion) &&
         raid.mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"};
 }
 std::string sourceId(const RaidEncounterGroupSnapshot &group) { return group.instanceId + ".armored"; }

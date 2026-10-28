@@ -6,6 +6,7 @@
 #include "raid_lifecycle.h"
 #include "raid_corpse_legacy_fixture.h"
 #include "raid_credential_legacy_fixture.h"
+#include "raid_runner_legacy_fixture.h"
 #include "save_repository.h"
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
@@ -75,7 +76,7 @@ TEST(ArmoredInfectedTest, InvalidAndBlockedShotsPreserveHealthAndArmor) {
     EXPECT_EQ(enemies.front().checkpoint(),before);
 }
 TEST(ArmoredInfectedTest, FrontierReplacementPreservesPopulationGeometryAndLootAcrossSeeds) {
-    auto json=nlohmann::json::parse(publishedContentJson());
+    auto json=contentJsonBeforeRunner();
     // Both sides represent the earlier armor slice, before credential exits.
     for (auto &map:json["maps"]) if (map["id"]=="map.raid.frontier_exchange")
         map.erase("credential_extraction");
@@ -105,6 +106,9 @@ TEST(ArmoredInfectedTest, FrozenArmorRoundTripsAndOldSchemaDoesNotGainArmor) {
     ASSERT_TRUE(loaded.profile) << loaded.message;
     EXPECT_EQ(loaded.profile->pendingRaid->enemies,p.pendingRaid->enemies);
     EXPECT_EQ(profileStateFingerprint(*loaded.profile),profileStateFingerprint(p));
+    // Historical downgrade coverage starts from a pre-runner deployment.
+    // The current typed snapshot above retains its full round-trip coverage.
+    p=deploy(contentBeforeRunner(),42);
     p.stashLayoutVersion=0; // Explicit pre-page legacy fixture.
     stripCredentialExtractionForLegacySnapshot(p);
     EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(p,content().contentVersion(),49)),std::invalid_argument);

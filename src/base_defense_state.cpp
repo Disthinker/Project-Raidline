@@ -203,7 +203,7 @@ bool validateBaseDefenseSnapshot(const BaseDefenseSnapshot &s, std::string &mess
     std::set<std::uint64_t> active;
     for (const auto &enemy : s.enemies)
     {
-        if (!validateEnemyRuntimeCheckpoint(enemy) ||
+        if (isRunnerEnemyVariant(enemy.variant) || !validateEnemyRuntimeCheckpoint(enemy) ||
             !inWorld({enemy.position[0], enemy.position[1]}, s.worldSize) ||
             !planned.contains(enemy.id) || resolved.contains(enemy.id) ||
             !active.insert(enemy.id).second)

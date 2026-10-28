@@ -4,6 +4,7 @@
 #include "raid_corpse_search.h"
 #include "raid_lifecycle.h"
 #include "raid_credential_legacy_fixture.h"
+#include "raid_runner_legacy_fixture.h"
 #include "save_repository.h"
 #include <gtest/gtest.h>
 #include <algorithm>
@@ -40,12 +41,12 @@ protected:
     RaidCorpseDeathFact death;
     RaidSceneContainerAccess access;
     unsigned sequence{};
-    void SetUp() override
+    void prepare(const ContentRegistry &deploymentContent)
     {
-        p = makeNewAlphaProfile("corpse-contract", content);
+        p = makeNewAlphaProfile("corpse-contract", deploymentContent);
         bag = p.assets.create(content.item(ItemDefinitionId{"item.container.backpack_expedition"}), EquippedAssetLocation{EquipmentSlotKind::Backpack});
         owned = p.assets.create(content.item(alpha_content::medkit), StoredAssetLocation{ProfileContainerId::compartment(bag,0), {0,0}});
-        ASSERT_TRUE(executeDeploy(p, content, {"corpse-raid", "corpse-settle", 9917, MapDefinitionId{"map.raid.frontier_exchange"}}, {p.revision,"deploy"}).succeeded);
+        ASSERT_TRUE(executeDeploy(p, deploymentContent, {"corpse-raid", "corpse-settle", 9917, MapDefinitionId{"map.raid.frontier_exchange"}}, {p.revision,"deploy"}).succeeded);
         ASSERT_EQ(corpses(p).size(),3U); body = corpses(p).front();
         const auto &loc = std::get<RaidCorpseContainerAssetLocation>(p.assets.find(body)->location);
         death = {loc.sourceEnemyId, loc.spaceId, {1000,1000}};
@@ -54,6 +55,7 @@ protected:
         access.currentObservation=access.observation->key();
         const auto items = assetsInContainer(p, ProfileContainerId::compartment(body,0)); ASSERT_EQ(items.size(),1U); item=items.front()->instanceId;
     }
+    void SetUp() override { prepare(content); }
     void expose() { ASSERT_TRUE(revealRaidCorpse(p,content,death)); }
     InventoryReceipt move(AssetInstanceId id, ProfileContainerId target, GridPosition pos)
     {
@@ -83,9 +85,14 @@ TEST_F(RaidCorpseSearchTest, ThreeOrdinaryFrozenOriginsHaveOneOwnerAcrossSeeds)
             EXPECT_FALSE(loc.deathPosition); EXPECT_FALSE(raidCorpseAccessible(a,loot.corpseContainerAssetId,loc.spaceId,{1000,1000}));
         }
         EXPECT_EQ(origins,3U); const auto rolls=a.pendingRaid->loot;
-        legacyCorpses(a); EXPECT_TRUE(validateProfileState(a,content).valid);
-        ASSERT_EQ(a.pendingRaid->loot.size(),rolls.size());
-        for (std::size_t i=0;i<rolls.size();++i) { EXPECT_EQ(a.pendingRaid->loot[i].assetId,rolls[i].assetId); EXPECT_EQ(a.pendingRaid->loot[i].definitionId,rolls[i].definitionId); EXPECT_EQ(a.pendingRaid->loot[i].quantity,rolls[i].quantity); }
+        EXPECT_EQ(a.pendingRaid->rulesVersion,kRaidRunnerRulesVersion);
+        const auto historicalContent=contentBeforeRunner();
+        auto historical=makeNewAlphaProfile("same",historicalContent);
+        ASSERT_TRUE(executeDeploy(historical,historicalContent,{"r","s",seed,MapDefinitionId{"map.raid.frontier_exchange"}},{historical.revision,"d"}).succeeded);
+        EXPECT_EQ(historical.pendingRaid->loot,rolls);
+        legacyCorpses(historical); EXPECT_TRUE(validateProfileState(historical,content).valid);
+        ASSERT_EQ(historical.pendingRaid->loot.size(),rolls.size());
+        for (std::size_t i=0;i<rolls.size();++i) { EXPECT_EQ(historical.pendingRaid->loot[i].assetId,rolls[i].assetId); EXPECT_EQ(historical.pendingRaid->loot[i].definitionId,rolls[i].definitionId); EXPECT_EQ(historical.pendingRaid->loot[i].quantity,rolls[i].quantity); }
     }
 }
 TEST_F(RaidCorpseSearchTest, LiveUnknownAndInvalidDeathAreInaccessibleWithoutMutation)
@@ -161,6 +168,7 @@ TEST_F(RaidCorpseSearchTest, Schema52RoundTripAndLegacy51NeverRetrofitCorpses)
 {
     expose(); const auto loaded=deserializeProfileEnvelope(serializeProfileEnvelope(p,content.contentVersion()),content);
     ASSERT_TRUE(loaded.profile)<<loaded.message; EXPECT_EQ(profileStateFingerprint(*loaded.profile),profileStateFingerprint(p));
+    prepare(contentBeforeRunner()); expose();
     p.stashLayoutVersion=0;
     stripCredentialExtractionForLegacySnapshot(p);
     EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(p,content.contentVersion(),51)),std::invalid_argument);
@@ -202,6 +210,7 @@ TEST_F(RaidCorpseSearchTest, PartialMergeSwapAndRotationUseTheSameCorpseAccess)
 }
 TEST_F(RaidCorpseSearchTest, FailedFreezeAndDeathRevisionOverflowAreZeroModification)
 {
+    prepare(contentBeforeRunner());
     legacyCorpses(p);p.pendingRaid->rulesVersion=std::string{kRaidCorpseRulesVersion};
     for(auto &point:p.pendingRaid->spatialLayout.resourcePoints)if(point.kind==RaidResourcePointKind::Ordinary)point.kind=RaidResourcePointKind::HighValue;
     const auto hash=profileStateFingerprint(p);EXPECT_FALSE(freezeRaidCorpseLoot(p,content).valid);EXPECT_EQ(profileStateFingerprint(p),hash);

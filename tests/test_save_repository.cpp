@@ -27,6 +27,7 @@
 #include "raid_lifecycle.h"
 #include "raid_corpse_legacy_fixture.h"
 #include "raid_credential_legacy_fixture.h"
+#include "raid_runner_legacy_fixture.h"
 #include "raid_map_generation.h"
 #include "raid_rescue_domain.h"
 #include "recovery_task_domain.h"
@@ -109,8 +110,9 @@ std::string serializeLegacyProfileEnvelope(
 TEST(SaveRepositoryTest, HospitalContentAcceptsPreviousContent61WithoutSchemaChange)
 {
     const auto &content = publishedContentRegistry();
-    auto profile = makeNewAlphaProfile("hospital-legacy-content-61", content);
-    ASSERT_TRUE(executeDeploy(profile, content,
+    const auto oldContent = contentBeforeRunner("base-fortification-foundation-content-61");
+    auto profile = makeNewAlphaProfile("hospital-legacy-content-61", oldContent);
+    ASSERT_TRUE(executeDeploy(profile, oldContent,
         DeployCommand{"legacy-frontier-raid", "legacy-frontier-settlement", 42U,
                       MapDefinitionId{"map.raid.frontier_exchange"}},
         CommandContext{profile.revision, "legacy-frontier-deploy"}).succeeded);
@@ -2030,12 +2032,13 @@ TEST(SaveRepositoryTest, SchemaV37LoadsEncounterEcologyHardeningContent)
 TEST(SaveRepositoryTest, SchemaV37LoadsConsumerIntegrationContent)
 {
     const ContentRegistry &content = publishedContentRegistry();
+    const auto oldContent = contentBeforeRunner("procedural-frontier-consumer-integration-content-49");
     ProfileState profile = makeNewAlphaProfile(
-        "save-consumer-integration-content-v49", content);
+        "save-consumer-integration-content-v49", oldContent);
     profile.stashLayoutVersion = 0;
     ASSERT_TRUE(executeDeploy(
         profile,
-        content,
+        oldContent,
         DeployCommand{
             "save-v49-pending-raid",
             "save-v49-pending-settlement",
@@ -2071,12 +2074,13 @@ TEST(SaveRepositoryTest, SchemaV37LoadsConsumerIntegrationContent)
 TEST(SaveRepositoryTest, SchemaV37LoadsLootIdentityContentWithoutCrisis)
 {
     const ContentRegistry &content = publishedContentRegistry();
+    const auto oldContent = contentBeforeRunner("procedural-frontier-loot-identity-content-50");
     ProfileState profile = makeNewAlphaProfile(
-        "save-loot-identity-content-v50", content);
+        "save-loot-identity-content-v50", oldContent);
     profile.stashLayoutVersion = 0;
     ASSERT_TRUE(executeDeploy(
         profile,
-        content,
+        oldContent,
         DeployCommand{
             "save-v50-pending-raid",
             "save-v50-pending-settlement",
@@ -2114,12 +2118,13 @@ TEST(SaveRepositoryTest, SchemaV37LoadsLootIdentityContentWithoutCrisis)
 TEST(SaveRepositoryTest, SchemaV38LoadsPreviousHighRiskCrisisContent)
 {
     const ContentRegistry &content = publishedContentRegistry();
+    const auto oldContent = contentBeforeRunner("procedural-frontier-high-risk-crisis-content-51");
     ProfileState profile = makeNewAlphaProfile(
-        "save-high-risk-crisis-content-v51", content);
+        "save-high-risk-crisis-content-v51", oldContent);
     profile.stashLayoutVersion = 0;
     ASSERT_TRUE(executeDeploy(
         profile,
-        content,
+        oldContent,
         DeployCommand{
             "save-v51-pending-raid",
             "save-v51-pending-settlement",
@@ -2270,11 +2275,12 @@ TEST(SaveRepositoryTest,
      SchemaV35KeepsFrozenLayoutV3WithoutInventingResourcePoints)
 {
     const ContentRegistry &content = publishedContentRegistry();
+    const auto oldContent = contentBeforeRunner("procedural-frontier-district-layout-content-44");
     ProfileState profile = makeNewAlphaProfile(
-        "save-procedural-layout-v35", content);
+        "save-procedural-layout-v35", oldContent);
     ASSERT_TRUE(executeDeploy(
         profile,
-        content,
+        oldContent,
         DeployCommand{
             "save-layout-v3-raid",
             "save-layout-v3-settle",
@@ -2315,11 +2321,12 @@ TEST(SaveRepositoryTest,
 TEST(SaveRepositoryTest, SchemaV34KeepsFrozenLayoutV2WithoutRegeneration)
 {
     const ContentRegistry &content = publishedContentRegistry();
+    const auto oldContent = contentBeforeRunner("procedural-playable-outdoor-layout-content-43");
     ProfileState profile = makeNewAlphaProfile(
-        "save-procedural-layout-v34", content);
+        "save-procedural-layout-v34", oldContent);
     ASSERT_TRUE(executeDeploy(
         profile,
-        content,
+        oldContent,
         DeployCommand{
             "save-layout-v2-raid",
             "save-layout-v2-settle",
@@ -3157,14 +3164,15 @@ TEST(SaveRepositoryTest,
      SchemaV23RoundTripsPermanentInteriorIntelligenceAndDeployKnowledge)
 {
     const ContentRegistry &content = publishedContentRegistry();
+    const auto oldContent = contentBeforeRunner("raid-building-intelligence-content-32");
     const RaidSpaceDefinitionId interiorId{
         "raid_space.frontier_exchange.office"};
     ProfileState profile = makeNewAlphaProfile(
-        "save-interior-intelligence-v23", content);
+        "save-interior-intelligence-v23", oldContent);
     profile.raidInteriorIntelligence.knownLayouts.insert(interiorId);
     ASSERT_TRUE(executeDeploy(
         profile,
-        content,
+        oldContent,
         DeployCommand{
             "save-known-interior-raid",
             "save-known-interior-settle",
@@ -3342,14 +3350,15 @@ TEST(SaveRepositoryTest, SchemaV22RejectsUnknownInteriorActorSpace)
 TEST(SaveRepositoryTest, SchemaV22LoadsLegacyFixedInteriorPlacement)
 {
     const ContentRegistry &content = publishedContentRegistry();
+    const auto oldContent = contentBeforeRunner("raid-interior-spaces-content-30");
     const MapDefinitionId mapId{"map.raid.frontier_exchange"};
     const MapDefinition &map = content.map(mapId);
     const RaidInteriorDefinition &definition = map.interiors.front();
     ProfileState legacyProfile = makeNewAlphaProfile(
-        "save-legacy-interior-v22", content);
+        "save-legacy-interior-v22", oldContent);
     ASSERT_TRUE(executeDeploy(
         legacyProfile,
-        content,
+        oldContent,
         DeployCommand{
             "save-legacy-interior-raid",
             "save-legacy-interior-settle",
@@ -3888,7 +3897,7 @@ TEST(SaveRepositoryTest, Schema55RoundTripsIndependentPagesOverflowAndOwnedSubtr
     ASSERT_TRUE(validateProfileState(profile, content).valid);
     const auto text = serializeProfileEnvelope(profile, content.contentVersion());
     const auto envelope = nlohmann::json::parse(text);
-    EXPECT_EQ(envelope.at("schema_version"), 57U);
+    EXPECT_EQ(envelope.at("schema_version"), 58U);
     EXPECT_EQ(envelope.at("payload").at("stash_layout_version"), 1U);
     const auto loaded = deserializeProfileEnvelope(text, content);
     ASSERT_TRUE(loaded.profile) << loaded.message;

@@ -3,6 +3,8 @@
 #include "alpha_content_ids.h"
 #include "base_fortification_serialization.h"
 #include "base_defense_serialization.h"
+#include "combat_runtime_checkpoint_json.h"
+#include "raid_corpse_search.h"
 
 #include <algorithm>
 #include <chrono>
@@ -28,6 +30,37 @@
 namespace
 {
 using Json = nlohmann::json;
+
+Json baseDefenseValueForSchema(const BaseDefenseSnapshot &snapshot, std::uint32_t schemaVersion)
+{
+    if (schemaVersion < 58 && std::any_of(snapshot.enemies.begin(), snapshot.enemies.end(),
+            [](const auto &enemy) { return enemy.variant.has_value() || enemy.visiblePursuitMove; }))
+        throw std::invalid_argument("enemy variant checkpoint requires schema 58");
+    Json value = baseDefenseSnapshotJson(snapshot);
+    if (schemaVersion < 58)
+        for (auto &enemy : value.at("enemies"))
+        {
+            enemy.erase("variant");
+            enemy.erase("visible_pursuit_move");
+        }
+    return value;
+}
+
+BaseDefenseSnapshot parseBaseDefenseForSchema(const Json &value, std::uint32_t schemaVersion)
+{
+    if (schemaVersion < 58)
+        for (const auto &enemy : value.at("enemies"))
+            if ((enemy.contains("variant") && !enemy.at("variant").is_null()) ||
+                (enemy.contains("visible_pursuit_move") &&
+                 (!enemy.at("visible_pursuit_move").is_boolean() ||
+                  enemy.at("visible_pursuit_move").get<bool>())))
+                throw std::invalid_argument("enemy variant checkpoint requires schema 58");
+    auto snapshot = parseBaseDefenseSnapshotJson(value);
+    if (std::any_of(snapshot.enemies.begin(), snapshot.enemies.end(),
+            [](const auto &enemy) { return isRunnerEnemyVariant(enemy.variant); }))
+        throw std::invalid_argument("runner variant is not valid in Base defense");
+    return snapshot;
+}
 
 std::string checksum(std::string_view text)
 {
@@ -1410,6 +1443,11 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
 
 Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
 {
+    if (schemaVersion < 58 && profile.pendingRaid &&
+        (profile.pendingRaid->rulesVersion == kRaidRunnerRulesVersion ||
+         std::any_of(profile.pendingRaid->enemies.begin(), profile.pendingRaid->enemies.end(),
+             [](const auto &enemy) { return enemy.variant.has_value(); })))
+        throw std::invalid_argument{"Raid enemy variants require schema 58"};
     if (schemaVersion < 57 &&
         (!profile.raidExtractionPermissions.empty() ||
          (profile.pendingRaid && profile.pendingRaid->credentialExtraction) ||
@@ -1748,7 +1786,7 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         payload["base_defense_warning"] = profile.baseDefenseWarning
             ? Json{{"event_id", profile.baseDefenseWarning->eventId},
                    {"layout", profile.baseDefenseWarning->layout
-                       ? baseDefenseSnapshotJson(*profile.baseDefenseWarning->layout) : Json(nullptr)}}
+                       ? baseDefenseValueForSchema(*profile.baseDefenseWarning->layout, schemaVersion) : Json(nullptr)}}
             : Json(nullptr);
     else if (profile.baseDefenseWarning || (profile.activeBaseDefense &&
              profile.activeBaseDefense->rulesVersion != kBaseDefenseRulesVersion))
@@ -1757,7 +1795,7 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
         throw std::invalid_argument("melee checkpoint requires schema 54");
     if (schemaVersion >= 46)
         payload["active_base_defense"] = profile.activeBaseDefense
-            ? baseDefenseSnapshotJson(*profile.activeBaseDefense) : Json(nullptr);
+            ? baseDefenseValueForSchema(*profile.activeBaseDefense, schemaVersion) : Json(nullptr);
     else if (profile.activeBaseDefense)
         throw std::runtime_error("Active Base defense cannot be written to an older schema");
     if (schemaVersion >= 45)
@@ -1946,6 +1984,14 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             if (enemy.torsoArmor) {
                 if (schemaVersion < 50) throw std::invalid_argument("enemy armor requires schema 50");
                 enemyValue["torso_armor"] = {enemy.torsoArmor->protectionRequirement, enemy.torsoArmor->durability, enemy.torsoArmor->durabilityLossBasisPoints};
+            }
+            if (schemaVersion >= 58)
+            {
+                if (raid.rulesVersion == kRaidRunnerRulesVersion && !enemy.variant)
+                    throw std::invalid_argument("runner Raid is missing a frozen enemy variant");
+                if (raid.rulesVersion != kRaidRunnerRulesVersion && enemy.variant)
+                    throw std::invalid_argument("legacy Raid cannot acquire enemy variants");
+                enemyValue["variant"] = enemy.variant ? enemyVariantSnapshotJson(*enemy.variant) : Json(nullptr);
             }
             enemies.push_back(std::move(enemyValue));
         }
@@ -2761,6 +2807,9 @@ std::string serializeProfileEnvelope(
     std::string_view contentVersion,
     std::uint32_t schemaVersion)
 {
+    if (profile.pendingRaid && profile.pendingRaid->rulesVersion == kRaidRunnerRulesVersion &&
+        contentVersion != "raid-runner-infected-content-73")
+        throw std::invalid_argument{"runner Raid requires content 73"};
     if (schemaVersion != 1 && schemaVersion != 2 &&
         schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 &&
         schemaVersion != 6 && schemaVersion != 7 && schemaVersion != 8 &&
@@ -2776,7 +2825,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2801,6 +2850,7 @@ SaveLoadResult deserializeProfileEnvelope(
     {
         const Json envelope = Json::parse(text.begin(), text.end());
         if (!envelope.is_object() || !envelope.at("schema_version").is_number_unsigned() ||
+            envelope.at("schema_version").get<std::uint64_t>() > std::numeric_limits<std::uint32_t>::max() ||
             !envelope.at("content_version").is_string())
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -2952,7 +3002,8 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion >= 56 && contentVersion == "ui-unified-chest-rig-content-68") ||
             (schemaVersion >= 57 && contentVersion == "raid-credential-extraction-content-69") ||
             (schemaVersion >= 57 && contentVersion == "base-field-medical-supplies-content-70") ||
-            (schemaVersion >= 57 && contentVersion == "weapon-suppressor-acoustics-content-71");
+            (schemaVersion >= 57 && contentVersion == "weapon-suppressor-acoustics-content-71") ||
+            (schemaVersion >= 57 && contentVersion == "raid-fragmentation-grenade-content-72");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -2974,7 +3025,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-              schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57) ||
+               schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3370,10 +3421,10 @@ SaveLoadResult deserializeProfileEnvelope(
             profile.baseDefenseWarning = BaseDefenseWarningSnapshot{
                 warning.at("event_id").get<std::string>(), {}};
             if (!warning.at("layout").is_null())
-                profile.baseDefenseWarning->layout = parseBaseDefenseSnapshotJson(warning.at("layout"));
+                profile.baseDefenseWarning->layout = parseBaseDefenseForSchema(warning.at("layout"), schemaVersion);
         }
         if (schemaVersion >= 46 && !payload.at("active_base_defense").is_null())
-            profile.activeBaseDefense = parseBaseDefenseSnapshotJson(payload.at("active_base_defense"));
+            profile.activeBaseDefense = parseBaseDefenseForSchema(payload.at("active_base_defense"), schemaVersion);
         if(schemaVersion<54 && ((profile.activeBaseDefense && profile.activeBaseDefense->meleeRecoverySeconds>0) ||
             (profile.baseDefenseWarning && profile.baseDefenseWarning->layout && profile.baseDefenseWarning->layout->meleeRecoverySeconds>0)))
             return {SaveLoadStatus::Failed,std::nullopt,"melee checkpoint requires schema 54"};
@@ -3721,6 +3772,9 @@ SaveLoadResult deserializeProfileEnvelope(
             raid.raidId = value.at("raid_id").get<std::string>();
             raid.settlementId = value.at("settlement_id").get<std::string>();
             raid.rulesVersion = value.at("rules_version").get<std::string>();
+            if (raid.rulesVersion == kRaidRunnerRulesVersion &&
+                (schemaVersion < 58 || contentVersion != "raid-runner-infected-content-73"))
+                return {SaveLoadStatus::Failed, std::nullopt, "runner Raid requires schema 58 and content 73"};
             raid.mapDefinitionId = MapDefinitionId{
                 value.at("map_definition_id").get<std::string>()};
             raid.seed = value.at("seed").get<std::uint64_t>();
@@ -3753,6 +3807,15 @@ SaveLoadResult deserializeProfileEnvelope(
                     if (schemaVersion < 50) throw std::invalid_argument("legacy enemy cannot contain armor");
                     const auto &armor = enemy.at("torso_armor");
                     raid.enemies.back().torsoArmor = EnemyArmorState{armor.at(0).get<int>(), armor.at(1).get<std::uint32_t>(), armor.at(2).get<std::uint32_t>()};
+                }
+                if (schemaVersion >= 58 && raid.rulesVersion == kRaidRunnerRulesVersion &&
+                    (!enemy.contains("variant") || enemy.at("variant").is_null()))
+                    return {SaveLoadStatus::Failed, std::nullopt, "runner Raid is missing a frozen enemy variant"};
+                if (enemy.contains("variant") && !enemy.at("variant").is_null())
+                {
+                    if (schemaVersion < 58 || raid.rulesVersion != kRaidRunnerRulesVersion)
+                        return {SaveLoadStatus::Failed, std::nullopt, "legacy Raid cannot acquire enemy variants"};
+                    raid.enemies.back().variant = parseEnemyVariantSnapshotJson(enemy.at("variant"));
                 }
             }
             if (schemaVersion >= 37)
@@ -4792,7 +4855,15 @@ SaveWriteResult SaveRepository::save(
     }
 
     const auto serializationStartedAt = Clock::now();
-    const std::string text = serializeProfileEnvelope(profile, contentVersion);
+    std::string text;
+    try
+    {
+        text = serializeProfileEnvelope(profile, contentVersion);
+    }
+    catch (const std::exception &failure)
+    {
+        return {false, failure.what()};
+    }
     if (metrics)
     {
         metrics->serializationMilliseconds = std::chrono::duration<double, std::milli>{
@@ -4815,6 +4886,32 @@ SaveWriteResult SaveRepository::save(
         isValidEnvelope(primaryPath_, publishedContentRegistry());
     const bool validBackup =
         isValidEnvelope(backupPath_, publishedContentRegistry());
+    const auto isPreRunnerSource = [&](const std::filesystem::path &path, bool valid)
+    {
+        if (!valid || contentVersion != "raid-runner-infected-content-73") return false;
+        const auto bytes = readText(path);
+        if (!bytes) return false;
+        try
+        {
+            const auto envelope = Json::parse(*bytes);
+            return envelope.at("schema_version").get<std::uint32_t>() < 58U ||
+                envelope.at("content_version").get<std::string>() != contentVersion;
+        }
+        catch (...) { return false; }
+    };
+    if (isPreRunnerSource(primaryPath_, validPrimary) || isPreRunnerSource(backupPath_, validBackup))
+    {
+        // Preserve both actual source files, including a corrupt primary when
+        // recovering the old backup, before either rolling slot is replaced.
+        const auto preserved = preserveLayoutMigrationSources(
+            validPrimary ? SaveLoadStatus::LoadedPrimary : SaveLoadStatus::RecoveredBackup,
+            "raid-runner-infected-v1");
+        if (!preserved.succeeded)
+        {
+            std::filesystem::remove(temporaryPath_, error);
+            return {false, preserved.message};
+        }
+    }
     const auto isLegacySource = [](const std::filesystem::path &path, bool valid)
     {
         if (!valid) return false;
@@ -4847,7 +4944,8 @@ SaveWriteResult SaveRepository::save(
     {
         if (!valid || (contentVersion != "base-field-medical-supplies-content-70" &&
                        contentVersion != "weapon-suppressor-acoustics-content-71" &&
-                       contentVersion != "raid-fragmentation-grenade-content-72"))
+                       contentVersion != "raid-fragmentation-grenade-content-72" &&
+                       contentVersion != "raid-runner-infected-content-73"))
             return false;
         const auto bytes = readText(path);
         if (!bytes) return false;
@@ -4855,7 +4953,8 @@ SaveWriteResult SaveRepository::save(
         {
             const auto sourceContent = Json::parse(*bytes).at("content_version").get<std::string>();
             return sourceContent != contentVersion && sourceContent != "base-field-medical-supplies-content-70" &&
-                sourceContent != "weapon-suppressor-acoustics-content-71";
+                sourceContent != "weapon-suppressor-acoustics-content-71" &&
+                sourceContent != "raid-fragmentation-grenade-content-72";
         }
         catch (...)
         {
@@ -4881,14 +4980,16 @@ SaveWriteResult SaveRepository::save(
     const auto isPreSuppressorContentSource = [&](const std::filesystem::path &path, bool valid)
     {
         if (!valid || (contentVersion != "weapon-suppressor-acoustics-content-71" &&
-                       contentVersion != "raid-fragmentation-grenade-content-72"))
+                       contentVersion != "raid-fragmentation-grenade-content-72" &&
+                       contentVersion != "raid-runner-infected-content-73"))
             return false;
         const auto bytes = readText(path);
         if (!bytes) return false;
         try
         {
             const auto sourceContent = Json::parse(*bytes).at("content_version").get<std::string>();
-            return sourceContent != contentVersion && sourceContent != "weapon-suppressor-acoustics-content-71";
+            return sourceContent != contentVersion && sourceContent != "weapon-suppressor-acoustics-content-71" &&
+                sourceContent != "raid-fragmentation-grenade-content-72";
         }
         catch (...)
         {
@@ -4912,13 +5013,15 @@ SaveWriteResult SaveRepository::save(
     }
     const auto isPreGrenadeContentSource = [&](const std::filesystem::path &path, bool valid)
     {
-        if (!valid || contentVersion != "raid-fragmentation-grenade-content-72")
+        if (!valid || (contentVersion != "raid-fragmentation-grenade-content-72" &&
+                       contentVersion != "raid-runner-infected-content-73"))
             return false;
         const auto bytes = readText(path);
         if (!bytes) return false;
         try
         {
-            return Json::parse(*bytes).at("content_version").get<std::string>() != contentVersion;
+            const auto sourceContent = Json::parse(*bytes).at("content_version").get<std::string>();
+            return sourceContent != contentVersion && sourceContent != "raid-fragmentation-grenade-content-72";
         }
         catch (...)
         {

@@ -612,6 +612,7 @@ struct RaidEncounterArchetypeDefinition
     float activationDistance{240.0F};
     float patrolRadius{320.0F};
     std::optional<EnemyCombatDefinitionId> armoredMemberDefinition;
+    std::optional<EnemyCombatDefinitionId> runnerMemberDefinition;
 
     friend bool operator==(
         const RaidEncounterArchetypeDefinition &,

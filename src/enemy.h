@@ -43,7 +43,10 @@ public:
         Vec2 velocity = Vec2{},
         int maxHealth = 1,
         CombatTargetId combatTargetId = kInvalidCombatTargetId,
-        std::optional<EnemyArmorState> torsoArmor = std::nullopt);
+        std::optional<EnemyArmorState> torsoArmor = std::nullopt,
+        std::optional<EnemyVariantSnapshot> variant = std::nullopt);
+
+    [[nodiscard]] const std::optional<EnemyVariantSnapshot> &variant() const noexcept { return variant_; }
 
     [[nodiscard]] CombatTargetId combatTargetId() const noexcept;
     Vec2 position() const;
@@ -152,11 +155,13 @@ private:
     Animator movementAnimator_;
     Health health_;
     std::optional<EnemyArmorState> torsoArmor_;
+    std::optional<EnemyVariantSnapshot> variant_;
     EnemyAttackState attack_;
     EnemyAiState ai_;
     EnemyMovementState movementState_{EnemyMovementState::Stationary};
     EnemyTacticalRole tacticalRole_{EnemyTacticalRole::Support};
     float impactSlowRemaining_{};
+    bool visiblePursuitMove_{};
 
     [[nodiscard]]
     float consumeImpactAdjustedDeltaTime(

@@ -836,7 +836,7 @@ ContentRegistry ContentRegistry::fromJson(
             registry.contentVersion_ == "base-fortification-foundation-content-61" ||
             registry.contentVersion_ == "hospital-raid-theme-content-62" ||
             registry.contentVersion_ == "weapon-components-content-63" ||
-            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71" || registry.contentVersion_ == "raid-fragmentation-grenade-content-72");
+            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71" || registry.contentVersion_ == "raid-fragmentation-grenade-content-72" || registry.contentVersion_ == "raid-runner-infected-content-73");
 
         if (root.contains("fortifications"))
         {
@@ -862,7 +862,7 @@ ContentRegistry ContentRegistry::fromJson(
         if ((registry.contentVersion_ == "base-fortification-foundation-content-61" ||
              registry.contentVersion_ == "hospital-raid-theme-content-62" ||
              registry.contentVersion_ == "weapon-components-content-63" ||
-             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71" || registry.contentVersion_ == "raid-fragmentation-grenade-content-72")) &&
+             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71" || registry.contentVersion_ == "raid-fragmentation-grenade-content-72" || registry.contentVersion_ == "raid-runner-infected-content-73")) &&
             !registry.fortifications_.contains(kWoodBarricadeDefinition))
             fail("wood barricade definition is required by content 61");
 
@@ -884,12 +884,36 @@ ContentRegistry ContentRegistry::fromJson(
                         requiredPositiveUint(armor, "durability_loss_basis_points")};
                     if (!definition.torsoArmor->valid()) fail("invalid enemy torso armor");
                 }
+                if (value.contains("movement"))
+                {
+                    const auto &movement = requiredObject(value, "movement");
+                    EnemyMovementProfile profile{
+                        requiredFiniteFloat(movement, "normal_move_speed", true),
+                        std::nullopt, kStandardInfectedAttackProfileVersion};
+                    const auto &pursuit = movement.at("visible_pursuit_move_speed");
+                    if (!pursuit.is_null())
+                        profile.visiblePursuitMoveSpeed = requiredFiniteFloat(
+                            movement, "visible_pursuit_move_speed", true);
+                    if (requiredString(movement, "attack_profile") != kStandardInfectedAttackProfileId)
+                        fail("unknown enemy attack profile");
+                    const auto kind = enemyVariantKindFromDefinitionId(definition.id.value());
+                    if (!kind || !validEnemyVariantSnapshot({*kind, profile}))
+                        fail("invalid versioned enemy movement profile");
+                    definition.movement = profile;
+                }
+                if (definition.id == EnemyCombatDefinitionId{"enemy.infected.runner"} &&
+                    (definition.maximumHealth != 8 || definition.torsoArmor ||
+                     definition.movement != std::optional{runnerEnemyVariantSnapshot().movement}))
+                    fail("invalid runner combat definition");
                 if (!hasPrefix(definition.id.value(), "enemy.") ||
                     !registry.enemyCombatDefinitions_.emplace(definition.id, definition).second)
                     fail("invalid or duplicate enemy combat definition ID");
             }
             if (!registry.enemyCombatDefinitions_.contains(ordinaryInfectedDefinitionId()))
                 fail("ordinary infected combat definition is required");
+            if (registry.contentVersion_ == "raid-runner-infected-content-73" &&
+                !registry.enemyCombatDefinitions_.contains(EnemyCombatDefinitionId{"enemy.infected.runner"}))
+                fail("runner combat definition is required by content 73");
         }
         else
         {
@@ -2812,10 +2836,30 @@ ContentRegistry ContentRegistry::fromJson(
                                 fail("invalid armored guard definition");
                             archetype.armoredMemberDefinition = found->first;
                         }
+                        if (const auto id = optionalString(encounter, "runner_member_definition"))
+                        {
+                            const auto found = registry.enemyCombatDefinitions_.find(EnemyCombatDefinitionId{*id});
+                            if (definition.id != MapDefinitionId{"map.raid.frontier_exchange"} ||
+                                archetype.id != "encounter.frontier.route_ambush" ||
+                                archetype.kind != RaidEncounterKind::Ambush || archetype.armoredMemberDefinition ||
+                                archetype.minimumGroups != 2U || archetype.maximumGroups != 3U ||
+                                archetype.minimumMembers != 3U || archetype.maximumMembers != 5U ||
+                                found == registry.enemyCombatDefinitions_.end() ||
+                                found->first != EnemyCombatDefinitionId{"enemy.infected.runner"} ||
+                                found->second.maximumHealth != 8 || found->second.torsoArmor ||
+                                found->second.movement != std::optional{runnerEnemyVariantSnapshot().movement})
+                                fail("invalid runner ambush member definition");
+                            archetype.runnerMemberDefinition = found->first;
+                        }
                         value.encounterArchetypes.push_back(
                             std::move(archetype));
                     }
                 }
+                if (registry.contentVersion_ == "raid-runner-infected-content-73" &&
+                    definition.id == MapDefinitionId{"map.raid.frontier_exchange"} &&
+                    std::none_of(value.encounterArchetypes.begin(), value.encounterArchetypes.end(),
+                        [](const auto &group) { return group.runnerMemberDefinition.has_value(); }))
+                    fail("Frontier runner encounter is required by content 73");
                 if (!value.encounterArchetypes.empty())
                 {
                     std::uint64_t requiredPopulation{}, maximumCapacity{};

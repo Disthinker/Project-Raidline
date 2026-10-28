@@ -196,6 +196,7 @@ private:
     friend struct PointerContinuityUiTestAccess;
     friend struct RaidIndoorVisibilityUiTestAccess;
     friend struct RaidLightConeVisibilityUiTestAccess;
+    friend struct RunnerInfectedUiTestAccess;
     SDL_Window *window_{nullptr};
     SDL_Renderer *renderer_{nullptr};
     Texture indoorInformationLayer_;

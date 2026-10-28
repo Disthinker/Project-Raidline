@@ -615,7 +615,8 @@ function(raidline_add_test target source module)
         ${module})
     if(target STREQUAL "BaseDefensePerformanceTest" OR target STREQUAL "BaseDailyCheckpointTest"
        OR target STREQUAL "FortificationRuntimeTest" OR target STREQUAL "RaidLightConeVisibilityTest" OR target STREQUAL "WeaponLightTest"
-       OR target STREQUAL "NoiseDecoyTest" OR target STREQUAL "GrenadePerformanceTest")
+       OR target STREQUAL "NoiseDecoyTest" OR target STREQUAL "GrenadePerformanceTest"
+       OR target STREQUAL "RunnerInfectedPerformanceTest")
         # Timing gates need an isolated CPU/allocator, not competition with
         # the concurrent 128-seed map validation and other test processes.
         gtest_discover_tests(${target} PROPERTIES RUN_SERIAL TRUE)
@@ -1097,3 +1098,9 @@ raidline_add_test(GrenadeUiTest tests/test_grenade_ui.cpp raidline::sdl_client)
 raidline_add_test(GrenadeSaveTest tests/test_grenade_save.cpp raidline::services)
 raidline_add_test(GrenadeCorpseRuntimeTest tests/test_grenade_corpse_runtime.cpp raidline::services)
 raidline_add_test(GrenadeMovementTest tests/test_grenade_movement.cpp raidline::services)
+raidline_add_test(RunnerInfectedDomainTest tests/test_runner_infected_domain.cpp raidline::domain)
+raidline_add_test(RunnerInfectedSaveTest tests/test_runner_infected_save.cpp raidline::services)
+raidline_add_test(RunnerInfectedRuntimeTest tests/test_runner_infected_runtime.cpp raidline::services)
+raidline_add_test(RunnerInfectedUiTest tests/test_runner_infected_ui.cpp raidline::sdl_client)
+raidline_add_test(RunnerInfectedPerformanceTest tests/test_runner_infected_performance.cpp raidline::services)
+raidline_add_test(RunnerInfectedVisibilityEquivalenceTest tests/test_runner_infected_visibility_equivalence.cpp raidline::simulation)

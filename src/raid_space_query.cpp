@@ -241,8 +241,9 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
     const float lightHalf = key.lightAngleDegrees * pi / 360;
     const float half = std::max(ambientHalf, lightHalf);
     const auto radiusAt = [&](float angle) {
-        return std::max(std::abs(angle)<=ambientHalf+0.0000001F ? key.maximumDistance : 0.0F,
-                        key.lightAssetId && std::abs(angle)<=lightHalf+0.0000001F ? key.lightDistance : 0.0F);
+        const float ambient = std::abs(angle) <= ambientHalf + 0.0000001F ? key.maximumDistance : 0.0F;
+        const float lamp = key.lightAssetId && std::abs(angle) <= lightHalf + 0.0000001F ? key.lightDistance : 0.0F;
+        return ambient < lamp ? lamp : ambient;
     };
     std::vector<float> angles;
     // At most one world unit of inward arc error, never revealing beyond range.
@@ -276,13 +277,97 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
         for (auto &angle : angles)
             for (float seam : {ambientHalf,lightHalf})
                 if (std::abs(std::abs(angle)-seam)<=0.000002F) angle=std::copysign(seam,angle);
-    std::sort(angles.begin(), angles.end());
-    angles.erase(std::unique(angles.begin(), angles.end(), [](float a, float b)
-                             { return std::abs(a - b) < 1e-7F; }),
-                 angles.end());
+    auto *const angleData = angles.data();
+    std::sort(angleData, angleData + angles.size());
+    const auto *const uniqueEnd = std::unique(angleData, angleData + angles.size(),
+        [](float a, float b) { return std::abs(a - b) < 1e-7F; });
+    angles.resize(static_cast<std::size_t>(uniqueEnd - angleData));
     result.boundary.reserve(angles.size() + 1);
-    for (float angle : angles)
+    // Keep the original corner rays and original-index slab ordering. A ray
+    // can only hit local blockers overlapping its closed segment bounds.
+    // Borrow the immutable bounds once and use a closed broad-phase test
+    // before the original narrow phase, without per-ray allocation or sorting.
+    struct ConeBlocker
     {
+        Rect bounds;
+        Vec2 relativeCenter, halfExtent;
+        float linePadding;
+    };
+    std::vector<ConeBlocker> localBounds;
+    localBounds.reserve(candidates.size());
+    const auto *const blockerData = index.allBlockerBounds().data();
+    for (auto i : candidates)
+    {
+        const auto r = blockerData[i];
+        const Vec2 halfExtent{r.size.x * 0.5F, r.size.y * 0.5F};
+        const Vec2 relativeCenter{r.position.x + halfExtent.x - o.x,
+                                  r.position.y + halfExtent.y - o.y};
+        // Conservative roundoff allowance for a line touching a corner. This
+        // only admits extra narrow-phase candidates, never grows visibility.
+        const float padding = 8 * std::numeric_limits<float>::epsilon() *
+            (std::abs(o.x) + std::abs(o.y) + std::abs(relativeCenter.x) +
+             std::abs(relativeCenter.y) + halfExtent.x + halfExtent.y + 1);
+        localBounds.push_back({r, relativeCenter, halfExtent, padding});
+    }
+    // Conservative angular buckets avoid scanning every local rectangle for
+    // every ray. Each bounding circle covers its whole rectangle; padded bin
+    // ranges may admit extras. Insertion keeps the original blocker order.
+    constexpr std::size_t bucketCount = 128;
+    struct BucketRange { std::size_t candidate, first, last; };
+    std::vector<BucketRange> bucketRanges;
+    bucketRanges.reserve(localBounds.size() * 2);
+    std::array<std::size_t, bucketCount> bucketSizes{};
+    const auto addRange = [&](std::size_t candidate, std::size_t first, std::size_t last)
+    {
+        bucketRanges.push_back({candidate, first, last});
+        for (std::size_t bin = first; bin <= last; ++bin) ++bucketSizes[bin];
+    };
+    const auto bucketFor = [&](float angle)
+    {
+        if (half <= 0) return std::size_t{0};
+        return static_cast<std::size_t>(std::clamp(
+            (angle + half) * static_cast<float>(bucketCount) / (half * 2),
+            0.0F, static_cast<float>(bucketCount - 1)));
+    };
+    for (std::size_t i = 0; i < localBounds.size(); ++i)
+    {
+        const auto &b = localBounds[i];
+        const float centerDistance = std::hypot(b.relativeCenter.x, b.relativeCenter.y);
+        const float circleRadius = std::hypot(b.halfExtent.x, b.halfExtent.y) + b.linePadding;
+        if (half <= 0 || !std::isfinite(circleRadius) || circleRadius >= centerDistance)
+        {
+            addRange(i, 0, bucketCount - 1);
+            continue;
+        }
+        const float delta = std::atan2(b.relativeCenter.y, b.relativeCenter.x) - axisAngle;
+        const float centerAngle = std::atan2(std::sin(delta), std::cos(delta));
+        const float angularRadius = std::asin(std::clamp(circleRadius / centerDistance, 0.0F, 1.0F));
+        for (float wrap : {-2 * pi, 0.0F, 2 * pi})
+        {
+            const float low = centerAngle + wrap - angularRadius;
+            const float high = centerAngle + wrap + angularRadius;
+            if (low > half || high < -half) continue;
+            const auto first = bucketFor(std::max(low, -half));
+            const auto last = bucketFor(std::min(high, half));
+            const auto begin = first > 0 ? first - 1 : 0;
+            const auto end = std::min(last + 1, bucketCount - 1);
+            addRange(i, begin, end);
+        }
+    }
+    std::array<std::size_t, bucketCount + 1> bucketOffsets{};
+    for (std::size_t bin = 0; bin < bucketCount; ++bin)
+        bucketOffsets[bin + 1] = bucketOffsets[bin] + bucketSizes[bin];
+    std::vector<std::size_t> angularCandidates(bucketOffsets.back());
+    auto writeOffsets = bucketOffsets;
+    auto *const angularData = angularCandidates.data();
+    for (const auto range : bucketRanges)
+        for (std::size_t bin = range.first; bin <= range.last; ++bin)
+            angularData[writeOffsets[bin]++] = range.candidate;
+    const auto *const localData = localBounds.data();
+    const auto *const lastAngle = angles.data() + angles.size();
+    for (auto angleCursor = angles.data(); angleCursor != lastAngle; ++angleCursor)
+    {
+        const float angle = *angleCursor;
         const Vec2 d{std::cos(axisAngle + angle), std::sin(axisAngle + angle)};
         std::array<float,2> limits{radiusAt(angle),0};
         std::size_t limitCount=1;
@@ -296,18 +381,45 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
         if (work) ++work->rays;
         float length = limits[limitIndex];
         if (d.x > 1e-7F)
-            length = std::min(length, (result.worldSize.x - o.x) / d.x);
-        else if (d.x < -1e-7F)
-            length = std::min(length, -o.x / d.x);
-        if (d.y > 1e-7F)
-            length = std::min(length, (result.worldSize.y - o.y) / d.y);
-        else if (d.y < -1e-7F)
-            length = std::min(length, -o.y / d.y);
-        for (auto i : candidates)
         {
+            const float cap = (result.worldSize.x - o.x) / d.x;
+            if (cap < length) length = cap;
+        }
+        else if (d.x < -1e-7F)
+        {
+            const float cap = -o.x / d.x;
+            if (cap < length) length = cap;
+        }
+        if (d.y > 1e-7F)
+        {
+            const float cap = (result.worldSize.y - o.y) / d.y;
+            if (cap < length) length = cap;
+        }
+        else if (d.y < -1e-7F)
+        {
+            const float cap = -o.y / d.y;
+            if (cap < length) length = cap;
+        }
+        const Vec2 end{o.x + d.x * length, o.y + d.y * length};
+        const float left = end.x < o.x ? end.x : o.x, right = o.x < end.x ? end.x : o.x;
+        const float top = end.y < o.y ? end.y : o.y, bottom = o.y < end.y ? end.y : o.y;
+        const float absoluteX = std::abs(d.x), absoluteY = std::abs(d.y);
+        const auto bin = bucketFor(angle);
+        const auto *const lastCandidate = angularData + bucketOffsets[bin + 1];
+        for (auto cursor = angularData + bucketOffsets[bin]; cursor != lastCandidate; ++cursor)
+        {
+            const auto &candidate = localData[*cursor];
+            const auto &r = candidate.bounds;
+            const float pad = candidate.linePadding;
+            if (r.position.x + r.size.x < left - pad || r.position.x > right + pad ||
+                r.position.y + r.size.y < top - pad || r.position.y > bottom + pad) continue;
+            const float cross = d.x * candidate.relativeCenter.y -
+                                d.y * candidate.relativeCenter.x;
+            const float extent = absoluteX * candidate.halfExtent.y +
+                                 absoluteY * candidate.halfExtent.x;
+            if (std::abs(cross) > extent + pad) continue;
             if (work)
                 ++work->blockerTests;
-            const auto r = index.blockerBounds(i);
             float enter = 0, leave = length;
             const auto slab =
                 [&](float origin, float movement, float low, float high)
@@ -317,9 +429,13 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
                 float a = (low - origin) / movement,
                       b = (high - origin) / movement;
                 if (a > b)
-                    std::swap(a, b);
-                enter = std::max(enter, a);
-                leave = std::min(leave, b);
+                {
+                    const float temporary = a;
+                    a = b;
+                    b = temporary;
+                }
+                if (enter < a) enter = a;
+                if (b < leave) leave = b;
                 return enter <= leave;
             };
             if (slab(o.x, d.x, r.position.x, r.position.x + r.size.x) &&
@@ -327,9 +443,10 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
                 enter >= 0 && enter <= length && leave > enter + 0.00001F)
                 length = enter;
         }
+        const float x = o.x + d.x * length, y = o.y + d.y * length;
         result.boundary.push_back(
-            {std::clamp(o.x + d.x * length, 0.0F, result.worldSize.x),
-             std::clamp(o.y + d.y * length, 0.0F, result.worldSize.y)});
+            {x < 0.0F ? 0.0F : result.worldSize.x < x ? result.worldSize.x : x,
+             y < 0.0F ? 0.0F : result.worldSize.y < y ? result.worldSize.y : y});
         }
     }
     result.boundary.push_back(

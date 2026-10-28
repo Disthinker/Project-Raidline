@@ -1,3 +1,16 @@
+# 当前：迅捷感染者 v3 已验收，正在交付
+
+**用户已验收候选 `08178f45f1dd`，并授权提交、推送和合并。** 本次只交付该候选，不开始下一任务。
+
+- state：`accepted_delivering`；task_id：`raid-runner-infected-v1`；plan_version：`RL-RAID-RUNNER-INFECTED-v3`。
+- candidate_id／accepted_candidate_id：`RL-RAID-RUNNER-INFECTED-v3-local-08178f45f1dd`；acceptance_source：2026-10-28本主控用户“迅捷感染者 v3 验收通过，请完成提交、推送和合并。”。
+- Windows Debug全量2874/2874、定向559/559通过；原六项及新增混合敌群3ms保持。准确PR及合并后main的双平台CI待执行。
+- 实际目录`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`，分支`codex/raid-runner-infected-v1`，交付基线`77b117d1492d975a2861357a04c60a652d9e73dc`。原已验收程序、固定入口、最新玩家数据及其他未提交工作保留，代理不启动游戏。
+- [交付记录](../exec-plans/active/raid-runner-infected-v1.md)；[已通过试玩清单](../acceptance/raid-runner-infected-v1.md)。pending_request：无；UI专项保持结束。
+
+<details>
+<summary>上一项及更早记录（HEAD原文历史）</summary>
+
 # 当前：破片手雷 v1 已验收，正在交付
 
 **用户已验收候选`bd5b6011e799`，并授权提交、推送和合并。** 正按原门槛交付，不开始下一任务。
@@ -1897,6 +1910,8 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 
 </details>
 
+
+</details>
 
 </details>
 

@@ -3,6 +3,7 @@
 #include "hit_feedback_presentation.h"
 #include "home_perimeter_domain.h"
 #include "save_repository.h"
+#include "raid_runner_legacy_fixture.h"
 
 #include <array>
 #include <limits>
@@ -100,7 +101,7 @@ TEST(EnemyCombatDefinitionTest, DistinctDefinitionMayHaveDistinctHealthAndLegacy
     json["enemy_deployments"][0]["enemies"][0]["enemy_combat_definition"] = "enemy.test.heavy";
     const auto custom = ContentRegistry::fromJson(json.dump());
     EXPECT_EQ(custom.enemyDeployments().front().enemies.front().maximumHealth, 27);
-    json = contentJson();
+    json = contentJsonBeforeRunner("base-wishes-resource-tradeoff-content-59");
     useLegacyInlineSpawns(json);
     json.erase("enemy_combat_definitions");
     json["content_version"] = "base-wishes-resource-tradeoff-content-59";

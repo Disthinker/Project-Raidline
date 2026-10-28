@@ -74,7 +74,8 @@ namespace
 
     void validateConfig(const EnemyAiConfig &config)
     {
-        if (!isFinitePositive(config.normalMoveSpeed) ||
+        if ((config.visiblePursuitMoveSpeed && !isFinitePositive(*config.visiblePursuitMoveSpeed)) ||
+            !isFinitePositive(config.normalMoveSpeed) ||
             !isFinitePositive(config.attackMoveSpeed) ||
             !isFinitePositive(config.stopDistance) ||
             !isFinitePositive(config.scratchAttackDistance) ||
@@ -313,11 +314,16 @@ EnemyAiDecision EnemyAiState::update(
     desiredDirection.y +=
         input.tactical.separationDirection.y;
 
-    return EnemyAiDecision{
-        updateMoveDirection(
-            normalizedOrZero(desiredDirection),
-            input.deltaTime),
-        std::nullopt};
+    const Vec2 move = updateMoveDirection(
+        normalizedOrZero(desiredDirection), input.deltaTime);
+    const bool pursuit = config_.visiblePursuitMoveSpeed.has_value() &&
+        awarenessState_ == EnemyAwarenessState::Alerted && input.targetVisible &&
+        (input.tactical.role == EnemyTacticalRole::Pressure ||
+         input.tactical.role == EnemyTacticalRole::Engage) &&
+        distance > config_.stopDistance &&
+        lengthSquared(movementDirection) > kDirectionEpsilon * kDirectionEpsilon &&
+        lengthSquared(move) > kDirectionEpsilon * kDirectionEpsilon;
+    return EnemyAiDecision{move, std::nullopt, pursuit};
 }
 
 void EnemyAiState::recordAttackStarted(

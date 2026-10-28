@@ -549,6 +549,8 @@ private:
     friend struct MeleeTestAccess;
     friend struct NoiseDecoyTestAccess;
     friend struct GrenadeTestAccess;
+    friend struct RunnerInfectedTestAccess;
+    friend struct RunnerInfectedUiTestAccess;
     bool processGrenadeExplosion();
     friend struct NoiseDecoyUiTestAccess;
     friend struct BaseDailyCheckpointTestAccess;
