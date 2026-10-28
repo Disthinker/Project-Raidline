@@ -220,10 +220,11 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
     std::vector<std::size_t> candidates;
     index.queryCandidateIndices(
         {{o.x - radius, o.y - radius}, {radius * 2, radius * 2}}, candidates);
+    const auto *const blockerData = index.allBlockerBounds().data();
     std::erase_if(candidates,
                   [&](auto i)
                   {
-                      const auto r = index.blockerBounds(i);
+                      const auto r = blockerData[i];
                       const float x = std::clamp(o.x, r.position.x,
                                                  r.position.x + r.size.x);
                       const float y = std::clamp(o.y, r.position.y,
@@ -233,7 +234,7 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
     if (work)
         work->localBlockers = candidates.size();
     for (auto i : candidates)
-        if (pointInsideOpenRect(o, index.blockerBounds(i)))
+        if (pointInsideOpenRect(o, blockerData[i]))
             return result;
     constexpr float pi = 3.14159265358979323846F;
     const float axisAngle = std::atan2(key.direction.y, key.direction.x);
@@ -245,21 +246,25 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
         const float lamp = key.lightAssetId && std::abs(angle) <= lightHalf + 0.0000001F ? key.lightDistance : 0.0F;
         return ambient < lamp ? lamp : ambient;
     };
-    std::vector<float> angles;
     // At most one world unit of inward arc error, never revealing beyond range.
     const int arcSegments =
         std::max(2, static_cast<int>(std::ceil(half * 2 / 0.035F)));
+    // One arc, four optional light seams, and three rays per world/blocker
+    // corner. Establish valid size before borrowing writable storage.
+    std::vector<float> angles(static_cast<std::size_t>(arcSegments) + 1 +
+        (key.lightAssetId ? 4 : 0) + 12 * (candidates.size() + 1));
+    auto *angleWrite = angles.data();
     for (int n = 0; n <= arcSegments; ++n)
-        angles.push_back(-half + half * 2 * n / arcSegments);
+        *angleWrite++ = -half + half * 2 * n / arcSegments;
     if (key.lightAssetId)
-        for (float edge : {-ambientHalf, ambientHalf, -lightHalf, lightHalf}) angles.push_back(edge);
+        for (float edge : {-ambientHalf, ambientHalf, -lightHalf, lightHalf}) *angleWrite++ = edge;
     const auto corner = [&](Vec2 p)
     {
         const float angle = std::atan2(p.y - o.y, p.x - o.x) - axisAngle;
         const float local = std::atan2(std::sin(angle), std::cos(angle));
         for (float offset : {-0.00001F, 0.0F, 0.00001F})
             if (local + offset >= -half && local + offset <= half)
-                angles.push_back(local + offset);
+                *angleWrite++ = local + offset;
     };
     corner({0, 0});
     corner({result.worldSize.x, 0});
@@ -267,12 +272,13 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
     corner({0, result.worldSize.y});
     for (auto i : candidates)
     {
-        const auto r = index.blockerBounds(i);
+        const auto r = blockerData[i];
         corner(r.position);
         corner({r.position.x + r.size.x, r.position.y});
         corner({r.position.x + r.size.x, r.position.y + r.size.y});
         corner({r.position.x, r.position.y + r.size.y});
     }
+    angles.resize(static_cast<std::size_t>(angleWrite - angles.data()));
     if (key.lightAssetId)
         for (auto &angle : angles)
             for (float seam : {ambientHalf,lightHalf})
@@ -282,7 +288,10 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
     const auto *const uniqueEnd = std::unique(angleData, angleData + angles.size(),
         [](float a, float b) { return std::abs(a - b) < 1e-7F; });
     angles.resize(static_cast<std::size_t>(uniqueEnd - angleData));
-    result.boundary.reserve(angles.size() + 1);
+    // Only a powered light union can emit two endpoints for one angle.
+    // Copy one initialized value to establish live points before bulk writes.
+    result.boundary.assign((key.lightAssetId ? 2 : 1) * angles.size() + 1, Vec2{});
+    auto *boundaryWrite = result.boundary.data();
     // Keep the original corner rays and original-index slab ordering. A ray
     // can only hit local blockers overlapping its closed segment bounds.
     // Borrow the immutable bounds once and use a closed broad-phase test
@@ -295,7 +304,6 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
     };
     std::vector<ConeBlocker> localBounds;
     localBounds.reserve(candidates.size());
-    const auto *const blockerData = index.allBlockerBounds().data();
     for (auto i : candidates)
     {
         const auto r = blockerData[i];
@@ -317,21 +325,23 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
     std::vector<BucketRange> bucketRanges;
     bucketRanges.reserve(localBounds.size() * 2);
     std::array<std::size_t, bucketCount> bucketSizes{};
+    auto *const bucketSizeData = bucketSizes.data();
     const auto addRange = [&](std::size_t candidate, std::size_t first, std::size_t last)
     {
         bucketRanges.push_back({candidate, first, last});
-        for (std::size_t bin = first; bin <= last; ++bin) ++bucketSizes[bin];
+        for (std::size_t bin = first; bin <= last; ++bin) ++bucketSizeData[bin];
     };
     const auto bucketFor = [&](float angle)
     {
         if (half <= 0) return std::size_t{0};
-        return static_cast<std::size_t>(std::clamp(
-            (angle + half) * static_cast<float>(bucketCount) / (half * 2),
-            0.0F, static_cast<float>(bucketCount - 1)));
+        const float raw = (angle + half) * static_cast<float>(bucketCount) / (half * 2);
+        const float last = static_cast<float>(bucketCount - 1);
+        return static_cast<std::size_t>(raw < 0.0F ? 0.0F : last < raw ? last : raw);
     };
+    const auto *const localData = localBounds.data();
     for (std::size_t i = 0; i < localBounds.size(); ++i)
     {
-        const auto &b = localBounds[i];
+        const auto &b = localData[i];
         const float centerDistance = std::hypot(b.relativeCenter.x, b.relativeCenter.y);
         const float circleRadius = std::hypot(b.halfExtent.x, b.halfExtent.y) + b.linePadding;
         if (half <= 0 || !std::isfinite(circleRadius) || circleRadius >= centerDistance)
@@ -355,15 +365,16 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
         }
     }
     std::array<std::size_t, bucketCount + 1> bucketOffsets{};
+    auto *const bucketOffsetData = bucketOffsets.data();
     for (std::size_t bin = 0; bin < bucketCount; ++bin)
-        bucketOffsets[bin + 1] = bucketOffsets[bin] + bucketSizes[bin];
+        bucketOffsetData[bin + 1] = bucketOffsetData[bin] + bucketSizeData[bin];
     std::vector<std::size_t> angularCandidates(bucketOffsets.back());
     auto writeOffsets = bucketOffsets;
+    auto *const writeOffsetData = writeOffsets.data();
     auto *const angularData = angularCandidates.data();
     for (const auto range : bucketRanges)
         for (std::size_t bin = range.first; bin <= range.last; ++bin)
-            angularData[writeOffsets[bin]++] = range.candidate;
-    const auto *const localData = localBounds.data();
+            angularData[writeOffsetData[bin]++] = range.candidate;
     const auto *const lastAngle = angles.data() + angles.size();
     for (auto angleCursor = angles.data(); angleCursor != lastAngle; ++angleCursor)
     {
@@ -405,8 +416,8 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
         const float top = end.y < o.y ? end.y : o.y, bottom = o.y < end.y ? end.y : o.y;
         const float absoluteX = std::abs(d.x), absoluteY = std::abs(d.y);
         const auto bin = bucketFor(angle);
-        const auto *const lastCandidate = angularData + bucketOffsets[bin + 1];
-        for (auto cursor = angularData + bucketOffsets[bin]; cursor != lastCandidate; ++cursor)
+        const auto *const lastCandidate = angularData + bucketOffsetData[bin + 1];
+        for (auto cursor = angularData + bucketOffsetData[bin]; cursor != lastCandidate; ++cursor)
         {
             const auto &candidate = localData[*cursor];
             const auto &r = candidate.bounds;
@@ -444,13 +455,13 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
                 length = enter;
         }
         const float x = o.x + d.x * length, y = o.y + d.y * length;
-        result.boundary.push_back(
+        *boundaryWrite++ =
             {x < 0.0F ? 0.0F : result.worldSize.x < x ? result.worldSize.x : x,
-             y < 0.0F ? 0.0F : result.worldSize.y < y ? result.worldSize.y : y});
+             y < 0.0F ? 0.0F : result.worldSize.y < y ? result.worldSize.y : y};
         }
     }
-    result.boundary.push_back(
-        o); // Close both sector edges at its apex, never across the rear.
+    *boundaryWrite++ = o; // Close both sector edges at the original apex.
+    result.boundary.resize(static_cast<std::size_t>(boundaryWrite - result.boundary.data()));
     result.valid = result.boundary.size() >= 3;
     return result;
 }

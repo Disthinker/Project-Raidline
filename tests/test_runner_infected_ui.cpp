@@ -158,27 +158,44 @@ TEST_F(RunnerInfectedUiTest, WallAndRearHiddenRunnerDrawNoSpriteOrLabelPixels)
 TEST_F(RunnerInfectedUiTest, CompletedInformationLayerClipsRunnerLabelAtObservationEdge)
 {
     auto config = uiArena(false);
-    // The actor straddles the daytime half-plane; the label starts behind it.
-    config.playerSpawn = {494, 284};
+    // Both the Chinese Windows font and SDL's two 8px fallback glyphs cross
+    // this boundary. Prove that with raw pixels before checking the mask.
+    config.playerSpawn = {485, 284};
     stage(config, {900, 300});
     ASSERT_TRUE(Access::world(*app).raidEnemyObservable(Access::world(*app).enemies().front().combatTargetId()));
+    directPaint();
+    const auto rawOrdinary = pixels({485, 100, 120, 25});
     observedPaint();
     const auto ordinary = pixels({485, 100, 120, 25});
     config.initialEnemies.front().variant = runnerEnemyVariantSnapshot();
     stage(config, {900, 300});
+    directPaint();
+    const auto rawFast = pixels({485, 100, 120, 25});
     observedPaint();
     const auto fast = pixels({485, 100, 120, 25});
     const auto &view = Access::world(*app).raidObservation();
     std::size_t hiddenPixels = 0, changedVisiblePixels = 0;
+    std::size_t rawHiddenGlyphPixels = 0, rawVisibleGlyphPixels = 0;
     for (int y = 100; y < 125; ++y)
         for (int x = 485; x < 605; ++x)
         {
             const auto index = static_cast<std::size_t>((y - 100) * 120 + x - 485);
-            if (x < 508 && !view.pointVisible({x + 0.5F, y + 0.5F}))
-            { ++hiddenPixels; EXPECT_EQ(fast[index], ordinary[index]); }
-            if (view.pointVisible({x + 0.5F, y + 0.5F}) && fast[index] != ordinary[index])
-                ++changedVisiblePixels;
+            const bool visible = view.pointVisible({x + 0.5F, y + 0.5F});
+            const bool rawGlyph = rawFast[index] != rawOrdinary[index];
+            if (x < 499 && !visible)
+            {
+                ++hiddenPixels;
+                if (rawGlyph) ++rawHiddenGlyphPixels;
+                EXPECT_EQ(fast[index], ordinary[index]);
+            }
+            if (visible)
+            {
+                if (rawGlyph) ++rawVisibleGlyphPixels;
+                if (fast[index] != ordinary[index]) ++changedVisiblePixels;
+            }
         }
+    EXPECT_GT(rawHiddenGlyphPixels, 0U);
+    EXPECT_GT(rawVisibleGlyphPixels, 0U);
     EXPECT_GT(hiddenPixels, 100U);
     EXPECT_GT(changedVisiblePixels, 0U);
 }

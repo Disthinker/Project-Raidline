@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -187,6 +188,33 @@ TEST(RunnerInfectedPerformanceTest, RealMixedPursuitObservationAndDeathStayWithi
         EXPECT_GT(wallTests, 0U);
         auto sorted = samples; std::sort(sorted.begin(), sorted.end());
         RecordProperty("runner_" + std::to_string(count) + "_mixed_update_p95_ms", std::to_string(sorted[142]));
+        if (sorted[142] > 3.0)
+        {
+            // Failure evidence only; all calculations remain outside the
+            // unchanged complete gameplay timer and its 150-sample result.
+            std::array<std::vector<double>, 3> phases;
+            for (const auto &frame : diagnosis)
+            {
+                phases[0].push_back(frame.update);
+                phases[1].push_back(frame.observation);
+                phases[2].push_back(frame.actorQueries);
+            }
+            for (auto &phase : phases) std::sort(phase.begin(), phase.end());
+            const auto p95Sample = static_cast<std::size_t>(
+                std::find(samples.begin(), samples.end(), sorted[142]) - samples.begin());
+            const auto &frame = diagnosis[p95Sample];
+            std::cerr << "runner failure diagnosis: enemies=" << count
+                << " total_p95_ms=" << sorted[142]
+                << " update_p95_ms=" << phases[0][142]
+                << " observation_p95_ms=" << phases[1][142]
+                << " actorqueries_p95_ms=" << phases[2][142]
+                << " total_p95_sample=" << p95Sample
+                << " local_blockers=" << frame.work.localBlockers
+                << " rays=" << frame.work.rays
+                << " blocker_tests=" << frame.work.blockerTests
+                << " observation_builds=" << frame.observationBuilds
+                << " actor_solves=" << frame.actorSolves << '\n';
+        }
         EXPECT_LE(sorted[142], 3.0) << "enemies=" << count << " blockers=220 samples=150";
         if (const char *directory = std::getenv("RAIDLINE_RUNNER_QA_DIR"))
         {

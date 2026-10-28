@@ -179,6 +179,101 @@ slowConeReference(const RaidSpaceBlockerIndex &index,
     return result;
 }
 
+// Preserve accepted validity decisions independently of the optimized code.
+class OldMainValidityProjection final : public RaidVisibilityProjection
+{
+public:
+    explicit OldMainValidityProjection(const RaidVisibilityProjection &view)
+        : RaidVisibilityProjection{view} {}
+bool validGeometryReference() const noexcept
+{
+    if (!valid || geometryRevision == 0 || boundary.size() < 3 ||
+        !finite(observer) || !finite(worldSize) || worldSize.x <= 0 ||
+        worldSize.y <= 0 || observer.x < 0 || observer.y < 0 ||
+        observer.x > worldSize.x || observer.y > worldSize.y ||
+        !finite(direction) || !std::isfinite(angleDegrees) ||
+        !std::isfinite(maximumDistance) || angleDegrees <= 0 ||
+        angleDegrees > 360 || maximumDistance < 0 ||
+        (maximumDistance > 0 &&
+         (angleDegrees > 180 ||
+          std::abs(std::hypot(direction.x, direction.y) - 1) > 0.001F)))
+        return false;
+    if (!std::isfinite(lightAngleDegrees) || !std::isfinite(lightDistance) ||
+        (lightAssetId ? (!lightBatteryId || lightAngleDegrees <= 0 || lightAngleDegrees > 180 || lightDistance <= 0 || lightDistance > 1500 || maximumDistance <= 0) :
+                        (lightBatteryId != 0 || lightAngleDegrees != 0 || lightDistance != 0))) return false;
+    double area{};
+    const float cosLightHalf = std::cos(lightAngleDegrees * 3.14159265358979323846F / 360);
+    const float cosHalf =
+        std::cos(angleDegrees * 3.14159265358979323846F / 360);
+    for (std::size_t i = 0; i < boundary.size(); ++i)
+    {
+        const auto p = boundary[i], q = boundary[(i + 1) % boundary.size()];
+        if (!finite(p) || p.x < 0 || p.y < 0 || p.x > worldSize.x ||
+            p.y > worldSize.y)
+            return false;
+        if (maximumDistance > 0)
+        {
+            // Far-map float coordinates lose several thousandths on
+            // translation. Use 0.01-unit linear roundoff for vertices, rather
+            // than a fixed squared tolerance whose effective allowance shrinks
+            // at long range.
+            const float dx = p.x - observer.x, dy = p.y - observer.y;
+            const float squared = dx * dx + dy * dy,
+                        dot = dx * direction.x + dy * direction.y;
+            const auto within = [&](float distance, float cosine) {
+                return squared <= (distance + 0.01F) * (distance + 0.01F) && dot >= -0.01F &&
+                       (dot + 0.01F) * (dot + 0.01F) >= squared * cosine * cosine;
+            };
+            if (!within(maximumDistance, cosHalf) && !(lightAssetId && within(lightDistance, cosLightHalf))) return false;
+            if (lightAssetId && angleDegrees != lightAngleDegrees)
+            {
+                // Each angular subsegment must fit its own range. Testing only
+                // vertices (or the enclosing angle/range) fills the union's
+                // concave notch, including bridges ending exactly on a seam.
+                const Vec2 edge{q.x-p.x, q.y-p.y};
+                const float length=std::hypot(edge.x,edge.y);
+                const float inner=std::min(angleDegrees,lightAngleDegrees);
+                std::array<float,4> cuts{0,1}; std::size_t count=2;
+                bool radialStep=false;
+                for (float sign : {-1.0F,1.0F})
+                {
+                    const float theta=inner*sign*3.14159265358979323846F/360;
+                    const Vec2 ray{direction.x*std::cos(theta)-direction.y*std::sin(theta),
+                                   direction.x*std::sin(theta)+direction.y*std::cos(theta)};
+                    const double first=static_cast<double>(dx)*ray.y-static_cast<double>(dy)*ray.x;
+                    const double last=static_cast<double>(q.x-observer.x)*ray.y-static_cast<double>(q.y-observer.y)*ray.x;
+                    // Float translation at far map coordinates has <=0.01
+                    // world-unit roundoff; a radial step has zero ideal area.
+                    if (std::abs(first)<=0.01 && std::abs(last)<=0.01) { radialStep=true; break; }
+                    const double denominator=first-last;
+                    if (std::abs(denominator)<0.000001) continue;
+                    const double t=first/denominator;
+                    if (t>0 && t<1) cuts[count++]=static_cast<float>(t);
+                }
+                if (!radialStep)
+                {
+                    std::sort(cuts.begin(),cuts.begin()+count);
+                    for (std::size_t n=1;n<count;++n)
+                    {
+                        const float a=cuts[n-1], b=cuts[n];
+                        if ((b-a)*length<=0.02F) continue;
+                        const float mx=dx+edge.x*(a+b)*0.5F, my=dy+edge.y*(a+b)*0.5F;
+                        const float radius=std::hypot(mx,my), forward=mx*direction.x+my*direction.y;
+                        const float cap=std::max(forward+0.01F>=radius*cosHalf ? maximumDistance : 0.0F,
+                                                 forward+0.01F>=radius*cosLightHalf ? lightDistance : 0.0F);
+                        for (float t : {a,b})
+                            if (std::hypot(dx+edge.x*t,dy+edge.y*t)>cap+0.02F) return false;
+                    }
+                }
+            }
+        }
+        area += (static_cast<double>(p.x) - observer.x) * (q.y - observer.y) -
+                (static_cast<double>(p.y) - observer.y) * (q.x - observer.x);
+    }
+    return std::isfinite(area) && area > 0.0001;
+}
+};
+
 RaidObservationKey observation(Vec2 observer, Vec2 direction = {1, 0},
     float angle = 180, float distance = 1000)
 {
@@ -204,6 +299,7 @@ void expectIdenticalGeometry(Vec2 worldSize,
     EXPECT_EQ(actual.key(), expected.key());
     EXPECT_EQ(actual.valid, expected.valid);
     EXPECT_EQ(actual.validGeometry(), expected.validGeometry());
+    EXPECT_EQ(actual.validGeometry(), OldMainValidityProjection{expected}.validGeometryReference());
     EXPECT_EQ(actual.worldSize.x, expected.worldSize.x);
     EXPECT_EQ(actual.worldSize.y, expected.worldSize.y);
     EXPECT_EQ(newWork.rays, oldWork.rays);
@@ -324,4 +420,105 @@ TEST(RunnerInfectedVisibilityEquivalenceTest, LightUnionSeamsKeepBothEndpointsAn
                     key.lightDistance = ranges[3];
                     expectIdenticalGeometry({4000, 4000}, walls, key, cell);
                 }
+}
+
+TEST(RunnerInfectedVisibilityEquivalenceTest, PreparedBoundsPreserveOriginalClippingWithDenseCoverAndLightSeams)
+{
+    const auto index = RaidSpaceBlockerIndex::build({3000, 3000}, denseCover());
+    ASSERT_TRUE(index);
+    for (const float direction : {0.0F, 60.0F, 120.0F, 180.0F, 240.0F, 300.0F})
+        for (const int mode : {0, 1, 2})
+        {
+            auto key = observation({1216, 800}, heading(direction), mode == 0 ? 180.0F : 100.0F,
+                mode == 0 ? 1000.0F : 600.0F);
+            if (mode == 2)
+            {
+                key.lightAssetId = 11;
+                key.lightBatteryId = 12;
+                key.lightAngleDegrees = 70;
+                key.lightDistance = 900;
+            }
+            const auto view = buildRaidSpaceConeVisibility(*index, key);
+            ASSERT_TRUE(OldMainValidityProjection{view}.validGeometryReference());
+            ASSERT_TRUE(view.validGeometry());
+            const RaidVisibilityBoundsQuery prepared{view};
+            for (int target = 0; target < 24; ++target)
+            {
+                SCOPED_TRACE(::testing::Message() << "direction=" << direction
+                    << " mode=" << mode << " target=" << target);
+                const auto ray = heading(static_cast<float>(target) * 15);
+                const float distance = 50.0F + (target % 7) * 180.0F;
+                for (const float size : {0.002F, 50.0F})
+                {
+                    const Rect bounds{{key.observer.x + ray.x * distance - size / 2,
+                        key.observer.y + ray.y * distance - size / 2}, {size, size}};
+                    EXPECT_EQ(prepared.boundsVisible(bounds), view.boundsVisible(bounds));
+                }
+            }
+        }
+}
+
+TEST(RunnerInfectedVisibilityEquivalenceTest, PreparedBoundsRejectMalformedViewsAndRetainOwnedSnapshot)
+{
+    const auto index = RaidSpaceBlockerIndex::build({3000, 3000}, {});
+    ASSERT_TRUE(index);
+    auto view = buildRaidSpaceConeVisibility(*index,
+        observation({1000, 1000}, {1, 0}, 110, 500));
+    ASSERT_TRUE(OldMainValidityProjection{view}.validGeometryReference());
+    const Rect front{{1100, 975}, {50, 50}};
+    const RaidVisibilityBoundsQuery owned{view};
+    ASSERT_TRUE(owned.boundsVisible(front));
+    const auto reject = [&](const RaidVisibilityProjection &bad)
+    {
+        EXPECT_FALSE(OldMainValidityProjection{bad}.validGeometryReference());
+        EXPECT_FALSE(bad.validGeometry());
+        EXPECT_FALSE(RaidVisibilityBoundsQuery{bad}.boundsVisible(front));
+    };
+    auto bad = view;
+    bad.valid = false;
+    reject(bad);
+    bad = view;
+    bad.geometryRevision = 0;
+    reject(bad);
+    bad = view;
+    bad.boundary.resize(2);
+    reject(bad);
+    bad = view;
+    bad.boundary.front().x = std::numeric_limits<float>::quiet_NaN();
+    reject(bad);
+    bad = view;
+    bad.boundary.front().y = std::numeric_limits<float>::infinity();
+    reject(bad);
+    bad = view;
+    bad.boundary.front().x = -1;
+    reject(bad);
+    bad = view;
+    bad.boundary.front().x = bad.observer.x + 501;
+    reject(bad);
+    bad = view;
+    std::reverse(bad.boundary.begin(), bad.boundary.end());
+    reject(bad);
+    bad = view;
+    bad.direction = {2, 0};
+    reject(bad);
+    bad = view;
+    bad.angleDegrees = 181;
+    reject(bad);
+    bad = view;
+    bad.maximumDistance = -1;
+    reject(bad);
+    bad = view;
+    bad.maximumDistance = std::numeric_limits<float>::quiet_NaN();
+    reject(bad);
+    bad = view;
+    bad.lightAssetId = 11;
+    reject(bad);
+    view.boundary.clear();
+    EXPECT_TRUE(owned.boundsVisible(front));
+    EXPECT_FALSE(RaidVisibilityBoundsQuery{view}.boundsVisible(front));
+    EXPECT_FALSE(RaidVisibilityBoundsQuery{}.boundsVisible(front));
+    for (const Rect invalid : {Rect{{1100, 975}, {0, 50}},
+             Rect{{1100, 975}, {-1, 50}},
+             Rect{{1100, 975}, {std::numeric_limits<float>::infinity(), 50}}})
+        EXPECT_FALSE(owned.boundsVisible(invalid));
 }

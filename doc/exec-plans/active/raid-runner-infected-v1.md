@@ -1,3 +1,90 @@
+# 迅捷感染者 CI v1：本地通过，正在验证双平台
+
+**候选 `261634b9a2b8` 已冻结。本地全量2876/2876、最后定向13/13通过；准确新HEAD的Windows与Ubuntu CI尚待完成，完成后再请用户复验。**
+
+- task_id：`raid-runner-infected-v1`；fix_plan_version：`RL-RAID-RUNNER-INFECTED-CI-v1`；state：`ci_verification_pending`。
+- candidate_id：`RL-RAID-RUNNER-INFECTED-CI-v1-local-261634b9a2b8`；source_sha256：`261634b9a2b8d7135f56f9c04d126069961b1c85c28a9ebbae247681af1aa58d`；program_sha256：`22466a663c6066f65a8c003a61a2242a168e45b8b072d2d0e384914977361779`。
+- approval_source：2026-10-28用户选择“同意，先做CI再复验（推荐）”，明确允许提交推送至[PR #197](https://github.com/Disthinker/Project-Raidline/pull/197)，新候选复验前不合并。新候选尚未人工验收。
+- 已验收v3 `08178f45f1dd`／提交`e1374c5932a5b33b4da44fa40eebae745186db72`为本修复基线；accepted main仍`77b117d1492d975a2861357a04c60a652d9e73dc`。继续原分支`codex/raid-runner-infected-v1`。
+
+## 实际修改与边界
+
+`raid_space_query.cpp`与`raid_visibility.cpp`只优化当前帧的连续数据填充、只读查询和重复计算。保持角度、排序、射线、几何运算顺序、容差与旧输出；无跨帧缓存、无AI／GameSession／存档或玩法修改。
+
+中文“迅捷”部分裁剪测试把既有观察边界移入文字内部，并先证明原始字形两侧均有像素。Windows与Linux后备字体宽度不同，旧样本在Linux上把整个短名放在了隐藏侧；产品文字与遮盖没有改。增加两项视野等价／非法输入与拥有快照回归。混合性能测试只在失败后输出原测量诊断，原计时区间与负载不变。
+
+599份源文件中仅上述两个生产文件和三个迅捷测试变化；提交另含本任务计划、复验清单及CURRENT_STATE入口，共8文件。原六项3ms源码、32/100混合目标、220近障碍、160帧／150样本、p95≤3ms及串行隔离均保持。
+
+## 检查与保全
+
+最终Build无待编译项，Probe4为13/13；Full1为2876/2876，0失败／跳过，原2874项完整保留。Focused2曾199/199通过；最终源码由Probe4及Full1覆盖，不把较早检查冒充最终版本结果。实际性能原始CSV见本轮candidate-source.json。
+
+保留原失败CI 40631074705：Windows混合100目标3.5637ms，Ubuntu3.970759ms及中文样本失败。Focused1另有9项可选QA图片保存失败，原因是导出路径含中文；仅将测试运行环境改为纯英文目录，Focused2及最终全量通过，没有改旧断言。
+
+五目录原有脏文件、CURRENT_STATE旧历史、最新21份玩家数据及固定快捷方式按开工快照核对。旧v3程序939562d7…在accepted-v3-program单独保留。提交钩子后再次逐字节检查；其他工作不得夹入提交或被换行处理覆盖。原存档不恢复到开发前，不启动游戏。
+
+证据根：`C:\Users\Administrator\Documents\美术资源生成\tmp\raid-runner-infected-ci-v1-20261028`，包括before.json、原源码／脏文件备份、候选清单、构建日志、JUnit、CSV与后续CI／提交保全回执。准确提交、CI及候选发布结果随后更新本记录，不追加仅复制CI状态的提交。
+
+<details>
+<summary>批准过程、原v3与历史记录</summary>
+
+# 迅捷感染者 CI v1：已批准，修复中
+
+**用户已批准 `RL-RAID-RUNNER-INFECTED-CI-v1`，允许先提交、推送到PR #197验证双平台CI；通过后提供新候选复验，复验前不合并。**
+
+- state：`implementing_ci_fix`；fix_plan_version：`RL-RAID-RUNNER-INFECTED-CI-v1`；approval_source：2026-10-28用户选择“同意，先做CI再复验（推荐）”。
+- 只优化既有视野数据计算并修正中文裁剪测试样本；原玩法、存档、地图权限、UI、固定入口、全部负载及3ms门槛保持。原v3程序与失败CI保留。
+- 基线为已验收v3 `08178f45f1dd`／提交`e1374c5932a5b33b4da44fa40eebae745186db72`；实际分支仍`codex/raid-runner-infected-v1`，PR #197未合并。
+- 开工保全与原始源码在`C:\Users\Administrator\Documents\美术资源生成\tmp\raid-runner-infected-ci-v1-20261028`。新候选／新CI尚无；按获批范围连续完成，不开游戏、不合并、不开始下一任务。
+
+<details>
+<summary>获批前修复方案与原v3交付证据（历史）</summary>
+
+# 迅捷感染者 v3 已验收，交付受阻
+
+**[PR #197](https://github.com/Disthinker/Project-Raidline/pull/197)。Windows混合100敌人p95=3.5637ms、Ubuntu=3.970759ms，均超过3ms；Ubuntu另有一项中文裁剪测试样本失效。已提交推送，尚未合并，已验收候选保持不变。** 用户已验收候选`08178f45f1dd`并授权本次交付；不开始下一任务。
+
+- state：`accepted_delivery_blocked`；task_id：`raid-runner-infected-v1`；plan_version：`RL-RAID-RUNNER-INFECTED-v3`；accepted_candidate_id：`RL-RAID-RUNNER-INFECTED-v3-local-08178f45f1dd`。
+- feature_commit：`e1374c5932a5b33b4da44fa40eebae745186db72`；merge_commit：`待合并`；baseline：`77b117d1492d975a2861357a04c60a652d9e73dc`。
+- 本地全量2874/2874；PR CI：https://github.com/Disthinker/Project-Raidline/actions/runs/40631074705（failure）；main CI：待合并后执行（未完成）。准确提交、事件、Windows／Ubuntu各2874项和七项关键3ms证据保存在`delivery/*-ci-proof.json`。
+- 59个提交文件与已验收范围一致，599份源码及原程序指纹不变。最新存档、固定入口、五目录其他未提交工作保全；pre-commit暂存恢复仅造成的换行变化已归档并恢复原字节，无无关改动进入提交。
+- 程序仍从桌面 **Project Raidline Debug** 启动；原分支及程序保留。无正式资源生产，未启动游戏，不追加仅复制CI状态的提交。
+- 策划同步状态及证据见`delivery/planner-sync-*.json`（发出后登记）。不发起下一项开发。
+
+## 待批准：迅捷感染者双平台检查修复 v1
+
+**方案：`RL-RAID-RUNNER-INFECTED-CI-v1`。尚未获批，未修改游戏代码或测试。** 原v3已通过玩家验收，但PR #197的双平台检查未全部通过，因此仍停在合并前。
+
+### 已确认的问题
+
+- Windows：2873/2874通过，唯一失败为新混合100敌人的3ms检查，p95=3.5637ms。
+- Ubuntu：2872/2874通过；同一性能检查p95=3.970759ms，另一个失败为新中文标记局部裁剪测试。两平台均无跳过，原六项3ms检查全部通过；32敌人的新负载也通过。
+- 本地同一源码全量2874/2874，100敌人p95=2.6739ms。这说明本地通过没有足够的跨平台余量，不以重跑碰过代替修复，也不放宽门槛。
+- 本地分段诊断显示，慢帧主要有视野生成、PreparedBounds构造及现有更新成本。保守角度桶已经削减障碍测试，剩余几千个角点／三角形的Debug容器与标量操作还有可检查的重复工作；CI目前没有各分段原始CSV，具体收益仍须实测。
+- Ubuntu中文裁剪失败来自测试位置：回退绘制每个UTF-8码点8像素，“迅捷”只占x493～508，测试的观察边界却为x510，文字实际完全在隐藏侧，正确遮盖后可见差为0。Windows字体更宽才跨界。生产文字与遮盖无需因此改变。
+
+### 本次只修这些内容
+
+1. `src/raid_space_query.cpp`：角度与边界按现有上界一次建立有效容器大小，再以连续数据填充并裁到实际数量；复用已有只读障碍数组。保留每个角点、原角度表达式、排序、射线数、候选顺序、除法及灯光接缝双端点。不得只reserve后越过size写入，不引入跨帧缓存或减少射线。
+2. `src/raid_visibility.cpp`：三角形同样使用连续批量填充，三点包围盒按原比较次序计算，查询时连续访问三角形／边，减少Debug逐元素开销。仅外提完全相同的固定表达式，保留完整几何校验、SAT表达式、短路顺序、容差及拥有式快照；例如不把原`squared*cosine*cosine`重新结合成`squared*(cosine*cosine)`。
+3. `tests/test_runner_infected_ui.cpp`：保留中文，将测试观察边界放到两平台实际字形中间，并增加未遮盖文字差的先验检查，证明文字确实跨界；保留“隐藏侧零泄漏、可见侧有变化”断言，不改生产UI、不跳过Linux、不删除或降低断言。
+4. 相关新回归按需补充同序计算与真实字形先验；性能测试仅补失败时的分段诊断输出，原总计时范围、32／100敌人、220近障碍、160次含10次预热、150有效样本、p95和3ms阈值全部保持。
+
+不改AI决策、速度、攻击、生成、存档schema／迁移、收益、地图权限、准星或菜单；不改原六项性能测试源码，不制作资源或增加入口。已验收v3程序和原候选证据保留，玩家最新存档不覆盖。若上述范围不足，保留失败证据并重新说明，不悄悄扩到其他系统。
+
+### 怎么验证与交付
+
+- 在同一任务／现有PR上实施直接依赖修复，不混入其他未提交内容。
+- 保留原四项逐位视野边界参考，补充PreparedBounds布尔结果和畸形几何拒绝对照；中文、墙后与局部裁剪的非零／零泄漏断言均须通过。
+- x64 Windows Debug重建受影响目标，跑定向及完整CTest；原六项和新混合性能检查原样通过，保留失败与原始计时记录。
+- **建议用户本次同时授权：允许在本地通过后先提交、推送这份修复到PR #197做准确提交的Windows／Ubuntu CI；双平台全部通过后提供新候选与简短复验清单，复验通过前不合并。** 此项当前仅为建议，没有执行授权，不沿用原候选的验收结论代替新候选复验。
+- 如果用户只批准本地修复，则停在本地新候选，不追加提交、推送或合并。当前PR保持未合并，不启动下一项内容开发。
+
+原CI证据：run `40631074705`，提交`e1374c5932a5b33b4da44fa40eebae745186db72`；`delivery/pr-ci-proof.json`、`pr-windows-job.log`、`pr-ubuntu-job.log`。本方案不保证两项优化一定达到门槛，以相同负载的实际检查为准。
+
+<details>
+<summary>提交前候选、验收与开发记录（历史）</summary>
+
 # 迅捷感染者 v3：已验收，正在交付
 
 **用户已验收候选 `08178f45f1dd`，并授权提交、推送和合并。** 本次只交付该候选，不开始下一任务。
@@ -162,6 +249,12 @@ Pressure允许继续接近，Engage另有近身攻击名额。加速只改变移
 ## 实施启动（2026-10-28）
 
 已按本主控用户的明确批准，从已验收main77b117d建立`codex/raid-runner-infected-v1`。开工前已重新保全五目录脏文件、21份玩家数据、旧程序／内容72和固定入口，证据目录`C:\Users\Administrator\Documents\美术资源生成\tmp\raid-runner-infected-v3-20261028`。前文拟实施与待审批文字保留为方案历史，以上方状态和本段为准。本轮连续完成获批范围及检查，不启动游戏、不提交／推送／合并。
+
+</details>
+
+</details>
+
+</details>
 
 </details>
 

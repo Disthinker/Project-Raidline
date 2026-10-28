@@ -125,6 +125,22 @@ bool RaidVisibilityProjection::validGeometry() const noexcept
     const float cosLightHalf = std::cos(lightAngleDegrees * 3.14159265358979323846F / 360);
     const float cosHalf =
         std::cos(angleDegrees * 3.14159265358979323846F / 360);
+    const float maximumVertexDistanceSquared =
+        (maximumDistance + 0.01F) * (maximumDistance + 0.01F);
+    const float lightVertexDistanceSquared =
+        (lightDistance + 0.01F) * (lightDistance + 0.01F);
+    std::array<Vec2, 2> seamRays{};
+    if (lightAssetId && angleDegrees != lightAngleDegrees)
+    {
+        const float inner = std::min(angleDegrees, lightAngleDegrees);
+        auto *ray = seamRays.data();
+        for (float sign : {-1.0F, 1.0F})
+        {
+            const float theta = inner * sign * 3.14159265358979323846F / 360;
+            *ray++ = {direction.x * std::cos(theta) - direction.y * std::sin(theta),
+                      direction.x * std::sin(theta) + direction.y * std::cos(theta)};
+        }
+    }
     const auto *const points = boundary.data();
     const auto pointCount = boundary.size();
     for (std::size_t i = 0; i < pointCount; ++i)
@@ -142,11 +158,11 @@ bool RaidVisibilityProjection::validGeometry() const noexcept
             const float dx = p.x - observer.x, dy = p.y - observer.y;
             const float squared = dx * dx + dy * dy,
                         dot = dx * direction.x + dy * direction.y;
-            const auto within = [&](float distance, float cosine) {
-                return squared <= (distance + 0.01F) * (distance + 0.01F) && dot >= -0.01F &&
-                       (dot + 0.01F) * (dot + 0.01F) >= squared * cosine * cosine;
-            };
-            if (!within(maximumDistance, cosHalf) && !(lightAssetId && within(lightDistance, cosLightHalf))) return false;
+            if (!(squared <= maximumVertexDistanceSquared && dot >= -0.01F &&
+                    (dot + 0.01F) * (dot + 0.01F) >= squared * cosHalf * cosHalf) &&
+                !(lightAssetId && squared <= lightVertexDistanceSquared && dot >= -0.01F &&
+                    (dot + 0.01F) * (dot + 0.01F) >= squared * cosLightHalf * cosLightHalf))
+                return false;
             if (lightAssetId && angleDegrees != lightAngleDegrees)
             {
                 // Each angular subsegment must fit its own range. Testing only
@@ -154,14 +170,13 @@ bool RaidVisibilityProjection::validGeometry() const noexcept
                 // concave notch, including bridges ending exactly on a seam.
                 const Vec2 edge{q.x-p.x, q.y-p.y};
                 const float length=std::hypot(edge.x,edge.y);
-                const float inner=std::min(angleDegrees,lightAngleDegrees);
                 std::array<float,4> cuts{0,1}; std::size_t count=2;
+                auto *const cutData = cuts.data();
                 bool radialStep=false;
-                for (float sign : {-1.0F,1.0F})
+                const auto *const lastRay = seamRays.data() + seamRays.size();
+                for (auto rayCursor = seamRays.data(); rayCursor != lastRay; ++rayCursor)
                 {
-                    const float theta=inner*sign*3.14159265358979323846F/360;
-                    const Vec2 ray{direction.x*std::cos(theta)-direction.y*std::sin(theta),
-                                   direction.x*std::sin(theta)+direction.y*std::cos(theta)};
+                    const Vec2 ray = *rayCursor;
                     const double first=static_cast<double>(dx)*ray.y-static_cast<double>(dy)*ray.x;
                     const double last=static_cast<double>(q.x-observer.x)*ray.y-static_cast<double>(q.y-observer.y)*ray.x;
                     // Float translation at far map coordinates has <=0.01
@@ -170,14 +185,14 @@ bool RaidVisibilityProjection::validGeometry() const noexcept
                     const double denominator=first-last;
                     if (std::abs(denominator)<0.000001) continue;
                     const double t=first/denominator;
-                    if (t>0 && t<1) cuts[count++]=static_cast<float>(t);
+                    if (t>0 && t<1) cutData[count++]=static_cast<float>(t);
                 }
                 if (!radialStep)
                 {
-                    std::sort(cuts.begin(),cuts.begin()+count);
+                    std::sort(cutData,cutData+count);
                     for (std::size_t n=1;n<count;++n)
                     {
-                        const float a=cuts[n-1], b=cuts[n];
+                        const float a=cutData[n-1], b=cutData[n];
                         if ((b-a)*length<=0.02F) continue;
                         const float mx=dx+edge.x*(a+b)*0.5F, my=dy+edge.y*(a+b)*0.5F;
                         const float radius=std::hypot(mx,my), forward=mx*direction.x+my*direction.y;
@@ -342,12 +357,12 @@ RaidVisibilityBoundsQuery::RaidVisibilityBoundsQuery(
                       view.direction.y * c - view.direction.x * s};
     rightDirection_ = {view.direction.x * c - view.direction.y * s,
                        view.direction.y * c + view.direction.x * s};
-    triangles_.reserve(view.boundary.size());
-    const auto edge = [](Vec2 a, Vec2 b)
-    {
-        const Vec2 delta{b.x - a.x, b.y - a.y};
-        return Edge{a, delta, std::abs(delta.x), std::abs(delta.y)};
-    };
+    // Establish live elements before writing through the contiguous view.
+    // The final resize removes only triangles rejected by the original area
+    // test; no capacity-only writes or changed fan order are permitted.
+    triangles_.assign(view.boundary.size(), Triangle{});
+    auto *const triangles = triangles_.data();
+    std::size_t triangleCount{};
     const auto *const points = view.boundary.data();
     const auto pointCount = view.boundary.size();
     for (std::size_t i = 0; i < pointCount; ++i)
@@ -356,14 +371,25 @@ RaidVisibilityBoundsQuery::RaidVisibilityBoundsQuery(
         const auto area = cross(observer_, p, q);
         if (std::abs(area) < 0.00001F)
             continue;
-        triangles_.push_back(
-            {{std::min({observer_.x, p.x, q.x}),
-              std::min({observer_.y, p.y, q.y})},
-             {std::max({observer_.x, p.x, q.x}),
-              std::max({observer_.y, p.y, q.y})},
-             area > 0 ? 1.0F : -1.0F,
-             {edge(observer_, p), edge(p, q), edge(q, observer_)}});
+        Vec2 minimum = observer_, maximum = observer_;
+        if (p.x < minimum.x) minimum.x = p.x;
+        if (q.x < minimum.x) minimum.x = q.x;
+        if (p.y < minimum.y) minimum.y = p.y;
+        if (q.y < minimum.y) minimum.y = q.y;
+        if (maximum.x < p.x) maximum.x = p.x;
+        if (maximum.x < q.x) maximum.x = q.x;
+        if (maximum.y < p.y) maximum.y = p.y;
+        if (maximum.y < q.y) maximum.y = q.y;
+        const Vec2 firstDelta{p.x - observer_.x, p.y - observer_.y};
+        const Vec2 middleDelta{q.x - p.x, q.y - p.y};
+        const Vec2 lastDelta{observer_.x - q.x, observer_.y - q.y};
+        triangles[triangleCount++] = {minimum, maximum,
+            area > 0 ? 1.0F : -1.0F,
+            {Edge{observer_, firstDelta, std::abs(firstDelta.x), std::abs(firstDelta.y)},
+             Edge{p, middleDelta, std::abs(middleDelta.x), std::abs(middleDelta.y)},
+             Edge{q, lastDelta, std::abs(lastDelta.x), std::abs(lastDelta.y)}}};
     }
+    triangles_.resize(triangleCount);
 }
 
 bool RaidVisibilityBoundsQuery::boundsVisible(Rect rect) const noexcept
@@ -404,14 +430,17 @@ bool RaidVisibilityBoundsQuery::boundsVisible(Rect rect) const noexcept
                 bottom = rect.position.y + rect.size.y - dy;
     const Vec2 center{(left + right) / 2, (top + bottom) / 2};
     const float hx = (right - left) / 2, hy = (bottom - top) / 2;
-    for (const auto &triangle : triangles_)
+    const auto *const lastTriangle = triangles_.data() + triangles_.size();
+    for (auto triangleCursor = triangles_.data(); triangleCursor != lastTriangle; ++triangleCursor)
     {
+        const auto &triangle = *triangleCursor;
         if (triangle.maximum.x < left || triangle.minimum.x > right ||
             triangle.maximum.y < top || triangle.minimum.y > bottom)
             continue;
-        if (triangle.edges[0].overlaps(center, hx, hy, triangle.sign) &&
-            triangle.edges[1].overlaps(center, hx, hy, triangle.sign) &&
-            triangle.edges[2].overlaps(center, hx, hy, triangle.sign))
+        const auto *const edges = triangle.edges.data();
+        if (edges[0].overlaps(center, hx, hy, triangle.sign) &&
+            edges[1].overlaps(center, hx, hy, triangle.sign) &&
+            edges[2].overlaps(center, hx, hy, triangle.sign))
             return true;
     }
     return false;
