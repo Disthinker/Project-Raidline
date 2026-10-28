@@ -625,6 +625,8 @@ function(raidline_add_test target source module)
     endif()
 endfunction()
 
+raidline_add_test(TemporaryDirectoryTest tests/test_temp_directory.cpp raidline::domain)
+target_link_libraries(TemporaryDirectoryTest PRIVATE Threads::Threads)
 raidline_add_test(HealthTest tests/test_health.cpp raidline::domain)
 raidline_add_test(BaseWishExpeditionTest tests/test_base_wish_expedition.cpp raidline::services)
 raidline_add_test(HomeFoundingTest tests/test_home_founding.cpp raidline::services)

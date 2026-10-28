@@ -1,4 +1,5 @@
 #include "app.h"
+#include "test_temp_directory.h"
 #include "alpha_content_ids.h"
 
 #include <algorithm>
@@ -59,6 +60,7 @@ namespace {
 using A = UiFinalContainersTestAccess;
 class UiFinalContainersTest : public testing::Test {
 protected:
+    raidline::test::TemporaryDirectory saveDirectory;
     std::unique_ptr<App> app;
     SDL_Surface *surface{};
     SDL_Renderer *renderer{};
@@ -69,8 +71,9 @@ protected:
     ProfileState &profile() { return const_cast<ProfileState &>(session().profile()); }
     void SetUp() override {
         ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
-        path = std::filesystem::temp_directory_path() / ("raidline-final-containers-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-        ASSERT_TRUE(std::filesystem::create_directory(path));
+        ASSERT_NO_THROW(saveDirectory.claim("raidline-final-containers-",
+            testing::UnitTest::GetInstance()->current_test_info()->name()));
+        path = saveDirectory.path();
         auto p = makeNewAlphaProfile("final-containers", content);
         p.tutorial = TutorialProgress::Complete; p.homeFounding.hintsDismissed = true;
         for (const auto &[id, asset] : p.assets.records()) if (asset.definitionId == alpha_content::rifle) { rifle = id; break; }
@@ -93,10 +96,7 @@ protected:
     }
     void TearDown() override {
         if (renderer) detach(); app.reset(); SDL_Quit();
-        const auto resolved = std::filesystem::weakly_canonical(path);
-        ASSERT_TRUE(std::filesystem::equivalent(resolved.parent_path(), std::filesystem::temp_directory_path()));
-        ASSERT_TRUE(resolved.filename().string().starts_with("raidline-final-containers-"));
-        std::error_code error; std::filesystem::remove_all(resolved, error);
+        ASSERT_NO_THROW(saveDirectory.cleanup());
     }
     void position(Vec2 center) {
         const auto half = session().world().player().size() / 2;

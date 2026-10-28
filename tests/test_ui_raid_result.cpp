@@ -1,4 +1,5 @@
 #include "app.h"
+#include "test_temp_directory.h"
 #include "alpha_content_ids.h"
 #include "ui_raid_result_presentation.h"
 
@@ -125,6 +126,7 @@ UiRaidResultProjection project(const std::optional<LastRaidResult> &r,
 
 class UiRaidResultTest : public testing::Test {
 protected:
+    raidline::test::TemporaryDirectory saveDirectory;
     std::unique_ptr<App> app;
     SDL_Surface *surface{};
     SDL_Renderer *renderer{};
@@ -134,9 +136,9 @@ protected:
 
     void SetUp() override {
         ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
-        path = std::filesystem::temp_directory_path() /
-            ("raidline-result-ui-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-        ASSERT_TRUE(std::filesystem::create_directory(path));
+        ASSERT_NO_THROW(saveDirectory.claim("raidline-result-ui-",
+            testing::UnitTest::GetInstance()->current_test_info()->name()));
+        path = saveDirectory.path();
         auto p = makeNewAlphaProfile("result-ui", content);
         p.tutorial = TutorialProgress::Complete; p.homeFounding.hintsDismissed = true;
         ASSERT_TRUE(validateProfileState(p, content).valid) << validateProfileState(p, content).message;
@@ -158,11 +160,7 @@ protected:
     }
     void TearDown() override {
         detach(); app.reset(); SDL_Quit();
-        if (path.empty() || !std::filesystem::exists(path)) return;
-        const auto resolved = std::filesystem::canonical(path);
-        ASSERT_TRUE(std::filesystem::equivalent(resolved.parent_path(), std::filesystem::temp_directory_path()));
-        ASSERT_TRUE(resolved.filename().string().starts_with("raidline-result-ui-"));
-        std::error_code error; std::filesystem::remove_all(resolved, error);
+        ASSERT_NO_THROW(saveDirectory.cleanup());
     }
     void carryRecords(std::size_t count) {
         const auto pack = std::find_if(profile().assets.records().begin(), profile().assets.records().end(),

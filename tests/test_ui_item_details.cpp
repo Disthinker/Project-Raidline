@@ -1,4 +1,5 @@
 #include "app.h"
+#include "test_temp_directory.h"
 #include "alpha_content_ids.h"
 #include "ui_item_details_presentation.h"
 #include "weapon_component_domain.h"
@@ -57,6 +58,7 @@ AssetInstanceId find(const ProfileState &p, const ItemDefinitionId &definition) 
 class UiItemDetailsTest : public testing::Test {
 protected:
     const ContentRegistry &content = publishedContentRegistry();
+    raidline::test::TemporaryDirectory saveDirectory;
     std::unique_ptr<App> app;
     SDL_Surface *surface{};
     SDL_Renderer *renderer{};
@@ -71,8 +73,9 @@ protected:
     }
     void SetUp() override {
         ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
-        path = std::filesystem::temp_directory_path() / ("raidline-final-details-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-        ASSERT_TRUE(std::filesystem::create_directory(path));
+        ASSERT_NO_THROW(saveDirectory.claim("raidline-final-details-",
+            testing::UnitTest::GetInstance()->current_test_info()->name()));
+        path = saveDirectory.path();
         auto p = makeNewPublishedProfile("final-details", content);
         p.tutorial = TutorialProgress::Complete; p.homeFounding.hintsDismissed = true;
         weapon = find(p, rifle);
@@ -103,10 +106,7 @@ protected:
     }
     void TearDown() override {
         if (app) detach(); app.reset(); SDL_Quit();
-        const auto resolved = std::filesystem::weakly_canonical(path);
-        ASSERT_TRUE(std::filesystem::equivalent(resolved.parent_path(), std::filesystem::temp_directory_path()));
-        ASSERT_TRUE(resolved.filename().string().starts_with("raidline-final-details-"));
-        std::error_code error; std::filesystem::remove_all(resolved, error);
+        ASSERT_NO_THROW(saveDirectory.cleanup());
     }
     void down(SDL_FRect r) { A::pointer(*app, Event::LeftButtonDown, center(r)); }
     void up(SDL_FRect r) { A::pointer(*app, Event::LeftButtonUp, center(r)); }

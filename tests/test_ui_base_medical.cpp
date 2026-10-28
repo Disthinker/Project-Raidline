@@ -1,4 +1,5 @@
 #include "app.h"
+#include "test_temp_directory.h"
 #include "alpha_content_ids.h"
 #include <algorithm>
 #include <chrono>
@@ -45,6 +46,7 @@ void key(SDL_Scancode code) {
 }
 class UiBaseMedicalTest : public testing::Test {
 protected:
+    raidline::test::TemporaryDirectory saveDirectory;
     std::unique_ptr<App> app;
     SDL_Surface *surface{}; SDL_Renderer *renderer{};
     std::filesystem::path path;
@@ -52,8 +54,9 @@ protected:
     ProfileState &profile() { return const_cast<ProfileState &>(A::session(*app).profile()); }
     void SetUp() override {
         ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
-        path = std::filesystem::temp_directory_path() / ("raidline-medical-ui-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-        ASSERT_TRUE(std::filesystem::create_directory(path));
+        ASSERT_NO_THROW(saveDirectory.claim("raidline-medical-ui-",
+            testing::UnitTest::GetInstance()->current_test_info()->name()));
+        path = saveDirectory.path();
         auto p = makeNewAlphaProfile("medical-ui", content);
         p.currency = 10000; p.currentHealth = 64; p.tutorial = TutorialProgress::Complete;
         p.homeFounding.hintsDismissed = true;
@@ -75,10 +78,7 @@ protected:
     }
     void TearDown() override {
         detach(); app.reset(); SDL_Quit();
-        const auto resolved = std::filesystem::canonical(path);
-        ASSERT_TRUE(std::filesystem::equivalent(resolved.parent_path(), std::filesystem::temp_directory_path()));
-        ASSERT_TRUE(resolved.filename().string().starts_with("raidline-medical-ui-"));
-        std::error_code ec; std::filesystem::remove_all(resolved, ec);
+        ASSERT_NO_THROW(saveDirectory.cleanup());
     }
     void control(Control c) { auto point = center(uiBaseMedicalControlRect(c)); pointer(point, true); pointer(point, false); A::frame(*app); }
     void down(Control c = Control::Main) { pointer(center(uiBaseMedicalControlRect(c)), true); A::frame(*app); }

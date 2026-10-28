@@ -1,4 +1,5 @@
 #include "app.h"
+#include "test_temp_directory.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -60,6 +61,7 @@ void key(SDL_Scancode scancode) {
 class UiWeaponComponentsTest : public testing::Test {
 protected:
     const ContentRegistry &content = publishedContentRegistry();
+    raidline::test::TemporaryDirectory saveDirectory;
     std::unique_ptr<App> app;
     std::filesystem::path path;
     SDL_Surface *surface{}; SDL_Renderer *renderer{};
@@ -70,8 +72,9 @@ protected:
     }
     void SetUp() override {
         ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
-        path = std::filesystem::temp_directory_path() / ("raidline-component-ui-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-        ASSERT_TRUE(std::filesystem::create_directory(path));
+        ASSERT_NO_THROW(saveDirectory.claim("raidline-component-ui-",
+            testing::UnitTest::GetInstance()->current_test_info()->name()));
+        path = saveDirectory.path();
         auto p = makeNewPublishedProfile("component-ui", content);
         p.tutorial = TutorialProgress::Complete; p.homeFounding.hintsDismissed = true;
         ASSERT_TRUE(SaveRepository(path).save(p, content.contentVersion()).succeeded);
@@ -85,13 +88,10 @@ protected:
         ASSERT_TRUE(SDL_SetRenderLogicalPresentation(renderer, 1280, 720, SDL_LOGICAL_PRESENTATION_LETTERBOX));
         A::attach(*app, renderer, w / 1280.0F);
     }
-    void detach() { A::detach(*app); SDL_DestroyRenderer(renderer); SDL_DestroySurface(surface); }
+    void detach() { if (app) A::detach(*app); SDL_DestroyRenderer(renderer); SDL_DestroySurface(surface); }
     void TearDown() override {
         detach(); app.reset(); SDL_Quit();
-        const auto resolved = std::filesystem::canonical(path);
-        ASSERT_TRUE(std::filesystem::equivalent(resolved.parent_path(), std::filesystem::temp_directory_path()));
-        ASSERT_TRUE(path.filename().string().starts_with("raidline-component-ui-"));
-        std::error_code ec; std::filesystem::remove_all(resolved, ec);
+        ASSERT_NO_THROW(saveDirectory.cleanup());
     }
     void click(SDL_FRect r) { const auto p = center(r); pointer(p, true); pointer(p, false); A::frame(*app); }
     void control(Control c) { click(uiComponentControl(c)); }

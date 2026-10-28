@@ -1,4 +1,5 @@
 #include "app.h"
+#include "test_temp_directory.h"
 #include "ui_base_management_presentation.h"
 #include "ui_base_defense_presentation.h"
 #include "base_siege_warning_layout.h"
@@ -74,6 +75,7 @@ using A=UiBaseManagementTestAccess;
 Vec2 center(SDL_FRect box){return {box.x+box.w/2,box.y+box.h/2};}
 class UiBaseManagementTest:public testing::Test {
 protected:
+    raidline::test::TemporaryDirectory saveDirectory;
     std::unique_ptr<App> app;
     std::filesystem::path path;
     SDL_Surface *surface{};SDL_Renderer *renderer{};
@@ -82,8 +84,9 @@ protected:
     GameSession &session(){return A::flow(*app).gameSession();}
     void SetUp()override {
         ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
-        path=std::filesystem::temp_directory_path()/("raidline-ui-base-final-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-        ASSERT_TRUE(std::filesystem::create_directory(path));
+        ASSERT_NO_THROW(saveDirectory.claim("raidline-ui-base-final-",
+            testing::UnitTest::GetInstance()->current_test_info()->name()));
+        path = saveDirectory.path();
         auto p=makeNewAlphaProfile("base-final-isolated",content);p.baseConstruction.materialUnits=100;
         ASSERT_TRUE(validateProfileState(p,content).valid)<<validateProfileState(p,content).message;
         ASSERT_TRUE(SaveRepository(path).save(p,content.contentVersion()).succeeded);
@@ -96,11 +99,8 @@ protected:
     }
     void detach(){if(app && renderer)A::detach(*app);SDL_DestroyRenderer(renderer);SDL_DestroySurface(surface);renderer=nullptr;surface=nullptr;}
     void TearDown()override {
-        detach();app.reset();SDL_Quit();if(path.empty() || !std::filesystem::exists(path))return;
-        const auto actual=std::filesystem::canonical(path);
-        ASSERT_TRUE(std::filesystem::equivalent(actual.parent_path(),std::filesystem::temp_directory_path()));
-        ASSERT_TRUE(actual.filename().string().starts_with("raidline-ui-base-final-"));
-        std::error_code ignored;std::filesystem::remove_all(actual,ignored);
+        detach();app.reset();SDL_Quit();
+        ASSERT_NO_THROW(saveDirectory.cleanup());
     }
     void clear(){SDL_SetRenderDrawColor(renderer,10,16,18,255);SDL_RenderClear(renderer);}
     int bright(SDL_FRect box) {
