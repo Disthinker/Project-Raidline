@@ -46,6 +46,8 @@ struct EnemyAiConfig
     float maximumTurnRateRadians{9.42477796F};
     float supportMinDistance{105.0F};
     float supportMaxDistance{155.0F};
+    // Absent preserves this instance's existing normal movement exactly.
+    std::optional<float> visiblePursuitMoveSpeed;
 };
 
 struct EnemyTacticalDirective
@@ -71,6 +73,7 @@ struct EnemyAiDecision
 {
     Vec2 moveDirection{};
     std::optional<EnemyAttackType> attackRequest;
+    bool confirmedVisiblePursuit{};
 };
 
 class EnemyAiState

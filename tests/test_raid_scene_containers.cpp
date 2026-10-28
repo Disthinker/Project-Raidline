@@ -6,6 +6,7 @@
 #include "game_session.h"
 #include "raid_lifecycle.h"
 #include "raid_credential_legacy_fixture.h"
+#include "raid_runner_legacy_fixture.h"
 #include "save_repository.h"
 #include "raid_visibility_fixture.h"
 
@@ -52,6 +53,7 @@ protected:
     }
 };
 TEST_F(RaidSceneContainerTest, FrozenRollsHaveOneOwnerAndNoAdditionalRewardsAcrossSeeds) {
+    const auto oldContent=contentBeforeRunner();
     for (std::uint64_t seed=1; seed<=8; ++seed) {
         auto a=makeNewAlphaProfile("stable",content), b=a;
         ASSERT_TRUE(executeDeploy(a,content,{"r","s",seed,frontier},{a.revision,"d"}).succeeded);
@@ -66,7 +68,9 @@ TEST_F(RaidSceneContainerTest, FrozenRollsHaveOneOwnerAndNoAdditionalRewardsAcro
             EXPECT_FALSE(loot.collected);
         }
         EXPECT_EQ(moved,4U);
-        auto legacy=a;
+        auto legacy=makeNewAlphaProfile("stable",oldContent);
+        ASSERT_TRUE(executeDeploy(legacy,oldContent,{"r","s",seed,frontier},{legacy.revision,"d"}).succeeded);
+        EXPECT_EQ(legacy.pendingRaid->loot,a.pendingRaid->loot);
         stripCredentialExtractionForLegacySnapshot(legacy);
         // Historical schema50 fixture has no corpse ownership/source fields.
         legacy.pendingRaid->rulesVersion="content-beta-loot-economy-29";

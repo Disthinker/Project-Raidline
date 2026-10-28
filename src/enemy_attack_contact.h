@@ -47,6 +47,6 @@ template <class LineOfSight>
 
     protectionRemaining = kEnemyContactProtectionSeconds;
     return {EnemyContactDisposition::Applied,
-            enemyAttackDamageObservation(enemy.combatTargetId(), *type),
+            enemyAttackDamageObservation(enemy.combatTargetId(), *type, enemy.variant()),
             config->damage, config->controlDuration};
 }

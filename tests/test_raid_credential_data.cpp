@@ -12,6 +12,7 @@
 #include "profile_state.h"
 #include "raid_lifecycle.h"
 #include "raid_map_generation.h"
+#include "raid_runner_legacy_fixture.h"
 #include "save_repository.h"
 
 namespace
@@ -70,9 +71,8 @@ std::filesystem::path preservedSourcePath(
         "credential-extraction-v1." + bytesChecksum(bytes) + ".json");
 }
 
-ProfileState deployedCredentialProfile()
+ProfileState deployedCredentialProfile(const ContentRegistry &content = publishedContentRegistry())
 {
-    const auto &content = publishedContentRegistry();
     auto profile = makeNewAlphaProfile("credential-data", content);
     const auto receipt = executeDeploy(profile, content,
         {"credential-data-raid", "credential-data-settlement", 9917, kFrontier},
@@ -152,7 +152,7 @@ TEST(RaidCredentialData, Schema57RoundTripsPermanentArchiveAndResultSummary)
     profile.lastRaidResult->unlockedExtractionPermissions.push_back(kPermission);
     ASSERT_TRUE(validateProfileState(profile, content).valid);
     const auto serialized = serializeProfileEnvelope(profile, content.contentVersion());
-    EXPECT_EQ(Json::parse(serialized).at("schema_version"), 57);
+    EXPECT_EQ(Json::parse(serialized).at("schema_version"), 58);
     const auto loaded = deserializeProfileEnvelope(serialized, content);
     ASSERT_TRUE(loaded.profile) << loaded.message;
     EXPECT_EQ(loaded.profile->raidExtractionPermissions, profile.raidExtractionPermissions);
@@ -175,7 +175,8 @@ TEST(RaidCredentialData, Schema56MigrationDoesNotGrantPermissionOrChangeAssets)
 TEST(RaidCredentialData, LegacyPendingRemainsWithoutCredentialAndKeepsFrozenLayout)
 {
     const auto &content = publishedContentRegistry();
-    auto profile = deployedCredentialProfile();
+    const auto oldContent = contentBeforeRunner("ui-unified-chest-rig-content-68");
+    auto profile = deployedCredentialProfile(oldContent);
     ASSERT_TRUE(profile.pendingRaid);
     profile.pendingRaid->credentialExtraction.reset();
     auto &layout = profile.pendingRaid->spatialLayout;
@@ -300,8 +301,8 @@ TEST(RaidCredentialData, UpgradePreservesBothLegacySourcesAcrossTwoRollingSaves)
     ASSERT_TRUE(repository.save(profile, content.contentVersion()).succeeded);
     EXPECT_EQ(readBytes(preservedSourcePath(directory, false, primary)), primary);
     EXPECT_EQ(readBytes(preservedSourcePath(directory, true, backup)), backup);
-    EXPECT_EQ(Json::parse(readBytes(repository.primaryPath())).at("schema_version"), 57);
-    EXPECT_EQ(Json::parse(readBytes(repository.backupPath())).at("schema_version"), 57);
+    EXPECT_EQ(Json::parse(readBytes(repository.primaryPath())).at("schema_version"), 58);
+    EXPECT_EQ(Json::parse(readBytes(repository.backupPath())).at("schema_version"), 58);
 }
 
 TEST(RaidCredentialData, UpgradePreservesLegacySourcesBeforePendingRaidMirrorsBothFiles)

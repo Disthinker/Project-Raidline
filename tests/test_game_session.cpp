@@ -13,6 +13,7 @@
 
 #include "game_session.h"
 #include "raid_credential_legacy_fixture.h"
+#include "raid_runner_legacy_fixture.h"
 #include "alpha_content_ids.h"
 #include "base_world.h"
 
@@ -753,7 +754,7 @@ TEST(GameSessionTest, LegacyMigrationDoesNotReplaceExistingImmutableBackup)
 TEST(GameSessionTest, LegacyPendingRaidRollsBackBeforeIndependentPageMigration)
 {
     StashMigrationSaveDirectory temporary;
-    const auto &content = publishedContentRegistry();
+    const auto content = contentBeforeRunner("quick-melee-self-defense-content-66");
     auto legacy = crossedLegacySessionProfile();
     const auto originalAssets = legacy.assets;
     const auto rifle = firstAsset(legacy, alpha_content::rifle);

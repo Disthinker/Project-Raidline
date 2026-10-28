@@ -21,6 +21,7 @@
 #include "raid_lifecycle.h"
 #include "raid_corpse_legacy_fixture.h"
 #include "raid_credential_legacy_fixture.h"
+#include "raid_runner_legacy_fixture.h"
 #include "raid_rescue_domain.h"
 #include "regional_operations_domain.h"
 
@@ -1043,7 +1044,7 @@ TEST(RaidLifecycleTest,
     ASSERT_TRUE(repeated.pendingRaid.has_value());
     const PendingRaidSnapshot &raid = *first.pendingRaid;
     EXPECT_EQ(raid.rulesVersion,
-              kRaidCorpseRulesVersion);
+              kRaidRunnerRulesVersion);
     EXPECT_EQ(raid.spatialLayout.layoutVersion, 4U);
     EXPECT_EQ(raid.spatialLayout, repeated.pendingRaid->spatialLayout);
     EXPECT_EQ(raid.loot, repeated.pendingRaid->loot);
@@ -1213,12 +1214,13 @@ TEST(RaidLifecycleTest,
      FrontierRulesTwentySixPendingRaidKeepsLegacyResourceLootTables)
 {
     const ContentRegistry &content = publishedContentRegistry();
+    const auto historicalContent = contentBeforeRunner();
     ProfileState legacy = makeNewAlphaProfile(
-        "legacy-frontier-resource-tables", content);
-    ASSERT_TRUE(deploy(
-        legacy,
-        7712202U,
-        MapDefinitionId{"map.raid.frontier_exchange"}).succeeded);
+        "legacy-frontier-resource-tables", historicalContent);
+    ASSERT_TRUE(executeDeploy(legacy, historicalContent,
+        DeployCommand{"legacy-frontier-raid", "legacy-frontier-settlement", 7712202U,
+            MapDefinitionId{"map.raid.frontier_exchange"}},
+        {legacy.revision, "legacy-frontier-deploy"}).succeeded);
     ASSERT_TRUE(legacy.pendingRaid.has_value());
     stripCredentialExtractionForLegacySnapshot(legacy);
     stripCorpseBindingsForLegacySnapshot(legacy);

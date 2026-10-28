@@ -57,6 +57,12 @@ struct EnemyAttackCombatDamage
 [[nodiscard]]
 EnemyAttackConfigSet defaultEnemyAttackConfigs();
 
+// Saved profile enemy.attack.infected-standard-v1 resolves these immutable
+// values, independently of any future unsaved/default balance changes.
+[[nodiscard]] EnemyAttackConfigSet standardInfectedAttackConfigsV1();
+[[nodiscard]] EnemyAttackCombatDamage standardInfectedAttackCombatDamageV1(
+    EnemyAttackType type) noexcept;
+
 // Production combat semantics stay separate from the legacy three-HP
 // simulation adapter. GameSession resolves this result against Profile armor.
 [[nodiscard]] EnemyAttackCombatDamage enemyAttackCombatDamage(

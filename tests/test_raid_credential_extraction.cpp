@@ -60,7 +60,7 @@ TEST_F(RaidCredentialExtractionTest, DeployFreezesSeparateContractWithoutGrantin
 {
     const auto &snapshot = *profile.pendingRaid->credentialExtraction;
     const auto &definition = *content.map(kFrontier).credentialExtraction;
-    EXPECT_EQ(profile.pendingRaid->rulesVersion, kRaidCorpseRulesVersion);
+    EXPECT_EQ(profile.pendingRaid->rulesVersion, kRaidRunnerRulesVersion);
     EXPECT_EQ(snapshot.rulesVersion, kRaidCredentialExtractionRulesVersion);
     EXPECT_EQ(snapshot.definition.permissionId, definition.permissionId);
     EXPECT_EQ(snapshot.definition.investigationSpaceId, definition.investigationSpaceId);

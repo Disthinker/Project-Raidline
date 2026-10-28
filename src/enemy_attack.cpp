@@ -72,6 +72,11 @@ namespace
 
 EnemyAttackConfigSet defaultEnemyAttackConfigs()
 {
+    return standardInfectedAttackConfigsV1();
+}
+
+EnemyAttackConfigSet standardInfectedAttackConfigsV1()
+{
     return EnemyAttackConfigSet{
         EnemyAttackConfig{
             0.55F,
@@ -106,6 +111,12 @@ EnemyAttackConfigSet defaultEnemyAttackConfigs()
 }
 
 EnemyAttackCombatDamage enemyAttackCombatDamage(
+    EnemyAttackType type) noexcept
+{
+    return standardInfectedAttackCombatDamageV1(type);
+}
+
+EnemyAttackCombatDamage standardInfectedAttackCombatDamageV1(
     EnemyAttackType type) noexcept
 {
     switch (type)

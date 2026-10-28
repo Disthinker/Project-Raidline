@@ -13,6 +13,7 @@
 #include "alpha_content_ids.h"
 #include "base_manufacturing_domain.h"
 #include "raid_lifecycle.h"
+#include "raid_runner_legacy_fixture.h"
 #include "save_repository.h"
 
 namespace
@@ -115,7 +116,7 @@ TEST(FieldMedicalSaveTest, FieldMedicalContent69PreservesExistingItemsUsesAndAut
     EXPECT_EQ(loaded.profile->baseSupplyPolicy.assignments, profile.baseSupplyPolicy.assignments);
     EXPECT_EQ(loaded.profile->assets.nextAssetId(), profile.assets.nextAssetId());
     EXPECT_EQ(nlohmann::json::parse(serializeProfileEnvelope(
-        *loaded.profile, content.contentVersion())).at("schema_version"), 57U);
+        *loaded.profile, content.contentVersion())).at("schema_version"), 58U);
     for (const auto &[id, asset] : loaded.profile->assets.records())
     {
         static_cast<void>(id);
@@ -126,17 +127,18 @@ TEST(FieldMedicalSaveTest, FieldMedicalContent69PreservesExistingItemsUsesAndAut
 TEST(FieldMedicalSaveTest, FieldMedicalContent69PreservesOldManufacturingOrderAndPendingRaid)
 {
     const auto &content = publishedContentRegistry();
-    auto profile = makeNewAlphaProfile("medical-legacy-order", content);
+    const auto oldContent = contentBeforeRunner("raid-credential-extraction-content-69");
+    auto profile = makeNewAlphaProfile("medical-legacy-order", oldContent);
     for (const auto *definitionId : {"item.loot.scrap_parts", "item.loot.electronics"})
     {
-        const auto &definition = content.item(ItemDefinitionId{definitionId});
-        const auto origin = findFirstProfileFit(profile, content,
+        const auto &definition = oldContent.item(ItemDefinitionId{definitionId});
+        const auto origin = findFirstProfileFit(profile, oldContent,
             ProfileContainerId::stash(), definition, ItemOrientation::Degrees0);
         ASSERT_TRUE(origin);
         static_cast<void>(profile.assets.create(definition,
             StoredAssetLocation{ProfileContainerId::stash(), *origin}));
     }
-    const auto started = executeStartBaseManufacturing(profile, content,
+    const auto started = executeStartBaseManufacturing(profile, oldContent,
         StartBaseManufacturingCommand{BaseManufacturingRecipeDefinitionId{
             "base_manufacturing.weapon_maintenance_kit"}},
         CommandContext{profile.revision, "medical-legacy-start"});
@@ -150,7 +152,7 @@ TEST(FieldMedicalSaveTest, FieldMedicalContent69PreservesOldManufacturingOrderAn
     ASSERT_TRUE(oldOrder.profile->baseManufacturing.activeOrder);
     EXPECT_EQ(oldOrder.profile->baseManufacturing.activeOrder->outputAssetId, outputId);
 
-    ASSERT_TRUE(executeDeploy(profile, content,
+    ASSERT_TRUE(executeDeploy(profile, oldContent,
         DeployCommand{"medical-legacy-raid", "medical-legacy-settlement", 7291U,
             MapDefinitionId{"map.raid.frontier_exchange"}},
         CommandContext{profile.revision, "medical-legacy-deploy"}).succeeded);
@@ -177,7 +179,7 @@ TEST(FieldMedicalSaveTest, FieldMedicalContent70RoundTripsPartialMedicalChargesW
     ASSERT_FALSE(profile.baseSupplyPolicy.assignments.contains(
         ItemDefinitionId{"item.medical.bandage_roll_basic"}));
     const auto envelope = serializeProfileEnvelope(profile, content.contentVersion());
-    EXPECT_EQ(nlohmann::json::parse(envelope).at("schema_version"), 57U);
+    EXPECT_EQ(nlohmann::json::parse(envelope).at("schema_version"), 58U);
     const auto loaded = deserializeProfileEnvelope(envelope, content);
     ASSERT_TRUE(loaded.profile) << loaded.message;
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
@@ -231,11 +233,12 @@ TEST(FieldMedicalSaveTest, FieldMedicalUpgradeKeepsBothSourcesImmutableAndStopsA
 TEST(FieldMedicalSaveTest, FieldMedicalUpgradeProtectsOldSourcesBeforePendingRaidMirrorsThem)
 {
     const auto &content = publishedContentRegistry();
+    const auto oldContent = contentBeforeRunner("raid-credential-extraction-content-69");
     TemporarySaveDirectory temporary;
     std::filesystem::create_directories(temporary.path());
     SaveRepository repository{temporary.path()};
-    auto profile = makeNewAlphaProfile("medical-upgrade-pending", content);
-    ASSERT_TRUE(executeDeploy(profile, content,
+    auto profile = makeNewAlphaProfile("medical-upgrade-pending", oldContent);
+    ASSERT_TRUE(executeDeploy(profile, oldContent,
         DeployCommand{"medical-upgrade-raid", "medical-upgrade-settlement", 7292U,
             MapDefinitionId{"map.raid.frontier_exchange"}},
         CommandContext{profile.revision, "medical-upgrade-deploy"}).succeeded);

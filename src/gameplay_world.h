@@ -74,6 +74,7 @@ struct EnemySpawn
     float ambushActivationDistance{240.0F};
     std::optional<EnemyArmorState> torsoArmor;
     std::string sourceEnemyId;
+    std::optional<EnemyVariantSnapshot> variant;
 };
 
 struct HighRiskWorldConfig
@@ -709,6 +710,7 @@ private:
     bool developerRange_{};
     bool noiseDecoyEnabled_{};
     friend struct GrenadeTestAccess;
+    friend struct RunnerInfectedTestAccess;
     bool grenadeEnabled_{};
     RaidGrenadeRuntime grenade_;
     std::optional<GrenadeExplosion> lastGrenadeExplosion_;

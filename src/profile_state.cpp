@@ -2436,6 +2436,16 @@ ProfileValidationResult validateProfileState(
         {
             return {false, "pending Raid map is invalid"};
         }
+        const bool runnerEcologyRules = raid.rulesVersion == kRaidRunnerRulesVersion;
+        if (runnerEcologyRules &&
+            (raid.mapDefinitionId != MapDefinitionId{"map.raid.frontier_exchange"} ||
+             raid.selfRecovery || raid.outpostRestoration || raid.baseSiteClearance || raid.basePerimeterSweep ||
+             std::none_of(raidMap->proceduralOutdoor.encounterArchetypes.begin(),
+                raidMap->proceduralOutdoor.encounterArchetypes.end(),
+                [](const auto &group) { return group.id == "encounter.frontier.route_ambush" && group.runnerMemberDefinition.has_value(); })))
+            return {false, "runner Raid rules are outside ordinary Frontier activity"};
+        std::vector<EnemyVariantKind> expectedEnemyKinds;
+        if (runnerEcologyRules) expectedEnemyKinds.resize(raid.enemies.size(), EnemyVariantKind::Basic);
         if (raid.credentialExtraction)
         {
             const auto &snapshot = *raid.credentialExtraction;
@@ -2456,7 +2466,7 @@ ProfileValidationResult validateProfileState(
                 frozen.extractionPoint.position.y + frozen.extractionPoint.size.y <=
                     raidMap->walkableBounds.position.y + raidMap->walkableBounds.size.y;
             if (snapshot.rulesVersion != "credential-extraction-1" ||
-                raid.rulesVersion != kRaidCorpseRulesVersion ||
+                !supportsRaidCorpseRules(raid.rulesVersion) ||
                 raid.selfRecovery || raid.outpostRestoration || raid.baseSiteClearance || raid.basePerimeterSweep ||
                 frozen.permissionId != definition.permissionId ||
                 frozen.investigationPointId != definition.investigationPointId ||
@@ -2517,7 +2527,7 @@ ProfileValidationResult validateProfileState(
             raid.rulesVersion == "procedural-frontier-resource-ecology-23";
         const bool highRiskCrisisRules =
             raid.rulesVersion == "procedural-frontier-high-risk-crisis-28" ||
-            raid.rulesVersion == "content-beta-loot-economy-29" || raid.rulesVersion == kRaidCorpseRulesVersion;
+            raid.rulesVersion == "content-beta-loot-economy-29" || supportsRaidCorpseRules(raid.rulesVersion);
         const bool frontierLootIdentityRules =
             raid.rulesVersion == "procedural-frontier-loot-identity-27" ||
             highRiskCrisisRules;
@@ -4354,6 +4364,8 @@ ProfileValidationResult validateProfileState(
         }
         for (const RaidEnemySnapshot &enemy : raid.enemies)
         {
+            if (!runnerEcologyRules && enemy.variant)
+                return {false, "legacy Raid contains a versioned enemy variant"};
             if (enemy.torsoArmor && (!enemy.torsoArmor->valid() || enemy.torsoArmor->durability == 0))
                 return {false, "invalid frozen enemy armor"};
             Vec2 spaceSize = raidMap->worldSize;
@@ -4386,6 +4398,7 @@ ProfileValidationResult validateProfileState(
         {
             std::set<std::string> groupIds;
             std::set<std::uint32_t> memberIndices;
+            std::size_t canonicalMemberIndex{}, canonicalGroupIndex{}, runnerGroups{};
             for (const RaidEncounterGroupSnapshot &group :
                  raid.encounterGroups)
             {
@@ -4424,6 +4437,10 @@ ProfileValidationResult validateProfileState(
                 {
                     return {false, "pending Raid encounter group is invalid"};
                 }
+                if (runnerEcologyRules &&
+                    group.instanceId != group.definitionId + ":" + std::to_string(canonicalGroupIndex))
+                    return {false, "runner Raid encounter identity is not canonical"};
+                ++canonicalGroupIndex;
                 for (std::uint32_t memberIndex : group.memberEnemyIndices)
                 {
                     if (memberIndex >= raid.enemies.size() ||
@@ -4436,12 +4453,29 @@ ProfileValidationResult validateProfileState(
                         return {false,
                                 "pending Raid encounter membership is invalid"};
                     }
+                    if (runnerEcologyRules)
+                    {
+                        if (memberIndex != canonicalMemberIndex++)
+                            return {false, "runner Raid encounter member order is invalid"};
+                        if (memberIndex == group.memberEnemyIndices.front())
+                        {
+                            if (definition->runnerMemberDefinition)
+                            {
+                                expectedEnemyKinds[memberIndex] = EnemyVariantKind::Runner;
+                                ++runnerGroups;
+                            }
+                            else if (definition->armoredMemberDefinition)
+                                expectedEnemyKinds[memberIndex] = EnemyVariantKind::Armored;
+                        }
+                    }
                 }
             }
             if (memberIndices.size() != outdoorEnemyCount)
             {
                 return {false, "pending Raid encounter membership is incomplete"};
             }
+            if (runnerEcologyRules && (runnerGroups < 2U || runnerGroups > 3U))
+                return {false, "runner Raid must freeze two or three ambush replacements"};
             for (const RaidEncounterArchetypeDefinition &definition :
                  raidMap->proceduralOutdoor.encounterArchetypes)
             {
@@ -4463,6 +4497,27 @@ ProfileValidationResult validateProfileState(
                      { return !enemy.encounterGroupInstanceId.empty(); }))
         {
             return {false, "legacy Raid unexpectedly has encounter metadata"};
+        }
+        if (runnerEcologyRules)
+        {
+            const auto &guardArmor = content.enemyCombatDefinition(
+                EnemyCombatDefinitionId{"enemy.infected.armored"}).torsoArmor;
+            for (std::size_t index{}; index < raid.enemies.size(); ++index)
+            {
+                const auto &enemy = raid.enemies[index];
+                if (!enemy.variant || !validEnemyVariantVitals(*enemy.variant, enemy.maximumHealth, enemy.torsoArmor) ||
+                    enemy.variant->kind != expectedEnemyKinds[index])
+                    return {false, "runner Raid enemy variant is missing or does not match its frozen member"};
+                if (enemy.variant->kind == EnemyVariantKind::Armored)
+                {
+                    if (!guardArmor || enemy.torsoArmor != guardArmor)
+                        return {false, "runner Raid armored guard differs from its original protection"};
+                }
+                else if (enemy.torsoArmor || !enemy.sourceEnemyId.empty())
+                    return {false, "runner Raid unarmored variant has guard-only state"};
+                if (enemy.variant->kind == EnemyVariantKind::Runner && enemy.maximumHealth != 8)
+                    return {false, "runner Raid enemy has invalid maximum health"};
+            }
         }
         const auto enemyMatches = [](const RaidEnemySnapshot &snapshot,
                                      const EnemySpawnDefinition &definition)
@@ -4495,9 +4550,12 @@ ProfileValidationResult validateProfileState(
             outdoorEnemiesMatch = true;
             for (std::size_t index{}; index < outdoorEnemies.size(); ++index)
             {
-                if (!districtEnemyMatches(
-                        outdoorEnemies[index],
-                        deployment.enemies[index % deployment.enemies.size()]))
+                const auto &enemy = outdoorEnemies[index];
+                const auto &source = deployment.enemies[index % deployment.enemies.size()];
+                const bool matches = runnerEcologyRules && isRunnerEnemyVariant(enemy.variant)
+                    ? enemy.size.x == source.size.x && enemy.size.y == source.size.y && enemy.maximumHealth == 8
+                    : districtEnemyMatches(enemy, source);
+                if (!matches)
                 {
                     outdoorEnemiesMatch = false;
                     break;
@@ -5313,6 +5371,16 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
                 hashInteger(hash, enemy.torsoArmor->protectionRequirement);
                 hashInteger(hash, enemy.torsoArmor->durability);
                 hashInteger(hash, enemy.torsoArmor->durabilityLossBasisPoints);
+            }
+            if (enemy.variant)
+            {
+                hashBytes(hash, "frozen-enemy-variant-v1");
+                hashBytes(hash, enemyVariantDefinitionId(enemy.variant->kind));
+                hashFloat(hash, enemy.variant->movement.normalMoveSpeed);
+                hashInteger(hash, static_cast<std::uint32_t>(enemy.variant->movement.visiblePursuitMoveSpeed.has_value()));
+                if (enemy.variant->movement.visiblePursuitMoveSpeed)
+                    hashFloat(hash, *enemy.variant->movement.visiblePursuitMoveSpeed);
+                hashInteger(hash, enemy.variant->movement.attackProfileVersion);
             }
         }
         for (const RaidEncounterGroupSnapshot &group : raid.encounterGroups)

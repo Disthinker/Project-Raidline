@@ -9264,6 +9264,13 @@ void App::renderEnemies()
                 &enemyRect);
         }
 
+        if (!enemy.isDead() && isRunnerEnemyVariant(enemy.variant()))
+        {
+            SDL_SetRenderDrawColor(renderer_, 230U, 230U, 218U, 255U);
+            uiTextRenderer_.render(
+                renderer_, enemyRect.x, enemyRect.y - 18.0F, "RUNNER");
+        }
+
         if (enemy.torsoArmor())
         {
             const bool intact = enemy.torsoArmor()->durability > 0;

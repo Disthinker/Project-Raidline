@@ -1,5 +1,6 @@
 #pragma once
 #include "enemy_armor.h"
+#include "enemy_variant.h"
 #include <optional>
 
 #include "vec2.h"
@@ -29,6 +30,8 @@ struct EnemyRuntimeCheckpoint
     std::optional<CheckpointPoint> navigationTarget;
     float navigationRefreshRemaining{};
     std::optional<EnemyArmorState> torsoArmor;
+    std::optional<EnemyVariantSnapshot> variant;
+    bool visiblePursuitMove{};
     friend bool operator==(const EnemyRuntimeCheckpoint &,
                            const EnemyRuntimeCheckpoint &) = default;
 };

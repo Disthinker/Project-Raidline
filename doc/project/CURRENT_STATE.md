@@ -1,3 +1,41 @@
+# 当前：迅捷感染者 CI v2，正在验证双平台
+
+**本地全量2882/2882通过，候选`b9344c8cd631`已冻结。按用户批准，先提交推送原PR #197验证准确HEAD的Windows／Ubuntu CI；通过后复验，复验前不合并。**
+
+- state：`ci_verification_pending`；task_id：`raid-runner-infected-v1`；fix_plan_version：`RL-RAID-RUNNER-INFECTED-CI-v2`。
+- candidate_id：`RL-RAID-RUNNER-INFECTED-CI-v2-local-b9344c8cd631`；新候选人工验收：无。approval_source：2026-10-28主控用户“同意v2，先验证CI再复验”。
+- 仅改观察候选筛选和精确角度排序；原逐位结果、玩法、存档、固定入口及3ms门槛保持。原CI失败与各版候选程序保留，其他未提交工作和玩家数据保全。
+- 桌面 **Project Raidline Debug** 为同一固定入口。双平台通过后使用[四步复验清单](../acceptance/raid-runner-infected-v1.md)，[技术与证据](../exec-plans/active/raid-runner-infected-v1.md)记录实际结果；代理未启动游戏、不开始下一项任务。
+
+<details>
+<summary>上一记录（完整HEAD历史）</summary>
+
+# 当前：迅捷感染者 CI v1，正在验证双平台
+
+**本地全量2876/2876通过，候选 `261634b9a2b8` 已冻结。按用户批准，先提交推送到原PR #197验证双平台CI；通过后复验，复验前不合并。**
+
+- state：`ci_verification_pending`；task_id：`raid-runner-infected-v1`；fix_plan_version：`RL-RAID-RUNNER-INFECTED-CI-v1`。
+- candidate_id：`RL-RAID-RUNNER-INFECTED-CI-v1-local-261634b9a2b8`；accepted_candidate_id：无（原v3 `08178f45f1dd`仅作已验收基线）。
+- approval_source：2026-10-28用户“同意，先做CI再复验（推荐）”；只授权本修复预先提交和推送，未授权复验前合并。
+- 只优化既有视野计算、修正中文裁剪测试并补充等价回归。原玩法、旧档、固定入口、32/100目标负载和3ms门槛保留；原CI失败和旧程序有独立备份。
+- 桌面 **Project Raidline Debug** 仍为固定入口。代理未启动游戏，不开始下一任务；[复验清单](../acceptance/raid-runner-infected-v1.md)在双平台通过后使用，[技术记录](../exec-plans/active/raid-runner-infected-v1.md)记录实际证据。
+
+<details>
+<summary>上一记录（完整HEAD历史）</summary>
+
+# 当前：迅捷感染者 v3 已验收，正在交付
+
+**用户已验收候选 `08178f45f1dd`，并授权提交、推送和合并。** 本次只交付该候选，不开始下一任务。
+
+- state：`accepted_delivering`；task_id：`raid-runner-infected-v1`；plan_version：`RL-RAID-RUNNER-INFECTED-v3`。
+- candidate_id／accepted_candidate_id：`RL-RAID-RUNNER-INFECTED-v3-local-08178f45f1dd`；acceptance_source：2026-10-28本主控用户“迅捷感染者 v3 验收通过，请完成提交、推送和合并。”。
+- Windows Debug全量2874/2874、定向559/559通过；原六项及新增混合敌群3ms保持。准确PR及合并后main的双平台CI待执行。
+- 实际目录`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`，分支`codex/raid-runner-infected-v1`，交付基线`77b117d1492d975a2861357a04c60a652d9e73dc`。原已验收程序、固定入口、最新玩家数据及其他未提交工作保留，代理不启动游戏。
+- [交付记录](../exec-plans/active/raid-runner-infected-v1.md)；[已通过试玩清单](../acceptance/raid-runner-infected-v1.md)。pending_request：无；UI专项保持结束。
+
+<details>
+<summary>上一项及更早记录（HEAD原文历史）</summary>
+
 # 当前：破片手雷 v1 已验收，正在交付
 
 **用户已验收候选`bd5b6011e799`，并授权提交、推送和合并。** 正按原门槛交付，不开始下一任务。
@@ -1897,6 +1935,12 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 
 </details>
 
+
+</details>
+
+</details>
+
+</details>
 
 </details>
 

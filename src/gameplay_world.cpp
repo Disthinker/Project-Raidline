@@ -521,7 +521,7 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
                 spawn.size,
                 Vec2{},
                 spawn.maxHealth,
-                nextCombatTargetId_++, spawn.torsoArmor});
+                nextCombatTargetId_++, spawn.torsoArmor, spawn.variant});
             const Vec2 spawnCenter{
                 spawn.position.x + spawn.size.x * 0.5F,
                 spawn.position.y + spawn.size.y * 0.5F};
@@ -894,7 +894,7 @@ GameplayWorld::GameplayWorld(
             spawn.size,
             Vec2{},
             spawn.maxHealth,
-            nextCombatTargetId_++, spawn.torsoArmor});
+            nextCombatTargetId_++, spawn.torsoArmor, spawn.variant});
         if (!spawn.sourceEnemyId.empty())
             corpseSources_.emplace(enemies_.back().combatTargetId(), RaidCorpseDeathFact{spawn.sourceEnemyId, outdoorRaidSpaceId(), {spawn.size.x * 0.5F, spawn.size.y * 0.5F}});
         const Vec2 spawnCenter{
@@ -3418,7 +3418,7 @@ std::size_t GameplayWorld::spawnHighRiskPressureWave()
                 candidate.size,
                 Vec2{},
                 candidate.maxHealth,
-                nextCombatTargetId_++, candidate.torsoArmor});
+                nextCombatTargetId_++, candidate.torsoArmor, candidate.variant});
             const ContentRect pressureArea =
                 highRiskAdvancedResourceArea_.value_or(ContentRect{
                     candidate.position, candidate.size});

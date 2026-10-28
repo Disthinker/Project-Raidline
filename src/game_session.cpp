@@ -1057,6 +1057,7 @@ bool GameSession::deployAlpha(
                 enemy.size,
                 enemy.maximumHealth};
             spawn.torsoArmor = enemy.torsoArmor;
+            spawn.variant = enemy.variant;
             spawn.sourceEnemyId = enemy.sourceEnemyId;
             if (group != snapshot.encounterGroups.end())
             {
@@ -1174,6 +1175,7 @@ bool GameSession::deployAlpha(
                         enemy.size,
                         enemy.maximumHealth});
                     runtime.initialEnemies.back().torsoArmor = enemy.torsoArmor;
+                    runtime.initialEnemies.back().variant = enemy.variant;
                 }
             }
             worldConfig.interiors.push_back(std::move(runtime));

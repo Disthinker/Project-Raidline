@@ -666,7 +666,11 @@ DeployReceipt executeDeploy(
     const bool corpseTrial = command.mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"} &&
         std::any_of(map->proceduralOutdoor.encounterArchetypes.begin(), map->proceduralOutdoor.encounterArchetypes.end(),
             [](const auto &group) { return group.id == "encounter.frontier.resource_guard" && group.armoredMemberDefinition.has_value(); });
-    snapshot.rulesVersion = highRiskCrisisRules
+    const bool runnerEcologyRules = regionalMissionCount == 0U && corpseTrial && highRiskCrisisRules &&
+        content.contentVersion() == "raid-runner-infected-content-73" &&
+        std::any_of(map->proceduralOutdoor.encounterArchetypes.begin(), map->proceduralOutdoor.encounterArchetypes.end(),
+            [](const auto &group) { return group.id == "encounter.frontier.route_ambush" && group.runnerMemberDefinition.has_value(); });
+    snapshot.rulesVersion = runnerEcologyRules ? std::string{kRaidRunnerRulesVersion} : highRiskCrisisRules
         ? (corpseTrial
             ? std::string{kRaidCorpseRulesVersion} : "content-beta-loot-economy-29")
         : encounterEcologyRules
@@ -1755,6 +1759,29 @@ DeployReceipt executeDeploy(
             asset->location = StoredAssetLocation{container, *fit};
             loot.sceneContainerAssetId = containerId;
             ++moved;
+        }
+    }
+    if (runnerEcologyRules)
+    {
+        // Freeze variants only after all original random draws and geometry
+        // allocation. Replacing one stable member never changes population,
+        // group ordering, locations, or any resource/Loot random stream.
+        for (auto &enemy : snapshot.enemies)
+            enemy.variant = ordinaryEnemyVariantSnapshot(enemy.torsoArmor.has_value());
+        for (const auto &group : snapshot.encounterGroups)
+        {
+            if (group.definitionId != "encounter.frontier.route_ambush") continue;
+            const auto archetype = std::find_if(map->proceduralOutdoor.encounterArchetypes.begin(),
+                map->proceduralOutdoor.encounterArchetypes.end(),
+                [&](const auto &value) { return value.id == group.definitionId; });
+            if (archetype == map->proceduralOutdoor.encounterArchetypes.end() ||
+                !archetype->runnerMemberDefinition || group.memberEnemyIndices.empty())
+                return deployFailure(RaidLifecycleError::InvalidProfile, "runner encounter is incomplete", profile.revision);
+            const auto &definition = content.enemyCombatDefinition(*archetype->runnerMemberDefinition);
+            auto &enemy = snapshot.enemies.at(group.memberEnemyIndices.front());
+            enemy.maximumHealth = definition.maximumHealth;
+            enemy.torsoArmor.reset();
+            enemy.variant = EnemyVariantSnapshot{EnemyVariantKind::Runner, *definition.movement};
         }
     }
     candidate.pendingRaid = std::move(snapshot);

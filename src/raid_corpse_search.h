@@ -3,6 +3,12 @@
 #include "profile_state.h"
 
 inline constexpr std::string_view kRaidCorpseRulesVersion{"content-frontier-corpse-search-30"};
+inline constexpr std::string_view kRaidRunnerRulesVersion{"content-frontier-runner-infected-31"};
+
+[[nodiscard]] inline constexpr bool supportsRaidCorpseRules(std::string_view version) noexcept
+{
+    return version == kRaidCorpseRulesVersion || version == kRaidRunnerRulesVersion;
+}
 
 struct RaidCorpseDeathFact
 {

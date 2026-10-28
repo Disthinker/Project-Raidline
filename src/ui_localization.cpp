@@ -233,6 +233,7 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"ENTER COMBAT TEST RANGE", "进入战斗测试场"},
      {"LEAVE TEST RANGE", "退出战斗测试场"},
      {"ENEMY: ORDINARY INFECTED", "敌人：普通感染者"},
+     {"RUNNER", "迅捷"},
      {"ENEMY: TORSO ARMORED INFECTED", "敌人：躯干护甲感染者"},
      {"FIXED TARGET PAD:", "固定刷新点："},
      {"TARGET COUNT:", "敌人数量："},
