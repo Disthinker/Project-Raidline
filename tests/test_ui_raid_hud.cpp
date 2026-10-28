@@ -1,4 +1,5 @@
 #include "app.h"
+#include "test_temp_directory.h"
 #include "developer_test_range.h"
 #include "raid_lifecycle.h"
 #include <algorithm>
@@ -30,17 +31,21 @@ namespace {
 using A=UiRaidHudTestAccess;
 class UiRaidHudTest : public testing::Test {
 protected:
+    raidline::test::TemporaryDirectory saveDirectory;
     std::unique_ptr<App> app;SDL_Surface *surface{};SDL_Renderer *renderer{};std::filesystem::path path;
     void SetUp()override{
         ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
-        path=std::filesystem::temp_directory_path()/("raidline-final-hud-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-        ASSERT_TRUE(std::filesystem::create_directory(path));app=std::make_unique<App>();A::flow(*app).configurePersistence(path);
+        ASSERT_NO_THROW(saveDirectory.claim("raidline-final-hud-",
+            testing::UnitTest::GetInstance()->current_test_info()->name()));
+        path = saveDirectory.path();app=std::make_unique<App>();A::flow(*app).configurePersistence(path);
         ASSERT_TRUE(A::flow(*app).startNewGame("final-hud-isolated"));
         attach(1280,720);
     }
     void attach(int w,int h){surface=SDL_CreateSurface(w,h,SDL_PIXELFORMAT_RGBA32);ASSERT_NE(surface,nullptr);renderer=SDL_CreateSoftwareRenderer(surface);ASSERT_NE(renderer,nullptr);ASSERT_TRUE(SDL_SetRenderLogicalPresentation(renderer,1280,720,SDL_LOGICAL_PRESENTATION_LETTERBOX));ASSERT_TRUE(A::attach(*app,renderer,w/1280.0F));}
-    void detach(){A::detach(*app);SDL_DestroyRenderer(renderer);SDL_DestroySurface(surface);renderer=nullptr;surface=nullptr;}
-    void TearDown()override{detach();app.reset();SDL_Quit();if(path.empty()||!std::filesystem::exists(path))return;const auto resolved=std::filesystem::canonical(path);ASSERT_TRUE(std::filesystem::equivalent(resolved.parent_path(),std::filesystem::temp_directory_path()));ASSERT_TRUE(resolved.filename().string().starts_with("raidline-final-hud-"));std::error_code error;std::filesystem::remove_all(resolved,error);}
+    void detach(){if (app) A::detach(*app);SDL_DestroyRenderer(renderer);SDL_DestroySurface(surface);renderer=nullptr;surface=nullptr;}
+    void TearDown()override{detach();app.reset();SDL_Quit();
+        ASSERT_NO_THROW(saveDirectory.cleanup());
+    }
     void clear(){SDL_SetRenderDrawColor(renderer,3,8,11,255);ASSERT_TRUE(SDL_RenderClear(renderer));}
     std::size_t bright(SDL_Rect b){std::size_t n{};for(int y=b.y;y<b.y+b.h;++y)for(int x=b.x;x<b.x+b.w;++x){Uint8 r{},g{},bl{},a{};if(SDL_ReadSurfacePixel(surface,x,y,&r,&g,&bl,&a)&&r>150&&g>150&&bl>140)++n;}return n;}
     void range(){ASSERT_TRUE(A::flow(*app).enterDeveloperRange());const auto weapons=developerRangeWeapons();const auto ammo=developerRangeAmmunition(weapons.front());ASSERT_TRUE(A::session(*app).grantDeveloperRangeLoadout(weapons.front(),ammo.front(),std::nullopt));A::clearPanels(*app);}

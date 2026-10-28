@@ -1,4 +1,5 @@
 #include "app.h"
+#include "test_temp_directory.h"
 #include "alpha_content_ids.h"
 #include "ui_base_deployment_presentation.h"
 #include "ui_lost_recovery_presentation.h"
@@ -70,6 +71,7 @@ void key(SDL_Scancode code) {
 
 class UiLostRecoveryTest : public testing::Test {
 protected:
+    raidline::test::TemporaryDirectory saveDirectory;
     std::unique_ptr<App> app;
     SDL_Surface *surface{};
     SDL_Renderer *renderer{};
@@ -79,9 +81,9 @@ protected:
 
     void SetUp() override {
         ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
-        path = std::filesystem::temp_directory_path() /
-            ("raidline-lost-recovery-ui-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-        ASSERT_TRUE(std::filesystem::create_directory(path));
+        ASSERT_NO_THROW(saveDirectory.claim("raidline-lost-recovery-ui-",
+            testing::UnitTest::GetInstance()->current_test_info()->name()));
+        path = saveDirectory.path();
         auto p = makeNewAlphaProfile("lost-recovery-ui", content);
         p.currency = 10000; p.tutorial = TutorialProgress::Complete; p.homeFounding.hintsDismissed = true;
         ASSERT_TRUE(SaveRepository(path).save(p, content.contentVersion()).succeeded);
@@ -103,11 +105,7 @@ protected:
     }
     void TearDown() override {
         detach(); app.reset(); SDL_Quit();
-        if (path.empty() || !std::filesystem::exists(path)) return;
-        const auto resolved = std::filesystem::canonical(path);
-        ASSERT_TRUE(std::filesystem::equivalent(resolved.parent_path(), std::filesystem::temp_directory_path()));
-        ASSERT_TRUE(resolved.filename().string().starts_with("raidline-lost-recovery-ui-"));
-        std::error_code error; std::filesystem::remove_all(resolved, error);
+        ASSERT_NO_THROW(saveDirectory.cleanup());
     }
     void click(Vec2 p) { pointer(p, true); pointer(p, false); A::frame(*app); }
     void control(C c) { click(center(uiLostRecoveryControlRect(c))); }

@@ -1,4 +1,5 @@
 #include "app.h"
+#include "test_temp_directory.h"
 #include "alpha_content_ids.h"
 #include "noise_decoy_fixture.h"
 #include "raid_camera.h"
@@ -77,6 +78,7 @@ void inside(SDL_FRect r,SDL_FRect parent={0,0,1280,720}) {
 }
 class UiQuickWheelTest:public testing::Test {
 protected:
+    raidline::test::TemporaryDirectory saveDirectory;
     std::unique_ptr<App> app;
     std::filesystem::path path;
     SDL_Surface *surface{}; SDL_Renderer *renderer{};
@@ -86,8 +88,9 @@ protected:
     ProfileState &profile() { return const_cast<ProfileState &>(session().profile()); }
     void SetUp() override {
         ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
-        path=std::filesystem::temp_directory_path()/("raidline-wheel-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-        ASSERT_TRUE(std::filesystem::create_directory(path));
+        ASSERT_NO_THROW(saveDirectory.claim("raidline-wheel-",
+            testing::UnitTest::GetInstance()->current_test_info()->name()));
+        path = saveDirectory.path();
         const auto &c=publishedContentRegistry();auto p=makeNewPublishedProfile("quick-wheel",c);
         p.tutorial=TutorialProgress::Complete;p.homeFounding.hintsDismissed=true;
         equipDecoyTestGun(p,c);
@@ -123,9 +126,7 @@ protected:
     }
     void TearDown() override {
         detach();app.reset();SDL_Quit();
-        if(path.parent_path().lexically_normal()==std::filesystem::temp_directory_path().lexically_normal() && path.filename().string().starts_with("raidline-wheel-")) {
-            std::error_code ec;std::filesystem::remove_all(path,ec);
-        }
+        ASSERT_NO_THROW(saveDirectory.cleanup());
     }
     void openMedical() { A::point(*app,{640,360});key(SDL_SCANCODE_5,true);A::frame(*app);ASSERT_TRUE(A::medical(*app)); }
     void openThrowable() { A::point(*app,{640,360});key(SDL_SCANCODE_4,true);A::frame(*app);ASSERT_TRUE(A::throwable(*app)); }

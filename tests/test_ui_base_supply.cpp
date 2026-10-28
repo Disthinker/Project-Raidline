@@ -1,4 +1,5 @@
 #include "app.h"
+#include "test_temp_directory.h"
 #include "alpha_content_ids.h"
 #include "weapon_component_domain.h"
 #include <algorithm>
@@ -43,14 +44,16 @@ void key(SDL_Scancode code,bool down) {
 }
 class UiBaseSupplyTest:public testing::Test {
 protected:
+    raidline::test::TemporaryDirectory saveDirectory;
     std::unique_ptr<App> app; SDL_Surface *surface{}; SDL_Renderer *renderer{}; std::filesystem::path path;
     const ContentRegistry &content=publishedContentRegistry();
     auto &session() {return A::session(*app);}
     ProfileState &profile() {return const_cast<ProfileState &>(session().profile());}
     void SetUp() override {
         ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
-        path=std::filesystem::temp_directory_path()/("raidline-supply-ui-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-        ASSERT_TRUE(std::filesystem::create_directory(path));
+        ASSERT_NO_THROW(saveDirectory.claim("raidline-supply-ui-",
+            testing::UnitTest::GetInstance()->current_test_info()->name()));
+        path = saveDirectory.path();
         auto p=makeNewPublishedProfile("supply-ui",content);p.currency=100000;p.tutorial=TutorialProgress::Complete;p.homeFounding.hintsDismissed=true;
         ASSERT_TRUE(SaveRepository(path).save(p,content.contentVersion()).succeeded);
         app=std::make_unique<App>();A::flow(*app).configurePersistence(path);ASSERT_TRUE(A::flow(*app).continueGame());
@@ -65,9 +68,7 @@ protected:
     void detach() {if(app)A::detach(*app);SDL_DestroyRenderer(renderer);SDL_DestroySurface(surface);renderer=nullptr;surface=nullptr;}
     void TearDown() override {
         detach();app.reset();SDL_Quit();
-        if(path.parent_path().lexically_normal()==std::filesystem::temp_directory_path().lexically_normal() && path.filename().string().starts_with("raidline-supply-ui-")) {
-            std::error_code ec;std::filesystem::remove_all(path,ec);
-        }
+        ASSERT_NO_THROW(saveDirectory.cleanup());
     }
     void click(SDL_FRect box) {const auto p=center(box);pointer(p,true);pointer(p,false);A::frame(*app);}
     void control(Control c) {click(uiBaseSupplyControlRect(c));}

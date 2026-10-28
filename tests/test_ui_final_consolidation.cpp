@@ -1,4 +1,5 @@
 #include "app.h"
+#include "test_temp_directory.h"
 #include <gtest/gtest.h>
 #include <SDL3_image/SDL_image.h>
 #include <algorithm>
@@ -89,11 +90,13 @@ void pointer(Vec2 p,bool down) {
 void event(Uint32 type) { SDL_Event e{}; e.type=type; ASSERT_TRUE(SDL_PushEvent(&e)); }
 class UiFinalConsolidationTest: public testing::Test {
 protected:
+  raidline::test::TemporaryDirectory saveDirectory;
   std::unique_ptr<App> app; SDL_Surface *surface{}; SDL_Renderer *renderer{}; std::filesystem::path path;
   void SetUp() override {
     ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
-    path=std::filesystem::temp_directory_path()/("raidline-final-all-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-    ASSERT_TRUE(std::filesystem::create_directory(path)); app=std::make_unique<App>();
+    ASSERT_NO_THROW(saveDirectory.claim("raidline-final-all-",
+        testing::UnitTest::GetInstance()->current_test_info()->name()));
+    path = saveDirectory.path(); app=std::make_unique<App>();
     A::flow(*app).configurePersistence(path/"profile"); attach(1280,720);
   }
   void attach(int w,int h) {
@@ -102,13 +105,10 @@ protected:
     ASSERT_TRUE(SDL_SetRenderLogicalPresentation(renderer,1280,720,SDL_LOGICAL_PRESENTATION_LETTERBOX));
     A::attach(*app,renderer,w/1280.0F,path/"settings.json");
   }
-  void detach() { A::detach(*app); SDL_DestroyRenderer(renderer); SDL_DestroySurface(surface); renderer=nullptr; surface=nullptr; }
+  void detach() { if (app) A::detach(*app); SDL_DestroyRenderer(renderer); SDL_DestroySurface(surface); renderer=nullptr; surface=nullptr; }
   void TearDown() override {
     detach(); app.reset(); SDL_Quit();
-    const auto resolved=std::filesystem::canonical(path);
-    ASSERT_TRUE(std::filesystem::equivalent(resolved.parent_path(),std::filesystem::temp_directory_path()));
-    ASSERT_TRUE(resolved.filename().string().starts_with("raidline-final-all-"));
-    std::error_code ec; std::filesystem::remove_all(resolved,ec);
+    ASSERT_NO_THROW(saveDirectory.cleanup());
   }
   void frame() { A::frame(*app); }
   void base() { ASSERT_TRUE(A::flow(*app).startNewGame("final-all-isolated",false)); frame(); }

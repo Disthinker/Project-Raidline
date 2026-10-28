@@ -1,4 +1,5 @@
 #include "app.h"
+#include "test_temp_directory.h"
 #include "alpha_content_ids.h"
 #include <algorithm>
 #include <chrono>
@@ -37,13 +38,15 @@ void windowEvent(Uint32 type){SDL_Event e{};e.type=type;ASSERT_TRUE(SDL_PushEven
 void key(SDL_Scancode code){SDL_Event e{};e.type=SDL_EVENT_KEY_DOWN;e.key.scancode=code;e.key.down=true;ASSERT_TRUE(SDL_PushEvent(&e));e.type=SDL_EVENT_KEY_UP;e.key.down=false;ASSERT_TRUE(SDL_PushEvent(&e));}
 class UiBaseAllocationTest:public testing::Test {
 protected:
+    raidline::test::TemporaryDirectory saveDirectory;
     std::unique_ptr<App> app;SDL_Surface *surface{};SDL_Renderer *renderer{};std::filesystem::path path;
     const ContentRegistry &content=publishedContentRegistry();
     ProfileState &profile(){return const_cast<ProfileState &>(A::session(*app).profile());}
     void SetUp() override {
         ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
-        path=std::filesystem::temp_directory_path()/("raidline-allocation-ui-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-        ASSERT_TRUE(std::filesystem::create_directory(path));
+        ASSERT_NO_THROW(saveDirectory.claim("raidline-allocation-ui-",
+            testing::UnitTest::GetInstance()->current_test_info()->name()));
+        path = saveDirectory.path();
         auto p=makeNewAlphaProfile("allocation-ui",content);p.tutorial=TutorialProgress::Complete;p.homeFounding.hintsDismissed=true;
         ASSERT_TRUE(SaveRepository(path).save(p,content.contentVersion()).succeeded);
         app=std::make_unique<App>();A::flow(*app).configurePersistence(path);ASSERT_TRUE(A::flow(*app).continueGame());A::frame(*app);
@@ -52,9 +55,8 @@ protected:
     void attach(int w,int h){surface=SDL_CreateSurface(w,h,SDL_PIXELFORMAT_RGBA32);ASSERT_NE(surface,nullptr);renderer=SDL_CreateSoftwareRenderer(surface);ASSERT_NE(renderer,nullptr);ASSERT_TRUE(SDL_SetRenderLogicalPresentation(renderer,1280,720,SDL_LOGICAL_PRESENTATION_LETTERBOX));A::attach(*app,renderer,w/1280.0F);}
     void detach(){if(app)A::detach(*app);SDL_DestroyRenderer(renderer);SDL_DestroySurface(surface);renderer=nullptr;surface=nullptr;}
     void TearDown() override {
-        detach();app.reset();SDL_Quit();const auto resolved=std::filesystem::canonical(path);
-        ASSERT_TRUE(std::filesystem::equivalent(resolved.parent_path(),std::filesystem::temp_directory_path()));
-        ASSERT_TRUE(resolved.filename().string().starts_with("raidline-allocation-ui-"));std::error_code ec;std::filesystem::remove_all(resolved,ec);
+        detach();app.reset();SDL_Quit();
+        ASSERT_NO_THROW(saveDirectory.cleanup());
     }
     void click(Vec2 p){pointer(p,true);pointer(p,false);A::frame(*app);}
     void control(C c){click(center(uiAllocationControlRect(c)));}
