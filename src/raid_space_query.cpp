@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <bit>
+#include <cfenv>
+#include <cfloat>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -11,6 +13,10 @@
 #include <array>
 #include <queue>
 #include <vector>
+
+#if defined(_M_X64) || defined(_M_IX86) || defined(__SSE__)
+#include <xmmintrin.h>
+#endif
 
 namespace
 {
@@ -145,6 +151,79 @@ namespace
         {
             float a = (rect.position.y - origin.y) / direction.y,
                   b = (rect.position.y + rect.size.y - origin.y) / direction.y;
+            if (a > b) { const float temporary = a; a = b; b = temporary; }
+            if (enter < a) enter = a;
+            if (b < leave) leave = b;
+            if (!(enter <= leave)) return false;
+        }
+        if (!(enter >= 0 && enter <= maximum && leave > enter + 0.00001F))
+            return false;
+        hitDistance = enter;
+        return true;
+    }
+
+    struct ConeSlabs
+    {
+        float lowX{}, highX{}, lowY{}, highY{};
+        bool insideX{}, insideY{}, ready{};
+    };
+
+    bool preparedConeEnvironment() noexcept
+    {
+#if (defined(_M_X64) || defined(_M_IX86) || defined(__SSE__)) && FLT_EVAL_METHOD == 0
+        return sizeof(float) == 4 && std::numeric_limits<float>::is_iec559 &&
+            std::numeric_limits<float>::radix == 2 &&
+            std::fegetround() == FE_TONEAREST &&
+            (_mm_getcsr() & 0xffc0U) == 0x1f80U;
+#else
+        return false;
+#endif
+    }
+
+    ConeSlabs prepareConeSlabs(const Rect &rect, Vec2 origin) noexcept
+    {
+        ConeSlabs result;
+        // These are the exact original expressions, not algebraic rewrites.
+        result.lowX = rect.position.x - origin.x;
+        result.highX = rect.position.x + rect.size.x - origin.x;
+        result.lowY = rect.position.y - origin.y;
+        result.highY = rect.position.y + rect.size.y - origin.y;
+        if (!std::isfinite(result.lowX) || !std::isfinite(result.highX) ||
+            !std::isfinite(result.lowY) || !std::isfinite(result.highY))
+            return result;
+        // Cancellation can make relative zero comparisons differ at an edge.
+        result.insideX = origin.x >= rect.position.x &&
+            origin.x <= rect.position.x + rect.size.x;
+        result.insideY = origin.y >= rect.position.y &&
+            origin.y <= rect.position.y + rect.size.y;
+        result.ready = true;
+        return result;
+    }
+
+    bool castPreparedConeRay(const ConeSlabs &bounds, Vec2 direction,
+                             float absoluteX, float absoluteY, float maximum,
+                             float &hitDistance) noexcept
+    {
+        float enter = 0, leave = maximum;
+        if (absoluteX < 1e-7F)
+        {
+            if (!bounds.insideX) return false;
+        }
+        else
+        {
+            float a = bounds.lowX / direction.x, b = bounds.highX / direction.x;
+            if (a > b) { const float temporary = a; a = b; b = temporary; }
+            if (enter < a) enter = a;
+            if (b < leave) leave = b;
+            if (!(enter <= leave)) return false;
+        }
+        if (absoluteY < 1e-7F)
+        {
+            if (!bounds.insideY) return false;
+        }
+        else
+        {
+            float a = bounds.lowY / direction.y, b = bounds.highY / direction.y;
             if (a > b) { const float temporary = a; a = b; b = temporary; }
             if (enter < a) enter = a;
             if (b < leave) leave = b;
@@ -425,9 +504,11 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
         Rect bounds;
         Vec2 relativeCenter, halfExtent;
         float linePadding;
+        ConeSlabs slabs;
     };
     std::vector<ConeBlocker> localBounds;
     localBounds.reserve(candidates.size());
+    const bool prepareSlabs = preparedConeEnvironment();
     for (auto i : candidates)
     {
         const auto r = blockerData[i];
@@ -439,7 +520,8 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
         const float padding = 8 * std::numeric_limits<float>::epsilon() *
             (std::abs(o.x) + std::abs(o.y) + std::abs(relativeCenter.x) +
              std::abs(relativeCenter.y) + halfExtent.x + halfExtent.y + 1);
-        localBounds.push_back({r, relativeCenter, halfExtent, padding});
+        localBounds.push_back({r, relativeCenter, halfExtent, padding,
+            prepareSlabs ? prepareConeSlabs(r, o) : ConeSlabs{}});
     }
     // Conservative angular buckets avoid scanning every local rectangle for
     // every ray. Each bounding circle covers its whole rectangle; padded bin
@@ -578,8 +660,10 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
         if (previewFound)
         {
             if (work) ++work->blockerTests;
-            previewHit = castConeRay(localData[*previewCursor].bounds, o, d,
-                                     absoluteX, absoluteY, length, previewEntry);
+            const auto &preview = localData[*previewCursor];
+            previewHit = preview.slabs.ready
+                ? castPreparedConeRay(preview.slabs, d, absoluteX, absoluteY, length, previewEntry)
+                : castConeRay(preview.bounds, o, d, absoluteX, absoluteY, length, previewEntry);
             if (previewHit)
             {
                 previewThreshold = previewEntry + hitEpsilon;
@@ -632,7 +716,10 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
             if (work)
                 ++work->blockerTests;
             float enter{};
-            if (castConeRay(r, o, d, absoluteX, absoluteY, length, enter))
+            const bool hit = candidate.slabs.ready
+                ? castPreparedConeRay(candidate.slabs, d, absoluteX, absoluteY, length, enter)
+                : castConeRay(r, o, d, absoluteX, absoluteY, length, enter);
+            if (hit)
             {
                 length = enter;
                 // A nearer hit shortens the remaining closed segment. Keep

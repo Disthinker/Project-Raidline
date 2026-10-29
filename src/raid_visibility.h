@@ -3,6 +3,7 @@
 #include "definition_id.h"
 #include "rect.h"
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -106,10 +107,17 @@ class RaidVisibilityBoundsQuery
         float sign{};
         std::array<Edge, 3> edges;
     };
+    struct TriangleGroup
+    {
+        Vec2 minimum, maximum;
+        std::size_t first{}, end{};
+    };
     bool valid_{}, bounded_{};
     Vec2 observer_{}, leftDirection_{}, rightDirection_{};
     float maximumDistanceSquared_{};
     std::vector<Triangle> triangles_;
+    // Contiguous ranges and owned bounds remain valid after copy/move.
+    std::vector<TriangleGroup> triangleGroups_;
 };
 
 [[nodiscard]] bool raidSightSegmentIntersectsRectInterior(Vec2, Vec2,
