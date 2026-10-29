@@ -38,6 +38,12 @@ public:
     [[nodiscard]] float cellSize() const noexcept;
 
 private:
+    struct SightBounds
+    {
+        float lowX{}, highX{}, lowY{}, highY{};
+        bool ready{}, empty{};
+    };
+
     Vec2 worldSize_{};
     float cellSize_{};
     std::size_t columns_{};
@@ -45,6 +51,15 @@ private:
     Vec2 maximumHalfExtent_{};
     std::vector<Rect> blockerBounds_;
     std::vector<std::vector<std::size_t>> cells_;
+    // Owned scalar preparation belongs to this immutable index. The original
+    // rectangles remain the authority for other queries and slow fallback.
+    std::vector<SightBounds> sightBlockers_, sightCells_;
+    bool sightPrepared_{};
+
+    [[nodiscard]] static SightBounds prepareSightBounds(Rect bounds) noexcept;
+    [[nodiscard]] static bool intersectsSightBounds(
+        Vec2 start, Vec2 delta, bool nearX, bool nearY,
+        const SightBounds &bounds) noexcept;
 
     [[nodiscard]] std::size_t clampedColumn(float x) const noexcept;
     [[nodiscard]] std::size_t clampedRow(float y) const noexcept;
