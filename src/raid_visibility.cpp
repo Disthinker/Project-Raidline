@@ -1,9 +1,31 @@
 #include "raid_visibility.h"
 #include <algorithm>
+#include <cfenv>
+#include <cfloat>
 #include <cmath>
+#include <limits>
+
+#if defined(_M_X64) || defined(_M_IX86) || defined(__SSE__)
+#include <xmmintrin.h>
+#endif
 
 namespace
 {
+constexpr std::size_t kBoundsTriangleGroupSize{32};
+constexpr std::size_t kMinimumGroupedTriangles{128};
+
+bool groupedSightEnvironment() noexcept
+{
+#if (defined(_M_X64) || defined(_M_IX86) || defined(__SSE__)) && FLT_EVAL_METHOD == 0
+    return sizeof(float) == 4 && std::numeric_limits<float>::is_iec559 &&
+        std::numeric_limits<float>::radix == 2 &&
+        std::fegetround() == FE_TONEAREST &&
+        (_mm_getcsr() & 0xffc0U) == 0x1f80U;
+#else
+    return false;
+#endif
+}
+
 bool finite(Vec2 p) noexcept
 {
     return std::isfinite(p.x) && std::isfinite(p.y);
@@ -357,14 +379,17 @@ RaidVisibilityBoundsQuery::RaidVisibilityBoundsQuery(
                       view.direction.y * c - view.direction.x * s};
     rightDirection_ = {view.direction.x * c - view.direction.y * s,
                        view.direction.y * c + view.direction.x * s};
-    // Establish live elements before writing through the contiguous view.
-    // The final resize removes only triangles rejected by the original area
-    // test; no capacity-only writes or changed fan order are permitted.
-    triangles_.assign(view.boundary.size(), Triangle{});
-    auto *const triangles = triangles_.data();
-    std::size_t triangleCount{};
     const auto *const points = view.boundary.data();
     const auto pointCount = view.boundary.size();
+    // Construct each retained triangle once; reserved capacity is never
+    // treated as live storage. The original fan and area test stay in order.
+    triangles_.reserve(pointCount);
+    const bool prepareGroups = pointCount >= kMinimumGroupedTriangles &&
+        groupedSightEnvironment();
+    if (prepareGroups)
+        triangleGroups_.reserve((pointCount - 1) / kBoundsTriangleGroupSize + 1);
+    TriangleGroup group{};
+    std::size_t triangleCount{}, groupCount{};
     for (std::size_t i = 0; i < pointCount; ++i)
     {
         const auto p = points[i], q = points[i + 1 == pointCount ? 0 : i + 1];
@@ -383,13 +408,38 @@ RaidVisibilityBoundsQuery::RaidVisibilityBoundsQuery(
         const Vec2 firstDelta{p.x - observer_.x, p.y - observer_.y};
         const Vec2 middleDelta{q.x - p.x, q.y - p.y};
         const Vec2 lastDelta{observer_.x - q.x, observer_.y - q.y};
-        triangles[triangleCount++] = {minimum, maximum,
+        triangles_.emplace_back(minimum, maximum,
             area > 0 ? 1.0F : -1.0F,
-            {Edge{observer_, firstDelta, std::abs(firstDelta.x), std::abs(firstDelta.y)},
+            std::array<Edge, 3>{
+             Edge{observer_, firstDelta, std::abs(firstDelta.x), std::abs(firstDelta.y)},
              Edge{p, middleDelta, std::abs(middleDelta.x), std::abs(middleDelta.y)},
-             Edge{q, lastDelta, std::abs(lastDelta.x), std::abs(lastDelta.y)}}};
+             Edge{q, lastDelta, std::abs(lastDelta.x), std::abs(lastDelta.y)}});
+        if (prepareGroups)
+        {
+            if (groupCount == 0)
+                group = {minimum, maximum, triangleCount, triangleCount + 1};
+            else
+            {
+                // These select original finite Triangle bounds. No geometric
+                // formula, angular approximation or new rounding is involved.
+                if (minimum.x < group.minimum.x) group.minimum.x = minimum.x;
+                if (minimum.y < group.minimum.y) group.minimum.y = minimum.y;
+                if (group.maximum.x < maximum.x) group.maximum.x = maximum.x;
+                if (group.maximum.y < maximum.y) group.maximum.y = maximum.y;
+                group.end = triangleCount + 1;
+            }
+            if (++groupCount == kBoundsTriangleGroupSize)
+            {
+                triangleGroups_.push_back(group);
+                groupCount = 0;
+            }
+        }
+        ++triangleCount;
     }
-    triangles_.resize(triangleCount);
+    if (groupCount != 0)
+        triangleGroups_.push_back(group);
+    if (triangleCount < kMinimumGroupedTriangles)
+        triangleGroups_.clear();
 }
 
 bool RaidVisibilityBoundsQuery::boundsVisible(Rect rect) const noexcept
@@ -430,6 +480,36 @@ bool RaidVisibilityBoundsQuery::boundsVisible(Rect rect) const noexcept
                 bottom = rect.position.y + rect.size.y - dy;
     const Vec2 center{(left + right) / 2, (top + bottom) / 2};
     const float hx = (right - left) / 2, hy = (bottom - top) / 2;
+    if (!triangleGroups_.empty() && groupedSightEnvironment() &&
+        std::isfinite(left) && std::isfinite(right) && std::isfinite(top) &&
+        std::isfinite(bottom) && finite(center) && std::isfinite(hx) && std::isfinite(hy))
+    {
+        const auto *const triangles = triangles_.data();
+        const auto *const groupEnd = triangleGroups_.data() + triangleGroups_.size();
+        for (auto groupCursor = triangleGroups_.data(); groupCursor != groupEnd; ++groupCursor)
+        {
+            const auto &group = *groupCursor;
+            // A group reject implies this exact old AABB test rejects every
+            // member. Survivors still execute all original predicates in order.
+            if (group.maximum.x < left || group.minimum.x > right ||
+                group.maximum.y < top || group.minimum.y > bottom)
+                continue;
+            const auto *const end = triangles + group.end;
+            for (auto cursor = triangles + group.first; cursor != end; ++cursor)
+            {
+                const auto &triangle = *cursor;
+                if (triangle.maximum.x < left || triangle.minimum.x > right ||
+                    triangle.maximum.y < top || triangle.minimum.y > bottom)
+                    continue;
+                const auto *const edges = triangle.edges.data();
+                if (edges[0].overlaps(center, hx, hy, triangle.sign) &&
+                    edges[1].overlaps(center, hx, hy, triangle.sign) &&
+                    edges[2].overlaps(center, hx, hy, triangle.sign))
+                    return true;
+            }
+        }
+        return false;
+    }
     const auto *const lastTriangle = triangles_.data() + triangles_.size();
     for (auto triangleCursor = triangles_.data(); triangleCursor != lastTriangle; ++triangleCursor)
     {

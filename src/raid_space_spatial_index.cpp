@@ -2,8 +2,15 @@
 
 #include <algorithm>
 #include <array>
+#include <cfenv>
+#include <cfloat>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
+
+#if defined(_M_X64) || defined(_M_IX86) || defined(__SSE__)
+#include <xmmintrin.h>
+#endif
 
 #include "raid_space_query.h"
 
@@ -18,6 +25,77 @@ namespace
     {
         return finite(value) && value.x > 0.0F && value.y > 0.0F;
     }
+
+    bool preparedSightEnvironment() noexcept
+    {
+#if (defined(_M_X64) || defined(_M_IX86) || defined(__SSE__)) && FLT_EVAL_METHOD == 0
+        // Cache only the environment whose binary32 arithmetic was prepared.
+        // Different rounding, FTZ/DAZ or unmasked traps use the original path.
+        return sizeof(float) == 4 && std::numeric_limits<float>::is_iec559 &&
+            std::numeric_limits<float>::radix == 2 &&
+            std::fegetround() == FE_TONEAREST &&
+            (_mm_getcsr() & 0xffc0U) == 0x1f80U;
+#else
+        return false;
+#endif
+    }
+}
+
+RaidSpaceBlockerIndex::SightBounds
+RaidSpaceBlockerIndex::prepareSightBounds(Rect bounds) noexcept
+{
+    SightBounds prepared;
+    if (!finite(bounds.position) || !finitePositive(bounds.size))
+        return prepared;
+    // Preserve the original left association and the exact epsilon.
+    prepared.lowX = bounds.position.x + kRaidSightGeometryEpsilon;
+    prepared.highX = bounds.position.x + bounds.size.x - kRaidSightGeometryEpsilon;
+    prepared.lowY = bounds.position.y + kRaidSightGeometryEpsilon;
+    prepared.highY = bounds.position.y + bounds.size.y - kRaidSightGeometryEpsilon;
+    if (!std::isfinite(prepared.lowX) || !std::isfinite(prepared.highX) ||
+        !std::isfinite(prepared.lowY) || !std::isfinite(prepared.highY))
+        return prepared;
+    prepared.empty = prepared.lowX >= prepared.highX || prepared.lowY >= prepared.highY;
+    prepared.ready = true;
+    return prepared;
+}
+
+bool RaidSpaceBlockerIndex::intersectsSightBounds(
+    Vec2 start, Vec2 delta, bool nearX, bool nearY,
+    const SightBounds &bounds) noexcept
+{
+    if (bounds.empty)
+        return false;
+    float enter{}, leave{1};
+    if (nearX)
+    {
+        if (!(start.x > bounds.lowX && start.x < bounds.highX))
+            return false;
+    }
+    else
+    {
+        float first = (bounds.lowX - start.x) / delta.x;
+        float second = (bounds.highX - start.x) / delta.x;
+        if (first > second) std::swap(first, second);
+        enter = std::max(enter, first);
+        leave = std::min(leave, second);
+        if (!(enter <= leave)) return false;
+    }
+    if (nearY)
+    {
+        if (!(start.y > bounds.lowY && start.y < bounds.highY))
+            return false;
+    }
+    else
+    {
+        float first = (bounds.lowY - start.y) / delta.y;
+        float second = (bounds.highY - start.y) / delta.y;
+        if (first > second) std::swap(first, second);
+        enter = std::max(enter, first);
+        leave = std::min(leave, second);
+        if (!(enter <= leave)) return false;
+    }
+    return leave >= 0 && enter <= 1 && leave - enter > kRaidSightGeometryEpsilon;
 }
 
 std::optional<RaidSpaceBlockerIndex> RaidSpaceBlockerIndex::build(
@@ -63,6 +141,27 @@ std::optional<RaidSpaceBlockerIndex> RaidSpaceBlockerIndex::build(
         const std::size_t row = index.clampedRow(center.y);
         index.cells_[row * index.columns_ + column].push_back(blockerIndex);
     }
+    if (preparedSightEnvironment())
+    {
+        index.sightBlockers_.reserve(index.blockerBounds_.size());
+        for (const Rect bounds : index.blockerBounds_)
+            index.sightBlockers_.push_back(prepareSightBounds(bounds));
+        index.sightCells_.resize(index.cells_.size());
+        // maximumHalfExtent_ is final before any expanded cell is prepared.
+        for (std::size_t row = 0; row < index.rows_; ++row)
+            for (std::size_t column = 0; column < index.columns_; ++column)
+            {
+                const std::size_t cell = row * index.columns_ + column;
+                if (index.cells_[cell].empty()) continue;
+                const Rect expandedCell{
+                    {static_cast<float>(column) * index.cellSize_ - index.maximumHalfExtent_.x,
+                     static_cast<float>(row) * index.cellSize_ - index.maximumHalfExtent_.y},
+                    {index.cellSize_ + index.maximumHalfExtent_.x * 2.0F,
+                     index.cellSize_ + index.maximumHalfExtent_.y * 2.0F}};
+                index.sightCells_[cell] = prepareSightBounds(expandedCell);
+            }
+        index.sightPrepared_ = true;
+    }
     return index;
 }
 
@@ -78,6 +177,20 @@ bool RaidSpaceBlockerIndex::hasLineOfSight(
     if (!finite(start) || !finite(end))
     {
         return false;
+    }
+
+    bool prepared = sightPrepared_ && preparedSightEnvironment();
+    Vec2 delta{};
+    bool nearX{}, nearY{};
+    if (prepared)
+    {
+        delta = {end.x - start.x, end.y - start.y};
+        prepared = finite(delta);
+        if (prepared)
+        {
+            nearX = std::abs(delta.x) <= kRaidSightGeometryEpsilon;
+            nearY = std::abs(delta.y) <= kRaidSightGeometryEpsilon;
+        }
     }
 
     // Cell membership is deliberately conservative. Dense cells can contain
@@ -107,21 +220,30 @@ bool RaidSpaceBlockerIndex::hasLineOfSight(
             {
                 continue;
             }
-            const Rect expandedCell{
-                Vec2{
-                    static_cast<float>(column) * cellSize_ -
-                        maximumHalfExtent_.x,
-                    static_cast<float>(row) * cellSize_ -
-                        maximumHalfExtent_.y},
-                Vec2{
-                    cellSize_ + maximumHalfExtent_.x * 2.0F,
-                    cellSize_ + maximumHalfExtent_.y * 2.0F}};
-            if (!raidSpaceSegmentIntersectsBlockerInterior(
-                    start,
-                    end,
-                    expandedCell))
+            const std::size_t cellIndex = row * columns_ + column;
+            if (prepared && sightCells_[cellIndex].ready)
             {
-                continue;
+                if (!intersectsSightBounds(start, delta, nearX, nearY, sightCells_[cellIndex]))
+                    continue;
+            }
+            else
+            {
+                const Rect expandedCell{
+                    Vec2{
+                        static_cast<float>(column) * cellSize_ -
+                            maximumHalfExtent_.x,
+                        static_cast<float>(row) * cellSize_ -
+                            maximumHalfExtent_.y},
+                    Vec2{
+                        cellSize_ + maximumHalfExtent_.x * 2.0F,
+                        cellSize_ + maximumHalfExtent_.y * 2.0F}};
+                if (!raidSpaceSegmentIntersectsBlockerInterior(
+                        start,
+                        end,
+                        expandedCell))
+                {
+                    continue;
+                }
             }
             const auto *const endCandidate=cell.data()+cell.size();
             for (const auto *cursor=cell.data(); cursor!=endCandidate; ++cursor)
@@ -134,7 +256,12 @@ bool RaidSpaceBlockerIndex::hasLineOfSight(
                 const Rect &bounds=blockerData[candidate];
                 if(bounds.position.x+bounds.size.x<rayLeft || bounds.position.x>rayRight ||
                    bounds.position.y+bounds.size.y<rayTop || bounds.position.y>rayBottom)continue;
-                if (raidSpaceSegmentIntersectsBlockerInterior(
+                if (prepared && sightBlockers_[candidate].ready)
+                {
+                    if (intersectsSightBounds(start, delta, nearX, nearY, sightBlockers_[candidate]))
+                        return false;
+                }
+                else if (raidSpaceSegmentIntersectsBlockerInterior(
                         start,
                         end,
                         bounds))
@@ -153,7 +280,10 @@ void RaidSpaceBlockerIndex::queryCandidateIndices(
 {
     output.clear();
     std::size_t nonemptyCells{};
-    std::array<std::size_t,8> cellEnds{};
+    struct Range { const std::size_t *first, *last; };
+    std::array<Range, 8> ranges;
+    std::size_t rangeCount{}, candidateCount{};
+    bool directMerge = true;
     if (!finite(bounds.position) || !finite(bounds.size) ||
         bounds.size.x < 0.0F || bounds.size.y < 0.0F || cells_.empty())
     {
@@ -178,37 +308,48 @@ void RaidSpaceBlockerIndex::queryCandidateIndices(
         {
             const std::vector<std::size_t> &cell =
                 cells_[row * columns_ + column];
-            if(!cell.empty()) {
+            if (!cell.empty()) {
                 ++nonemptyCells;
-                output.insert(output.end(), cell.data(), cell.data() + cell.size());
-                if(nonemptyCells<=cellEnds.size())cellEnds[nonemptyCells-1]=output.size();
+                if (directMerge && rangeCount < ranges.size() &&
+                    cell.size() <= 256U - candidateCount) {
+                    // The immutable index owns these already sorted ranges;
+                    // output growth cannot invalidate any borrowed pointer.
+                    ranges[rangeCount++] = {cell.data(), cell.data() + cell.size()};
+                    candidateCount += cell.size();
+                } else {
+                    if (directMerge) {
+                        // Crossing either small-query limit preserves every
+                        // earlier cell before continuing the original fallback.
+                        for (std::size_t i = 0; i < rangeCount; ++i)
+                            output.insert(output.end(), ranges[i].first, ranges[i].last);
+                        directMerge = false;
+                    }
+                    output.insert(output.end(), cell.data(), cell.data() + cell.size());
+                }
             }
         }
     }
-    // build() visits original indices in ascending order; one cell is already
-    // sorted. Multi-cell queries retain the exact original-index ordering.
-    if(nonemptyCells>1) {
-        // Small local queries dominate actor movement. Merge their already
-        // sorted cell ranges without repeatedly sorting the same dense bucket.
-        // Larger queries retain the original general sort and memory bounds.
-        if(nonemptyCells<=8 && output.size()<=256) {
-            std::array<std::size_t,256> input;
-            std::copy_n(output.data(),output.size(),input.data());
-            struct Range { const std::size_t *first,*last; };
-            std::array<Range,8> ranges;
-            auto *const cursors=ranges.data();std::size_t begin{};
-            for(std::size_t i=0;i<nonemptyCells;++i) {
-                cursors[i]={input.data()+begin,input.data()+cellEnds[i]};begin=cellEnds[i];
-            }
-            std::size_t active=nonemptyCells;auto *write=output.data();
-            while(active) {
-                std::size_t selected{};
-                for(std::size_t i=1;i<active;++i)
-                    if(*cursors[i].first<*cursors[selected].first)selected=i;
-                *write++=*cursors[selected].first++;
-                if(cursors[selected].first==cursors[selected].last)cursors[selected]=cursors[--active];
-            }
-        } else std::sort(output.begin(), output.end());
+    // build() visits original indices in ascending order. Preserve the direct
+    // single-cell copy and the general insert/sort path for larger queries.
+    if (!directMerge) {
+        if (nonemptyCells > 1) std::sort(output.begin(), output.end());
+    } else if (rangeCount == 1) {
+        output.insert(output.end(), ranges[0].first, ranges[0].last);
+    } else if (rangeCount > 1) {
+        // Establish every output element's lifetime once, then merge directly
+        // from the source cells without an intermediate candidate copy.
+        output.resize(candidateCount);
+        auto *const cursors = ranges.data();
+        std::size_t active = rangeCount;
+        auto *write = output.data();
+        while (active) {
+            std::size_t selected{};
+            for (std::size_t i = 1; i < active; ++i)
+                if (*cursors[i].first < *cursors[selected].first) selected = i;
+            *write++ = *cursors[selected].first++;
+            if (cursors[selected].first == cursors[selected].last)
+                cursors[selected] = cursors[--active];
+        }
     }
 }
 
