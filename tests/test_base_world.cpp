@@ -296,13 +296,14 @@ TEST(BaseWorldTest, ExposesDormitoryWithoutBlockingCentralRoute)
     moveDown.moveDown = true;
     for (int index{}; index < 8; ++index)
     {
-        static_cast<void>(world.update(moveDown, 0.05F));
+        // Keep the same physical route after the approved 240-unit walk speed.
+        static_cast<void>(world.update(moveDown, 0.0375F));
     }
     BaseInput moveLeft;
     moveLeft.moveLeft = true;
     for (int index{}; index < 20; ++index)
     {
-        static_cast<void>(world.update(moveLeft, 0.05F));
+        static_cast<void>(world.update(moveLeft, 0.0375F));
     }
     EXPECT_EQ(world.interactableFacility(), BaseFacilityKind::Dormitory);
     BaseInput interact;
@@ -339,13 +340,13 @@ TEST(BaseWorldTest, ExposesAndInteractsWithMedicalFacility)
     moveDown.moveDown = true;
     for (int index{}; index < 8; ++index)
     {
-        static_cast<void>(world.update(moveDown, 0.05F));
+        static_cast<void>(world.update(moveDown, 0.0375F));
     }
     BaseInput moveRight;
     moveRight.moveRight = true;
     for (int index{}; index < 58; ++index)
     {
-        static_cast<void>(world.update(moveRight, 0.05F));
+        static_cast<void>(world.update(moveRight, 0.0375F));
     }
     EXPECT_EQ(world.interactableFacility(), BaseFacilityKind::Medical);
     BaseInput interact;

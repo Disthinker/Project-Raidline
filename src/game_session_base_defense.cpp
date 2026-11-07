@@ -41,13 +41,14 @@ bool GameSession::triggerDeveloperBaseSiegeWarning()
     return commitProfileCandidate(std::move(candidate));
 }
 
-bool GameSession::startBaseRealtimeDefense(BaseWorld &world)
+bool GameSession::prepareBaseDefenseStartCandidate(BaseWorld &world,ProfileState &candidate)
 {
-    if (baseDefenseActive())
-        return restoreBaseDefenseRuntime(world);
+    if(profileUiCommitPending())return false;
     if (alphaRaidActive_ || profile_.pendingRaid || state_ != GameSessionState::BetweenRaids ||
         !profile_.baseSiege.warningActive)
         return false;
+    candidate=profile_;
+    if (!prepareBaseBoundaryInCandidate(candidate,true)) return false;
     BaseDefenseSnapshot inputs;
     inputs.eventId = baseSiegeEventId(profile_);
     inputs.siegeSequence = profile_.baseSiege.siegeSequence;
@@ -99,22 +100,40 @@ bool GameSession::startBaseRealtimeDefense(BaseWorld &world)
     prepared->medicalTickAccumulatorSeconds = medicalTickAccumulatorSeconds_;
     prepared->pendingWorldSeconds = pendingWorldSeconds_;
     prepared->baseCombatElapsedSeconds = baseCombatElapsedSeconds_;
-    ProfileState candidate = profile_;
     const auto receipt =
         executeBaseRealtimeDefenseStart(candidate, publishedContentRegistry(), *prepared,
-                                        {profile_.revision, prepared->eventId + ":start"});
+                                        {candidate.revision, prepared->eventId + ":start"});
     if (!receipt.succeeded)
     {
         persistenceMessage_ = receipt.message;
         return false;
     }
-    if (!commitProfileCandidate(std::move(candidate)))
-        return false;
+    return true;
+}
+
+bool GameSession::startBaseRealtimeDefense(BaseWorld &world)
+{
+    if(baseDefenseActive())return restoreBaseDefenseRuntime(world);
+    ProfileState candidate;
+    if(!prepareBaseDefenseStartCandidate(world,candidate))return false;
+    if(!commitProfileCandidate(std::move(candidate)))return false;
+    raidActionState_.cancel();cancelPlayerControlIntent();
     return restoreBaseDefenseRuntime(world);
+}
+
+ProfileUiSubmission GameSession::requestStartBaseRealtimeDefense(BaseWorld &world)
+{
+    if(profileUiCommitPending() || inventoryPersistencePending())return {0,false,false,DomainErrorCode::IllegalDestination,"WAIT FOR THE ACTIVE SAVE"};
+    bindBasePlayerWorld(&world);
+    ProfileState candidate;
+    if(!prepareBaseDefenseStartCandidate(world,candidate))return {0,false,false,DomainErrorCode::IllegalDestination,persistenceMessage_};
+    auto prepared=std::make_shared<PreparedPlayerTransition>();prepared->kind=PreparedPlayerTransition::Kind::DefenseStart;
+    return enqueuePreparedProfileUi(std::move(candidate),std::nullopt,ProfileUiCompletionKind::DefenseStart,std::nullopt,std::move(prepared));
 }
 
 bool GameSession::restoreBaseDefenseRuntime(BaseWorld &world)
 {
+    if(profileUiCommitPending())return false;
     if (!baseDefenseActive())
     {
         world.clearBaseDefense();
@@ -138,6 +157,7 @@ bool GameSession::restoreBaseDefenseRuntime(BaseWorld &world)
         persistenceMessage_ = "BASE DEFENSE RESTORE FAILED | SAVE PRESERVED";
         return false;
     }
+    weaponTriggerGate_.reset();
     baseDefenseWorld_ = &world;
     baseDefenseSaveBlocked_ = false;
     baseDefenseSimulationRejected_ = false;
@@ -155,6 +175,8 @@ bool GameSession::restoreBaseDefenseRuntime(BaseWorld &world)
     baseDefenseCheckpointElapsed_ = 0.0F;
     if (saveRepository_ && !baseDefenseWriter_)
         baseDefenseWriter_ = std::make_unique<BaseDefenseCheckpointWriter>(*saveRepository_);
+    if(!restoreBasePlayerEffects(world))return false;
+    cancelPlayerControlIntent();
     return true;
 }
 
@@ -172,19 +194,30 @@ bool GameSession::captureBaseDefenseCheckpoint(ProfileState &candidate) const
         snapshot->pendingWorldSeconds = pendingWorldSeconds_;
         snapshot->baseCombatElapsedSeconds = baseCombatElapsedSeconds_;
         snapshot->medicalTickAccumulatorSeconds = medicalTickAccumulatorSeconds_;
-        return captureOwnedDefenseCheckpoint(candidate, std::move(*snapshot), publishedContentRegistry());
+        if(!captureOwnedDefenseCheckpoint(candidate,std::move(*snapshot),publishedContentRegistry()))return false;
+        const_cast<GameSession *>(this)->recordBaseEnemyDeaths(candidate);
+        return captureBasePlayerEffects(candidate);
     }
     return false;
 }
 
 bool GameSession::checkpointBaseDefense(bool wait)
 {
+    if(profileUiSaveOwnsWriter()) {
+        if(!wait)return true;
+        if(baseDefenseWriter_) {if(!baseDefenseWriter_->flush().succeeded)return false;}
+        else if(baseDailyWriter_) {if(!baseDailyWriter_->flush().succeeded)return false;}
+        pollProfileUiPersistence();
+        return !profileUiCommitPending();
+    }
     if (!baseDefenseActive())
         return true;
     if (baseDefenseSimulationRejected_)
         return false;
+    if(pendingBaseDefenseSettlement_)
+        return wait ? finalizeBaseDefense(*pendingBaseDefenseEnd_,true) : true;
     if (wait && pendingBaseDefenseEnd_)
-        return finalizeBaseDefense(*pendingBaseDefenseEnd_);
+        return finalizeBaseDefense(*pendingBaseDefenseEnd_,true);
     if (!captureBaseDefenseCheckpoint(profile_))
     {
         baseDefenseSimulationRejected_ = baseDefenseSaveBlocked_ = true;
@@ -197,8 +230,10 @@ bool GameSession::checkpointBaseDefense(bool wait)
     {
         try
         {
-            static_cast<void>(
-                baseDefenseWriter_->request(profile_, publishedContentRegistry().contentVersion()));
+            auto checkpoint = inventoryCheckpointCandidate(profile_);
+            const auto generation = baseDefenseWriter_->request(
+                checkpoint, publishedContentRegistry().contentVersion());
+            noteInventoryCheckpointRequested(generation, true);
             if (wait)
             {
                 if (baseDefenseWriter_->snapshot().failed)
@@ -210,6 +245,8 @@ bool GameSession::checkpointBaseDefense(bool wait)
                     persistenceMessage_ = result.message;
                     return false;
                 }
+                updateInventoryPersistence(0);
+                if(profileUiCommitPending())return false;
             }
         }
         catch (const std::exception &error)
@@ -275,6 +312,7 @@ void GameSession::finishBaseDefenseFrame(BaseWorld &world, float deltaTime)
             persistenceMessage_ = "DEFENSE SIMULATION REJECTED | RETRY RELOADS LAST CHECKPOINT";
             return;
         }
+        lastIncomingDamage_=receipt.resolution;
         ++woundRandomSequence_;
         presentationEvents_.push_back(receipt.resolution.damageApplied >= 25
                                           ? GameSessionPresentationEvent::PlayerHurtHeavy
@@ -327,18 +365,26 @@ void GameSession::finishBaseDefenseFrame(BaseWorld &world, float deltaTime)
         static_cast<void>(checkpointBaseDefense(false));
 }
 
-bool GameSession::finalizeBaseDefense(BaseDefenseEndReason reason)
+bool GameSession::finalizeBaseDefense(BaseDefenseEndReason reason,bool wait)
 {
-    if (!baseDefenseActive())
-        return true;
-    if (baseDefenseSimulationRejected_)
-        return false;
-    if (!captureBaseDefenseCheckpoint(profile_))
-    {
-        baseDefenseSimulationRejected_ = baseDefenseSaveBlocked_ = true;
-        persistenceMessage_ = "DEFENSE SIMULATION REJECTED | RETRY RELOADS LAST CHECKPOINT";
-        return false;
-    }
+    if(!baseDefenseActive())return true;
+    if(baseDefenseSimulationRejected_)return false;
+    if(!pendingBaseDefenseSettlement_) {
+        if(inventoryPersistencePending()) {
+            requestInventoryPersistenceBarrier();
+            updateInventoryPersistence(0);
+            if(wait && inventoryPersistencePending()) {
+                if(!checkpointBaseDefense(false))return false;
+                if(baseDefenseWriter_ && !baseDefenseWriter_->flush().succeeded)return false;
+                updateInventoryPersistence(0);
+            }
+            if(inventoryPersistencePending() || !inventoryPersistenceBarrierReady())return false;
+        }
+        if(!cancelActiveRaidAction())return false;
+        if(!captureBaseDefenseCheckpoint(profile_)) {
+            baseDefenseSimulationRejected_=baseDefenseSaveBlocked_=true;
+            persistenceMessage_="DEFENSE SIMULATION REJECTED | RETRY RELOADS LAST CHECKPOINT";return false;
+        }
     ProfileState candidate = profile_;
     const auto receipt = executeBaseRealtimeDefenseSettlement(
         candidate, publishedContentRegistry(), profile_.activeBaseDefense->eventId, reason,
@@ -354,45 +400,52 @@ bool GameSession::finalizeBaseDefense(BaseDefenseEndReason reason)
     static_cast<void>(applyBaseManufacturingThrough(candidate, publishedContentRegistry()));
     static_cast<void>(applyResidentTreatmentThrough(candidate));
     static_cast<void>(applyRecoveryTaskThrough(candidate));
-    if (saveRepository_)
-    {
-        try
-        {
-            if (!baseDefenseWriter_)
-                baseDefenseWriter_ =
-                    std::make_unique<BaseDefenseCheckpointWriter>(*saveRepository_);
-            static_cast<void>(baseDefenseWriter_->request(
-                candidate, publishedContentRegistry().contentVersion()));
-            if (baseDefenseWriter_->snapshot().failed)
-                static_cast<void>(baseDefenseWriter_->retry());
-            const auto saved = baseDefenseWriter_->flush();
-            if (!saved.succeeded)
-            {
-                baseDefenseSaveBlocked_ = true;
-                persistenceMessage_ = saved.message;
-                return false;
+    if(reason==BaseDefenseEndReason::PlayerDown && candidate.basePlayerEffects && basePlayerWorld_) {
+        candidate.basePlayerEffects->playerPosition=basePlayerWorld_->medicalRespawnPosition();
+        candidate.basePlayerEffects->controlRemainingSeconds=0;
+        candidate.basePlayerEffects->impactSlowRemainingSeconds=0;
+        candidate.basePlayerEffects->dailyDamageProtectionSeconds=.25F;
+    }
+        pendingBaseDefenseSettlement_=std::move(candidate);
+        if(saveRepository_) {
+            try {
+                if(!baseDefenseWriter_)baseDefenseWriter_=std::make_unique<BaseDefenseCheckpointWriter>(*saveRepository_);
+                pendingBaseDefenseSettlementGeneration_=baseDefenseWriter_->request(*pendingBaseDefenseSettlement_,publishedContentRegistry().contentVersion());
+                worldClockDirty_=false;
+            } catch(const std::exception &error) {
+                pendingBaseDefenseSettlement_.reset();baseDefenseSaveBlocked_=true;persistenceMessage_=error.what();return false;
             }
         }
-        catch (const std::exception &error)
-        {
-            baseDefenseSaveBlocked_ = true;
-            persistenceMessage_ = error.what();
-            return false;
+    }
+    if(baseDefenseWriter_ && pendingBaseDefenseSettlementGeneration_) {
+        if(wait) {
+            if(baseDefenseWriter_->snapshot().failed)static_cast<void>(baseDefenseWriter_->retry());
+            const auto saved=baseDefenseWriter_->flush();
+            if(!saved.succeeded){baseDefenseSaveBlocked_=true;persistenceMessage_=saved.message;return false;}
+        }
+        const auto status=baseDefenseWriter_->snapshot();
+        if(status.failed){baseDefenseSaveBlocked_=true;persistenceMessage_=status.message;return false;}
+        if(status.durableGeneration<pendingBaseDefenseSettlementGeneration_) {
+            persistenceMessage_="BASE DEFENSE RESULT SAVING";return false;
         }
     }
-    profile_ = std::move(candidate);
+    profile_ = std::move(*pendingBaseDefenseSettlement_);
+    pendingBaseDefenseSettlement_.reset();pendingBaseDefenseSettlementGeneration_=0;
+    cancelPlayerControlIntent();
     baseDefenseWriter_.reset();
     if (baseDefenseWorld_)
     {
         baseDefenseWorld_->clearBaseDefense();
         if (reason == BaseDefenseEndReason::PlayerDown)
             baseDefenseWorld_->resetAtMedicalPoint();
+        static_cast<void>(restoreBasePlayerEffects(*baseDefenseWorld_));
+        cancelPlayerControlIntent();
     }
     baseDefenseWorld_ = nullptr;
     baseDefenseSaveBlocked_ = false;
     pendingBaseDefenseEnd_.reset();
     worldClockDirty_ = false;
-    persistenceMessage_ = receipt.outcome == BaseSiegeOutcome::Defended
+    persistenceMessage_ = reason == BaseDefenseEndReason::Completed
                               ? "BASE DEFENDED | SAFETY PERIOD STARTED"
                               : "BASE DEFENSE FAILED SOFTLY | RECOVERY PERIOD STARTED";
     return true;
@@ -400,6 +453,7 @@ bool GameSession::finalizeBaseDefense(BaseDefenseEndReason reason)
 
 bool GameSession::abandonBaseRealtimeDefense()
 {
+    if(profileUiCommitPending())return false;
     if (!baseDefenseActive())
         return false;
     pendingBaseDefenseEnd_ = BaseDefenseEndReason::Abandoned;
@@ -418,8 +472,11 @@ bool GameSession::retryBaseDefenseSave()
             return false;
         return continueProfile() && restoreBaseDefenseRuntime(*world);
     }
-    if (pendingBaseDefenseEnd_)
+    if (pendingBaseDefenseEnd_) {
+        if(baseDefenseWriter_ && baseDefenseWriter_->snapshot().failed)static_cast<void>(baseDefenseWriter_->retry());
+        if(!baseDefenseWriter_ || !baseDefenseWriter_->snapshot().failed)baseDefenseSaveBlocked_=false;
         return finalizeBaseDefense(*pendingBaseDefenseEnd_);
+    }
     const bool saved = checkpointBaseDefense(true);
     if (saved)
         baseDefenseSaveBlocked_ = false;

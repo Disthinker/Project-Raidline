@@ -1,9 +1,12 @@
 #include "ui_item_context_presentation.h"
 #include "medical_domain.h"
+#include "weapon_ammo_domain.h"
+#include "ui_raid_hud_presentation.h"
 
 #include <algorithm>
 #include <cmath>
 #include <fmt/format.h>
+#include <iterator>
 
 std::string compactUiItemName(const ItemDefinition &d,UiLanguage language) {
     struct Name {std::string_view id,en,zh;};
@@ -46,7 +49,7 @@ std::string compactUiItemName(const ItemDefinition &d,UiLanguage language) {
 
 std::vector<UiItemActionEntry> projectUiItemActions(
     const ProfileState &profile, const ContentRegistry &content,
-    AssetInstanceId id, bool inRaid) {
+    AssetInstanceId id, bool inRaid, MedicalAccess medicalAccess) {
     const auto *asset = profile.assets.find(id);
     if (!asset) return {};
     const auto &definition = content.item(asset->definitionId);
@@ -54,6 +57,16 @@ std::vector<UiItemActionEntry> projectUiItemActions(
     if (definition.weaponUse)
         result = {{UiItemAction::WeaponDetails, "WEAPON DETAILS"},
                   {UiItemAction::ModifyWeapon, "MODIFY WEAPON"}};
+    if(definition.weaponUse && definition.weaponUse->supportedFireModes.size()>1) {
+        if(const auto mode=queryWeaponFireMode(profile,content,id)) {
+            const auto &modes=definition.weaponUse->supportedFireModes;
+            const auto at=std::find(modes.begin(),modes.end(),*mode);
+            const auto next=at==modes.end() || std::next(at)==modes.end()?modes.front():*std::next(at);
+            if(queryWeaponAmmo(profile,content,SetWeaponFireModeCommand{id,next}).canCommit)
+                result.push_back({UiItemAction::CycleFireMode,fmt::format("FIRE MODE {} -> {}",
+                    uiWeaponFireModeName(*mode,UiLanguage::English),uiWeaponFireModeName(next,UiLanguage::English))});
+        }
+    }
     if (definition.meleeUse)
         result = {{UiItemAction::MeleeDetails, "MELEE DETAILS"}};
     if (definition.noiseDecoyUse)
@@ -71,7 +84,8 @@ std::vector<UiItemActionEntry> projectUiItemActions(
             break;
         case ProfileContextActionKind::UseMedkit: {
             const auto plan = queryMedicalUse(profile, content, id,
-                inRaid ? MedicalAccess::CarriedOnly : MedicalAccess::AnyOwned);
+                inRaid ? MedicalAccess::CarriedOnly : medicalAccess);
+            if (!plan.canCommit) break;
             const char *label = "USE MEDKIT";
             switch (plan.effect) {
             case MedicalUseEffect::RestoreHealth:
@@ -98,6 +112,8 @@ std::vector<std::string> projectUiItemSummary(
         fmt::format("ITEM SIZE {} x {} | QUANTITY {}", footprint.width,
                     footprint.height, asset.quantity),
         fmt::format("WEIGHT {:.2f} KG", definition.unitWeightGrams / 1000.0)};
+    if(definition.weaponUse && asset.fireMode)
+        lines.push_back("FIRE MODE: "+std::string(uiWeaponFireModeName(*asset.fireMode,UiLanguage::English)));
     if (definition.armorProtection) {
         const auto &armor = *definition.armorProtection;
         lines.push_back(fmt::format("PROTECTION {} | {}", armor.protectionRequirement,
@@ -254,8 +270,8 @@ std::vector<std::string> projectUiWeaponSupplyLines(
     lines.emplace_back("CANNOT FIRE: BROKEN WEAPON | MAINTENANCE REQUIRED");
   else if (weapon.fireResult == WeaponAmmoResult::BlockedByMalfunction)
     lines.emplace_back("CANNOT FIRE: JAMMED | CLEAR THE MALFUNCTION");
-  else if (weapon.fireResult == WeaponAmmoResult::Chambered)
-    lines.emplace_back("CHAMBER EMPTY | NEXT FIRE INPUT ONLY CHAMBERS A ROUND");
+  else if (weapon.fireResult == WeaponAmmoResult::Chambered || weapon.fireResult == WeaponAmmoResult::NeedsChamber)
+    lines.emplace_back("CHAMBER EMPTY | PRESS R TO CHAMBER");
   else
     lines.emplace_back(
         "CANNOT FIRE: NO FEED | LOOSE OR SPARE AMMO IS NOT LOADED");
@@ -287,7 +303,7 @@ std::vector<std::string> projectUiWeaponSupplyLines(
       break;
     case WeaponSupplySuggestionKind::ChamberWeapon:
       lines.emplace_back(
-          inRaid ? "CLOSE TAB; USE FIRE ONCE TO CHAMBER, AGAIN TO SHOOT"
+          inRaid ? "CLOSE TAB; PRESS R TO CHAMBER"
                  : "RIGHT-CLICK THE WEAPON AND CHOOSE CHAMBER");
       break;
     case WeaponSupplySuggestionKind::MoveSpareToChestRig:

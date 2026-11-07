@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "test_temp_directory.h"
 #include "alpha_content_ids.h"
 #include "ui_item_details_presentation.h"
@@ -24,11 +25,17 @@ struct UiItemDetailsTestAccess {
     }
     static void pointer(App &a, InventoryPointerEventType kind, Vec2 p) {
         a.handleProfileInventoryUiEvent(InventoryPointerEvent{kind, {p.x, p.y}}, false);
+        settle(a);
     }
     static void wheel(App &a, Vec2 p, int delta) {
         a.handleProfileInventoryUiEvent(InventoryNavigationEvent{{p.x, p.y}, delta, 0, 0}, false);
     }
-    static void frame(App &a) { a.processEvents(); a.update(0); a.input_.endFrame(); }
+    static void settle(App &a) {
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+            [&] { return a.profileUiBusy() || static_cast<bool>(a.pendingInventoryBarrierAction_); },
+            [&] { a.processEvents(); a.update(0); a.input_.endFrame(); })) << a.gameSession_.persistenceMessage();
+    }
+    static void frame(App &a) { a.processEvents(); a.update(0); a.input_.endFrame(); settle(a); }
     static void draw(App &a) { a.renderProfileWeaponDetails(); }
     static void attach(App &a, SDL_Renderer *renderer, float scale) {
         a.renderer_ = renderer; ASSERT_TRUE(a.uiTextRenderer_.initialize(renderer));

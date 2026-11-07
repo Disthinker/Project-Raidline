@@ -19,11 +19,12 @@ void App::updateThrowableInput(GameplayInput &input)
     const bool cancel= input_.wasActionJustPressed(GameAction::InventoryCancel) || (right && !throwableRightWasDown_);
     throwableRightWasDown_=right;
     const bool available=windowHasInputFocus_ && !inventoryOverlayState_.isOpen() && !tacticalMapOpen_ &&
-        !medicalWheelOpen_ && !developerWeaponPanelOpen_ && !developerWeaponPanelBlocksGameplayThisFrame_ &&
-        !pauseMenu_.isOpen() && gameSession_.canSelectThrowable();
+        !medicalWheelOpen_ && !magazineWheelOpen_ && !developerWeaponPanelOpen_ && !developerWeaponPanelBlocksGameplayThisFrame_ &&
+        !pauseMenu_.isOpen() && !baseConstructionPanelOpen_ && !basePlacementState_ &&
+        !baseFixedFacilityPlacementState_ && !gameFlow_.activeBaseFacility() && gameSession_.canSelectThrowable();
     bool opened=false;
     if(!available){
-        if(input_.wasActionJustPressed(GameAction::SelectThrowable) && gameSession_.world().grenade().active())
+        if(input_.wasActionJustPressed(GameAction::SelectThrowable) && (gameFlow_.state()==GameFlowState::Base?gameFlow_.baseWorld().grenade().active():gameSession_.world().grenade().active()))
             uiMessage_="LIVE GRENADE | WAIT FOR EXPLOSION";
         cancelThrowableUi();
     }
@@ -47,8 +48,10 @@ void App::updateThrowableInput(GameplayInput &input)
         }
     }else if(selectedThrowable_ && !cancel && input_.wasPrimaryPointerJustPressed()){
         const auto id=*selectedThrowable_;
-        const auto receipt=gameSession_.throwThrowable(id,gameSession_.world().weaponAimWorldPosition(),
-            {gameSession_.profile().revision,fmt::format("throwable-ui-{}-{}",gameSession_.profile().pendingRaid->raidId,++throwableCommandSequence_)});
+        const Vec2 aim=gameFlow_.state()==GameFlowState::Base
+            ? gameFlow_.baseWorld().weaponAimWorldPosition():gameSession_.world().weaponAimWorldPosition();
+        const auto receipt=gameSession_.throwThrowable(id,aim,
+            {gameSession_.profile().revision,nextProfileTransactionId("throwable-ui")});
         uiMessage_=receipt.succeeded ? (selectingGrenade?"GRENADE THROWN":"DECOY THROWN") : receipt.message;
         cancelThrowableUi();
     }
@@ -56,6 +59,8 @@ void App::updateThrowableInput(GameplayInput &input)
     if(input.throwableModal){
         input.sprint=input.aimDownSights=false;
         input.reloadJustPressed=input.healJustPressed=input.interactPressed=input.interactJustPressed=false;
+        input.cycleFireModeJustPressed=false;input.raidReloadIntents.clear();
+        input.reloadGestureJustPressed=false;
         input.weaponSlotJustPressed.reset();input.meleePressed=input.meleeJustPressed=false;
         input.quitRaidJustPressed=false;input_.suppressPrimaryPointerUntilRelease();
     }
@@ -63,33 +68,64 @@ void App::updateThrowableInput(GameplayInput &input)
 }
 void App::renderThrowableUi()
 {
-    if(!gameSession_.world().raidSession().isActive() ||
-       (!gameSession_.world().noiseDecoyEnabled() && !gameSession_.world().grenadeEnabled()) ||
+    if(!gameSession_.playerGameplayContext().available ||
        inventoryOverlayState_.isOpen() || tacticalMapOpen_ || developerWeaponPanelOpen_ || developerRangePanelOpen_)return;
     if(throwableWheelOpen_)renderQuickWheel(UiQuickWheelKind::Throwable,throwableWheelOptions_,throwableWheelSelected_);
     else if(selectedThrowable_){
         const SDL_FRect panel{434,424,412,46};uiFinalPanel(renderer_,panel);
         uiFinalText(renderer_,uiTextRenderer_,{446,430,388,38},"LEFT CLICK THROW | RIGHT CLICK / ESC CANCEL",13,2);
-    }else if(!medicalWheelOpen_)uiFinalText(renderer_,uiTextRenderer_,{780,666,390,24},"4 THROWABLES | CHEST RIG",12,1);
+    }else if(gameFlow_.state()!=GameFlowState::Base && !medicalWheelOpen_ && !magazineWheelOpen_)uiFinalText(renderer_,uiTextRenderer_,{780,666,390,24},"4 THROWABLES | CHEST RIG",12,1);
 }
+void App::renderEmptyPlayerCorpses()
+{
+    const auto context = gameSession_.playerGameplayContext();
+    if (!context.available || context.activity.activity == WeaponActionActivity::Raid)
+        return;
+
+    const bool base = gameFlow_.state() == GameFlowState::Base;
+    for (const BaseCorpseRecord &corpse : gameSession_.profile().baseCorpses)
+    {
+        if (corpse.activity != context.activity)
+            continue;
+        const Rect bounds{
+            {corpse.position.x - corpse.size.x * 0.5F,
+             corpse.position.y - corpse.size.y * 0.5F},
+            corpse.size};
+        if (!(base ? gameFlow_.baseWorld().boundsObservable(bounds)
+                   : gameSession_.world().raidBoundsObservable(bounds)))
+            continue;
+
+        const SDL_FRect body{
+            corpse.position.x - corpse.size.x * 0.34F,
+            corpse.position.y - corpse.size.y * 0.18F,
+            corpse.size.x * 0.68F, corpse.size.y * 0.36F};
+        SDL_SetRenderDrawColor(renderer_, 62, 67, 53, 255);
+        SDL_RenderFillRect(renderer_, &body);
+        SDL_SetRenderDrawColor(renderer_, 123, 126, 101, 255);
+        SDL_RenderRect(renderer_, &body);
+        renderWorldLabel(body.x, body.y - 20.0F, "CORPSE EMPTY");
+    }
+}
+
 void App::renderNoiseDecoyWorld()
 {
-    const auto &world=gameSession_.world();
-    if(!world.noiseDecoyEnabled() && !world.grenadeEnabled())return;
+    if(gameFlow_.state()!=GameFlowState::Base && !gameSession_.world().noiseDecoyEnabled() &&
+       !gameSession_.world().grenadeEnabled())return;
+    const auto draw=[&](const auto &world,const auto &space,const auto &observable) {
     SDL_BlendMode blend;SDL_GetRenderDrawBlendMode(renderer_,&blend);SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_BLEND);
     auto marker=[&](Vec2 p,float radius){
         SDL_SetRenderDrawColor(renderer_,224,193,106,230);const SDL_FRect box{p.x-4,p.y-4,8,8};SDL_RenderFillRect(renderer_,&box);
         Vec2 last{p.x+radius,p.y};for(int i=1;i<=24;++i){const float angle=i*6.28318530718F/24;
             const Vec2 next{p.x+std::cos(angle)*radius,p.y+std::sin(angle)*radius};SDL_RenderLine(renderer_,last.x,last.y,next.x,next.y);last=next;}};
     const auto &runtime=world.noiseDecoy();
-    if(const auto &f=runtime.flight();f && f->landing.space==world.activeRaidSpaceId()){
+    if(const auto &f=runtime.flight();f && f->landing.space==space){
         const float progress=std::clamp(static_cast<float>(f->elapsed/f->landing.use.flightSeconds),0.0F,1.0F);
         const Vec2 p{f->landing.origin.x+(f->landing.point.x-f->landing.origin.x)*progress,
                      f->landing.origin.y+(f->landing.point.y-f->landing.origin.y)*progress};
         SDL_SetRenderDrawColor(renderer_,224,193,106,180);SDL_RenderLine(renderer_,f->landing.origin.x,f->landing.origin.y,p.x,p.y);marker(p,5);
     }
-    if(const auto &s=runtime.source();s && s->landing.space==world.activeRaidSpaceId())marker(s->landing.point,8+static_cast<float>(std::fmod(s->elapsed,1.0))*24);
-    const auto grenadeVisible=[&](Vec2 p){return world.raidBoundsObservable({{p.x-6,p.y-6},{12,12}});};
+    if(const auto &s=runtime.source();s && s->landing.space==space)marker(s->landing.point,8+static_cast<float>(std::fmod(s->elapsed,1.0))*24);
+    const auto grenadeVisible=[&](Vec2 p){return observable({{p.x-6,p.y-6},{12,12}});};
     const auto grenadeMarker=[&](Vec2 p,float radius,Uint8 alpha){
         if(!grenadeVisible(p))return;
         SDL_SetRenderDrawColor(renderer_,220,166,103,alpha);
@@ -100,15 +136,15 @@ void App::renderNoiseDecoyWorld()
             SDL_RenderLine(renderer_,last.x,last.y,next.x,next.y);last=next;}
     };
     const auto &grenade=world.grenade();
-    if(const auto &f=grenade.flight();f && f->landing.space==world.activeRaidSpaceId()){
+    if(const auto &f=grenade.flight();f && f->landing.space==space){
         const float progress=std::clamp(static_cast<float>(f->elapsed/f->landing.use.flightSeconds),0.0F,1.0F);
         const Vec2 p{f->landing.origin.x+(f->landing.point.x-f->landing.origin.x)*progress,
                      f->landing.origin.y+(f->landing.point.y-f->landing.origin.y)*progress};
         grenadeMarker(p,5,200);
     }
-    if(const auto &f=grenade.fuse();f && f->landing.space==world.activeRaidSpaceId())
+    if(const auto &f=grenade.fuse();f && f->landing.space==space)
         grenadeMarker(f->landing.point,7+static_cast<float>(std::fmod(f->elapsed,0.3))*15,210);
-    if(const auto &e=world.lastGrenadeExplosion();e && e->landing.space==world.activeRaidSpaceId())
+    if(const auto &e=world.lastGrenadeExplosion();e && e->landing.space==space)
         grenadeMarker(e->landing.point,e->landing.use.radius,world.grenadeExplodedLastUpdate()?95:55);
     if(selectedThrowable_){
         const auto *asset=gameSession_.profile().assets.find(*selectedThrowable_);
@@ -128,7 +164,16 @@ void App::renderNoiseDecoyWorld()
         }
     }
     SDL_SetRenderDrawBlendMode(renderer_,blend);
+    };
+    if(gameFlow_.state()==GameFlowState::Base) {
+        const auto &world=gameFlow_.baseWorld();
+        draw(world,world.activeSpaceId(),[&](Rect bounds){return world.boundsObservable(bounds);});
+    } else {
+        const auto &world=gameSession_.world();
+        draw(world,world.activeRaidSpaceId(),[&](Rect bounds){return world.raidBoundsObservable(bounds);});
+    }
 }
+
 void App::renderProfileDecoyDetails(const AssetRecord &asset, const ItemDefinition &definition)
 {
     const auto model = projectUiItemDetails(gameSession_.profile(), publishedContentRegistry(), asset.instanceId, uiTextRenderer_.language());

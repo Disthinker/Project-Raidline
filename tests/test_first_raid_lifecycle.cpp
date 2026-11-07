@@ -1,6 +1,7 @@
 #include "alpha_content_ids.h"
 #include "game_flow.h"
 #include "home_founding_domain.h"
+#include "profile_ui_test_wait.h"
 
 #include <algorithm>
 #include <chrono>
@@ -85,6 +86,8 @@ void finishRaid(GameFlow &flow, RaidResultOutcome outcome) {
     ASSERT_TRUE(session.activeQuitAlphaRaid());
     flow.update({}, 0.0F);
   }
+  ASSERT_TRUE(waitForProfileUiDurability(session));
+  flow.update({},0);
   ASSERT_EQ(flow.state(), GameFlowState::RaidResult);
   ASSERT_TRUE(session.profile().lastRaidResult);
   ASSERT_EQ(session.profile().lastRaidResult->outcome, outcome);
@@ -146,6 +149,39 @@ TEST(FirstRaidLifecycleTest,
     EXPECT_EQ(profileStateFingerprint(reopened.gameSession().profile()),
               completed);
   }
+}
+
+TEST(FirstRaidLifecycleTest,
+     ResultBarriersAndHintsDoNotCaptureTheInactiveBaseAndNavigationRebindsIt) {
+  FirstRaidSaveDirectory directory;saveProfile(directory,foundedProfile("result-context"));
+  GameFlow flow;EXPECT_FALSE(flow.gameSession().playerGameplayContext().available);
+  loadFlow(flow,directory);ASSERT_TRUE(flow.gameSession().playerGameplayContext().available);
+  finishRaid(flow,RaidResultOutcome::ActiveQuit);auto &session=flow.gameSession();
+  ASSERT_EQ(flow.state(),GameFlowState::RaidResult);ASSERT_FALSE(session.playerGameplayContext().available);
+  // The old Base object still exists for rendering/navigation. Its stale pose
+  // must never become a new gameplay checkpoint on the result page.
+  const auto parcel=flow.baseWorld().baseParcel();
+  ASSERT_TRUE(flow.baseWorld().restorePlayerBody({parcel.position.x+120,parcel.position.y+150},{-1,0},0,0));
+  const auto settled=profileStateFingerprint(session.profile());
+  const auto barrier=session.requestWorldDurabilityBarrier();ASSERT_TRUE(barrier.accepted)<<barrier.message;
+  ASSERT_TRUE(waitForProfileUiDurability(session))<<session.persistenceMessage();
+  EXPECT_EQ(profileStateFingerprint(session.profile()),settled);EXPECT_FALSE(session.playerGameplayContext().available);
+  auto disk=SaveRepository{directory.path()}.load(content);ASSERT_TRUE(disk.profile)<<disk.message;
+  EXPECT_EQ(profileStateFingerprint(*disk.profile),settled);
+  auto expected=session.profile();expected.homeFounding.hintsDismissed=true;expected.tutorial=TutorialProgress::Complete;
+  expected.committedTransactions.insert("result-hints-only");++expected.revision;
+  const auto hints=session.requestProfileUiCommand(ProfileUiHintsCommand{true},"result-hints-only");ASSERT_TRUE(hints.accepted)<<hints.message;
+  ASSERT_TRUE(waitForProfileUiDurability(session))<<session.persistenceMessage();
+  EXPECT_EQ(profileStateFingerprint(session.profile()),profileStateFingerprint(expected));
+  EXPECT_FALSE(session.playerGameplayContext().available);
+  ASSERT_TRUE(flow.completeReturnToBase(hints.requestId));EXPECT_TRUE(session.playerGameplayContext().available);
+  EXPECT_EQ(session.playerGameplayContext().activity.activity,WeaponActionActivity::BaseDaily);
+  EXPECT_EQ(profileStateFingerprint(session.profile()),profileStateFingerprint(expected));
+  disk=SaveRepository{directory.path()}.load(content);ASSERT_TRUE(disk.profile)<<disk.message;
+  EXPECT_EQ(profileStateFingerprint(*disk.profile),profileStateFingerprint(expected));
+  const auto menu=session.requestWorldDurabilityBarrier();ASSERT_TRUE(menu.accepted)<<menu.message;
+  ASSERT_TRUE(waitForProfileUiDurability(session));ASSERT_TRUE(flow.completeReturnToMainMenu(menu.requestId));
+  EXPECT_EQ(flow.state(),GameFlowState::MainMenu);EXPECT_FALSE(session.playerGameplayContext().available);
 }
 
 TEST(FirstRaidLifecycleTest,

@@ -10,6 +10,7 @@
 #include "base_resource_domain.h"
 #include "base_world.h"
 #include "game_session.h"
+#include "profile_ui_test_wait.h"
 
 namespace
 {
@@ -114,6 +115,8 @@ TEST(PersistentSessionTest, BaseShootingCheckpointPersistsAmmoAndDurability)
         "persistent-base-install").succeeded);
 
     BaseWorld world;
+    static_cast<void>(first.updateBaseWorld(world, {}, 0));
+    ASSERT_TRUE(waitForProfileUiDurability(first)) << first.persistenceMessage();
     GameplayInput fire{};
     fire.aimWorldPosition = Vec2{
         world.playerPosition().x + 700.0F,
@@ -400,6 +403,7 @@ TEST(PersistentSessionTest, EligibleSiegeWarningActivationIsImmediatelyDurable)
     active.configurePersistence(temporary.path());
     ASSERT_TRUE(active.continueProfile()) << active.persistenceMessage();
     active.advanceBaseWorldClock(0.1F);
+    ASSERT_TRUE(waitForProfileUiDurability(active)) << active.persistenceMessage();
     ASSERT_TRUE(active.baseThreatProjection().warningActive);
     EXPECT_EQ(active.baseThreatProjection().warningRemainingSeconds,
               kBaseSiegeWarningSeconds);
@@ -430,6 +434,7 @@ TEST(PersistentSessionTest, SavedAutoDefensePresetResolvesAtTimeout)
     session.configurePersistence(temporary.path());
     ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
     session.advanceBaseWorldClock(1.0F);
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
 
     EXPECT_FALSE(session.baseThreatProjection().warningActive);
     EXPECT_EQ(session.profile().baseSiege.lastOutcome,
@@ -962,6 +967,7 @@ TEST(PersistentSessionTest,
             "base_construction.kitchen_water.level_1"},
         "persistent-start-kitchen").succeeded);
     session.advanceBaseWorldClock(480.0F);
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
 
     const BaseFacilityDefinitionId kitchenWater{
         "base_facility.kitchen_water"};
@@ -1303,9 +1309,11 @@ TEST(PersistentSessionTest, BaseClockCompletesAndPersistsDormitoryExpansion)
     ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
     const ProfileRevision startedRevision = session.profile().revision;
     session.advanceBaseWorldClock(359.0F);
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
     EXPECT_TRUE(session.profile().baseConstruction.activeProject.has_value());
     EXPECT_TRUE(session.takePresentationEvents().empty());
     session.advanceBaseWorldClock(1.0F);
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
     EXPECT_FALSE(session.profile().baseConstruction.activeProject.has_value());
     EXPECT_EQ(session.profile().baseConstruction.dormitoryLevel, 2U);
     EXPECT_EQ(session.profile().basePopulation.bedCapacity, 14U);
@@ -1344,9 +1352,11 @@ TEST(PersistentSessionTest, BaseClockCompletesAndPersistsWorkshopUpgrade)
         "persistent-start-workshop-upgrade").succeeded);
 
     session.advanceBaseWorldClock(719.0F);
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
     EXPECT_EQ(session.profile().baseConstruction.workshopLevel, 1U);
     EXPECT_TRUE(session.profile().baseConstruction.activeProject.has_value());
     session.advanceBaseWorldClock(1.0F);
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
     EXPECT_EQ(session.profile().baseConstruction.workshopLevel, 2U);
     EXPECT_FALSE(session.profile().baseConstruction.activeProject.has_value());
     EXPECT_EQ(
@@ -1795,6 +1805,7 @@ TEST(PersistentSessionTest,
     ASSERT_TRUE(processing.continueProfile()) << processing.persistenceMessage();
     ASSERT_TRUE(processing.profile().baseManufacturing.activeOrder.has_value());
     processing.advanceBaseWorldClock(360.0F);
+    ASSERT_TRUE(waitForProfileUiDurability(processing)) << processing.persistenceMessage();
     EXPECT_FALSE(processing.profile().baseManufacturing.activeOrder.has_value());
     EXPECT_EQ(
         processing.takePresentationEvents(),
@@ -2056,6 +2067,7 @@ TEST(PersistentSessionTest, HomePerimeterSnapshotSurvivesProcessRestart)
     BaseWorld firstWorld;
     static_cast<void>(first.updateBaseWorld(
         firstWorld, GameplayInput{}, 1.0F / 60.0F));
+    ASSERT_TRUE(waitForProfileUiDurability(first)) << first.persistenceMessage();
     const RegionalBaseSiteDefinitionId site{
         firstWorld.siteDefinitionId()};
     ASSERT_TRUE(first.profile().homePerimeter.sites.contains(site));

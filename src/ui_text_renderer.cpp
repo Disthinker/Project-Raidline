@@ -225,7 +225,7 @@ void UiTextRenderer::setRasterScale(float scale) {
 float UiTextRenderer::measure(std::string_view text, int size) {
   if (text.empty())
     return 0;
-  size = std::clamp(size, 8, 64);
+  size = std::clamp(size, 1, 64);
   const int pixels = static_cast<int>(std::lround(size * rasterScale_));
   const std::string key = std::to_string(pixels) + ":" + std::string(text);
   if (auto found = widths_.find(key); found != widths_.end())
@@ -270,7 +270,7 @@ void UiTextRenderer::renderLine(SDL_Renderer *renderer, float x, float y,
   SDL_RenderDebugText(renderer, x, y, text.c_str());
 #else
   const int pixels =
-      static_cast<int>(std::lround(std::clamp(size, 8, 64) * rasterScale_));
+      std::max(1, static_cast<int>(std::lround(std::clamp(size, 1, 64) * rasterScale_)));
   auto font = fontFor(pixels);
   if (!font)
     return;

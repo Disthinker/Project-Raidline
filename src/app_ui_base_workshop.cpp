@@ -27,6 +27,7 @@ void App::refreshBaseWorkshopUi(bool force) {
     workshopProjectionRevision_=p.revision; workshopProjectionLanguage_=language; ++workshopProjectionGeneration_;
 }
 void App::handleBaseWorkshopEvent(const UiWorkshopEvent &e) {
+    if(profileUiBusy())return;
     if(gameFlow_.state()!=GameFlowState::Base || gameFlow_.activeBaseFacility()!=BaseFacilityKind::Workshop ||
         pauseMenu_.isOpen() || inventoryOverlayState_.isOpen() || developerWeaponPanelOpen_ || !windowHasInputFocus_) {
         workshopUi_.press.reset(); return;
@@ -67,28 +68,30 @@ void App::handleBaseWorkshopEvent(const UiWorkshopEvent &e) {
             p.order?p.order->outputReady || control==Control::Cancel?p.returns.message:"PRODUCTION ACTIVE":p.selection?p.start.message:"NO PUBLISHED MANUFACTURING RECIPE");
         return;
     }
-    bool succeeded=false;
-    if(control==Control::Main && !p.order && p.selection) {
-        const auto receipt=gameSession_.executeStartBaseManufacturing(*p.selection,nextProfileTransactionId("workshop-start"));
-        succeeded=receipt.succeeded;feedback(succeeded?"MANUFACTURING STARTED":receipt.message);
+    const auto finish=[this,feedback](bool succeeded,std::string message){
+        feedback(std::move(message));gameAudio_.play(succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);refreshBaseWorkshopUi(true);
+    };
+    if(control==Control::Main && p.selection && !p.order) {
+        submitProfileUi<BaseManufacturingReceipt>(StartBaseManufacturingCommand{*p.selection},nextProfileTransactionId("workshop-start"),
+            [finish](const auto &r){finish(r.succeeded,r.succeeded?"MANUFACTURING STARTED":r.message);});
     } else if(control==Control::Main) {
-        const auto receipt=gameSession_.executeCollectBaseManufacturing(nextProfileTransactionId("workshop-collect"));
-        succeeded=receipt.succeeded;feedback(succeeded?"MANUFACTURED ITEM COLLECTED":receipt.message);
+        submitProfileUi<BaseManufacturingReceipt>(ProfileUiCollectManufacturingCommand{},nextProfileTransactionId("workshop-collect"),
+            [finish](const auto &r){finish(r.succeeded,r.succeeded?"MANUFACTURED ITEM COLLECTED":r.message);});
     } else if(control==Control::Cancel) {
-        const auto receipt=gameSession_.executeCancelBaseManufacturing(nextProfileTransactionId("workshop-cancel"));
-        succeeded=receipt.succeeded;feedback(succeeded?"MANUFACTURING CANCELLED | INPUTS RETURNED":receipt.message);
+        submitProfileUi<BaseManufacturingReceipt>(ProfileUiCancelManufacturingCommand{},nextProfileTransactionId("workshop-cancel"),
+            [finish](const auto &r){finish(r.succeeded,r.succeeded?"MANUFACTURING CANCELLED | INPUTS RETURNED":r.message);});
     } else if(control==Control::Staffing) {
         const bool assigned=p.workforce.workshopWorker.has_value();
-        const auto receipt=assigned?gameSession_.executeClearBaseWorker(BaseFacilityStaffingKind::Workshop,nextProfileTransactionId("workshop-clear-worker")):
-            gameSession_.executeAssignBestBaseWorker(BaseFacilityStaffingKind::Workshop,nextProfileTransactionId("workshop-assign-worker"));
-        succeeded=receipt.succeeded;feedback(succeeded?assigned?"WORKSHOP WORKER CLEARED":"WORKSHOP WORKER ASSIGNED":receipt.message);
+        submitProfileUi<BaseWorkforceReceipt>(assigned?ProfileUiCommand{ProfileUiClearWorkerCommand{BaseFacilityStaffingKind::Workshop}}:
+            ProfileUiCommand{ProfileUiAssignWorkerCommand{BaseFacilityStaffingKind::Workshop}},nextProfileTransactionId("workshop-worker"),
+            [finish,assigned](const auto &r){finish(r.succeeded,r.succeeded?(assigned?"WORKSHOP WORKER CLEARED":"WORKSHOP WORKER ASSIGNED"):r.message);});
     } else if(control==Control::Upgrade && p.upgradeId) {
         const bool cancel=p.cancelUpgrade;
-        const auto receipt=cancel?gameSession_.executeCancelBaseConstruction(*p.upgradeId,nextProfileTransactionId("workshop-cancel-upgrade")):
-            gameSession_.executeStartBaseConstruction(*p.upgradeId,nextProfileTransactionId("workshop-start-upgrade"));
-        succeeded=receipt.succeeded;feedback(succeeded?cancel?"WORKSHOP UPGRADE CANCELLED":"WORKSHOP UPGRADE STARTED":receipt.message);
+        submitProfileUi<BaseConstructionReceipt>(cancel?ProfileUiCommand{CancelBaseConstructionCommand{*p.upgradeId}}:
+            ProfileUiCommand{StartBaseConstructionCommand{*p.upgradeId}},nextProfileTransactionId("workshop-upgrade"),
+            [finish,cancel](const auto &r){finish(r.succeeded,r.succeeded?(cancel?"WORKSHOP UPGRADE CANCELLED":"WORKSHOP UPGRADE STARTED"):r.message);});
     }
-    gameAudio_.play(succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);refreshBaseWorkshopUi(true);
+
 }
 void App::renderBaseWorkshop() {
     refreshBaseWorkshopUi(); const auto &p=workshopProjection_;const auto language=uiTextRenderer_.language();

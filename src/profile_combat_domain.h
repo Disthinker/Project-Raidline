@@ -59,3 +59,13 @@ struct IncomingDamageReceipt
 executeIncomingDamageInSimulation(ProfileState &profile, const ContentRegistry &content,
                                   const IncomingDamageCommand &command,
                                   const CommandContext &context);
+
+// Only for an isolated candidate in the real site's active Base Daily outing.
+// A lethal result may temporarily have zero health. The caller must immediately
+// complete the outing's existing rescue, then fully validate the whole candidate
+// before publishing or queuing it. This never relaxes Profile/save validation.
+[[nodiscard]] IncomingDamageReceipt
+executeIncomingDamageForHomePerimeterCandidate(
+    ProfileState &privateCandidate, const ContentRegistry &content,
+    const IncomingDamageCommand &command, const CommandContext &context,
+    const RegionalBaseSiteDefinitionId &site);

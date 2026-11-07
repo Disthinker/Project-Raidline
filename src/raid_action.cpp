@@ -145,7 +145,7 @@ std::optional<AssetInstanceId> selectRaidReloadMagazine(
                          *chest,
                          static_cast<std::uint32_t>(index))))
             {
-                if (content.magazineFitsWeapon(
+                if (!asset->magazineRounds.empty() && content.magazineFitsWeapon(
                         asset->definitionId, weapon->definitionId))
                 {
                     candidates.push_back(asset);

@@ -9,6 +9,10 @@ struct DeviceBatteryAccess
 {
     bool raid{};
     std::optional<RaidDroppedBatteryLocation> overflow;
+    // New activity callers provide their real owner identity. The legacy
+    // two-field aggregate keeps its original Base/Raid behavior.
+    std::optional<WeaponActionScope> activity;
+    bool stashAccessible{};
 };
 struct WeaponLightBinding
 {

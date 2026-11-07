@@ -2,19 +2,11 @@
 
 #include "item_definition.h"
 #include "raid_space_spatial_index.h"
+#include "throwable_types.h"
 
-struct GrenadeLanding
-{
-    Vec2 origin{}, point{};
-    RaidSpaceDefinitionId space;
-    GrenadeUseDefinition use;
-};
 [[nodiscard]] std::optional<GrenadeLanding> queryGrenadeLanding(Vec2 origin, Vec2 aim,
     const RaidSpaceDefinitionId &, const GrenadeUseDefinition &, const RaidSpaceBlockerIndex &);
 
-struct GrenadeFlight { GrenadeLanding landing; double elapsed{}; };
-struct GrenadeFuse { GrenadeLanding landing; double elapsed{}; };
-struct GrenadeExplosion { std::uint64_t id{}; GrenadeLanding landing; };
 
 // One Raid-owned transient. No actors, assets, persistence or client state.
 // The world blocks space changes while active and acknowledges only after the
@@ -30,6 +22,8 @@ public:
     [[nodiscard]] const std::optional<GrenadeExplosion> &pendingExplosion() const noexcept { return explosion_; }
     void acknowledgeExplosion() noexcept;
     void clear() noexcept;
+    [[nodiscard]] GrenadeRuntimeCheckpoint checkpoint() const;
+    [[nodiscard]] bool restore(const GrenadeRuntimeCheckpoint &);
 private:
     std::optional<GrenadeFlight> flight_;
     std::optional<GrenadeFuse> fuse_;

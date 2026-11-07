@@ -3,6 +3,8 @@
 #include <SDL3/SDL.h>
 
 #include <optional>
+#include <cstdint>
+#include <vector>
 #include <unordered_set>
 
 enum class GameAction
@@ -14,6 +16,7 @@ enum class GameAction
     MoveRight,
     Fire,
     Reload,
+    CycleFireMode,
     Heal,
     SelectWeapon1,
     SelectWeapon2,
@@ -33,6 +36,32 @@ enum class GameAction
 
     // 主菜单、基地和 Raid 结果页的主操作确认。
     ScreenConfirm
+};
+
+enum class RaidReloadGestureKind { Automatic, OpenWheel, Selected, UpgradeEmergency };
+struct RaidReloadGestureEvent {
+    RaidReloadGestureKind kind{};
+    double timeSeconds{};
+    std::uint64_t gestureId{};
+    double doubleTapSeconds{};
+};
+// Pure timing state. All time comes from the caller's monotonic input clock.
+// No profile, inventory or simulation time is consulted here.
+class RaidReloadGesture {
+public:
+    [[nodiscard]] std::vector<RaidReloadGestureEvent> press(double now, bool actionActive);
+    [[nodiscard]] std::vector<RaidReloadGestureEvent> release(double now);
+    [[nodiscard]] std::vector<RaidReloadGestureEvent> advance(double now);
+    void cancel(bool physicallyHeld = false) noexcept;
+private:
+    bool held_{}, consumed_{}, wheel_{}, pending_{}, hasFirstRelease_{};
+    double pressedAt_{}, firstReleaseAt_{}, lastEventTime_{};
+    std::uint64_t sequence_{}, gestureId_{};
+    double time(double now) noexcept;
+};
+struct ReloadKeyTransition {
+    bool pressed{};
+    double timeSeconds{};
 };
 
 class InputSystem
@@ -62,18 +91,26 @@ public:
 
     [[nodiscard]]
     bool isPrimaryPointerPressed() const noexcept;
+    [[nodiscard]] bool isPrimaryPointerPhysicallyPressed() const noexcept {
+        return primaryPointerPhysicallyPressed_;
+    }
 
     [[nodiscard]]
     bool wasPrimaryPointerJustPressed() const noexcept;
 
     [[nodiscard]]
     bool isSecondaryPointerPressed() const noexcept;
+    [[nodiscard]] bool wasSecondaryPointerJustPressed() const noexcept { return secondaryPointerJustPressed_; }
 
     // A UI layer calls this after consuming a left click. If the physical
     // button is still held, gameplay remains suppressed until its matching up.
     void suppressPrimaryPointerUntilRelease() noexcept;
 
     void endFrame();
+
+    [[nodiscard]] const std::vector<ReloadKeyTransition> &reloadTransitions() const noexcept {
+        return reloadTransitions_;
+    }
 
 private:
     std::unordered_set<GameAction>
@@ -94,6 +131,8 @@ private:
     bool primaryPointerJustPressed_{};
     bool primaryPointerSuppressedUntilRelease_{};
     bool secondaryPointerPressed_{};
+    bool secondaryPointerJustPressed_{};
+    std::vector<ReloadKeyTransition> reloadTransitions_;
 
     [[nodiscard]]
     std::optional<GameAction>

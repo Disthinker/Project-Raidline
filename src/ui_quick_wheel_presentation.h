@@ -4,27 +4,31 @@
 #include "ui_foundation.h"
 
 // Presentation consumers only: neither projection nor layout selects/uses an item.
-enum class UiQuickWheelKind { Medical, Throwable };
+enum class UiQuickWheelKind { Medical, Throwable, Magazine };
 struct UiQuickWheelEntry {
     AssetInstanceId instanceId{};
     std::string name, count, status;
     bool usable{};
     ItemDefinitionId definitionId;
     std::uint64_t quantity{}, remainingUses{};
+    bool mixedAmmunition{};
 };
 [[nodiscard]] std::vector<AssetInstanceId> quickWheelCandidates(
-    const ProfileState &, const ContentRegistry &, UiQuickWheelKind);
+    const ProfileState &, const ContentRegistry &, UiQuickWheelKind,
+    std::optional<AssetInstanceId> weaponId = std::nullopt);
 [[nodiscard]] std::optional<std::size_t> quickWheelSector(Vec2 offset) noexcept;
 [[nodiscard]] Vec2 moveQuickWheelPointer(Vec2 offset, Vec2 delta) noexcept;
 [[nodiscard]] std::vector<UiQuickWheelEntry> projectUiQuickWheel(
     const ProfileState &, const ContentRegistry &,
-    const std::vector<AssetInstanceId> &, UiQuickWheelKind);
+    const std::vector<AssetInstanceId> &, UiQuickWheelKind,
+    std::optional<AssetInstanceId> weaponId = std::nullopt);
 
 struct UiQuickWheelProjection {
     std::vector<UiQuickWheelEntry> entries;
     std::uint64_t generation{};
     bool refresh(const ProfileState &, const ContentRegistry &,
-                 const std::vector<AssetInstanceId> &, UiQuickWheelKind);
+                 const std::vector<AssetInstanceId> &, UiQuickWheelKind,
+                 std::optional<AssetInstanceId> weaponId = std::nullopt);
 private:
     bool valid_{};
     UiQuickWheelKind kind_{};
@@ -33,6 +37,7 @@ private:
     int health_{};
     BleedingSeverity bleeding_{};
     std::vector<AssetInstanceId> ids_;
+    std::optional<AssetInstanceId> weaponId_;
 };
 struct UiQuickWheelText {
     SDL_FRect bounds{};

@@ -324,7 +324,7 @@ TEST(MeleeAttackTest, MeleeDoesNotClearExistingBulletImpactSlow){
 }
 
 TEST(MeleeAttackTest, ReturningFromRangeRestoresOriginalProfileWithoutKnife){
- GameFlow f;ASSERT_TRUE(f.startNewGame("melee-isolation",false));const auto before=profileStateFingerprint(f.gameSession().profile());
+ GameFlow f;ASSERT_TRUE(f.startNewGame("melee-isolation",false));ASSERT_TRUE(f.gameSession().checkpointWorldClock());const auto before=profileStateFingerprint(f.gameSession().profile());
  ASSERT_TRUE(f.enterDeveloperRange());auto &s=f.gameSession();ASSERT_TRUE(s.grantDeveloperRangeLoadout(alpha_content::rifle,alpha_content::ammunition,std::nullopt));
  ASSERT_TRUE(s.grantDeveloperRangeItem(alpha_content::utilityKnife));ASSERT_TRUE(f.leaveDeveloperRange());
  EXPECT_EQ(profileStateFingerprint(f.gameSession().profile()),before);

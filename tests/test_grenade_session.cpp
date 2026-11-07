@@ -152,13 +152,12 @@ TEST(GrenadeSessionTest, ExactStackAndReplayCommitOnlyOneRealFlight)
 
 TEST(GrenadeSessionTest, InvalidAimStaleMissingStashAndDisabledActivityAreZeroModification)
 {
-    for (int refusal = 0; refusal < 6; ++refusal)
+    for (int refusal = 0; refusal < 5; ++refusal)
     {
         SCOPED_TRACE(refusal);
         GameSession session;
         auto config = arena();
         if (refusal == 4) config.grenadeEnabled = false;
-        if (refusal == 5) config.developerRange = true;
         auto id = stage(session, config, refusal != 3);
         Vec2 aim{500, 116};
         CommandContext command{session.profile().revision, "grenade-reject"};
@@ -172,6 +171,18 @@ TEST(GrenadeSessionTest, InvalidAimStaleMissingStashAndDisabledActivityAreZeroMo
         EXPECT_FALSE(session.world().lastGrenadeExplosion());
         EXPECT_EQ(session.world().score(), 0);
     }
+}
+
+TEST(GrenadeSessionTest, TrainingUsesTheSharedRealThrowAndExactStackConsumption)
+{
+    GameSession session;auto config=arena();config.developerRange=true;
+    const auto id=stage(session,config);const auto quantity=session.profile().assets.find(id)->quantity;
+    const auto receipt=session.throwThrowable(id,{500,116},{session.profile().revision,"training-real-grenade"});
+    ASSERT_TRUE(receipt.succeeded)<<receipt.message;
+    ASSERT_TRUE(session.world().grenade().flight());
+    ASSERT_NE(session.profile().assets.find(id),nullptr);
+    EXPECT_EQ(session.profile().assets.find(id)->quantity,quantity-1);
+    EXPECT_EQ(session.world().score(),0);EXPECT_FALSE(session.world().lastGrenadeExplosion());
 }
 
 TEST(GrenadeSessionTest, WorldExplosionUsesArmorWallsAndStableIdentitiesWithoutCrossingSpace)
@@ -256,6 +267,40 @@ TEST(GrenadeSessionTest, MutatedTargetRejectsPreparedExplosionBeforeAnyOtherTarg
     EXPECT_EQ(session.world().score(), 0);
     EXPECT_TRUE(session.world().grenade().pendingExplosion());
     EXPECT_FALSE(session.world().lastGrenadeExplosion());
+}
+
+TEST(GrenadeSessionTest, ReorderedAndRepeatedPreparedHitsStillUseStableIdentity)
+{
+    auto config = arena();
+    config.initialEnemies = {EnemySpawn{{470, 106}, {20, 20}, 100},
+        EnemySpawn{{490, 136}, {20, 20}, 100}};
+    GameSession session;
+    const auto id = stage(session, config);
+    ASSERT_TRUE(session.throwThrowable(id, {500, 116},
+        {session.profile().revision, "grenade-reordered-plan"}).succeeded);
+    auto &world = session.world();
+    makeExplosionDue(world);
+    auto plan = world.prepareGrenadeExplosion();
+    ASSERT_TRUE(plan);
+    ASSERT_EQ(plan->enemies.size(), 2U);
+    const auto first = plan->enemies.front();
+    const auto second = plan->enemies.back();
+    plan->enemies = {second, first, second};
+
+    auto missingTarget = *plan;
+    missingTarget.enemies.back().id = kInvalidCombatTargetId;
+    EXPECT_FALSE(world.commitPreparedGrenadeExplosion(missingTarget));
+    EXPECT_EQ(world.enemies()[0].health(), first.health);
+    EXPECT_EQ(world.enemies()[1].health(), second.health);
+
+    ASSERT_TRUE(world.validatePreparedGrenadeExplosion(*plan));
+    ASSERT_TRUE(world.commitPreparedGrenadeExplosion(*plan));
+    ASSERT_EQ(world.enemies().size(), 2U);
+    EXPECT_EQ(world.enemies()[0].combatTargetId(), first.id);
+    EXPECT_EQ(world.enemies()[0].health(), first.health - first.damage.damageApplied);
+    EXPECT_EQ(world.enemies()[1].combatTargetId(), second.id);
+    EXPECT_EQ(world.enemies()[1].health(), second.health - 2 * second.damage.damageApplied);
+    EXPECT_FALSE(world.commitPreparedGrenadeExplosion(*plan));
 }
 
 TEST(GrenadeSessionTest, ThreeFrozenCorpsesOpenOnceWhileOtherDeathsGrantNoNewLoot)

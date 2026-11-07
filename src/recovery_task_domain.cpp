@@ -1,3 +1,4 @@
+#include "weapon_ammo_domain.h"
 #include "recovery_task_domain.h"
 
 #include <algorithm>
@@ -41,6 +42,8 @@ std::optional<AssetInstanceId> parentAssetId(
     {
         return installed->weaponAssetId;
     }
+    if (const auto *retained = std::get_if<RetainedRaidMagazineLocation>(&asset.location))
+        return retained->weaponAssetId;
     if (const auto *component = std::get_if<InstalledWeaponComponentLocation>(&asset.location))
         return component->weaponAssetId;
     if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset.location)) return battery->deviceAssetId;
@@ -91,6 +94,9 @@ bool recoverAsset(
             if (const auto *device = profile.assets.find(assetId))
                 if (const auto *part = std::get_if<InstalledWeaponComponentLocation>(&device->location)) assetId = part->weaponAssetId;
         }
+    if (const auto *asset = profile.assets.find(assetId))
+        if (const auto *retained = std::get_if<RetainedRaidMagazineLocation>(&asset->location))
+            assetId = retained->weaponAssetId;
     const RecoveryTendency tendency = recoveryTendency(
         profile, content, record, assetId);
     const std::uint32_t baseChance =
@@ -209,6 +215,8 @@ RecoveryTendency recoveryTendency(
 {
     static_cast<void>(record);
     const AssetRecord &asset = *profile.assets.find(assetId);
+    if (const auto *retained = std::get_if<RetainedRaidMagazineLocation>(&asset.location))
+        return recoveryTendency(profile, content, record, retained->weaponAssetId);
     if (std::holds_alternative<InstalledWeaponComponentLocation>(asset.location) ||
         std::holds_alternative<InstalledDeviceBatteryLocation>(asset.location))
         return RecoveryTendency::High;
@@ -471,6 +479,8 @@ RecoveryTaskReceipt executeCollectRecoveryTask(
         }
         candidate.assets.findMutable(assetId)->location = StoredAssetLocation{
             ProfileContainerId::stash(), *origin};
+        const auto detached = resolveRetainedRaidMagazinesInCandidate(candidate, content, assetId, false);
+        if (!detached.valid) return receiptFailure(profile, DomainErrorCode::Capacity, detached.message);
     }
 
     std::uint32_t recovered{};

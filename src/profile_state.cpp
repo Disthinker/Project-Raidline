@@ -1,3 +1,5 @@
+#include "base_corpse_domain.h"
+#include "weapon_ammo_domain.h"
 #include "raid_corpse_search.h"
 #include "chest_rig_layout_migration.h"
 #include "tactical_device_domain.h"
@@ -184,14 +186,13 @@ bool containerAccepts(
            item.category == ItemCategory::Magazine;
 }
 
-bool placementFits(
+bool placementWithinContainer(
     const ProfileState &profile,
     const ContentRegistry &content,
     ProfileContainerId container,
     GridPosition origin,
     const ItemDefinition &definition,
-    ItemOrientation orientation,
-    std::optional<AssetInstanceId> ignoredAsset)
+    ItemOrientation orientation)
 {
     InventoryGridSize size{};
     try
@@ -223,6 +224,16 @@ bool placementFits(
         !stashFootprintFitsPage(origin, footprint))
         return false;
 
+    return true;
+}
+
+bool placementFits(
+    const ProfileState &profile,const ContentRegistry &content,ProfileContainerId container,
+    GridPosition origin,const ItemDefinition &definition,ItemOrientation orientation,
+    std::optional<AssetInstanceId> ignoredAsset)
+{
+    if(!placementWithinContainer(profile,content,container,origin,definition,orientation))return false;
+    const InventoryFootprint footprint=inventoryFootprint(definition,orientation);
     for (const AssetRecord *other : assetsInContainer(profile, container))
     {
         if (ignoredAsset.has_value() &&
@@ -526,6 +537,7 @@ AssetInstanceId AssetRegistry::create(
         WeaponMalfunctionType::None,
         std::move(location)};
     if (definition.weaponLight) record.deviceState = TacticalDeviceState{};
+    if (definition.weaponUse) record.fireMode = definition.weaponUse->defaultFireMode;
     if (!records_.emplace(id, std::move(record)).second)
     {
         throw std::logic_error{"asset ID allocation collided"};
@@ -826,6 +838,15 @@ bool assetIsCarried(
                 std::get_if<InstalledWeaponComponentLocation>(&asset->location))
         {
             current = installed->weaponAssetId;
+            continue;
+        }
+        if(const auto *held=std::get_if<BaseReloadHeldMagazineLocation>(&asset->location))
+        {current=held->weaponAssetId;continue;}
+        if(const auto *held=std::get_if<TrainingHeldMagazineLocation>(&asset->location))
+        {current=held->weaponAssetId;continue;}
+        if (const auto *held = std::get_if<RaidReloadHeldMagazineLocation>(&asset->location))
+        {
+            current = held->weaponAssetId;
             continue;
         }
         if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset->location))
@@ -1209,6 +1230,14 @@ std::optional<GridPosition> findFirstProfileFit(
     return std::nullopt;
 }
 
+bool profilePlacementWithinContainer(
+    const ProfileState &profile,const ContentRegistry &content,ProfileContainerId container,
+    GridPosition origin,const ItemDefinition &definition,ItemOrientation orientation) noexcept
+{
+    try{return canUseItemOrientation(definition,orientation) && placementWithinContainer(profile,content,container,origin,definition,orientation);}
+    catch(...){return false;}
+}
+
 bool profilePlacementFits(
     const ProfileState &profile,
     const ContentRegistry &content,
@@ -1255,6 +1284,11 @@ ProfileValidationResult validateProfileState(
     if (const auto components = validateWeaponComponents(profile, content); !components.valid)
         return components;
     if (const auto devices = validateTacticalDevices(profile, content); !devices.valid) return devices;
+    if (const auto magazines = validateRaidMagazineLocations(profile, content); !magazines.valid) return magazines;
+    if (const auto recovery = validateBaseMagazineRecovery(profile,content); !recovery.valid) return recovery;
+    if (const auto corpses=validateBaseCorpseRecords(profile,content); !corpses.valid) return corpses;
+    if(profile.basePlayerEffects)
+        if(const auto effects=validateBasePlayerEffectsRecovery(*profile.basePlayerEffects,profile,content);!effects.valid)return effects;
 
     if (profile.profileId.empty() || profile.revision == 0 ||
         profile.nextBaseServiceJobId == 0 ||
@@ -1953,6 +1987,11 @@ ProfileValidationResult validateProfileState(
         {
             return {false, "asset definition is unknown"};
         }
+        if (bool(asset.fireMode) != bool(definition->weaponUse) ||
+            (asset.fireMode && std::find(definition->weaponUse->supportedFireModes.begin(),
+                definition->weaponUse->supportedFireModes.end(), *asset.fireMode) ==
+                definition->weaponUse->supportedFireModes.end()))
+            return {false, "weapon fire mode is missing or unsupported"};
         if (asset.quantity == 0 || asset.quantity > definition->maxStackSize ||
             !canUseItemOrientation(*definition, asset.orientation) ||
             asset.remainingCharges > definition->maximumCharges ||
@@ -2083,6 +2122,12 @@ ProfileValidationResult validateProfileState(
             continue;
         }
 
+        if (std::holds_alternative<RaidReloadHeldMagazineLocation>(asset.location) ||
+            std::holds_alternative<RaidDroppedMagazineLocation>(asset.location) ||
+            std::holds_alternative<RetainedRaidMagazineLocation>(asset.location) ||
+            std::holds_alternative<BaseReloadHeldMagazineLocation>(asset.location) ||
+            std::holds_alternative<TrainingHeldMagazineLocation>(asset.location) ||
+            std::holds_alternative<TrainingDroppedMagazineLocation>(asset.location)) continue;
         if (std::holds_alternative<RaidDroppedBatteryLocation>(asset.location)) continue; // Validated by device ownership contract.
         if (std::holds_alternative<RaidCorpseContainerAssetLocation>(asset.location)) continue; // Validated by the independent corpse contract below.
         if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
@@ -2510,13 +2555,40 @@ ProfileValidationResult validateProfileState(
             const auto graph = validateInventoryAssetGraph(
                 *raid.startingAssets, content, profile.stashLayoutVersion, profile.chestRigLayoutVersion);
             if (!graph.valid) return {false, "Raid scene rollback asset graph is invalid: " + graph.message};
+            std::set<std::pair<AssetInstanceId, RaidReloadMagazineRole>> rollbackRetainedRoles;
             for (const auto &[id, asset] : raid.startingAssets->records())
             {
-                static_cast<void>(id);
                 if (std::holds_alternative<RaidGroundAssetLocation>(asset.location) ||
                     std::holds_alternative<RaidSceneContainerAssetLocation>(asset.location) ||
-                    std::holds_alternative<RaidCorpseContainerAssetLocation>(asset.location))
+                    std::holds_alternative<RaidCorpseContainerAssetLocation>(asset.location) ||
+                    std::holds_alternative<RaidReloadHeldMagazineLocation>(asset.location) ||
+                    std::holds_alternative<RaidDroppedMagazineLocation>(asset.location) ||
+                    std::holds_alternative<BaseReloadHeldMagazineLocation>(asset.location) ||
+                    std::holds_alternative<TrainingHeldMagazineLocation>(asset.location) ||
+                    std::holds_alternative<TrainingDroppedMagazineLocation>(asset.location))
                     return {false, "Raid rollback contains generated scene assets"};
+                if (const auto *retained = std::get_if<RetainedRaidMagazineLocation>(&asset.location))
+                {
+                    const auto *weapon = raid.startingAssets->find(retained->weaponAssetId);
+                    const auto *lost = weapon ? std::get_if<LostRaidAssetLocation>(&weapon->location) : nullptr;
+                    const auto *task = weapon ? std::get_if<RecoveryTaskAssetLocation>(&weapon->location) : nullptr;
+                    const bool lostOwner = lost && (profile.lostRaidRecords.contains(lost->recordId) ||
+                        (raid.selfRecovery && raid.selfRecovery->sourceRecord.recordId == lost->recordId));
+                    const bool taskOwner = task && profile.recoveryTask && task->taskId == profile.recoveryTask->taskId;
+                    const auto &magazineDefinition = content.item(asset.definitionId);
+                    const bool roundsValid = asset.magazineRounds.size() <= magazineDefinition.magazineCapacity &&
+                        std::all_of(asset.magazineRounds.begin(), asset.magazineRounds.end(), [&](const auto &round) {
+                            return content.ammunitionFitsMagazine(round.definitionId, asset.definitionId) &&
+                                (!round.reliefBatchId || !round.reliefBatchId->empty());
+                        });
+                    if ((!lostOwner && !taskOwner) ||
+                        !roundsValid || !itemCanEquipInSlot(content.item(weapon->definitionId),
+                            lost ? lost->sourceSlot : task->sourceSlot) ||
+                        !rollbackRetainedRoles.emplace(retained->weaponAssetId, retained->role).second ||
+                        (taskOwner && profile.recoveryTask->recoveredAssetIds.contains(id) !=
+                            profile.recoveryTask->recoveredAssetIds.contains(retained->weaponAssetId)))
+                        return {false, "Raid rollback retained magazine owner is invalid"};
+                }
             }
         }
         const bool legacyPlayableOutdoorRules =
@@ -5102,6 +5174,11 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, asset.currentMaximumDurability);
         hashInteger(hash, asset.currentDurability);
         hashInteger(hash, static_cast<std::uint32_t>(asset.weaponMalfunction));
+        if (asset.fireMode)
+        {
+            hashBytes(hash, "weapon-fire-mode-v1");
+            hashInteger(hash, static_cast<std::uint32_t>(*asset.fireMode));
+        }
         hashBytes(hash, asset.reliefBatchId.value_or(""));
         for (const MagazineRoundRecord &round : asset.magazineRounds)
         {
@@ -5135,6 +5212,35 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         {
             hashInteger(hash, 2U);
             hashInteger(hash, installed->weaponAssetId);
+        }
+        else if(const auto *held=std::get_if<BaseReloadHeldMagazineLocation>(&asset.location))
+        {
+            hashInteger(hash,16U);hashInteger(hash,static_cast<std::uint32_t>(held->activity.activity));
+            hashBytes(hash,held->activity.baseSiteDefinitionId.value());hashBytes(hash,held->activity.activityId);
+            hashInteger(hash,held->weaponAssetId);hashBytes(hash,held->actionId);hashInteger(hash,static_cast<std::uint32_t>(held->role));
+        }
+        else if(const auto *held=std::get_if<TrainingHeldMagazineLocation>(&asset.location))
+        {
+            hashInteger(hash,17U);hashBytes(hash,held->sessionId);hashInteger(hash,held->weaponAssetId);
+            hashBytes(hash,held->actionId);hashInteger(hash,static_cast<std::uint32_t>(held->role));
+        }
+        else if(const auto *drop=std::get_if<TrainingDroppedMagazineLocation>(&asset.location))
+        {hashInteger(hash,18U);hashBytes(hash,drop->sessionId);hashFloat(hash,drop->position.x);hashFloat(hash,drop->position.y);}
+        else if (const auto *held = std::get_if<RaidReloadHeldMagazineLocation>(&asset.location))
+        {
+            hashInteger(hash, 13U); hashBytes(hash, held->raidId); hashBytes(hash, held->spaceId.value());
+            hashInteger(hash, held->weaponAssetId); hashBytes(hash, held->actionId);
+            hashInteger(hash, static_cast<std::uint32_t>(held->role));
+        }
+        else if (const auto *drop = std::get_if<RaidDroppedMagazineLocation>(&asset.location))
+        {
+            hashInteger(hash, 14U); hashBytes(hash, drop->raidId); hashBytes(hash, drop->spaceId.value());
+            hashFloat(hash, drop->position.x); hashFloat(hash, drop->position.y);
+        }
+        else if (const auto *retained = std::get_if<RetainedRaidMagazineLocation>(&asset.location))
+        {
+            hashInteger(hash, 15U); hashInteger(hash, retained->weaponAssetId);
+            hashInteger(hash, static_cast<std::uint32_t>(retained->role));
         }
         else if (const auto *drop = std::get_if<RaidDroppedBatteryLocation>(&asset.location))
         {
@@ -5203,6 +5309,33 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, 7U);
             hashInteger(hash, task.taskId);
             hashInteger(hash, static_cast<std::uint32_t>(task.sourceSlot));
+        }
+    }
+    if(profile.basePlayerEffects)
+    {hashBytes(hash,"base-player-effects-v1");hashInteger(hash,basePlayerEffectsFingerprint(*profile.basePlayerEffects));}
+    if(profile.baseReloadRecovery)
+    {
+        const auto &r=*profile.baseReloadRecovery;
+        hashBytes(hash,"base-reload-recovery-v1");hashInteger(hash,static_cast<std::uint32_t>(r.activity.activity));
+        hashBytes(hash,r.activity.baseSiteDefinitionId.value());hashBytes(hash,r.activity.activityId);
+        hashInteger(hash,r.weaponAssetId);hashInteger(hash,r.newMagazineAssetId);hashInteger(hash,r.oldMagazineAssetId.value_or(0));hashBytes(hash,r.actionId);
+        const auto placement=[&](const StoredAssetLocation &p,ItemOrientation orientation){
+            hashInteger(hash,static_cast<std::uint32_t>(p.container.kind));hashInteger(hash,p.container.ownerAssetId);
+            hashInteger(hash,p.container.compartmentIndex);hashInteger(hash,p.origin.x);hashInteger(hash,p.origin.y);
+            hashInteger(hash,static_cast<std::uint32_t>(orientation));};
+        placement(r.newSource,r.newSourceOrientation);hashInteger(hash,r.oldReturn.has_value()?1U:0U);
+        if(r.oldReturn)placement(*r.oldReturn,r.oldReturnOrientation);
+        hashInteger(hash,static_cast<std::uint32_t>(r.kind));hashInteger(hash,static_cast<std::uint32_t>(r.source));
+    }
+    if(!profile.baseCorpses.empty())
+    {
+        hashBytes(hash,"base-empty-corpses-v1");
+        for(const auto &c:profile.baseCorpses)
+        {
+            hashBytes(hash,c.corpseId);hashInteger(hash,static_cast<std::uint32_t>(c.activity.activity));
+            hashBytes(hash,c.activity.baseSiteDefinitionId.value());hashBytes(hash,c.activity.activityId);
+            hashInteger(hash,c.sourceEnemyId);hashInteger(hash,c.cycleIndex);
+            hashFloat(hash,c.position.x);hashFloat(hash,c.position.y);hashFloat(hash,c.size.x);hashFloat(hash,c.size.y);
         }
     }
     for (const std::string &transaction : profile.committedTransactions)

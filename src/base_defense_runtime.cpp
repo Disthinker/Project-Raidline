@@ -464,10 +464,14 @@ void BaseDefenseRuntime::refreshWorldBlockers()
 
 void BaseDefenseRuntime::advance(const GameplayInput &input, float dt, Vec2 playerPosition,
                                  Vec2 playerSize, bool moving, WorldShootingRuntime &shooting,
-                                 const std::vector<BallisticBlocker> &shotBlockers, WorldMeleeRuntime *melee)
+                                 const std::vector<BallisticBlocker> &shotBlockers, WorldMeleeRuntime *melee,
+                                 RaidNoiseDecoyRuntime *decoy, const RaidSpaceDefinitionId &space,
+                                 const std::function<bool()> &beforeShots)
 {
     const auto started = std::chrono::steady_clock::now();
     damageObservation_.reset();
+    controlLastUpdate_ = 0;
+    deathsLastUpdate_.clear();
     fortifications_.beginFrame();
     metrics_ = {};
     if (!std::isfinite(dt) || dt <= 0 || completed() || breached())
@@ -481,17 +485,20 @@ void BaseDefenseRuntime::advance(const GameplayInput &input, float dt, Vec2 play
     // Match Raid's enemy-first contact order, including objective retirement.
     const unsigned steps = static_cast<unsigned>(std::ceil(dt / (1.0F / 30.0F)));
     for (unsigned i = 0; i < steps && !breached(); ++i)
-        step(dt / static_cast<float>(steps), playerPosition, playerSize);
+        step(dt / static_cast<float>(steps), playerPosition, playerSize, decoy, space);
+    if (beforeShots && !beforeShots()) return;
     if (!breached() && !completed())
     {
+        const auto sizes = captureBaseEnemySizes(enemies_);
         const auto resolved = shooting.advanceShots(input, dt, playerCenter,
-            std::max(playerSize.x, playerSize.y), moving, false,
+            std::max(playerSize.x, playerSize.y), moving, controlLastUpdate_ > 0,
             state_.worldSize, enemies_, state_.rulesVersion == kFortifiedBaseDefenseRulesVersion
                                            ? worldBlockers_ : shotBlockers);
+        appendBaseEnemyDeaths(deathsLastUpdate_, resolved.removals, sizes);
         for (const auto &fact : resolved.removals)
             if (fact.reason == EnemyRemovalReason::Death)
                 state_.killedIds.push_back(fact.id);
-        if(melee) melee->prepare(input.meleeJustPressed,input.inventoryOpen,
+        if(melee) melee->prepare(input.meleeJustPressed,input.inventoryOpen || controlLastUpdate_ > 0,
             playerCenter,shooting.aimDirection(),enemies_,
             [&](Vec2 a,Vec2 b){return blockerIndex_->hasLineOfSight(a,b) && fortifications_.lineOfSight(a,b);});
         // Hearing does not replace the wave objective or replay enemy movement.
@@ -520,7 +527,8 @@ void BaseDefenseRuntime::advance(const GameplayInput &input, float dt, Vec2 play
             .count();
 }
 
-void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize)
+void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize,
+                             RaidNoiseDecoyRuntime *decoy, const RaidSpaceDefinitionId &space)
 {
     const auto geometryBefore = fortifications_.geometryRevision();
     state_.damageProtectionSeconds = std::max(0.0F, state_.damageProtectionSeconds - dt);
@@ -574,6 +582,20 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize)
             : (!visible && e.attackPhase() == EnemyAttackPhase::Idle
                 ? fortifications_.obstructing(ec, wave->target) : nullptr);
         Vec2 goal = visible ? pc : wave->target;
+        bool investigatingSound = false;
+        if (!visible && e.awarenessState() == EnemyAwarenessState::Searching &&
+            e.attackPhase() == EnemyAttackPhase::Idle && e.searchTimeRemaining() > 0 && e.lastKnownTargetPosition()) {
+            goal = *e.lastKnownTargetPosition(); structure = nullptr; investigatingSound = true;
+        }
+        if (decoy) {
+            if (visible || e.awarenessState() == EnemyAwarenessState::Alerted || e.attackPhase() != EnemyAttackPhase::Idle)
+                decoy->forget(e.combatTargetId());
+            else if (const auto investigation = decoy->investigationGoal(e.combatTargetId(), space, ec)) {
+                goal = *investigation;
+                structure = nullptr;
+                investigatingSound = true;
+            }
+        }
         if (structure)
         {
             const auto surface = FortificationRuntime::surfacePoint(structure->footprint, ec);
@@ -606,7 +628,7 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize)
         directive.role = EnemyTacticalRole::Engage;
         directive.canStartAttack = directive.canStartAttack && visible && !cached.structureAttack;
         static_cast<void>(e.updateTowardsTarget(
-            goal, directive, dt, state_.worldSize.x, state_.worldSize.y, true,
+            goal, directive, dt, state_.worldSize.x, state_.worldSize.y, !investigatingSound,
             cached.navigationTarget ? std::optional{runtimePoint(*cached.navigationTarget)}
                                     : std::optional{ec},
             true));
@@ -652,6 +674,7 @@ void BaseDefenseRuntime::step(float dt, Vec2 playerPosition, Vec2 playerSize)
             e, {playerPosition, playerSize}, exposed && !cached.structureAttack, state_.damageProtectionSeconds,
             [&] { return blockerIndex_->hasLineOfSight(center(e), pc) && fortifications_.lineOfSight(center(e), pc); });
         if (attackContact.damage) damageObservation_ = attackContact.damage;
+        controlLastUpdate_ = std::max(controlLastUpdate_, attackContact.controlDuration);
     }
     static_cast<void>(enemies_.removeForObjective(state_.breachedIds));
     if (geometryBefore != fortifications_.geometryRevision())
@@ -690,7 +713,9 @@ BaseDefenseSnapshot BaseDefenseRuntime::checkpoint(const WorldShootingRuntime &s
 
 bool BaseDefenseRuntime::commitPreparedMelee(WorldMeleeRuntime &melee)
 {
+    const auto sizes = captureBaseEnemySizes(enemies_);
     if(completed() || breached() || !melee.commitPrepared(enemies_))return false;
+    appendBaseEnemyDeaths(deathsLastUpdate_, melee.removals(), sizes);
     for(const auto &death:melee.removals())if(death.reason==EnemyRemovalReason::Death)state_.killedIds.push_back(death.id);
     if(!melee.removals().empty())state_.reservedAttackers.clear();
     synchronizeActorCheckpoints();return true;

@@ -12,17 +12,24 @@ bool transientBaseMessage(std::string_view message) {
   // persistence errors and messages from future callers stay readable.
   constexpr std::array ordinary{
       "PROFILE LOADED", "NEW PROFILE CREATED", "BASE BUILD PANEL CLOSED",
-      "INVENTORY UPDATED", "EQUIPMENT UPDATED", "MAGAZINE UNLOADED",
+      "INVENTORY UPDATED", "EQUIPMENT UPDATED", "PROFILE SAVE CONFIRMED", "MAGAZINE UNLOADED",
       "WEAPON CHAMBERED", "BATTERY CHANGE COMPLETE", "COMPONENT CHANGE SAVED",
       "BASE FACILITY PLACEMENT CANCELLED", "BASE PLACEMENT CANCELLED",
       "HOME REGION MAP CLOSED", "LANGUAGE UPDATED", "DEVELOPER RUNTIME PANEL CLOSED",
       "RETURNED FROM TEST RANGE | ORIGINAL PROFILE RESTORED",
       "BASE FACILITY FUNCTION OPENED", "BASE GROUND CONTAINER OPENED",
       "WEAPON MALFUNCTION CLEARED", "MEDICAL SELECTION CANCELLED",
-      "CARRIED ASSET SELECTED", "ROTATED"};
+      "CARRIED ASSET SELECTED", "ROTATED", "FIRE MODE CHANGED",
+      "FIRE MODE: SEMI", "FIRE MODE: BURST", "FIRE MODE: AUTO",
+      "射击模式：半自动", "射击模式：三连发", "射击模式：全自动",
+      "MAGAZINE SELECTION CANCELLED", "THROWABLE SELECTION CANCELLED",
+      "GRENADE THROWN", "DECOY THROWN", "GRENADE CANCELLED", "DECOY CANCELLED",
+      "RELOAD STARTED (2 SEC)", "CHAMBERING", "MEDICAL ACTION STARTED",
+      "WEAPON MAINTENANCE STARTED (8 SEC)", "ARMOR MAINTENANCE STARTED (10 SEC)",
+      "MAGAZINE PACKING STARTED", "MAGAZINE UNLOAD STARTED (3 SEC)",
+      "WEAPON LIGHT INTENT ON", "WEAPON LIGHT OFF", "CORPSE EMPTY"};
   return std::find(ordinary.begin(), ordinary.end(), message) != ordinary.end();
 }
-constexpr SDL_FRect kBaseFeedback{24,590,400,110};
 }
 
 bool App::baseWorldHudVisible() const {
@@ -45,7 +52,7 @@ bool App::baseCombatStatusVisible() const {
 }
 
 void App::updateBasePresentation(float deltaTime) {
-  if (gameFlow_.state() != GameFlowState::Base) {
+  if (gameFlow_.state() != GameFlowState::Base && gameFlow_.state()!=GameFlowState::Raid) {
     baseToastInBase_ = false;
     baseToastSeconds_ = 0;
     return;
@@ -58,10 +65,17 @@ void App::updateBasePresentation(float deltaTime) {
     baseToastSeconds_ = 0;
     return;
   }
-  if (baseWorldHudVisible() && !pauseMenu_.isOpen() && windowHasInputFocus_ &&
-      !gameSession_.baseDefenseActive() && !gameSession_.baseDailySaveBlocked() &&
+  const bool visible=gameFlow_.state()==GameFlowState::Base?baseWorldHudVisible():
+      !inventoryOverlayState_.isOpen() && !tacticalMapOpen_ && !developerWeaponPanelOpen_ && !developerRangePanelOpen_;
+  if (visible && !pauseMenu_.isOpen() && windowHasInputFocus_ &&
+      !gameSession_.baseDailySaveBlocked() &&
       !gameSession_.baseDefenseSaveBlocked() && std::isfinite(deltaTime) && deltaTime > 0)
     baseToastSeconds_ = std::min(3.0F, baseToastSeconds_ + deltaTime);
+}
+
+std::string_view App::visibleFeedbackMessage() const noexcept {
+  if(transientBaseMessage(uiMessage_) && baseToastMessage_==uiMessage_ && baseToastSeconds_>=3)return {};
+  return uiMessage_;
 }
 
 int App::finalDiscreteActionAt(Vec2 point) const {
@@ -176,11 +190,11 @@ bool App::routeFinalDiscretePointer(SDL_Event &event) {
   return hadPress || action != 0;
 }
 
-void App::renderFinalFeedback(SDL_FRect bounds, std::string_view message, int size) {
+void App::renderFinalFeedback(SDL_FRect bounds, std::string_view message, int size, int hintSize) {
   const auto key = fmt::format("{}|{}|{}|{}|{}|{}", static_cast<int>(gameFlow_.state()),
       static_cast<int>(uiTextRenderer_.language()), bounds.x, bounds.y, bounds.w, message);
   if (key != finalFeedbackKey_) { finalFeedbackKey_ = key; finalFeedbackScroll_ = 0; }
-  uiFinalScrollableText(renderer_, uiTextRenderer_, bounds, message, finalFeedbackScroll_, size);
+  uiFinalScrollableText(renderer_, uiTextRenderer_, bounds, message, finalFeedbackScroll_, size, hintSize);
 }
 
 bool App::routeFinalFeedbackWheel(const SDL_Event &event) {
@@ -195,7 +209,8 @@ bool App::routeFinalFeedbackWheel(const SDL_Event &event) {
     box = {540,608,676,48};
   else if (baseWorldHudVisible() && !uiMessage_.empty() &&
       !transientBaseMessage(uiMessage_) && !gameSession_.baseDailySaveBlocked() &&
-      !gameSession_.baseDefenseSaveBlocked()) box = kBaseFeedback;
+      !gameSession_.baseDefenseSaveBlocked())
+    box = baseBottomHudLayout().feedback.panel;
   if (!uiContains(box, windowUiViewport().toLogical({event.wheel.mouse_x,event.wheel.mouse_y}))) return false;
   supplyUi_.press.reset();
   const float direction = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1.0F : 1.0F;
@@ -229,20 +244,35 @@ void App::renderBaseDailyHud() {
     uiFinalTextAt(renderer_, uiTextRenderer_, 346,54,
         zh ? "M 地图 · E 查看 · H 隐藏" : "M map · E inspect · H hide",492,12);
   }
+}
+
+UiGameplayBottomHudLayout App::baseBottomHudLayout() {
+  return layoutUiGameplayBottomHud(renderer_,uiTextRenderer_,
+      {true,gameSession_.activeWeaponLight().binding.deviceAssetId!=0,
+       !meleeStatusLabel().empty(),transientBaseMessage(uiMessage_),
+       developerPerformanceOverlayOpen_,visibleFeedbackMessage()});
+}
+
+void App::renderBaseFeedback() {
+  if(!baseWorldHudVisible() || gameSession_.baseDefenseActive())return;
+  const auto &profile=gameSession_.profile();
   if (!uiMessage_.empty() && !gameSession_.baseDailySaveBlocked() &&
       !gameSession_.baseDefenseSaveBlocked()) {
     if (transientBaseMessage(uiMessage_)) {
       const float elapsed = baseToastInBase_ && baseToastProfileId_ == profile.profileId &&
           baseToastMessage_ == uiMessage_ ? baseToastSeconds_ : 0.0F;
       const float opacity = std::clamp((3.0F - elapsed) / .6F, 0.0F, 1.0F);
-      if (opacity > 0)
-        uiFinalText(renderer_, uiTextRenderer_, {24,646,360,24}, uiMessage_,13,1,
-            {222,231,226,static_cast<Uint8>(std::lround(255 * opacity))});
+      if (opacity > 0) {
+        const auto layout = baseBottomHudLayout().feedback;
+        uiFinalCompactFeedback(renderer_, uiTextRenderer_, layout, uiMessage_, false, nullptr,
+            static_cast<Uint8>(std::lround(255 * opacity)));
+      }
     } else {
       // Persistent errors retain their full text and wheel access. Never
       // misclassify a rejection or a future message as a success by substring.
-      uiFinalPanel(renderer_, kBaseFeedback, true);
-      renderFinalFeedback({36,600,376,88}, uiMessage_,12);
+      const auto layout = baseBottomHudLayout().feedback;
+      uiFinalPanel(renderer_, layout.panel, true);
+      renderFinalFeedback(layout.text, uiMessage_, layout.fontSize, layout.fontSize);
     }
   }
 }
@@ -255,7 +285,8 @@ void App::renderBaseCombatVitals() {
   const bool combat = gameSession_.baseDefenseActive() ||
       gameFlow_.baseWorld().playerSafetyZone() != HomeRegionSafetyZone::SafeCore ||
       profile.homePerimeter.activeOuting.has_value();
-  uiFinalPanel(renderer_, {1040,638,216,combat ? 62.0F : 38.0F}, profile.currentHealth<30);
+  auto card=baseBottomHudLayout().vitals;card.h=combat?62.0F:38.0F;
+  uiFinalPanel(renderer_, card, profile.currentHealth<30);
   SDL_SetRenderDrawColor(renderer_,113,191,179,255);
   SDL_RenderLine(renderer_,1052,650,1066,650);
   SDL_RenderLine(renderer_,1059,643,1059,657);
@@ -280,6 +311,8 @@ void App::renderBaseCombatVitals() {
         const auto magazine=installedMagazine(profile,*id);
         weapon=fmt::format("{} · {}+{}",compactUiItemName(content.item(asset->definitionId),uiTextRenderer_.language()),
             magazine?magazineRoundCount(profile,*magazine):0U,asset->chamberedRound?1:0);
+        if(const auto mode=gameSession_.weaponFireMode(*id))
+          weapon=std::string(uiWeaponFireModeName(*mode,uiTextRenderer_.language()))+" · "+weapon;
         if(asset->weaponMalfunction!=WeaponMalfunctionType::None)
           condition+=(condition.empty()?"":" · ")+std::string(zh?"卡弹 · 移鼠排障":"JAM · SWEEP MOUSE");
         else if(!asset->currentDurability)
@@ -288,5 +321,23 @@ void App::renderBaseCombatVitals() {
     uiFinalText(renderer_,uiTextRenderer_,{1052,674,192,18},weapon,12);
   }
   if(!condition.empty())
-    uiFinalText(renderer_,uiTextRenderer_,{980,590,276,42},condition,12,2,{240,178,120,255});
+    uiFinalText(renderer_,uiTextRenderer_,baseBottomHudLayout().condition,condition,12,2,{240,178,120,255});
+}
+
+void App::renderBasePlayerActionHud() {
+  if(!baseWorldHudVisible() || pauseMenu_.isOpen())return;
+  const auto &state=gameSession_.playerActionState();
+  if(state.active()) {
+    const auto panel=baseBottomHudLayout().action;uiFinalPanel(renderer_,panel);
+    const float progress=state.progress();
+    uiFinalText(renderer_,uiTextRenderer_,{panel.x+12,panel.y+6,panel.w-24,24},
+        fmt::format("{} {:.0f}%",localizeUiText(uiTextRenderer_.language(),uiPlayerActionLabel(*state.active())),progress*100),14,1);
+    SDL_FRect track{panel.x+12,panel.y+37,panel.w-24,3};SDL_SetRenderDrawColor(renderer_,48,66,63,245);SDL_RenderFillRect(renderer_,&track);
+    track.w*=progress;SDL_SetRenderDrawColor(renderer_,113,191,179,255);SDL_RenderFillRect(renderer_,&track);
+  }
+  const auto light=gameSession_.activeWeaponLight();
+  if(light.binding.deviceAssetId)
+    uiFinalText(renderer_,uiTextRenderer_,baseBottomHudLayout().light,
+        fmt::format("{} · {}% · U",localizeUiText(uiTextRenderer_.language(),uiWeaponLightStateLabel(light)),light.capacityMs?
+            static_cast<std::uint64_t>(light.remainingMs)*100/light.capacityMs:0),12,1);
 }

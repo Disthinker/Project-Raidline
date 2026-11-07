@@ -8,6 +8,7 @@
 
 #include "app.h"
 #include "game_session.h"
+#include "profile_ui_test_wait.h"
 #include "inventory_domain.h"
 #include "ui_base_deployment_presentation.h"
 #include "ui_raid_result_presentation.h"
@@ -103,6 +104,7 @@ void extractNormally(GameSession &session)
     const auto exit = session.world().extractionPoint().bounds();
     position(session, {exit.position.x + exit.size.x * 0.5F, exit.position.y + exit.size.y * 0.5F});
     session.update({}, 3.1F);
+    static_cast<void>(waitForProfileUiDurability(session));
 }
 }
 
@@ -150,6 +152,7 @@ TEST(RaidCredentialSessionTest, RealInvestigationSettlesThenReloadsAndUsesNewHig
     ASSERT_EQ(resumed.world().raidSession().extractionRoute(), RaidExtractionRoute::Credential);
     EXPECT_FALSE(resumed.world().raidSession().signalCalledLastUpdate());
     resumed.update({}, 0.2F);
+    ASSERT_TRUE(waitForProfileUiDurability(resumed)) << resumed.persistenceMessage();
     EXPECT_EQ(resumed.state(), GameSessionState::BetweenRaids);
     EXPECT_TRUE(resumed.profile().raidExtractionPermissions.contains(permit));
     ASSERT_TRUE(resumed.profile().lastRaidResult);
@@ -229,7 +232,9 @@ TEST(RaidCredentialSessionTest, SaveFailureRetainsPendingFactAndRetryRegistersEx
     session.update({}, 0);
     EXPECT_EQ(profileStateFingerprint(session.profile()), beforeRetry);
     ASSERT_TRUE(std::filesystem::remove(blocking));
-    session.update({}, 0);
+    const auto retry = session.retryProfileUiCommit();
+    ASSERT_TRUE(retry.accepted) << retry.message;
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
     EXPECT_EQ(session.state(), GameSessionState::BetweenRaids);
     ASSERT_TRUE(session.profile().raidExtractionPermissions.contains(permit));
     const auto after = profileStateFingerprint(session.profile());

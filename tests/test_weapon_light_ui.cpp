@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "weapon_component_domain.h"
 #include "ui_localization.h"
 #include <gtest/gtest.h>
@@ -10,7 +11,9 @@
 
 struct TacticalDeviceUiTestAccess {
     static GameFlow &flow(App &a) {return a.gameFlow_;}
-    static void frame(App &a,float seconds=0) {a.windowHasInputFocus_=true;a.processEvents();a.update(seconds);a.input_.endFrame();}
+    static void frame(App &a,float seconds=0) {a.windowHasInputFocus_=true;a.processEvents();a.update(seconds);a.input_.endFrame(); ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+       [&] { return a.profileUiBusy() || static_cast<bool>(a.pendingInventoryBarrierAction_); },
+       [&] { a.windowHasInputFocus_=true;a.processEvents();a.update(0);a.input_.endFrame(); })) << a.gameSession_.persistenceMessage(); }
     static void detail(App &a,AssetInstanceId weapon) {a.inventoryOverlayState_.openPlayerInventory();a.profileDetailsAsset_=weapon;}
     static bool dragging(App &a) {return a.deviceBatteryDrag_.has_value();}
     static bool details(App &a) {return a.profileDetailsAsset_.has_value();}

@@ -3,10 +3,14 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
+#include <utility>
 
 #include <SDL3/SDL.h>
 
@@ -167,6 +171,8 @@ private:
     friend struct InventoryPresentationUiTestAccess;
     friend struct UiItemContextTestAccess;
     friend struct UiQuickWheelTestAccess;
+    friend struct UiMagazineWheelTestAccess;
+    friend struct PlayerInventoryLatencyTestAccess;
     friend struct UiBaseSupplyTestAccess;
     friend struct UiWeaponComponentsTestAccess;
     friend struct UiBaseMedicalTestAccess;
@@ -253,6 +259,7 @@ private:
     float baseToastSeconds_{};
     bool baseToastInBase_{};
     void updateBasePresentation(float deltaTime);
+    [[nodiscard]] std::string_view visibleFeedbackMessage() const noexcept;
     [[nodiscard]] bool baseWorldHudVisible() const;
     [[nodiscard]] bool baseCombatStatusVisible() const;
     struct DeferredWorldLabel { Vec2 position; std::string text; };
@@ -265,8 +272,12 @@ private:
     std::string finalDiscreteContext() const;
     bool routeFinalDiscretePointer(SDL_Event &event);
     void renderBaseDailyHud();
+    [[nodiscard]] UiGameplayBottomHudLayout baseBottomHudLayout();
+    [[nodiscard]] std::string meleeStatusLabel() const;
+    void renderBaseFeedback();
     void renderBaseCombatVitals();
-    void renderFinalFeedback(SDL_FRect bounds, std::string_view message, int size = 14);
+    void renderBasePlayerActionHud();
+    void renderFinalFeedback(SDL_FRect bounds, std::string_view message, int size = 14, int hintSize = 0);
     bool routeFinalFeedbackWheel(const SDL_Event &event);
     [[nodiscard]] UiViewport windowUiViewport() const noexcept;
     [[nodiscard]] UiWindowSize availableUiWindowArea() const noexcept;
@@ -474,6 +485,47 @@ private:
     std::size_t selectedBasePriorityIndex_{};
     std::set<AssetInstanceId> selectedBasePriorityAssetIds_;
     std::string uiMessage_;
+    struct PendingInventoryUiFeedback { std::string message; SoundEventId sound; };
+    std::map<std::uint64_t, PendingInventoryUiFeedback> pendingInventoryUiFeedback_;
+    std::function<void()> pendingInventoryBarrierAction_;
+    bool submitInventoryUi(const InventoryCommand &, std::string transactionId,
+        bool inRaid, std::string successMessage, SoundEventId);
+    bool deferInventoryBarrier(std::function<void()>);
+    void updateInventoryUiPersistence(float);
+    void requestQuitAfterInventory();
+    using ProfileUiContinuation=std::function<void(const ProfileUiCompletion &)>;
+    std::map<std::uint64_t,ProfileUiContinuation> profileUiContinuations_;
+    ProfileUiContinuation failedProfileUiContinuation_;
+    std::string failedHomeHintsProfileId_;
+    bool quitAfterProfileUi_{};
+    bool trackProfileUiSubmission(const ProfileUiSubmission &,ProfileUiContinuation);
+    bool retryPendingProfileUi();
+    [[nodiscard]] bool raidSaveProtectionVisible() const noexcept;
+    bool handleRaidSaveProtectionClick(MousePosition);
+    void consumeProfileUiCompletions();
+    [[nodiscard]] bool profileUiBusy() const noexcept {
+        const bool failed=gameSession_.baseDailySaveBlocked() || gameSession_.baseDefenseSaveBlocked();
+        return !profileUiContinuations_.empty() || (gameSession_.profileUiCommitPending() && !failed);
+    }
+    template<class Receipt,class Callback>
+    void trackProfileUiResult(const ProfileUiSubmission &submission,Callback callback) {
+        auto continuation=[this,callback=std::move(callback)](const ProfileUiCompletion &completion) mutable {
+            Receipt receipt{};
+            if(completion.succeeded) {
+                const auto *result=completion.commandResult?
+                    std::get_if<Receipt>(&completion.commandResult->receipt):nullptr;
+                if(!result) {uiMessage_="CHANGES SAVED | REOPEN THE PAGE";return;}
+                receipt=*result;
+            } else {receipt.succeeded=false;receipt.message=completion.message;}
+            callback(receipt);
+        };
+        trackProfileUiSubmission(submission,std::move(continuation));
+    }
+    template<class Receipt,class Callback>
+    void submitProfileUi(ProfileUiCommand command,std::string transaction,Callback callback) {
+        const auto submission=gameSession_.requestProfileUiCommand(command,std::move(transaction));
+        trackProfileUiResult<Receipt>(submission,std::move(callback));
+    }
     WeaponSupplyProjection weaponSupplyCache_;
     std::string weaponSupplyCacheProfileId_;
     bool weaponSupplyCacheIncludesStash_{};
@@ -490,8 +542,19 @@ private:
     void cancelThrowableUi();
     void renderThrowableUi();
     void renderNoiseDecoyWorld();
+    void renderEmptyPlayerCorpses();
     void renderProfileDecoyDetails(const AssetRecord &, const ItemDefinition &);
     bool medicalWheelOpen_{};
+    bool magazineWheelOpen_{};
+    bool magazineFireSuppressedUntilRelease_{};
+    RaidReloadGesture reloadGesture_;
+    std::optional<AssetInstanceId> reloadGestureWeapon_;
+    std::optional<AssetInstanceId> magazineWheelWeapon_;
+    std::vector<AssetInstanceId> magazineWheelOptions_;
+    std::size_t magazineWheelSelectedIndex_{};
+    void openMagazineWheel(AssetInstanceId);
+    void updateRaidReloadInput(GameplayInput &);
+    void cancelMagazineWheel();
     bool tacticalMapOpen_{};
     std::vector<AssetInstanceId> medicalWheelOptions_;
     std::size_t medicalWheelSelectedIndex_{};
@@ -538,6 +601,8 @@ private:
 
     GameplayInput makeGameplayInput() const;
     GameplayInput makeBaseGameplayInput() const;
+    GameplayInput makeGameplayControls() const;
+    void updatePlayerActionInput(GameplayInput &);
 
     [[nodiscard]]
     bool handleScreenConfirm();
@@ -553,6 +618,14 @@ private:
     void handleProfileRightClick(MousePosition position, bool inRaid);
     void executeProfileDrop(const ProfileDropRequest &request, bool inRaid);
     void executeProfileContextAction(AssetInstanceId, bool inRaid);
+    void cycleProfileFireMode(AssetInstanceId);
+    void changeInventoryBattery(DeviceBatteryCommand);
+    template<class Callback> void submitWeaponAmmoUi(WeaponAmmoCommand command,std::string tx,Callback callback) {
+        if(gameSession_.alphaRaidActive() || gameSession_.developerRangeActive())
+            callback(gameSession_.executeProfileWeaponAmmo(command,std::move(tx)));
+        else submitProfileUi<WeaponAmmoReceipt>(ProfileUiCommand{std::move(command)},std::move(tx),std::move(callback));
+    }
+
     void openMedicalWheel();
     void updateMedicalWheelSelection();
     void commitMedicalWheelSelection();
@@ -682,7 +755,7 @@ private:
     bool inventoryDropZoneContains(
         MousePosition position) const noexcept;
 
-    void closeInventory() noexcept;
+    void closeInventory();
 
     void render();
     [[nodiscard]] bool shouldCaptureWorldPointer() const noexcept;

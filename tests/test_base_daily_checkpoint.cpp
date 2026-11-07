@@ -42,6 +42,9 @@ struct BaseDailyCheckpointTestAccess {
     session.baseDailyWriter_ =
         std::make_unique<BaseDefenseCheckpointWriter>(std::move(write));
   }
+  static void retireDurableInitialWriter(GameSession &session) {
+    session.baseDailyWriter_.reset();
+  }
 };
 
 namespace {
@@ -65,11 +68,24 @@ struct DailyFixture : ::testing::Test {
   void SetUp() override {
     flow.configurePersistence(save.path);
     ASSERT_TRUE(flow.startNewGame("daily-checkpoint", false));
-    flow.updateBase({}, 0.000001F);
+    initializePerimeter();
     ASSERT_FALSE(flow.baseWorld().perimeterEnemies().empty());
   }
   GameSession &session() { return flow.gameSession(); }
   BaseWorld &world() { return flow.baseWorld(); }
+  void initializePerimeter() {
+    flow.updateBase({}, 0.000001F);
+    for (unsigned i=0;i<5000 && session().profileUiCommitPending();++i) {
+      session().updateInventoryPersistence(0);
+      ASSERT_FALSE(session().baseDailyCheckpointStatus().failed)<<session().persistenceMessage();
+      std::this_thread::sleep_for(1ms);
+    }
+    ASSERT_FALSE(session().profileUiCommitPending())<<session().persistenceMessage();
+    ASSERT_FALSE(session().baseDailyCheckpointStatus().outstanding());
+    // The generation is now truly durable. Start each old checkpoint test at
+    // its original empty writer boundary before it injects a held store.
+    BaseDailyCheckpointTestAccess::retireDurableInitialWriter(session());
+  }
   void hit(int damage = 1, float dt = 0.000001F) {
     EnemyLifecycleTestAccess::queueHit(world(), damage);
     flow.updateBase({}, dt);
@@ -367,7 +383,7 @@ TEST_F(DailyFixture,
   ASSERT_TRUE(session().startNewProfile("second-profile"));
   EXPECT_EQ(saved().profileId, "second-profile");
   EXPECT_EQ(session().baseDailyCheckpointStatus().requestedGeneration, 0U);
-  flow.updateBase({}, 0.000001F);
+  initializePerimeter();
   hit();
   due();
   TemporarySave second;
@@ -387,7 +403,7 @@ TEST_F(DailyFixture,
     if (assetCount > 0) {
       ASSERT_TRUE(flow.returnToMainMenu());
       ASSERT_TRUE(flow.startNewGame("daily-large-checkpoint", false));
-      flow.updateBase({}, 0.000001F);
+      initializePerimeter();
       ASSERT_TRUE(flow.returnToMainMenu());
       auto profile = session().profile();
       while (profile.assets.records().size() < assetCount) {

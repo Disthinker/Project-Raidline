@@ -50,6 +50,8 @@ void App::renderFirstRaidHints() {
   if (gameFlow_.state() == GameFlowState::MainMenu || pauseMenu_.isOpen() ||
       developerWeaponPanelOpen_ || developerRangePanelOpen_ || developerPerformanceOverlayOpen_ ||
       tacticalMapOpen_ || medicalWheelOpen_ || throwableWheelOpen_ ||
+      gameSession_.baseDailySaveBlocked() || gameSession_.baseDefenseSaveBlocked() ||
+      baseDefenseResultVisible_ || baseSiegeWarningVisible() ||
       baseConstructionPanelOpen_ || basePlacementState_ ||
       baseFixedFacilityPlacementState_)
     return;

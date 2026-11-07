@@ -90,22 +90,19 @@ bool App::updateBaseSiegeWarning(float deltaTime)
         case SiegeWarningAction::Dismiss: siegeWarningDismissed_ = true; break;
         case SiegeWarningAction::Reopen: siegeWarningDismissed_ = false; break;
         case SiegeWarningAction::Manual:
-            uiMessage_ = gameSession_.startBaseRealtimeDefense(gameFlow_.baseWorld())
-                ? "BASE DEFENSE STARTED | INTERCEPT OUTSIDE THE CORE"
-                : gameSession_.persistenceMessage();
+            trackProfileUiSubmission(gameSession_.requestStartBaseRealtimeDefense(gameFlow_.baseWorld()),
+                [this](const ProfileUiCompletion &completion) {
+                    uiMessage_=completion.succeeded?"BASE DEFENSE STARTED | INTERCEPT OUTSIDE THE CORE":completion.message;
+                });
             break;
         case SiegeWarningAction::Automatic:
-        {
-            const auto receipt = gameSession_.executeBaseAutoDefense(
-                nextProfileTransactionId("base-auto-defense"));
-            uiMessage_ = receipt.succeeded
-                ? receipt.outcome == BaseSiegeOutcome::Defended
-                    ? "BASE DEFENDED | SAFETY PERIOD STARTED"
-                    : "BASE DEFENSE FAILED SOFTLY | RECOVERY PERIOD STARTED"
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded ? SoundEventId::UiConfirm : SoundEventId::UiDeny);
+            submitProfileUi<BaseAutoDefenseReceipt>(ProfileUiAutoDefenseCommand{},nextProfileTransactionId("base-auto-defense"),
+                [this](const auto &receipt) {
+                    uiMessage_=receipt.succeeded?(receipt.outcome==BaseSiegeOutcome::Defended?
+                        "BASE DEFENDED | SAFETY PERIOD STARTED":"BASE DEFENSE FAILED SOFTLY | RECOVERY PERIOD STARTED"):receipt.message;
+                    gameAudio_.play(receipt.succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);
+                });
             break;
-        }
         }
     }
     // A deliberate choice wins over the automatic preset at the same deadline.
@@ -148,7 +145,7 @@ bool App::handleBaseDefenseControls()
     {
         for (const auto &click : pendingBaseClicks_)
             if (inside(kDefenseRetry, click.position.x, click.position.y))
-                static_cast<void>(gameSession_.retryBaseDailySave());
+                static_cast<void>(retryPendingProfileUi());
         // Poll lag completion without advancing actors or consuming ammunition.
         static_cast<void>(gameSession_.updateBaseWorld(gameFlow_.baseWorld(), {}, 0.0F));
         pendingInventoryUiEvents_.clear();
@@ -187,8 +184,7 @@ bool App::handleBaseDefenseControls()
             inside(kDefenseRetry, click.position.x, click.position.y))
         {
             consumed = true;
-            static_cast<void>(gameSession_.retryBaseDefenseSave());
-            uiMessage_ = gameSession_.persistenceMessage();
+            static_cast<void>(retryPendingProfileUi());
         }
         else
             baseDefenseAbandonArmed_ = false;
@@ -259,6 +255,26 @@ void App::renderBaseDefenseWorld()
     }
 }
 
+bool App::raidSaveProtectionVisible() const noexcept
+{
+    return (gameFlow_.state()==GameFlowState::Raid || gameFlow_.state()==GameFlowState::RaidResult) &&
+        (gameSession_.baseDailySaveBlocked() || gameSession_.baseDefenseSaveBlocked());
+}
+
+bool App::handleRaidSaveProtectionClick(MousePosition point)
+{
+    if(inside(kDefenseRetry,point.x,point.y)) {
+        input_.suppressPrimaryPointerUntilRelease();
+        static_cast<void>(retryPendingProfileUi());
+        return true;
+    }
+    if(gameFlow_.state()==GameFlowState::Raid) {
+        input_.suppressPrimaryPointerUntilRelease();
+        return true;
+    }
+    return false;
+}
+
 void App::renderBaseDefenseHud()
 {
     const auto language=uiTextRenderer_.language();const auto tr=[&](auto en,auto zh){return uiBaseManagementText(language,en,zh);};
@@ -272,6 +288,7 @@ void App::renderBaseDefenseHud()
         if(baseFinalFeedbackKey_!=message){baseFinalFeedbackKey_=message;baseFinalFeedbackScroll_=0;}
         renderUiBaseManagementFeedback(renderer_,uiTextRenderer_,{box.x+14,box.y+42,box.w-28,box.h-54},message,baseFinalFeedbackScroll_);
     }
+    if(gameFlow_.state()!=GameFlowState::Base)return;
     if(!active) {
         if(baseDefenseResultVisible_ && !blocked) {
             const auto facts=projectUiBaseDefenseResultFacts(gameSession_.profile().baseSiege,language);

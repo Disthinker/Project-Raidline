@@ -4,6 +4,7 @@
 #include <cfloat>
 #include <cmath>
 #include <limits>
+#include <type_traits>
 
 #if defined(_M_X64) || defined(_M_IX86) || defined(__SSE__)
 #include <xmmintrin.h>
@@ -127,22 +128,40 @@ bool raidSightSegmentIntersectsRectInterior(Vec2 start, Vec2 end,
            leave - enter > kRaidSightGeometryEpsilon;
 }
 
-bool RaidVisibilityProjection::validGeometry() const noexcept
+namespace
 {
-    if (!valid || geometryRevision == 0 || boundary.size() < 3 ||
-        !finite(observer) || !finite(worldSize) || worldSize.x <= 0 ||
-        worldSize.y <= 0 || observer.x < 0 || observer.y < 0 ||
-        observer.x > worldSize.x || observer.y > worldSize.y ||
-        !finite(direction) || !std::isfinite(angleDegrees) ||
-        !std::isfinite(maximumDistance) || angleDegrees <= 0 ||
-        angleDegrees > 360 || maximumDistance < 0 ||
-        (maximumDistance > 0 &&
-         (angleDegrees > 180 ||
-          std::abs(std::hypot(direction.x, direction.y) - 1) > 0.001F)))
+bool validFanHeader(const RaidVisibilityProjection &view) noexcept
+{
+    if (!view.valid || view.geometryRevision == 0 || view.boundary.size() < 3 ||
+        !finite(view.observer) || !finite(view.worldSize) || view.worldSize.x <= 0 ||
+        view.worldSize.y <= 0 || view.observer.x < 0 || view.observer.y < 0 ||
+        view.observer.x > view.worldSize.x || view.observer.y > view.worldSize.y ||
+        !finite(view.direction) || !std::isfinite(view.angleDegrees) ||
+        !std::isfinite(view.maximumDistance) || view.angleDegrees <= 0 ||
+        view.angleDegrees > 360 || view.maximumDistance < 0 ||
+        (view.maximumDistance > 0 &&
+         (view.angleDegrees > 180 ||
+          std::abs(std::hypot(view.direction.x, view.direction.y) - 1) > 0.001F)))
         return false;
-    if (!std::isfinite(lightAngleDegrees) || !std::isfinite(lightDistance) ||
-        (lightAssetId ? (!lightBatteryId || lightAngleDegrees <= 0 || lightAngleDegrees > 180 || lightDistance <= 0 || lightDistance > 1500 || maximumDistance <= 0) :
-                        (lightBatteryId != 0 || lightAngleDegrees != 0 || lightDistance != 0))) return false;
+    if (!std::isfinite(view.lightAngleDegrees) || !std::isfinite(view.lightDistance) ||
+        (view.lightAssetId ? (!view.lightBatteryId || view.lightAngleDegrees <= 0 || view.lightAngleDegrees > 180 || view.lightDistance <= 0 || view.lightDistance > 1500 || view.maximumDistance <= 0) :
+                        (view.lightBatteryId != 0 || view.lightAngleDegrees != 0 || view.lightDistance != 0))) return false;
+    return true;
+}
+
+// Both the public validator and the owned snapshot use this exact edge walk.
+// Only the snapshot consumes the validated edges to build its triangles.
+template <typename PrepareTriangle>
+bool validateFan(const RaidVisibilityProjection &view, PrepareTriangle prepare)
+{
+    constexpr bool prepareTriangles = !std::is_same_v<PrepareTriangle, std::nullptr_t>;
+    const Vec2 observer = view.observer, direction = view.direction,
+               worldSize = view.worldSize;
+    const float angleDegrees = view.angleDegrees, maximumDistance = view.maximumDistance,
+                lightAngleDegrees = view.lightAngleDegrees, lightDistance = view.lightDistance;
+    const bool bounded = maximumDistance > 0;
+    const bool hasLight = view.lightAssetId != 0;
+    const bool checkLightSeams = hasLight && angleDegrees != lightAngleDegrees;
     double area{};
     const float cosLightHalf = std::cos(lightAngleDegrees * 3.14159265358979323846F / 360);
     const float cosHalf =
@@ -152,7 +171,7 @@ bool RaidVisibilityProjection::validGeometry() const noexcept
     const float lightVertexDistanceSquared =
         (lightDistance + 0.01F) * (lightDistance + 0.01F);
     std::array<Vec2, 2> seamRays{};
-    if (lightAssetId && angleDegrees != lightAngleDegrees)
+    if (checkLightSeams)
     {
         const float inner = std::min(angleDegrees, lightAngleDegrees);
         auto *ray = seamRays.data();
@@ -163,34 +182,38 @@ bool RaidVisibilityProjection::validGeometry() const noexcept
                       direction.x * std::sin(theta) + direction.y * std::cos(theta)};
         }
     }
-    const auto *const points = boundary.data();
-    const auto pointCount = boundary.size();
+    const auto *const points = view.boundary.data();
+    const auto pointCount = view.boundary.size();
     for (std::size_t i = 0; i < pointCount; ++i)
     {
         const auto p = points[i], q = points[i + 1 == pointCount ? 0 : i + 1];
         if (!finite(p) || p.x < 0 || p.y < 0 || p.x > worldSize.x ||
             p.y > worldSize.y)
             return false;
-        if (maximumDistance > 0)
+        const Vec2 firstDelta = bounded || prepareTriangles
+            ? Vec2{p.x - observer.x, p.y - observer.y} : Vec2{};
+        Vec2 middleDelta{};
+        if (bounded)
         {
             // Far-map float coordinates lose several thousandths on
             // translation. Use 0.01-unit linear roundoff for vertices, rather
             // than a fixed squared tolerance whose effective allowance shrinks
             // at long range.
-            const float dx = p.x - observer.x, dy = p.y - observer.y;
+            const float dx = firstDelta.x, dy = firstDelta.y;
             const float squared = dx * dx + dy * dy,
                         dot = dx * direction.x + dy * direction.y;
             if (!(squared <= maximumVertexDistanceSquared && dot >= -0.01F &&
                     (dot + 0.01F) * (dot + 0.01F) >= squared * cosHalf * cosHalf) &&
-                !(lightAssetId && squared <= lightVertexDistanceSquared && dot >= -0.01F &&
+                !(hasLight && squared <= lightVertexDistanceSquared && dot >= -0.01F &&
                     (dot + 0.01F) * (dot + 0.01F) >= squared * cosLightHalf * cosLightHalf))
                 return false;
-            if (lightAssetId && angleDegrees != lightAngleDegrees)
+            if (checkLightSeams)
             {
                 // Each angular subsegment must fit its own range. Testing only
                 // vertices (or the enclosing angle/range) fills the union's
                 // concave notch, including bridges ending exactly on a seam.
-                const Vec2 edge{q.x-p.x, q.y-p.y};
+                middleDelta = {q.x - p.x, q.y - p.y};
+                const auto &edge = middleDelta;
                 const float length=std::hypot(edge.x,edge.y);
                 std::array<float,4> cuts{0,1}; std::size_t count=2;
                 auto *const cutData = cuts.data();
@@ -228,8 +251,29 @@ bool RaidVisibilityProjection::validGeometry() const noexcept
         }
         area += (static_cast<double>(p.x) - observer.x) * (q.y - observer.y) -
                 (static_cast<double>(p.y) - observer.y) * (q.x - observer.x);
+        if constexpr (prepareTriangles)
+        {
+            // Reuse the float subtraction only on platforms that evaluate
+            // float expressions at their nominal precision.
+            const float triangleArea = FLT_EVAL_METHOD == 0
+                ? firstDelta.x * (q.y - observer.y) -
+                      firstDelta.y * (q.x - observer.x)
+                : cross(observer, p, q);
+            if (std::abs(triangleArea) < 0.00001F)
+                continue;
+            if (!checkLightSeams)
+                middleDelta = {q.x - p.x, q.y - p.y};
+            prepare(p, q, firstDelta, middleDelta, triangleArea);
+        }
     }
     return std::isfinite(area) && area > 0.0001;
+}
+
+} // namespace
+
+bool RaidVisibilityProjection::validGeometry() const noexcept
+{
+    return validFanHeader(*this) && validateFan(*this, nullptr);
 }
 
 bool RaidVisibilityProjection::matches(const RaidSpaceDefinitionId &space,
@@ -366,20 +410,9 @@ bool RaidVisibilityBoundsQuery::Edge::overlaps(Vec2 center, float hx, float hy,
 RaidVisibilityBoundsQuery::RaidVisibilityBoundsQuery(
     const RaidVisibilityProjection &view)
 {
-    if (!view.validGeometry())
+    if (!validFanHeader(view))
         return;
-    valid_ = true;
-    bounded_ = view.maximumDistance > 0;
-    observer_ = view.observer;
-    const float maximum = std::max(view.maximumDistance, view.lightDistance);
-    maximumDistanceSquared_ = maximum * maximum;
-    const float half = std::max(view.angleDegrees, view.lightAngleDegrees) * 3.14159265358979323846F / 360;
-    const float c = std::cos(half), s = std::sin(half);
-    leftDirection_ = {view.direction.x * c + view.direction.y * s,
-                      view.direction.y * c - view.direction.x * s};
-    rightDirection_ = {view.direction.x * c - view.direction.y * s,
-                       view.direction.y * c + view.direction.x * s};
-    const auto *const points = view.boundary.data();
+    const Vec2 observer = view.observer;
     const auto pointCount = view.boundary.size();
     // Construct each retained triangle once; reserved capacity is never
     // treated as live storage. The original fan and area test stay in order.
@@ -390,13 +423,10 @@ RaidVisibilityBoundsQuery::RaidVisibilityBoundsQuery(
         triangleGroups_.reserve((pointCount - 1) / kBoundsTriangleGroupSize + 1);
     TriangleGroup group{};
     std::size_t triangleCount{}, groupCount{};
-    for (std::size_t i = 0; i < pointCount; ++i)
+    const auto prepareTriangle = [&](Vec2 p, Vec2 q, Vec2 firstDelta,
+                                      Vec2 middleDelta, float area)
     {
-        const auto p = points[i], q = points[i + 1 == pointCount ? 0 : i + 1];
-        const auto area = cross(observer_, p, q);
-        if (std::abs(area) < 0.00001F)
-            continue;
-        Vec2 minimum = observer_, maximum = observer_;
+        Vec2 minimum = observer, maximum = observer;
         if (p.x < minimum.x) minimum.x = p.x;
         if (q.x < minimum.x) minimum.x = q.x;
         if (p.y < minimum.y) minimum.y = p.y;
@@ -405,13 +435,11 @@ RaidVisibilityBoundsQuery::RaidVisibilityBoundsQuery(
         if (maximum.x < q.x) maximum.x = q.x;
         if (maximum.y < p.y) maximum.y = p.y;
         if (maximum.y < q.y) maximum.y = q.y;
-        const Vec2 firstDelta{p.x - observer_.x, p.y - observer_.y};
-        const Vec2 middleDelta{q.x - p.x, q.y - p.y};
-        const Vec2 lastDelta{observer_.x - q.x, observer_.y - q.y};
+        const Vec2 lastDelta{observer.x - q.x, observer.y - q.y};
         triangles_.emplace_back(minimum, maximum,
             area > 0 ? 1.0F : -1.0F,
             std::array<Edge, 3>{
-             Edge{observer_, firstDelta, std::abs(firstDelta.x), std::abs(firstDelta.y)},
+             Edge{observer, firstDelta, std::abs(firstDelta.x), std::abs(firstDelta.y)},
              Edge{p, middleDelta, std::abs(middleDelta.x), std::abs(middleDelta.y)},
              Edge{q, lastDelta, std::abs(lastDelta.x), std::abs(lastDelta.y)}});
         if (prepareGroups)
@@ -435,11 +463,30 @@ RaidVisibilityBoundsQuery::RaidVisibilityBoundsQuery(
             }
         }
         ++triangleCount;
+    };
+    if (!validateFan(view, prepareTriangle))
+    {
+        // Invalid input may fail at the last edge or at the signed-area test.
+        // Release any partially prepared data while the query is still invalid.
+        std::vector<Triangle>{}.swap(triangles_);
+        std::vector<TriangleGroup>{}.swap(triangleGroups_);
+        return;
     }
     if (groupCount != 0)
         triangleGroups_.push_back(group);
     if (triangleCount < kMinimumGroupedTriangles)
         triangleGroups_.clear();
+    bounded_ = view.maximumDistance > 0;
+    observer_ = view.observer;
+    const float maximum = std::max(view.maximumDistance, view.lightDistance);
+    maximumDistanceSquared_ = maximum * maximum;
+    const float half = std::max(view.angleDegrees, view.lightAngleDegrees) * 3.14159265358979323846F / 360;
+    const float c = std::cos(half), s = std::sin(half);
+    leftDirection_ = {view.direction.x * c + view.direction.y * s,
+                      view.direction.y * c - view.direction.x * s};
+    rightDirection_ = {view.direction.x * c - view.direction.y * s,
+                       view.direction.y * c + view.direction.x * s};
+    valid_ = true;
 }
 
 bool RaidVisibilityBoundsQuery::boundsVisible(Rect rect) const noexcept

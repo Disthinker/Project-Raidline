@@ -1,5 +1,55 @@
 #include "input_system.h"
 
+#include <algorithm>
+#include <cmath>
+
+double RaidReloadGesture::time(double now) noexcept {
+    if (std::isfinite(now)) lastEventTime_ = std::max(lastEventTime_, now);
+    return lastEventTime_;
+}
+std::vector<RaidReloadGestureEvent> RaidReloadGesture::press(double now, bool actionActive) {
+    now=time(now);
+    if(held_)return {};
+    held_=true;
+    if(hasFirstRelease_ && now-firstReleaseAt_<=0.25+1e-9) {
+        consumed_=true;pending_=false;hasFirstRelease_=false;
+        return {{RaidReloadGestureKind::UpgradeEmergency,now,gestureId_,now-firstReleaseAt_}};
+    }
+    hasFirstRelease_=false;consumed_=actionActive;pending_=!actionActive;
+    gestureId_=++sequence_;
+    if(!gestureId_)gestureId_=++sequence_;
+    pressedAt_=now;wheel_=false;
+    return {};
+}
+std::vector<RaidReloadGestureEvent> RaidReloadGesture::advance(double now) {
+    // A render/update tick may run ahead of a queued SDL edge. It must never
+    // rewrite the edge's timestamp or lengthen the double-tap interval.
+    if(!std::isfinite(now))return {};
+    if(held_ && pending_ && !consumed_ && !wheel_ && now-pressedAt_>=0.35-1e-9) {
+        wheel_=true;
+        return {{RaidReloadGestureKind::OpenWheel,pressedAt_+0.35,gestureId_}};
+    }
+    return {};
+}
+std::vector<RaidReloadGestureEvent> RaidReloadGesture::release(double now) {
+    now=time(now);
+    if(!held_)return {};
+    auto result=advance(now);
+    held_=false;
+    if(!consumed_ && pending_) {
+        // A delayed short release can arrive after advance opened a preview.
+        // The physical hold duration still decides which action it requests.
+        const bool longHold=now-pressedAt_>=0.35-1e-9;
+        result.push_back({longHold?RaidReloadGestureKind::Selected:RaidReloadGestureKind::Automatic,now,gestureId_});
+        hasFirstRelease_=!longHold;firstReleaseAt_=now;
+    }
+    consumed_=pending_=wheel_=false;
+    return result;
+}
+void RaidReloadGesture::cancel(bool physicallyHeld) noexcept {
+    held_=physicallyHeld;consumed_=physicallyHeld;pending_=wheel_=hasFirstRelease_=false;
+}
+
 void InputSystem::handleEvent(
     const SDL_Event &event)
 {
@@ -14,6 +64,8 @@ void InputSystem::handleEvent(
         primaryPointerJustPressed_ = false;
         primaryPointerSuppressedUntilRelease_ = false;
         secondaryPointerPressed_ = false;
+        secondaryPointerJustPressed_ = false;
+        reloadTransitions_.clear();
         return;
     }
 
@@ -21,6 +73,8 @@ void InputSystem::handleEvent(
          event.type == SDL_EVENT_MOUSE_BUTTON_UP) &&
         event.button.button == SDL_BUTTON_RIGHT)
     {
+        if(event.type==SDL_EVENT_MOUSE_BUTTON_DOWN && !secondaryPointerPressed_)
+            secondaryPointerJustPressed_=true;
         secondaryPointerPressed_ = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
         return;
     }
@@ -82,10 +136,12 @@ void InputSystem::handleEvent(
         //
         // Repeated KEY_DOWN events for a held key do not create
         // repeated justPressed transitions.
-        if (!isActionPressed(*action))
+        if (!isActionPressed(*action) && !event.key.repeat)
         {
             justPressedActions_.insert(
                 *action);
+            if(*action==GameAction::Reload && !event.key.repeat)
+                reloadTransitions_.push_back({true,static_cast<double>(event.common.timestamp?event.common.timestamp:SDL_GetTicksNS())/1e9});
         }
 
         pressedActions_.insert(
@@ -104,6 +160,8 @@ void InputSystem::handleEvent(
     if (isActionPressed(*action))
     {
         justReleasedActions_.insert(*action);
+        if(*action==GameAction::Reload)
+            reloadTransitions_.push_back({false,static_cast<double>(event.common.timestamp?event.common.timestamp:SDL_GetTicksNS())/1e9});
     }
     pressedActions_.erase(*action);
 }
@@ -174,6 +232,8 @@ void InputSystem::endFrame()
     justPressedActions_.clear();
     justReleasedActions_.clear();
     primaryPointerJustPressed_ = false;
+    secondaryPointerJustPressed_ = false;
+    reloadTransitions_.clear();
 }
 
 std::optional<GameAction>
@@ -199,6 +259,9 @@ InputSystem::mapScancodeToAction(
 
     case SDL_SCANCODE_R:
         return GameAction::Reload;
+
+    case SDL_SCANCODE_B:
+        return GameAction::CycleFireMode;
 
     case SDL_SCANCODE_4:
     case SDL_SCANCODE_KP_4:

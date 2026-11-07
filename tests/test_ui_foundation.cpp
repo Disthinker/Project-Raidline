@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "raid_camera.h"
 #include "ui_foundation.h"
 #include <chrono>
@@ -27,6 +28,12 @@ struct UiFoundationTestAccess {
     a.syncRaidPointerCapture();
     a.pendingRelativeAimMotion_ = {};
     a.input_.endFrame();
+    ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+        [&] { return a.profileUiBusy() || static_cast<bool>(a.pendingInventoryBarrierAction_); },
+        [&] {
+          a.processEvents(); a.update(0); a.syncRaidPointerCapture();
+          a.pendingRelativeAimMotion_ = {}; a.input_.endFrame();
+        })) << a.gameSession_.persistenceMessage();
   }
   static void draw(App &a, bool paused = false) {
     a.renderFoundationMenu(paused);

@@ -58,6 +58,7 @@ void App::refreshLostRecoveryUi(bool force) {
 }
 
 void App::handleLostRecoveryEvent(const UiLostRecoveryEvent &event) {
+    if(profileUiBusy())return;
     if (gameFlow_.state() != GameFlowState::Base ||
         gameFlow_.activeBaseFacility() != BaseFacilityKind::RaidGate ||
         !lostRaidRecordsOpen_ || regionalOperationsOpen_ || pauseMenu_.isOpen() ||
@@ -74,9 +75,9 @@ void App::handleLostRecoveryEvent(const UiLostRecoveryEvent &event) {
     auto &state = lostRecoveryUi_;
     const auto &projection = lostRecoveryProjection_;
     const auto tr = [&](std::string_view value) { return localizeUiText(uiTextRenderer_.language(), value); };
-    const auto feedback = [&](std::string value) {
+    const auto feedback = [this](std::string value) {
         lostRecoveryFeedback_ = std::move(value);
-        state.feedbackScroll = 0;
+        lostRecoveryUi_.feedbackScroll = 0;
         uiMessage_ = lostRecoveryFeedback_;
     };
     const auto page = [&](int delta) {
@@ -189,47 +190,30 @@ void App::handleLostRecoveryEvent(const UiLostRecoveryEvent &event) {
         input_.suppressPrimaryPointerUntilRelease();
         return;
     }
-    if (control == C::Start) {
-        const std::string recordId = hit->recordId;
-        const auto receipt = gameSession_.startRecoveryTask(recordId,
-            nextProfileTransactionId("recovery-start"));
-        if (receipt.succeeded) {
-            if (selectedRaidSelfRecoveryRecordId_ == std::optional<std::string>{recordId})
-                selectedRaidSelfRecoveryRecordId_.reset();
-            state.selectedRecordId.reset();
-            state.assetScroll = 0;
-            state.tab = T::Task;
-        }
-        state.confirmationKey.reset();
-        feedback(receipt.succeeded ? "RECOVERY TASK STARTED" : receipt.message);
-        refreshLostRecoveryUi(true);
-        return;
+    if(control==C::Start) {
+        const std::string recordId=hit->recordId;
+        submitProfileUi<RecoveryTaskReceipt>(ProfileUiStartRecoveryCommand{recordId},nextProfileTransactionId("recovery-start"),
+            [this,feedback,recordId](const auto &r){
+                if(r.succeeded){if(selectedRaidSelfRecoveryRecordId_==std::optional<std::string>{recordId})selectedRaidSelfRecoveryRecordId_.reset();
+                    lostRecoveryUi_.selectedRecordId.reset();lostRecoveryUi_.assetScroll=0;lostRecoveryUi_.tab=T::Task;}
+                lostRecoveryUi_.confirmationKey.reset();feedback(r.succeeded?"RECOVERY TASK STARTED":r.message);refreshLostRecoveryUi(true);
+            });
+    } else if(control==C::Collect) {
+        submitProfileUi<RecoveryTaskReceipt>(ProfileUiCollectRecoveryCommand{},nextProfileTransactionId("recovery-collect"),
+            [this,feedback](const auto &r){lostRecoveryUi_.confirmationKey.reset();
+                feedback(r.succeeded?fmt::format("RECOVERY COLLECTED | {} RETURNED | {} LOST",r.recoveredAssetCount,r.lostAssetCount):r.message);refreshLostRecoveryUi(true);});
+    } else if(control==C::ConfirmCancel) {
+        const std::string recordId=projection.task->recordId;
+        submitProfileUi<RecoveryTaskReceipt>(ProfileUiCancelRecoveryCommand{},nextProfileTransactionId("recovery-cancel"),
+            [this,feedback,recordId](const auto &r){
+                lostRecoveryUi_.confirmationKey.reset();
+                if(r.succeeded){lostRecoveryUi_.tab=T::Records;lostRecoveryUi_.selectedRecordId=recordId;lostRecoveryUi_.assetScroll=0;
+                    const auto records=gameSession_.lostRaidRecordProjections();const auto found=std::find_if(records.begin(),records.end(),[&](const auto &value){return value.recordId==recordId;});
+                    if(found!=records.end())lostRecoveryUi_.recordPage=static_cast<std::size_t>(found-records.begin())/uiLostRecoveryPageSize();}
+                feedback(r.succeeded?"RECOVERY CANCELLED | NO REFUND":r.message);refreshLostRecoveryUi(true);
+            });
     }
-    if (control == C::Collect) {
-        const auto receipt = gameSession_.collectRecoveryTask(nextProfileTransactionId("recovery-collect"));
-        state.confirmationKey.reset();
-        feedback(receipt.succeeded ? fmt::format("RECOVERY COLLECTED | {} RETURNED | {} LOST",
-            receipt.recoveredAssetCount, receipt.lostAssetCount) : receipt.message);
-        refreshLostRecoveryUi(true);
-        return;
-    }
-    if (control == C::ConfirmCancel) {
-        const std::string recordId = projection.task->recordId;
-        const auto receipt = gameSession_.cancelRecoveryTask(nextProfileTransactionId("recovery-cancel"));
-        state.confirmationKey.reset();
-        if (receipt.succeeded) {
-            state.tab = T::Records;
-            state.selectedRecordId = recordId;
-            state.assetScroll = 0;
-            const auto records = gameSession_.lostRaidRecordProjections();
-            const auto found = std::find_if(records.begin(), records.end(),
-                [&](const auto &value) { return value.recordId == recordId; });
-            if (found != records.end()) state.recordPage =
-                static_cast<std::size_t>(found - records.begin()) / uiLostRecoveryPageSize();
-        }
-        feedback(receipt.succeeded ? "RECOVERY CANCELLED | NO REFUND" : receipt.message);
-        refreshLostRecoveryUi(true);
-    }
+
 }
 
 void App::renderLostRaidRecords() {

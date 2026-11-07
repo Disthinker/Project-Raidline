@@ -510,6 +510,7 @@ void downgradeFrontierLootIdentityToRulesV26(ProfileState &profile)
             asset->magazineRounds.clear();
             asset->chamberedRound.reset();
             asset->weaponMalfunction = WeaponMalfunctionType::None;
+            asset->fireMode.reset();
         }
     }
     raid.spatialLayout.layoutHash = raidMapLayoutHash(raid.spatialLayout);
@@ -2183,6 +2184,7 @@ TEST(SaveRepositoryTest, SchemaV38LoadsPreviousHighRiskCrisisContent)
         asset->magazineRounds.clear();
         asset->chamberedRound.reset();
         asset->weaponMalfunction = WeaponMalfunctionType::None;
+        asset->fireMode.reset();
     }
     ASSERT_TRUE(validateProfileState(profile, content).valid);
     const std::uint64_t fingerprint = profileStateFingerprint(profile);
@@ -3897,7 +3899,7 @@ TEST(SaveRepositoryTest, Schema55RoundTripsIndependentPagesOverflowAndOwnedSubtr
     ASSERT_TRUE(validateProfileState(profile, content).valid);
     const auto text = serializeProfileEnvelope(profile, content.contentVersion());
     const auto envelope = nlohmann::json::parse(text);
-    EXPECT_EQ(envelope.at("schema_version"), 58U);
+    EXPECT_EQ(envelope.at("schema_version"), 60U);
     EXPECT_EQ(envelope.at("payload").at("stash_layout_version"), 1U);
     const auto loaded = deserializeProfileEnvelope(text, content);
     ASSERT_TRUE(loaded.profile) << loaded.message;

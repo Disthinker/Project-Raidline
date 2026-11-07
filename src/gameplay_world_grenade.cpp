@@ -6,6 +6,23 @@
 namespace {
 Vec2 grenadeEnemyCenter(const Enemy &e) { return {e.position().x+e.size().x/2,e.position().y+e.size().y/2}; }
 bool samePoint(Vec2 a,Vec2 b) { return a.x==b.x && a.y==b.y; }
+
+const Enemy *findGrenadeHit(const Enemy *first, const Enemy *last,
+                           const Enemy *&next, CombatTargetId id)
+{
+    const auto matches = [id](const Enemy &enemy) { return enemy.combatTargetId() == id; };
+    const auto *target = std::find_if(next, last, matches);
+    if (target != last)
+    {
+        next = target + 1;
+        return target;
+    }
+
+    // Prepared hits follow roster order. A caller can still submit reordered
+    // or repeated stable IDs, which must resolve exactly as before.
+    target = std::find_if(first, next, matches);
+    return target == next ? last : target;
+}
 }
 
 std::optional<GrenadeLanding> GameplayWorld::previewGrenade(Vec2 aim,const GrenadeUseDefinition &use) const
@@ -78,9 +95,14 @@ bool GameplayWorld::validatePreparedGrenadeExplosion(const GrenadeExplosionPlan 
     if(!grenadeEnabled_ || !raidSession_.isActive() || !grenade_.pendingExplosion() ||
        grenade_.pendingExplosion()->id!=plan.explosion.id || plan.explosion.landing.space!=activeRaidSpaceId() ||
        !samePoint(player_.position(),plan.playerPosition) || player_.health()!=plan.playerHealth)return false;
+    const auto &actors = activeEnemies().view();
+    const auto *const first = actors.data();
+    const auto *const last = first + actors.size();
+    const auto *next = first;
     for(const auto &hit:plan.enemies) {
-        const auto *enemy=activeEnemies().find(hit.id);
-        if(!enemy || !samePoint(enemy->position(),hit.position) || enemy->health()!=hit.health || enemy->torsoArmor()!=hit.armor)
+        const auto *enemy = findGrenadeHit(first, last, next, hit.id);
+        if(enemy == last || enemy->isDead() || !samePoint(enemy->position(),hit.position) ||
+           enemy->health()!=hit.health || enemy->torsoArmor()!=hit.armor)
             return false;
     }
     return true;
@@ -89,10 +111,16 @@ bool GameplayWorld::commitPreparedGrenadeExplosion(const GrenadeExplosionPlan &p
 {
     if(!validatePreparedGrenadeExplosion(plan))return false;
     auto &actors=activeEnemies();
-    for(const auto &hit:plan.enemies) {
-        auto enemy=std::find_if(actors.begin(),actors.end(),[&](const Enemy &e){return e.combatTargetId()==hit.id;});
-        enemy->applyArmorLoss(hit.damage.armorDurabilityLoss);
-        static_cast<void>(enemy->takeDamage(hit.damage.damageApplied,EnemyImpactReaction::None));
+    {
+        const auto *const first = actors.view().data();
+        const auto *const last = first + actors.size();
+        const auto *next = first;
+        for(const auto &hit:plan.enemies) {
+            const auto *target = findGrenadeHit(first, last, next, hit.id);
+            auto &enemy = actors[static_cast<std::size_t>(target - first)];
+            enemy.applyArmorLoss(hit.damage.armorDurabilityLoss);
+            static_cast<void>(enemy.takeDamage(hit.damage.damageApplied,EnemyImpactReaction::None));
+        }
     }
     const auto removals=actors.removeDead();
     consumeEnemyRemovals(removals);

@@ -21,6 +21,8 @@
 #include "base_wish_types.h"
 #include "home_founding_types.h"
 #include "base_defense_state.h"
+#include "weapon_action_types.h"
+#include "player_effects_checkpoint.h"
 
 using AssetInstanceId = std::uint64_t;
 using ProfileRevision = std::uint64_t;
@@ -200,6 +202,93 @@ struct TacticalDeviceState
     friend bool operator==(const TacticalDeviceState &, const TacticalDeviceState &) = default;
 };
 
+enum class RaidReloadMagazineRole { NewMagazine, OldMagazine };
+enum class RaidReloadKind { Normal, Emergency };
+enum class RaidReloadSource { AutomaticChestRig, SelectedChestRig, ExplicitStored };
+enum class RaidReloadStage { TakeNew, RemoveOld, InsertNew, StowOld, Chamber };
+
+struct BaseReloadHeldMagazineLocation
+{
+    WeaponActionScope activity;
+    AssetInstanceId weaponAssetId{};
+    std::string actionId;
+    RaidReloadMagazineRole role{RaidReloadMagazineRole::NewMagazine};
+    friend bool operator==(const BaseReloadHeldMagazineLocation &, const BaseReloadHeldMagazineLocation &) = default;
+};
+struct TrainingHeldMagazineLocation
+{
+    std::string sessionId;
+    AssetInstanceId weaponAssetId{};
+    std::string actionId;
+    RaidReloadMagazineRole role{RaidReloadMagazineRole::NewMagazine};
+    friend bool operator==(const TrainingHeldMagazineLocation &, const TrainingHeldMagazineLocation &) = default;
+};
+struct TrainingDroppedMagazineLocation
+{
+    std::string sessionId;
+    Vec2 position{};
+    friend bool operator==(const TrainingDroppedMagazineLocation &a, const TrainingDroppedMagazineLocation &b)
+    { return a.sessionId == b.sessionId && a.position.x == b.position.x && a.position.y == b.position.y; }
+};
+
+// A durable recovery description, never a second owner of either magazine.
+// On recovery the caller resolves held participants as an interruption; elapsed
+// animation time is deliberately not a promise to resume an unfinished action.
+struct BaseReloadRecoveryState
+{
+    WeaponActionScope activity;
+    AssetInstanceId weaponAssetId{}, newMagazineAssetId{};
+    std::optional<AssetInstanceId> oldMagazineAssetId;
+    std::string actionId;
+    StoredAssetLocation newSource;
+    ItemOrientation newSourceOrientation{ItemOrientation::Degrees0};
+    std::optional<StoredAssetLocation> oldReturn;
+    ItemOrientation oldReturnOrientation{ItemOrientation::Degrees0};
+    RaidReloadKind kind{RaidReloadKind::Normal};
+    RaidReloadSource source{RaidReloadSource::AutomaticChestRig};
+};
+
+struct BaseCorpseRecord
+{
+    std::string corpseId;
+    WeaponActionScope activity;
+    std::uint64_t sourceEnemyId{}, cycleIndex{};
+    Vec2 position{}; // frozen death center, not a live actor pointer
+    Vec2 size{50, 50};
+};
+
+struct RaidReloadHeldMagazineLocation
+{
+    std::string raidId;
+    RaidSpaceDefinitionId spaceId;
+    AssetInstanceId weaponAssetId{};
+    std::string actionId;
+    RaidReloadMagazineRole role{RaidReloadMagazineRole::NewMagazine};
+    friend bool operator==(const RaidReloadHeldMagazineLocation &,
+                           const RaidReloadHeldMagazineLocation &) = default;
+};
+
+struct RaidDroppedMagazineLocation
+{
+    std::string raidId;
+    RaidSpaceDefinitionId spaceId;
+    Vec2 position{};
+    friend bool operator==(const RaidDroppedMagazineLocation &a,
+                           const RaidDroppedMagazineLocation &b)
+    { return a.raidId == b.raidId && a.spaceId == b.spaceId &&
+        a.position.x == b.position.x && a.position.y == b.position.y; }
+};
+
+// Detached magazines retained only by a failed-Raid weapon tree. This does
+// not mean installed, does not feed the weapon, and supplies no hidden slots.
+struct RetainedRaidMagazineLocation
+{
+    AssetInstanceId weaponAssetId{};
+    RaidReloadMagazineRole role{RaidReloadMagazineRole::NewMagazine};
+    friend bool operator==(const RetainedRaidMagazineLocation &,
+                           const RetainedRaidMagazineLocation &) = default;
+};
+
 using AssetLocation = std::variant<
     StoredAssetLocation,
     EquippedAssetLocation,
@@ -213,7 +302,13 @@ using AssetLocation = std::variant<
     InstalledWeaponComponentLocation,
     RaidCorpseContainerAssetLocation,
     InstalledDeviceBatteryLocation,
-    RaidDroppedBatteryLocation>;
+    RaidDroppedBatteryLocation,
+    RaidReloadHeldMagazineLocation,
+    RaidDroppedMagazineLocation,
+    RetainedRaidMagazineLocation,
+    BaseReloadHeldMagazineLocation,
+    TrainingHeldMagazineLocation,
+    TrainingDroppedMagazineLocation>;
 
 struct MagazineRoundRecord
 {
@@ -242,6 +337,7 @@ struct AssetRecord
         ProfileContainerId::stash(),
         GridPosition{}}};
     std::optional<TacticalDeviceState> deviceState;
+    std::optional<WeaponFireMode> fireMode;
 };
 
 enum class WeaponReliabilityTier
@@ -1134,6 +1230,9 @@ struct ProfileState
     std::optional<BaseDefenseSnapshot> activeBaseDefense;
     std::optional<BaseDefenseWarningSnapshot> baseDefenseWarning;
     HomePerimeterState homePerimeter;
+    std::optional<BaseReloadRecoveryState> baseReloadRecovery;
+    std::vector<BaseCorpseRecord> baseCorpses;
+    std::optional<BasePlayerEffectsRecovery> basePlayerEffects;
     BaseMoraleState baseMorale;
     BaseCommunityEventState baseCommunityEvent;
     BaseResidentMedicalState residentMedical;
@@ -1257,6 +1356,12 @@ grantDeveloperWarehouseCatalog(
     const ItemDefinition &definition,
     ItemOrientation orientation,
     std::optional<AssetInstanceId> ignoredAsset = std::nullopt) noexcept;
+
+// Checks container identity, pocket, bounds, orientation and stash page only.
+// Whole-graph validators supply their own single-pass occupancy index.
+[[nodiscard]] bool profilePlacementWithinContainer(
+    const ProfileState &, const ContentRegistry &, ProfileContainerId,
+    GridPosition, const ItemDefinition &, ItemOrientation) noexcept;
 
 [[nodiscard]] bool profilePlacementFits(
     const ProfileState &profile,

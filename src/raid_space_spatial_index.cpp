@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cfenv>
 #include <cfloat>
 #include <cmath>
@@ -351,6 +352,91 @@ void RaidSpaceBlockerIndex::queryCandidateIndices(
                 cursors[selected] = cursors[--active];
         }
     }
+}
+
+std::optional<std::size_t> RaidSpaceBlockerIndex::querySmallMovementCandidateIndices(
+    Vec2 sweptMinimum,
+    Vec2 sweptMaximum,
+    std::vector<std::size_t> &output) const
+{
+    const Vec2 sweptSize{
+        sweptMaximum.x - sweptMinimum.x,
+        sweptMaximum.y - sweptMinimum.y};
+    if (!finite(sweptMinimum) || !finite(sweptMaximum) || !finite(sweptSize) ||
+        sweptSize.x < 0.0F || sweptSize.y < 0.0F || cells_.empty())
+    {
+        return std::nullopt;
+    }
+
+    // Match the existing Rect query's arithmetic, including min + size.
+    // Keep the original sweep maximum for the separate overlap filter.
+    const float minimumX = sweptMinimum.x - maximumHalfExtent_.x;
+    const float minimumY = sweptMinimum.y - maximumHalfExtent_.y;
+    const float maximumX = sweptMinimum.x + sweptSize.x + maximumHalfExtent_.x;
+    const float maximumY = sweptMinimum.y + sweptSize.y + maximumHalfExtent_.y;
+    if (!finite({minimumX, minimumY}) || !finite({maximumX, maximumY}))
+    {
+        return std::nullopt;
+    }
+
+    const auto firstColumn = clampedColumn(minimumX);
+    const auto lastColumn = clampedColumn(maximumX);
+    const auto firstRow = clampedRow(minimumY);
+    const auto lastRow = clampedRow(maximumY);
+    struct Range
+    {
+        const std::size_t *first, *last;
+    };
+    constexpr std::size_t maximumCandidates = 256U;
+    std::array<Range, 8> ranges;
+    std::size_t rangeCount{}, candidateCount{};
+    const auto *const cells = cells_.data();
+    for (std::size_t row = firstRow; row <= lastRow; ++row)
+    {
+        for (std::size_t column = firstColumn; column <= lastColumn; ++column)
+        {
+            const auto &cell = cells[row * columns_ + column];
+            const auto count = cell.size();
+            if (count == 0)
+            {
+                continue;
+            }
+            if (rangeCount == ranges.size() || count > maximumCandidates - candidateCount)
+            {
+                return std::nullopt;
+            }
+            ranges[rangeCount++] = {cell.data(), cell.data() + count};
+            candidateCount += count;
+        }
+    }
+
+    output.clear();
+    const auto *const walls = blockerBounds_.data();
+    [[maybe_unused]] const auto wallCount = blockerBounds_.size();
+    for (std::size_t range = 0; range < rangeCount; ++range)
+    {
+        for (auto entry = ranges[range].first; entry != ranges[range].last; ++entry)
+        {
+            const auto id = *entry;
+            assert(id < wallCount);
+            const Rect &wall = walls[id];
+            if (wall.position.x + wall.size.x < sweptMinimum.x ||
+                wall.position.x > sweptMaximum.x ||
+                wall.position.y + wall.size.y < sweptMinimum.y ||
+                wall.position.y > sweptMaximum.y)
+            {
+                continue;
+            }
+            output.push_back(id);
+        }
+    }
+    // Each original index belongs to exactly one cell. Filtering before
+    // ordering therefore gives the same ordered subsequence as the merge.
+    if (rangeCount > 1 && output.size() > 1)
+    {
+        std::sort(output.begin(), output.end());
+    }
+    return candidateCount;
 }
 
 const Rect &RaidSpaceBlockerIndex::blockerBounds(std::size_t index) const

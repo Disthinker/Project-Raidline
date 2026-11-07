@@ -88,6 +88,7 @@ void App::closeWeaponComponentsUi() {
     input_.suppressPrimaryPointerUntilRelease();
 }
 void App::handleWeaponComponentsEvent(Kind kind, Vec2 position, int delta) {
+    if(profileUiBusy())return;
     const bool base = gameFlow_.state() == GameFlowState::Base;
     const bool range = gameSession_.developerRangeAtConsole();
     const bool validSource = (inventoryWeaponComponentsOpen_ && inventoryOverlayState_.isOpen()) ||
@@ -139,11 +140,11 @@ void App::handleWeaponComponentsEvent(Kind kind, Vec2 position, int delta) {
         if (!samePlan(*componentPreview_, fresh)) {
             clearWeaponComponentAction(); uiMessage_ = "COMPONENT STATE CHANGED - SELECT AGAIN"; return;
         }
-        const auto receipt = gameSession_.executeBaseWeaponComponentChange(*command, nextProfileTransactionId("weapon-component"));
-        gameAudio_.play(receipt.succeeded ? SoundEventId::UiConfirm : SoundEventId::UiDeny);
-        if (receipt.succeeded) {
-            clearWeaponComponentAction(); refreshWeaponComponents(true); uiMessage_ = "COMPONENT CHANGE SAVED";
-        } else { uiMessage_ = receipt.message; componentDetailScroll_ = 0; }
+        submitProfileUi<InventoryReceipt>(*command,nextProfileTransactionId("weapon-component"),[this](const auto &receipt){
+            gameAudio_.play(receipt.succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);
+            if(receipt.succeeded){clearWeaponComponentAction();refreshWeaponComponents(true);uiMessage_="COMPONENT CHANGE SAVED";}
+            else {uiMessage_=receipt.message;componentDetailScroll_=0;}
+        });
         return;
     }
     }

@@ -87,7 +87,7 @@ TEST(ChestRigLayoutTest, LegacySaveUpgradesOnceAndPreservesExactSourceBeforeWrit
     const auto again=saves.load(c);ASSERT_TRUE(again.profile);EXPECT_FALSE(again.migratedChestRigLayout);
     EXPECT_EQ(profileStateFingerprint(*again.profile),profileStateFingerprint(*loaded.profile));
     const auto json=nlohmann::json::parse(serializeProfileEnvelope(*again.profile,c.contentVersion()));
-    EXPECT_EQ(json["schema_version"],58);EXPECT_EQ(json["payload"]["chest_rig_layout_version"],1);
+    EXPECT_EQ(json["schema_version"],60);EXPECT_EQ(json["payload"]["chest_rig_layout_version"],1);
 }
 TEST(ChestRigLayoutTest, CorruptPrimaryRecoversLegacyBackupAndKeepsBothSources) {
     const auto &c=publishedContentRegistry();TemporaryDirectory temp;SaveRepository saves{temp.path};

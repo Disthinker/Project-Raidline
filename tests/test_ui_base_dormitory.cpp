@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "test_temp_directory.h"
 #include "alpha_content_ids.h"
 #include <algorithm>
@@ -9,6 +10,7 @@
 #include <SDL3_image/SDL_image.h>
 
 struct UiBaseDormitoryTestAccess {
+    static void bindWindow(App &a,SDL_Window *window){a.window_=window;}
     static auto &flow(App &a) { return a.gameFlow_; }
     static auto &session(App &a) { return a.gameSession_; }
     static auto &state(App &a) { return a.dormitoryUi_; }
@@ -16,7 +18,12 @@ struct UiBaseDormitoryTestAccess {
     static auto &text(App &a) { return a.uiTextRenderer_; }
     static auto &message(App &a) { return a.dormitoryFeedback_; }
     static auto generation(App &a) { return a.dormitoryProjectionGeneration_; }
-    static void frame(App &a, float dt = 0) { a.processEvents(); a.update(dt); a.input_.endFrame(); }
+    static void settle(App &a) {
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+            [&] { return a.profileUiBusy() || static_cast<bool>(a.pendingInventoryBarrierAction_); },
+            [&] { a.processEvents(); a.update(0); a.syncRaidPointerCapture(); a.pendingRelativeAimMotion_={}; a.input_.endFrame(); })) << a.gameSession_.persistenceMessage();
+    }
+    static void frame(App &a, float dt = 0) { a.processEvents(); a.update(dt); a.syncRaidPointerCapture(); a.pendingRelativeAimMotion_={}; a.input_.endFrame(); settle(a); }
     static void draw(App &a) { a.renderBaseDormitory(); }
     static void legacy(App &a, Vec2 p) { a.handleBasePointerClick({{p.x, p.y}}); }
     static void attach(App &a, SDL_Renderer *r, float scale) {
@@ -24,7 +31,7 @@ struct UiBaseDormitoryTestAccess {
     }
     static void detach(App &a) { a.uiTextRenderer_.shutdown(); a.renderer_ = nullptr; }
     static void close(App &a) { a.gameFlow_.closeBaseFacility(); a.resetBaseDormitoryUi(); }
-    static void directEvent(App &a, UiDormitoryEvent e) { a.handleBaseDormitoryEvent(e); }
+    static void directEvent(App &a, UiDormitoryEvent e) { a.handleBaseDormitoryEvent(e);  settle(a); }
     static void pause(App &a) { a.pauseMenu_.open(); }
     static void resume(App &a) { a.pauseMenu_.close(); }
     static void refresh(App &a) { a.refreshBaseDormitoryUi(true); a.dormitoryFeedback_.clear(); }
@@ -47,13 +54,16 @@ void key(SDL_Scancode code) {
 class UiBaseDormitoryTest : public testing::Test {
 protected:
     raidline::test::TemporaryDirectory saveDirectory;
-    std::unique_ptr<App> app;
+    std::unique_ptr<App> app; SDL_Window *window{};
     SDL_Surface *surface{}; SDL_Renderer *renderer{};
     std::filesystem::path path;
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState &profile() { return const_cast<ProfileState &>(A::session(*app).profile()); }
     void SetUp() override {
-        ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
+        ASSERT_TRUE(SDL_SetHint(SDL_HINT_VIDEO_DRIVER,"dummy"));
+        ASSERT_TRUE(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS));
+        window=SDL_CreateWindow("headless UI capture regression",1280,720,SDL_WINDOW_HIDDEN);
+        ASSERT_NE(window,nullptr);
         ASSERT_NO_THROW(saveDirectory.claim("raidline-dormitory-ui-",
             testing::UnitTest::GetInstance()->current_test_info()->name()));
         path = saveDirectory.path();
@@ -63,8 +73,8 @@ protected:
         p.basePopulation.injuredResidents = 0;
         p.basePopulation.injuredByProfession.fill(0);
         ASSERT_TRUE(SaveRepository(path).save(p, content.contentVersion()).succeeded);
-        app = std::make_unique<App>(); A::flow(*app).configurePersistence(path); ASSERT_TRUE(A::flow(*app).continueGame());
-        A::frame(*app); ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Dormitory));
+        app = std::make_unique<App>();A::bindWindow(*app,window); A::flow(*app).configurePersistence(path); ASSERT_TRUE(A::flow(*app).continueGame());
+        A::frame(*app); ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Dormitory));A::frame(*app);
         attach(1280, 720);
         A::text(*app).setLanguage(UiLanguage::English);
     }
@@ -78,7 +88,7 @@ protected:
         if (app) A::detach(*app); SDL_DestroyRenderer(renderer); SDL_DestroySurface(surface); renderer = nullptr; surface = nullptr;
     }
     void TearDown() override {
-        detach(); app.reset(); SDL_Quit();
+        detach(); if(app)A::bindWindow(*app,nullptr);SDL_DestroyWindow(window);window=nullptr;app.reset(); SDL_Quit();
         ASSERT_NO_THROW(saveDirectory.cleanup());
     }
     void control(Control c) { auto point = center(uiDormitoryControlRect(c)); pointer(point, true); pointer(point, false); A::frame(*app); }
@@ -171,7 +181,7 @@ TEST_F(UiBaseDormitoryTest, SwitchingOrClosingDiscardsTheUnconfirmedRest) {
     control(Control::Rest); control(Control::Hour12); const auto before=profileStateFingerprint(profile());
     control(Control::Residents); control(Control::Rest); EXPECT_FALSE(A::state(*app).restHours);
     control(Control::Hour6); control(Control::Close); EXPECT_EQ(profileStateFingerprint(profile()),before);
-    ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Dormitory)); A::draw(*app);
+    ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Dormitory));A::frame(*app); A::draw(*app);
     EXPECT_EQ(A::state(*app).tab,UiDormitoryTab::Residents); EXPECT_FALSE(A::state(*app).restHours);
 }
 
@@ -312,19 +322,19 @@ TEST_F(UiBaseDormitoryTest, SameBatchWindowLeaveDropsQueuedDownAndUp) {
     pointer(center(uiDormitoryControlRect(Control::StartRest)),false); A::frame(*app); EXPECT_EQ(profileStateFingerprint(profile()),fp);
 }
 TEST_F(UiBaseDormitoryTest, PauseInventoryAndEscapeCannotConfirmAPendingRest) {
-    control(Control::Rest); control(Control::Hour6); down(Control::StartRest); const auto fp=profileStateFingerprint(profile());
-    A::pause(*app); A::frame(*app); A::resume(*app); up(Control::StartRest); EXPECT_EQ(profileStateFingerprint(profile()),fp);
+    control(Control::Rest); control(Control::Hour6); down(Control::StartRest); const auto beforeProfile=profile();const auto fp=profileStateFingerprint(profile());
+    A::pause(*app); A::frame(*app); A::resume(*app); up(Control::StartRest); EXPECT_EQ(profileStateFingerprint(profile()),fp) << raidline::test::describeUiProfileChange(beforeProfile,profile());
     down(Control::StartRest); key(SDL_SCANCODE_TAB); A::frame(*app); up(Control::StartRest);
-    EXPECT_EQ(profileStateFingerprint(profile()),fp); EXPECT_FALSE(A::flow(*app).activeBaseFacility());
-    key(SDL_SCANCODE_TAB); A::frame(*app); ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Dormitory));
+    EXPECT_EQ(profileStateFingerprint(profile()),fp) << raidline::test::describeUiProfileChange(beforeProfile,profile()); EXPECT_FALSE(A::flow(*app).activeBaseFacility());
+    key(SDL_SCANCODE_TAB); A::frame(*app); ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Dormitory));A::frame(*app);
     control(Control::Rest); control(Control::Hour6); down(Control::StartRest); key(SDL_SCANCODE_ESCAPE); A::frame(*app);
-    up(Control::StartRest); EXPECT_EQ(profileStateFingerprint(profile()),fp); EXPECT_FALSE(A::flow(*app).activeBaseFacility());
+    up(Control::StartRest); EXPECT_EQ(profileStateFingerprint(profile()),fp) << raidline::test::describeUiProfileChange(beforeProfile,profile()); EXPECT_FALSE(A::flow(*app).activeBaseFacility());
 }
 TEST_F(UiBaseDormitoryTest, ReloadKeepsTheFrozenExpansionAndDoesNotRestoreTransientSelection) {
     profile().baseConstruction.materialUnits=100; ++profile().revision; control(Control::StartExpansion);
     const auto project=profile().baseConstruction.activeProject; control(Control::Rest); control(Control::Hour6);
     A::close(*app); static_cast<void>(A::flow(*app).returnToMainMenu()); ASSERT_TRUE(A::flow(*app).continueGame()); A::frame(*app);
-    ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Dormitory)); A::draw(*app);
+    ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Dormitory));A::frame(*app); A::draw(*app);
     EXPECT_EQ(profile().baseConstruction.activeProject,project); EXPECT_FALSE(A::state(*app).restHours);
 }
 TEST_F(UiBaseDormitoryTest, MenuMotionAndCloseKeepTheAcceptedWindowAimAnchor) {

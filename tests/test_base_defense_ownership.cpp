@@ -6,6 +6,7 @@
 #include "base_siege_domain.h"
 #include "game_flow.h"
 #include "save_repository.h"
+#include "profile_ui_test_wait.h"
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -235,7 +236,9 @@ TEST(BaseDefenseOwnershipTest, DisabledRuntimeRestoresAndSettlementDoesNotRepair
     const auto saved = repository.load(content);
     ASSERT_TRUE(saved.profile);
     EXPECT_EQ(saved.profile->baseFortifications.instances.at({1}).durability, 0U);
-    ASSERT_TRUE(flow.gameSession().abandonBaseRealtimeDefense());
+    static_cast<void>(flow.gameSession().abandonBaseRealtimeDefense());
+    ASSERT_TRUE(flow.gameSession().checkpointWorldClock());
+    ASSERT_FALSE(flow.gameSession().baseDefenseActive());
     EXPECT_EQ(flow.gameSession().profile().baseFortifications.instances.at({1}).durability, 0U);
     EXPECT_FALSE(flow.gameSession().profile().baseDefenseWarning);
     const auto before = profileStateFingerprint(flow.gameSession().profile());
@@ -326,6 +329,7 @@ TEST(BaseDefenseOwnershipTest, NaturalWarningPersistsOnceAndReloadCannotReroll)
     flow.configurePersistence(save.path);
     ASSERT_TRUE(flow.continueGame());
     flow.gameSession().advanceBaseWorldClock(0.02F);
+    ASSERT_TRUE(waitForProfileUiDurability(flow.gameSession()));
     const auto &warningState = flow.gameSession().profile().baseDefenseWarning;
     ASSERT_TRUE(warningState);
     ASSERT_TRUE(warningState->layout);

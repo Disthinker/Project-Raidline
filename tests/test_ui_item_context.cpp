@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "alpha_content_ids.h"
 
 #include <chrono>
@@ -30,6 +31,35 @@ struct UiItemContextTestAccess {
     }
     static void tick(App &a, float dt) { a.updateProfileItemContext(dt); }
     static void right(App &a, MousePosition p) { a.handleProfileRightClick(p, false); }
+    static void frame(App &a, float dt=0) {
+        a.processEvents();a.update(dt);a.input_.endFrame();
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+            [&] { return a.profileUiBusy() || static_cast<bool>(a.pendingInventoryBarrierAction_); },
+            [&] { a.processEvents();a.update(0);a.input_.endFrame(); })) << a.gameSession_.persistenceMessage();
+    }
+    static const auto &action(const App &a){return a.gameSession_.playerActionState().active();}
+    static void carryMedical(App &a,AssetInstanceId medical,AssetInstanceId backpack) {
+        const auto &profile=a.gameSession_.profile();const auto &content=publishedContentRegistry();
+        const auto *asset=profile.assets.find(medical);ASSERT_NE(asset,nullptr);
+        const auto container=ProfileContainerId::compartment(backpack,0);
+        const auto fit=findFirstProfileFit(profile,content,container,content.item(asset->definitionId),asset->orientation);
+        ASSERT_TRUE(fit);
+        ASSERT_TRUE(a.submitInventoryUi(InventoryMoveCommand{medical,0,{container,*fit},asset->orientation},
+            "ui-medical-carried-fixture",false,"INVENTORY UPDATED",SoundEventId::InventoryMoveOrPlace));
+        frame(a);
+    }
+    static MousePosition itemPoint(App &a,AssetInstanceId id) {
+        const auto &profile=a.gameSession_.profileForInventoryPresentation();const auto *asset=profile.assets.find(id);
+        if(!asset){ADD_FAILURE()<<"missing fixture asset";return {};}
+        const auto *stored=std::get_if<StoredAssetLocation>(&asset->location);
+        if(!stored){ADD_FAILURE()<<"fixture item is not stored";return {};}
+        const auto footprint=inventoryFootprint(publishedContentRegistry().item(asset->definitionId),asset->orientation);
+        for(const auto &grid:layoutProfileCarriedGrids(profile,publishedContentRegistry(),a.profilePresentation_.chestScroll))
+            if(grid.container==stored->container)
+                return {grid.bounds.x+(stored->origin.x+footprint.width*.5F)*kProfileItemCell,
+                    grid.bounds.y+(stored->origin.y+footprint.height*.5F)*kProfileItemCell};
+        ADD_FAILURE()<<"fixture item is not visible";return {};
+    }
     static void event(App &a, InventoryUiEvent event) { a.handleProfileInventoryUiEvent(event, false); }
     static void cancel(App &a) { a.handleInventoryCancel(); }
     static void close(App &a) { a.closeInventory(); }
@@ -118,6 +148,7 @@ protected:
         app = std::make_unique<App>();
         A::flow(*app).configurePersistence(path);
         ASSERT_TRUE(A::flow(*app).continueGame());
+        A::frame(*app);
         A::open(*app);
     }
     void TearDown() override {
@@ -239,15 +270,34 @@ TEST_F(UiItemContextTest, EmptyMagazineAffordanceAndDomainFailureArePreserved) {
     EXPECT_EQ(profileStateFingerprint(profile()), before);
 }
 TEST_F(UiItemContextTest, MedicalActionRunsOnlyAfterReleaseAndCannotRepeat) {
-    A::right(*app, {818.5F, 138.5F}); const auto p = row(UiItemAction::UseMedical);
+    A::carryMedical(*app,medkit,bag);
+    ASSERT_TRUE(assetIsCarried(profile(),medkit));
+    A::right(*app,A::itemPoint(*app,medkit)); const auto p = row(UiItemAction::UseMedical);
     const auto before = profileStateFingerprint(profile());
     pointer(InventoryPointerEventType::LeftButtonDown, p);
     EXPECT_EQ(profileStateFingerprint(profile()), before);
     pointer(InventoryPointerEventType::LeftButtonUp, p);
+    ASSERT_TRUE(A::action(*app));
+    const auto *medical=std::get_if<MedicalRaidAction>(&*A::action(*app));ASSERT_NE(medical,nullptr);
+    const auto steps=static_cast<unsigned>(medical->durationSeconds/.1F)+3;
+    for(unsigned step=0;step<steps && A::action(*app);++step)A::frame(*app,.1F);
+    ASSERT_FALSE(A::action(*app));
     EXPECT_GT(profile().currentHealth, 70);
     const auto after = profileStateFingerprint(profile());
     pointer(InventoryPointerEventType::LeftButtonUp, p);
     EXPECT_EQ(profileStateFingerprint(profile()), after);
+}
+TEST_F(UiItemContextTest, ActivePlayerStashMedicalHasNoExecutableActionAndBaseModificationStaysAvailable) {
+    const auto before=profileStateFingerprint(profile());const auto &content=publishedContentRegistry();
+    const auto has=[](const auto &entries,UiItemAction id) {
+        return std::any_of(entries.begin(),entries.end(),[&](const auto &entry){return entry.id==id;});
+    };
+    EXPECT_TRUE(has(projectUiItemActions(profile(),content,medkit,false),UiItemAction::UseMedical));
+    EXPECT_FALSE(has(projectUiItemActions(profile(),content,medkit,false,MedicalAccess::CarriedOnly),UiItemAction::UseMedical));
+    EXPECT_TRUE(has(projectUiItemActions(profile(),content,rifle,false,MedicalAccess::CarriedOnly),UiItemAction::ModifyWeapon));
+    A::right(*app,{818.5F,138.5F});EXPECT_FALSE(A::menu(*app));
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,A::message(*app)),"先将药品放入随身容器");
+    EXPECT_EQ(profileStateFingerprint(profile()),before);
 }
 TEST_F(UiItemContextTest, HoverDelayAndStableAnchorSurviveMotionInsideItem) {
     A::point(*app, {927.0F, 313.5F}); A::tick(*app, .39F);

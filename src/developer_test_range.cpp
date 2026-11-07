@@ -41,13 +41,14 @@ std::vector<ItemDefinitionId> developerRangeAmmunition(const ItemDefinitionId &w
 std::vector<ItemDefinitionId> developerRangeArmor()
 { return choices([](const auto &i) { return i.armorProtection && i.equipmentSlot == EquipmentSlotKind::BodyArmor; }); }
 std::vector<ItemDefinitionId> developerRangeSupplies()
-{ return choices([](const auto &i) { return i.meleeUse || i.medicalUse || i.armorProtection || i.weaponComponent || i.weaponMaintenance || i.armorMaintenance || i.magazineUse; }); }
+{ return choices([](const auto &i) { return i.meleeUse || i.medicalUse || i.armorProtection || i.weaponComponent || i.weaponMaintenance || i.armorMaintenance || i.magazineUse || i.grenadeUse || i.noiseDecoyUse || i.weaponLight || i.battery; }); }
 
 bool GameSession::startDeveloperRange()
 {
-    if (saveRepository_ || developerRange_ || profile_.pendingRaid) return false;
+    if (profileUiCommitPending() || saveRepository_ || developerRange_ || profile_.pendingRaid) return false;
     RaidWorldConfig config;
     config.developerRange = true;
+    config.lightConeObservationEnabled=true;config.noiseDecoyEnabled=true;config.grenadeEnabled=true;
     config.worldSize = kDeveloperRangeSize;
     config.playerSpawn = kDeveloperRangeConsole;
     config.extractionPoint = {{40, 1050}, {140, 160}};
@@ -78,7 +79,7 @@ bool GameSession::developerRangeAtConsole() const noexcept
 bool GameSession::grantDeveloperRangeLoadout(const ItemDefinitionId &weaponId,
     const ItemDefinitionId &ammoId, const std::optional<ItemDefinitionId> &armorId)
 {
-    if (!developerRangeAtConsole()) return false;
+    if (profileUiCommitPending() || !developerRangeAtConsole()) return false;
     const auto &content = publishedContentRegistry();
     try {
         const auto &weapon = content.item(weaponId);
@@ -120,7 +121,7 @@ bool GameSession::grantDeveloperRangeLoadout(const ItemDefinitionId &weaponId,
 
 bool GameSession::grantDeveloperRangeItem(const ItemDefinitionId &itemId)
 {
-    if (!developerRangeAtConsole()) return false;
+    if (profileUiCommitPending() || !developerRangeAtConsole()) return false;
     try {
         const auto &item = publishedContentRegistry().item(itemId);
         if (!item.visualAssetsPublished && !item.meleeUse) return false;
@@ -136,15 +137,15 @@ bool GameSession::grantDeveloperRangeItem(const ItemDefinitionId &itemId)
 bool GameSession::resetDeveloperRangeEnemies(const EnemyCombatDefinitionId &enemy,
     std::size_t pad, std::size_t count)
 {
-    if (!developerRangeAtConsole()) return false;
-    try { return world_->resetDeveloperRangeEnemies(publishedContentRegistry().enemyCombatDefinition(enemy), pad, count); }
+    if (profileUiCommitPending() || !developerRangeAtConsole()) return false;
+    try { profile_.baseCorpses.clear();return world_->resetDeveloperRangeEnemies(publishedContentRegistry().enemyCombatDefinition(enemy), pad, count); }
     catch (...) { return false; }
 }
 
 bool GameFlow::enterDeveloperRange()
 {
     if (state_ != GameFlowState::Base || suspendedRangeSession_ || gameSession_.baseDefenseActive() ||
-        gameSession_.profile().pendingRaid || !gameSession_.checkpointWorldClock()) return false;
+        gameSession_.profile().pendingRaid || !gameSession_.preparePlayerActivityBoundary() || !gameSession_.checkpointWorldClock()) return false;
     auto range = std::make_unique<GameSession>();
     if (!range->startDeveloperRange()) return false;
     static_assert(std::is_move_assignable_v<GameSession>);
@@ -160,6 +161,16 @@ bool GameFlow::leaveDeveloperRange() noexcept
     if (!suspendedRangeSession_) return false;
     gameSession_ = std::move(*suspendedRangeSession_);
     suspendedRangeSession_.reset();
+    gameSession_.bindBasePlayerWorld(&baseWorld_);
     state_ = GameFlowState::Base;
     return true;
+}
+
+bool GameFlow::completeEnterDeveloperRange(std::uint64_t requestId)
+{
+    if(state_!=GameFlowState::Base || suspendedRangeSession_ || gameSession_.baseDefenseActive() ||
+        gameSession_.profile().pendingRaid || !gameSession_.profileUiCompletionReady(requestId,ProfileUiCompletionKind::WorldBarrier))return false;
+    auto range=std::make_unique<GameSession>();if(!range->startDeveloperRange())return false;
+    suspendedRangeSession_=std::make_unique<GameSession>(std::move(gameSession_));
+    gameSession_=std::move(*range);activeBaseFacility_.reset();state_=GameFlowState::Raid;return true;
 }

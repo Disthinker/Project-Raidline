@@ -42,16 +42,23 @@ void App::renderMeleeSwing(const WorldMeleeRuntime &melee)
     SDL_SetRenderDrawBlendMode(renderer_,previous);
 }
 
-void App::renderMeleeStatus()
+std::string App::meleeStatusLabel() const
 {
-    if(inventoryOverlayState_.isOpen() || tacticalMapOpen_ || medicalWheelOpen_ || throwableWheelOpen_ || developerWeaponPanelOpen_ || developerRangePanelOpen_)return;
     const auto id=equippedAsset(gameSession_.profile(),EquipmentSlotKind::QuickMelee);
     const auto *a=id?gameSession_.profile().assets.find(*id):nullptr;
     const bool zh=uiTextRenderer_.language()==UiLanguage::SimplifiedChinese;
     std::string label;
     if(a)label=a->currentDurability?fmt::format("V {} {:.1f}",zh?"近战":"MELEE",a->currentDurability/100.0F):(zh?"近战损坏 · 回营维修":"MELEE BROKEN · BASE REPAIR");
     else if(gameSession_.persistenceMessage()=="EQUIP A UTILITY KNIFE")label="EQUIP A UTILITY KNIFE";
-    const SDL_FRect bounds = gameFlow_.state()==GameFlowState::Base
-        ? SDL_FRect{704,630,552,24} : SDL_FRect{450,666,310,24};
+    return label;
+}
+
+void App::renderMeleeStatus()
+{
+    if(inventoryOverlayState_.isOpen() || tacticalMapOpen_ || medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_ || developerWeaponPanelOpen_ || developerRangePanelOpen_)return;
+    const auto label=meleeStatusLabel();
+    const auto bounds = gameFlow_.state()==GameFlowState::Base
+        ? baseBottomHudLayout().melee
+        : layoutUiGameplayBottomHud(renderer_,uiTextRenderer_,{}).melee;
     if(!label.empty())uiFinalText(renderer_,uiTextRenderer_,bounds,label,12,1);
 }

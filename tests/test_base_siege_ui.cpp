@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "base_siege_warning_layout.h"
 #include "ui_localization.h"
 #include <gtest/gtest.h>
@@ -14,7 +15,11 @@ struct BaseSiegeUiTestAccess {
         app.processEvents();
         app.update(dt);
         app.input_.endFrame();
-    }
+     ASSERT_TRUE(raidline::test::waitForUiAppPersistence(app.gameSession_,
+       [&] { return app.profileUiBusy() || static_cast<bool>(app.pendingInventoryBarrierAction_); },
+       [&] { app.processEvents();
+        app.update(0);
+        app.input_.endFrame(); })) << app.gameSession_.persistenceMessage(); }
     static bool visible(const App &app) { return app.baseSiegeWarningVisible(); }
     static bool paused(const App &app) { return app.pauseMenu_.isOpen(); }
     static bool inventory(const App &app) { return app.inventoryOverlayState_.isOpen(); }

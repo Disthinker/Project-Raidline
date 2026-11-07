@@ -495,7 +495,7 @@ namespace
         {
             fail("weapon_use must be an object");
         }
-        return WeaponUseDefinition{
+        WeaponUseDefinition result{
             requiredBool(*found, "automatic_fire"),
             requiredFiniteFloat(*found, "shot_interval_seconds", true),
             requiredWeaponAttribute(*found, "recoil_control"),
@@ -507,6 +507,25 @@ namespace
             requiredFiniteFloat(*found, "effective_range", true),
             requiredFiniteFloat(*found, "maximum_range", true),
             requiredFiniteFloat(*found, "logical_ballistic_speed", true)};
+        const auto parseMode = [](const std::string &mode) -> WeaponFireMode {
+            if (mode == "semi_automatic") return WeaponFireMode::SemiAutomatic;
+            if (mode == "three_round_burst") return WeaponFireMode::ThreeRoundBurst;
+            if (mode == "automatic") return WeaponFireMode::Automatic;
+            fail("unknown weapon fire mode: " + mode);
+        };
+        for (const Json &mode : requiredArray(*found, "supported_fire_modes"))
+        {
+            if (!mode.is_string()) fail("weapon fire mode must be a string");
+            result.supportedFireModes.push_back(parseMode(mode.get<std::string>()));
+        }
+        result.defaultFireMode = parseMode(requiredString(*found, "default_fire_mode"));
+        const auto &burst = found->at("burst_shot_count");
+        if (!burst.is_number_unsigned() && !burst.is_number_integer())
+            fail("burst_shot_count must be an integer");
+        const auto burstCount = burst.get<std::int64_t>();
+        if (burstCount < 0 || burstCount > 3) fail("invalid burst shot count");
+        result.burstShotCount = static_cast<std::uint32_t>(burstCount);
+        return result;
     }
 
     std::optional<ArmorProtectionDefinition> parseArmorProtection(
@@ -836,7 +855,7 @@ ContentRegistry ContentRegistry::fromJson(
             registry.contentVersion_ == "base-fortification-foundation-content-61" ||
             registry.contentVersion_ == "hospital-raid-theme-content-62" ||
             registry.contentVersion_ == "weapon-components-content-63" ||
-            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71" || registry.contentVersion_ == "raid-fragmentation-grenade-content-72" || registry.contentVersion_ == "raid-runner-infected-content-73");
+            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71" || registry.contentVersion_ == "raid-fragmentation-grenade-content-72" || (registry.contentVersion_ == "raid-runner-infected-content-73" || registry.contentVersion_ == "raid-weapon-handling-content-74"));
 
         if (root.contains("fortifications"))
         {
@@ -862,7 +881,7 @@ ContentRegistry ContentRegistry::fromJson(
         if ((registry.contentVersion_ == "base-fortification-foundation-content-61" ||
              registry.contentVersion_ == "hospital-raid-theme-content-62" ||
              registry.contentVersion_ == "weapon-components-content-63" ||
-             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71" || registry.contentVersion_ == "raid-fragmentation-grenade-content-72" || registry.contentVersion_ == "raid-runner-infected-content-73")) &&
+             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71" || registry.contentVersion_ == "raid-fragmentation-grenade-content-72" || (registry.contentVersion_ == "raid-runner-infected-content-73" || registry.contentVersion_ == "raid-weapon-handling-content-74"))) &&
             !registry.fortifications_.contains(kWoodBarricadeDefinition))
             fail("wood barricade definition is required by content 61");
 
@@ -911,7 +930,7 @@ ContentRegistry ContentRegistry::fromJson(
             }
             if (!registry.enemyCombatDefinitions_.contains(ordinaryInfectedDefinitionId()))
                 fail("ordinary infected combat definition is required");
-            if (registry.contentVersion_ == "raid-runner-infected-content-73" &&
+            if ((registry.contentVersion_ == "raid-runner-infected-content-73" || registry.contentVersion_ == "raid-weapon-handling-content-74") &&
                 !registry.enemyCombatDefinitions_.contains(EnemyCombatDefinitionId{"enemy.infected.runner"}))
                 fail("runner combat definition is required by content 73");
         }
@@ -2025,6 +2044,11 @@ ContentRegistry ContentRegistry::fromJson(
             if (definition.weaponUse.has_value())
             {
                 const WeaponUseDefinition &use = *definition.weaponUse;
+                const std::set<WeaponFireMode> modes(use.supportedFireModes.begin(), use.supportedFireModes.end());
+                if (modes.empty() || modes.size() != use.supportedFireModes.size() ||
+                    !modes.contains(use.defaultFireMode) ||
+                    use.burstShotCount != (modes.contains(WeaponFireMode::ThreeRoundBurst) ? 3U : 0U))
+                    fail("weapon fire mode capability is invalid");
                 if (definition.category != ItemCategory::Weapon ||
                     definition.compatibleEquipmentSlots.empty() ||
                     definition.equipmentSlot.has_value() ||
@@ -2855,7 +2879,7 @@ ContentRegistry ContentRegistry::fromJson(
                             std::move(archetype));
                     }
                 }
-                if (registry.contentVersion_ == "raid-runner-infected-content-73" &&
+                if ((registry.contentVersion_ == "raid-runner-infected-content-73" || registry.contentVersion_ == "raid-weapon-handling-content-74") &&
                     definition.id == MapDefinitionId{"map.raid.frontier_exchange"} &&
                     std::none_of(value.encounterArchetypes.begin(), value.encounterArchetypes.end(),
                         [](const auto &group) { return group.runnerMemberDefinition.has_value(); }))

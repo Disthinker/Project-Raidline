@@ -3,6 +3,7 @@
 #include "base_fortification_domain.h"
 #include "base_siege_domain.h"
 #include "game_flow.h"
+#include "profile_ui_test_wait.h"
 #include <chrono>
 #include <filesystem>
 #include <gtest/gtest.h>
@@ -216,6 +217,7 @@ TEST(BaseAutoFortificationTest, SavedPresetUsesSamePlanAtDeadlineAndCannotRepeat
     flow.configurePersistence(store.path);
     ASSERT_TRUE(flow.continueGame());
     flow.gameSession().advanceBaseWorldClock(181);
+    ASSERT_TRUE(waitForProfileUiDurability(flow.gameSession()));
     EXPECT_FALSE(flow.gameSession().profile().baseSiege.warningActive);
     for (auto id : plan.participatingFortifications)
         EXPECT_EQ(flow.gameSession().profile().baseFortifications.instances.at(id).durability, 90U);

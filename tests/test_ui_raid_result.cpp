@@ -1,11 +1,13 @@
 #include "app.h"
 #include "test_temp_directory.h"
+#include "ui_app_persistence_wait.h"
 #include "alpha_content_ids.h"
 #include "ui_raid_result_presentation.h"
 
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -16,6 +18,7 @@
 #include <vector>
 #include <gtest/gtest.h>
 #include <SDL3_image/SDL_image.h>
+#include <nlohmann/json.hpp>
 
 struct UiRaidResultTestAccess {
     static auto &flow(App &a) { return a.gameFlow_; }
@@ -36,7 +39,12 @@ struct UiRaidResultTestAccess {
         a.raidResultUi_ = std::move(state);
         a.raidResultViewKey_ = uiRaidResultViewKey(a.raidResultUi_);
     }
-    static void frame(App &a) { a.processEvents(); a.update(0); a.input_.endFrame(); }
+    static void frame(App &a) {
+        a.processEvents(); a.update(0); a.input_.endFrame();
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+            [&] { return a.profileUiBusy() || bool(a.pendingInventoryBarrierAction_); },
+            [&] { a.processEvents(); a.update(0); a.input_.endFrame(); }));
+    }
     static void pause(App &a) { a.pauseMenu_.open(); }
     static void resume(App &a) { a.pauseMenu_.close(); }
     static bool paused(App &a) { return a.pauseMenu_.isOpen(); }
@@ -195,6 +203,14 @@ protected:
         } else {
             ASSERT_TRUE(A::session(*app).activeQuitAlphaRaid()); A::flow(*app).update({}, 0);
         }
+        // A terminal generation must be durable before asserting its result.
+        // Poll only Session/Flow here: frame=false intentionally leaves the
+        // App's first result frame and any preexisting held input unconsumed.
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(A::session(*app),
+            [] { return false; }, [&] {
+                A::session(*app).updateInventoryPersistence(0);
+                A::flow(*app).update({},0);
+            }));
         ASSERT_EQ(A::flow(*app).state(), GameFlowState::RaidResult);
         ASSERT_TRUE(profile().lastRaidResult); ASSERT_EQ(profile().lastRaidResult->outcome, outcome);
         ASSERT_TRUE(validateProfileState(profile(), content).valid) << validateProfileState(profile(), content).message;
@@ -225,6 +241,57 @@ protected:
         return count;
     }
     void stillResult() { EXPECT_EQ(A::flow(*app).state(), GameFlowState::RaidResult); }
+    std::string profileDifference(const ProfileState &expected)
+    {
+        const auto encode=[&](const ProfileState &value){
+            return nlohmann::json::parse(serializeProfileEnvelope(value,content.contentVersion())).at("payload");
+        };
+        return nlohmann::json::diff(encode(expected),encode(profile())).dump(2);
+    }
+    void expectBaseArrivalEffects(ProfileState &expected,bool extracted)
+    {
+        ASSERT_EQ(A::flow(*app).state(),GameFlowState::Base);
+        ASSERT_TRUE(profile().basePlayerEffects);
+        const auto &world=A::flow(*app).baseWorld();
+        BaseWorld arrival;arrival.configureSite(world.siteDefinitionId());
+        if(extracted)arrival.resetAtRaidGate();else arrival.resetAtMedicalPoint();
+        EXPECT_FLOAT_EQ(world.playerPosition().x,arrival.playerPosition().x);
+        EXPECT_FLOAT_EQ(world.playerPosition().y,arrival.playerPosition().y);
+        EXPECT_FLOAT_EQ(world.playerControlRemaining(),0);
+        EXPECT_FLOAT_EQ(world.playerImpactSlowRemaining(),0);
+        const auto context=A::session(*app).playerGameplayContext();
+        EXPECT_TRUE(context.available);EXPECT_FALSE(context.dead);EXPECT_FALSE(context.controlled);
+        const RegionalBaseSiteDefinitionId site{world.siteDefinitionId()};
+        BasePlayerEffectsRecovery effects;
+        effects.scope={WeaponActionActivity::BaseDaily,site,std::string{site.value()}};
+        EXPECT_EQ(context.activity,effects.scope);
+        effects.worldSize=arrival.worldSize();effects.playerPosition=arrival.playerPosition();
+        // Pointer return may legitimately choose a different facing than
+        // keyboard return; use the real aim, never a hardcoded unit vector.
+        effects.facingDirection=world.weaponAimDirection();
+        EXPECT_NEAR(std::hypot(effects.facingDirection.x,effects.facingDirection.y),1,0.0001F);
+        // This isolated fixture generated its initial perimeter once and never
+        // fired, treated, or threw anything; no combat sequence may advance.
+        effects.dailyCommandSequence=1;
+        effects.grenade=arrival.grenade().checkpoint();effects.noiseDecoy=arrival.noiseDecoy().checkpoint();
+        EXPECT_FALSE(world.grenade().active());EXPECT_FALSE(world.noiseDecoy().flight());EXPECT_FALSE(world.noiseDecoy().source());
+        ASSERT_TRUE(validateBasePlayerEffectsRecovery(*profile().basePlayerEffects,profile(),content).valid);
+        EXPECT_EQ(basePlayerEffectsFingerprint(*profile().basePlayerEffects),basePlayerEffectsFingerprint(effects));
+        expected.basePlayerEffects=std::move(effects);
+    }
+    void expectSingleUiTransaction(ProfileState &expected,std::string_view command)
+    {
+        const auto &actual=profile().committedTransactions;
+        for(const auto &transaction:expected.committedTransactions)
+            EXPECT_TRUE(actual.contains(transaction))<<"Original transaction was removed: "<<transaction;
+        ASSERT_EQ(actual.size(),expected.committedTransactions.size()+1);
+        std::vector<std::string> added;
+        for(const auto &transaction:actual)
+            if(!expected.committedTransactions.contains(transaction))added.push_back(transaction);
+        ASSERT_EQ(added.size(),1U);
+        EXPECT_TRUE(added.front().starts_with("ui."+std::string(command)+".rev"))<<added.front();
+        expected.committedTransactions.insert(added.front());
+    }
 };
 } // namespace
 
@@ -347,10 +414,11 @@ TEST(UiRaidResultProjectionTest, PageCountClampsAnOutOfRangeRequestAndCannotExpo
 }
 
 TEST_F(UiRaidResultTest, NativeReturnRequiresDownAndUpOnTheSameButton) {
-    finish(RaidResultOutcome::ActiveQuit); const auto before = profileStateFingerprint(profile());
+    finish(RaidResultOutcome::ActiveQuit); const auto baseline=profile(); const auto before = profileStateFingerprint(profile());
     down(C::Return); stillResult(); EXPECT_EQ(profileStateFingerprint(profile()), before);
     up(C::Return); EXPECT_EQ(A::flow(*app).state(), GameFlowState::Base);
-    EXPECT_EQ(profileStateFingerprint(profile()), before);
+    auto expected=baseline;expectBaseArrivalEffects(expected,false);
+    EXPECT_EQ(profileStateFingerprint(profile()),profileStateFingerprint(expected))<<profileDifference(expected);
 }
 
 TEST_F(UiRaidResultTest, AReleaseWithoutPressCannotReturnToBase) {
@@ -365,12 +433,13 @@ TEST_F(UiRaidResultTest, MovingAwayCancelsReturnEvenWhenReleasedBackOnTheButton)
 
 TEST_F(UiRaidResultTest, ReturningWithEnterDoesNotRepeatSettlementOrAdvanceTheClock) {
     carryRecords(2); finish(RaidResultOutcome::Extracted);
-    const auto before = profileStateFingerprint(profile()); const auto settlements = profile().committedSettlements.size();
+    auto expected=profile(); const auto settlements = profile().committedSettlements.size();
     key(SDL_SCANCODE_RETURN); A::frame(*app);
     EXPECT_EQ(A::flow(*app).state(), GameFlowState::Base);
-    EXPECT_EQ(profileStateFingerprint(profile()), before); EXPECT_EQ(profile().committedSettlements.size(), settlements);
+    expectBaseArrivalEffects(expected,true);
+    EXPECT_EQ(profileStateFingerprint(profile()),profileStateFingerprint(expected))<<profileDifference(expected); EXPECT_EQ(profile().committedSettlements.size(), settlements);
     keyboard(SDL_SCANCODE_RETURN, true, true); keyboard(SDL_SCANCODE_RETURN, false); A::frame(*app);
-    EXPECT_EQ(profileStateFingerprint(profile()), before); EXPECT_FALSE(profile().pendingRaid);
+    EXPECT_EQ(profileStateFingerprint(profile()),profileStateFingerprint(expected))<<profileDifference(expected); EXPECT_FALSE(profile().pendingRaid);
 }
 
 TEST_F(UiRaidResultTest, RepeatedEnterCannotAcknowledgeAResult) {
@@ -437,7 +506,11 @@ TEST_F(UiRaidResultTest, FailedFirstHintAcknowledgmentStaysOnResultAndCanRetryWi
     auto expected = profile(); expected.homeFounding.hintsDismissed = true;
     expected.tutorial = TutorialProgress::Complete; ++expected.revision;
     control(C::Return); EXPECT_EQ(A::flow(*app).state(), GameFlowState::Base);
-    EXPECT_EQ(profileStateFingerprint(profile()), profileStateFingerprint(expected));
+    expectSingleUiTransaction(expected,"finish-first-raid");
+    const auto saved=SaveRepository(path).load(content);ASSERT_TRUE(saved.profile);
+    EXPECT_EQ(profileStateFingerprint(*saved.profile),profileStateFingerprint(expected));
+    expectBaseArrivalEffects(expected,false);
+    EXPECT_EQ(profileStateFingerprint(profile()), profileStateFingerprint(expected))<<profileDifference(expected);
     EXPECT_EQ(profile().committedSettlements.size(), settlements);
 }
 
@@ -458,9 +531,11 @@ TEST_F(UiRaidResultTest, HeldEnterAfterFocusRecoveryCannotRetryAFailedAcknowledg
     keyboard(SDL_SCANCODE_RETURN, false); A::frame(*app); stillResult();
     key(SDL_SCANCODE_RETURN); A::frame(*app);
     EXPECT_EQ(A::flow(*app).state(), GameFlowState::Base);
-    EXPECT_EQ(profileStateFingerprint(profile()), profileStateFingerprint(expected));
+    expectSingleUiTransaction(expected,"finish-first-raid");
     const auto saved = SaveRepository(path).load(content); ASSERT_TRUE(saved.profile);
     EXPECT_EQ(profileStateFingerprint(*saved.profile), profileStateFingerprint(expected));
+    expectBaseArrivalEffects(expected,false);
+    EXPECT_EQ(profileStateFingerprint(profile()), profileStateFingerprint(expected))<<profileDifference(expected);
     EXPECT_EQ(profile().committedSettlements.size(), 1U);
 }
 
@@ -552,18 +627,20 @@ TEST_F(UiRaidResultTest, IdleFramesReuseTheResultProjectionRatherThanRescanningA
 TEST_F(UiRaidResultTest, FailedOutcomeNativeReturnPreservesItsCommittedLostRecordAndUsesMedicalArrival) {
     carryRecords(1); finish(RaidResultOutcome::PlayerDead);
     ASSERT_TRUE(profile().lastRaidResult->lostRaidRecordId); const auto lost = *profile().lastRaidResult->lostRaidRecordId;
-    ASSERT_TRUE(profile().lostRaidRecords.contains(lost)); const auto before = profileStateFingerprint(profile());
+    ASSERT_TRUE(profile().lostRaidRecords.contains(lost)); const auto baseline=profile();
     control(C::Return); EXPECT_EQ(A::flow(*app).state(), GameFlowState::Base);
-    EXPECT_TRUE(profile().lostRaidRecords.contains(lost)); EXPECT_EQ(profileStateFingerprint(profile()), before);
+    auto expectedProfile=baseline;expectBaseArrivalEffects(expectedProfile,false);
+    EXPECT_TRUE(profile().lostRaidRecords.contains(lost)); EXPECT_EQ(profileStateFingerprint(profile()),profileStateFingerprint(expectedProfile))<<profileDifference(expectedProfile);
     BaseWorld expected; expected.configureSite(A::flow(*app).baseWorld().siteDefinitionId()); expected.resetAtMedicalPoint();
     EXPECT_FLOAT_EQ(A::flow(*app).baseWorld().playerPosition().x, expected.playerPosition().x);
     EXPECT_FLOAT_EQ(A::flow(*app).baseWorld().playerPosition().y, expected.playerPosition().y);
 }
 
 TEST_F(UiRaidResultTest, SuccessNativeReturnKeepsCarriedSlotsAndUsesRaidGateArrival) {
-    carryRecords(2); finish(RaidResultOutcome::Extracted); const auto before = profileStateFingerprint(profile());
+    carryRecords(2); finish(RaidResultOutcome::Extracted); auto expectedProfile=profile();
     control(C::Return); EXPECT_EQ(A::flow(*app).state(), GameFlowState::Base);
-    EXPECT_EQ(profileStateFingerprint(profile()), before);
+    expectBaseArrivalEffects(expectedProfile,true);
+    EXPECT_EQ(profileStateFingerprint(profile()),profileStateFingerprint(expectedProfile))<<profileDifference(expectedProfile);
     BaseWorld expected; expected.configureSite(A::flow(*app).baseWorld().siteDefinitionId()); expected.resetAtRaidGate();
     EXPECT_FLOAT_EQ(A::flow(*app).baseWorld().playerPosition().x, expected.playerPosition().x);
     EXPECT_FLOAT_EQ(A::flow(*app).baseWorld().playerPosition().y, expected.playerPosition().y);
@@ -581,6 +658,7 @@ TEST_F(UiRaidResultTest, HideGuidanceUsesItsOriginalSaveRuleAndDoesNotReturnOrSe
     finish(RaidResultOutcome::ActiveQuit);
     auto expected = profile(); expected.homeFounding.hintsDismissed = true; ++expected.revision;
     key(SDL_SCANCODE_H); A::frame(*app); stillResult();
+    expectSingleUiTransaction(expected,"dismiss-home-hints");
     EXPECT_EQ(profileStateFingerprint(profile()), profileStateFingerprint(expected));
     const auto saved = SaveRepository(path).load(content); ASSERT_TRUE(saved.profile);
     EXPECT_EQ(profileStateFingerprint(*saved.profile), profileStateFingerprint(expected));

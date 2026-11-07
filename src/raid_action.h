@@ -13,6 +13,18 @@ struct ReloadRaidAction
     AssetInstanceId magazineAssetId{};
     float elapsedSeconds{};
     float durationSeconds{2.0F};
+    RaidReloadPlan plan;
+    float handlingMultiplier{1.0F};
+    std::uint8_t nextStage{};
+    std::uint64_t gestureId{};
+};
+
+struct ChamberRaidAction
+{
+    AssetInstanceId weaponAssetId{};
+    float elapsedSeconds{};
+    float durationSeconds{0.5F};
+    std::uint64_t gestureId{};
 };
 
 struct LoadMagazineRaidAction
@@ -83,6 +95,7 @@ struct ExtractRaidAction
 
 using RaidAction = std::variant<
     ReloadRaidAction,
+    ChamberRaidAction,
     LoadMagazineRaidAction,
     HealRaidAction,
     MedicalRaidAction,

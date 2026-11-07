@@ -1,3 +1,4 @@
+#include "weapon_ammo_domain.h"
 #include "raid_corpse_search.h"
 #include "tactical_device_domain.h"
 #include "weapon_component_domain.h"
@@ -80,6 +81,12 @@ bool validateCandidate(
     AssetInstanceId maximumId{};
     std::set<EquipmentSlotKind> occupiedSlots;
     std::set<AssetInstanceId> installedWeaponIds;
+    std::map<ProfileContainerId,std::set<std::pair<int,int>>> occupiedCells;
+    std::set<AssetInstanceId> containersWithChildren;
+    for(const auto &[id,asset]:candidate.assets.records())
+        if(const auto *stored=std::get_if<StoredAssetLocation>(&asset.location);
+           stored && stored->container.kind==ProfileContainerKind::AssetCompartment)
+            containersWithChildren.insert(stored->container.ownerAssetId);
     for (const auto &[id, asset] : candidate.assets.records())
     {
         if (id == 0 || id != asset.instanceId)
@@ -105,6 +112,10 @@ bool validateCandidate(
                 candidate.revision);
             return false;
         }
+        if (bool(asset.fireMode) != bool(definition->weaponUse) ||
+            (asset.fireMode && std::find(definition->weaponUse->supportedFireModes.begin(),
+                definition->weaponUse->supportedFireModes.end(), *asset.fireMode) == definition->weaponUse->supportedFireModes.end()))
+        { receipt = failure(DomainErrorCode::IllegalDestination, "unsupported weapon fire mode", candidate.revision); return false; }
         if (asset.quantity == 0 ||
             asset.quantity > definition->maxStackSize ||
             !canUseItemOrientation(*definition, asset.orientation))
@@ -164,27 +175,76 @@ bool validateCandidate(
             continue;
         }
 
+        if(const auto *held=std::get_if<BaseReloadHeldMagazineLocation>(&asset.location))
+        {
+            const auto *parent=candidate.assets.find(held->weaponAssetId);
+            if(!parent || definition->category!=ItemCategory::Magazine || held->actionId.empty() ||
+                !std::holds_alternative<EquippedAssetLocation>(parent->location) ||
+                !content.magazineFitsWeapon(asset.definitionId,parent->definitionId))
+            {receipt=failure(DomainErrorCode::IllegalDestination,"invalid Base held magazine",candidate.revision);return false;}
+            continue;
+        }
+        if(const auto *held=std::get_if<TrainingHeldMagazineLocation>(&asset.location))
+        {
+            const auto *parent=candidate.assets.find(held->weaponAssetId);
+            if(!parent || definition->category!=ItemCategory::Magazine || held->sessionId.empty() || held->actionId.empty() ||
+                !std::holds_alternative<EquippedAssetLocation>(parent->location) ||
+                !content.magazineFitsWeapon(asset.definitionId,parent->definitionId))
+            {receipt=failure(DomainErrorCode::IllegalDestination,"invalid training held magazine",candidate.revision);return false;}
+            continue;
+        }
+        if(std::holds_alternative<TrainingDroppedMagazineLocation>(asset.location))
+        {
+            if(definition->category!=ItemCategory::Magazine)
+            {receipt=failure(DomainErrorCode::IllegalDestination,"invalid training dropped magazine",candidate.revision);return false;}
+            continue;
+        }
+        if (const auto *held = std::get_if<RaidReloadHeldMagazineLocation>(&asset.location))
+        {
+            const auto *parent = candidate.assets.find(held->weaponAssetId);
+            if (!parent || definition->category != ItemCategory::Magazine || held->actionId.empty() ||
+                !std::holds_alternative<EquippedAssetLocation>(parent->location) ||
+                (held->role != RaidReloadMagazineRole::NewMagazine && held->role != RaidReloadMagazineRole::OldMagazine) ||
+                !content.magazineFitsWeapon(asset.definitionId, parent->definitionId))
+            { receipt = failure(DomainErrorCode::IllegalDestination, "invalid held magazine", candidate.revision); return false; }
+            continue;
+        }
+        if (const auto *retained = std::get_if<RetainedRaidMagazineLocation>(&asset.location))
+        {
+            const auto *parent = candidate.assets.find(retained->weaponAssetId);
+            if (!parent || definition->category != ItemCategory::Magazine ||
+                (retained->role != RaidReloadMagazineRole::NewMagazine && retained->role != RaidReloadMagazineRole::OldMagazine) ||
+                (!std::holds_alternative<LostRaidAssetLocation>(parent->location) &&
+                 !std::holds_alternative<RecoveryTaskAssetLocation>(parent->location) &&
+                 !std::holds_alternative<RaidGroundAssetLocation>(parent->location)) ||
+                !content.magazineFitsWeapon(asset.definitionId, parent->definitionId))
+            { receipt = failure(DomainErrorCode::IllegalDestination, "invalid retained magazine", candidate.revision); return false; }
+            continue;
+        }
+        if (std::holds_alternative<RaidDroppedMagazineLocation>(asset.location))
+        {
+            if (definition->category != ItemCategory::Magazine)
+            { receipt = failure(DomainErrorCode::IllegalDestination, "invalid dropped magazine", candidate.revision); return false; }
+            continue;
+        }
         const auto *stored =
             std::get_if<StoredAssetLocation>(&asset.location);
         if (stored == nullptr)
         {
             continue;
         }
-        if (!profilePlacementFits(
-                candidate,
-                content,
-                stored->container,
-                stored->origin,
-                *definition,
-                asset.orientation,
-                id))
+        if(!profilePlacementWithinContainer(candidate,content,stored->container,stored->origin,*definition,asset.orientation))
         {
-            receipt = failure(
-                DomainErrorCode::IllegalDestination,
-                "asset placement is invalid",
-                candidate.revision);
-            return false;
+            receipt=failure(DomainErrorCode::IllegalDestination,"asset placement is invalid",candidate.revision);return false;
         }
+        const auto footprint=inventoryFootprint(*definition,asset.orientation);
+        auto &cells=occupiedCells[stored->container];
+        for(int y=0;y<footprint.height;++y)
+            for(int x=0;x<footprint.width;++x)
+                if(!cells.emplace(stored->origin.x+x,stored->origin.y+y).second)
+                {
+                    receipt=failure(DomainErrorCode::IllegalDestination,"asset placement overlaps another asset",candidate.revision);return false;
+                }
         if (stored->container.kind == ProfileContainerKind::AssetCompartment)
         {
             if (stored->container.ownerAssetId == id)
@@ -197,19 +257,7 @@ bool validateCandidate(
             }
             if (!definition->containerCompartments.empty())
             {
-                const bool hasContents = std::any_of(
-                    candidate.assets.records().begin(),
-                    candidate.assets.records().end(),
-                    [id](const auto &entry)
-                    {
-                        const auto *childStored =
-                            std::get_if<StoredAssetLocation>(
-                                &entry.second.location);
-                        return childStored != nullptr &&
-                            childStored->container.kind ==
-                                ProfileContainerKind::AssetCompartment &&
-                            childStored->container.ownerAssetId == id;
-                    });
+                const bool hasContents=containersWithChildren.contains(id);
                 if (hasContents)
                 {
                     receipt = failure(
@@ -244,6 +292,18 @@ InventoryReceipt applyMove(
     bool validateWholeProfile)
 {
     AssetRecord *source = candidate.assets.findMutable(command.instanceId);
+    for (const auto &[id, asset] : candidate.assets.records())
+        if ((std::get_if<RaidReloadHeldMagazineLocation>(&asset.location) && std::get<RaidReloadHeldMagazineLocation>(asset.location).weaponAssetId==command.instanceId) ||
+            (std::get_if<BaseReloadHeldMagazineLocation>(&asset.location) && std::get<BaseReloadHeldMagazineLocation>(asset.location).weaponAssetId==command.instanceId) ||
+            (std::get_if<TrainingHeldMagazineLocation>(&asset.location) && std::get<TrainingHeldMagazineLocation>(asset.location).weaponAssetId==command.instanceId))
+            return failure(DomainErrorCode::IllegalDestination, "RESOLVE RELOAD BEFORE MOVING THE WEAPON", candidate.revision);
+    if (source && (std::holds_alternative<RaidReloadHeldMagazineLocation>(source->location) ||
+                   std::holds_alternative<RaidDroppedMagazineLocation>(source->location) ||
+                   std::holds_alternative<RetainedRaidMagazineLocation>(source->location) ||
+                   std::holds_alternative<BaseReloadHeldMagazineLocation>(source->location) ||
+                   std::holds_alternative<TrainingHeldMagazineLocation>(source->location) ||
+                   std::holds_alternative<TrainingDroppedMagazineLocation>(source->location)))
+        return failure(DomainErrorCode::IllegalDestination, "USE THE RAID MAGAZINE OPERATION", candidate.revision);
     if (source && (std::holds_alternative<InstalledWeaponComponentLocation>(source->location) ||
                    std::holds_alternative<InstalledDeviceBatteryLocation>(source->location)))
         return failure(DomainErrorCode::IllegalDestination, "USE GUNSMITH TO REMOVE COMPONENTS", candidate.revision);
@@ -483,6 +543,9 @@ InventoryReceipt applyMove(
             candidate.revision);
     }
 
+    const auto detached = resolveRetainedRaidMagazinesInCandidate(
+        candidate, content, command.instanceId, assetIsCarried(candidate, command.instanceId));
+    if (!detached.valid) return failure(DomainErrorCode::Capacity, detached.message, candidate.revision);
     InventoryReceipt receipt{true, false, DomainErrorCode::None, {}, candidate.revision};
     if (!validateCandidate(
             candidate, content, receipt, validateWholeProfile))
@@ -499,6 +562,19 @@ InventoryReceipt applyEquip(
     bool validateWholeProfile)
 {
     AssetRecord *source = candidate.assets.findMutable(command.instanceId);
+    for (const auto &[id, asset] : candidate.assets.records())
+        if ((std::get_if<RaidReloadHeldMagazineLocation>(&asset.location) && std::get<RaidReloadHeldMagazineLocation>(asset.location).weaponAssetId==command.instanceId) ||
+            (std::get_if<BaseReloadHeldMagazineLocation>(&asset.location) && std::get<BaseReloadHeldMagazineLocation>(asset.location).weaponAssetId==command.instanceId) ||
+            (std::get_if<TrainingHeldMagazineLocation>(&asset.location) && std::get<TrainingHeldMagazineLocation>(asset.location).weaponAssetId==command.instanceId))
+            return failure(DomainErrorCode::IllegalDestination, "RESOLVE RELOAD BEFORE MOVING THE WEAPON", candidate.revision);
+    if (source && (std::holds_alternative<RaidReloadHeldMagazineLocation>(source->location) ||
+                   std::holds_alternative<RaidDroppedMagazineLocation>(source->location) ||
+                   std::holds_alternative<RetainedRaidMagazineLocation>(source->location) ||
+                   std::holds_alternative<BaseReloadHeldMagazineLocation>(source->location) ||
+                   std::holds_alternative<TrainingHeldMagazineLocation>(source->location) ||
+                   std::holds_alternative<TrainingDroppedMagazineLocation>(source->location)))
+        return failure(DomainErrorCode::IllegalDestination, "USE THE RAID MAGAZINE OPERATION", candidate.revision);
+
     if (source == nullptr)
     {
         return failure(
@@ -567,6 +643,9 @@ InventoryReceipt applyEquip(
         target->location = originalLocation;
     }
 
+    const auto detached = resolveRetainedRaidMagazinesInCandidate(
+        candidate, content, command.instanceId, assetIsCarried(candidate, command.instanceId));
+    if (!detached.valid) return failure(DomainErrorCode::Capacity, detached.message, candidate.revision);
     InventoryReceipt receipt{true, false, DomainErrorCode::None, {}, candidate.revision};
     if (!validateCandidate(
             candidate, content, receipt, validateWholeProfile))
@@ -635,6 +714,7 @@ std::optional<AssetInstanceId> raidSceneContainerRoot(
             assetId = stored->container.ownerAssetId;
         else if (const auto *mag = std::get_if<InstalledMagazineLocation>(&asset->location)) assetId = mag->weaponAssetId;
         else if (const auto *part = std::get_if<InstalledWeaponComponentLocation>(&asset->location)) assetId = part->weaponAssetId;
+        else if (const auto *retained = std::get_if<RetainedRaidMagazineLocation>(&asset->location)) assetId = retained->weaponAssetId;
         else if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset->location)) assetId = battery->deviceAssetId;
         else return std::nullopt;
     }

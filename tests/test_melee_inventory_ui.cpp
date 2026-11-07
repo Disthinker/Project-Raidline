@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "alpha_content_ids.h"
 #include "ui_localization.h"
 #include "developer_test_range.h"
@@ -10,7 +11,9 @@
 
 struct MeleeUiTestAccess {
  static GameFlow &flow(App &a){return a.gameFlow_;}
- static void frame(App &a,float seconds=0){a.windowHasInputFocus_=true;a.processEvents();a.update(seconds);a.input_.endFrame();}
+ static void frame(App &a,float seconds=0){a.windowHasInputFocus_=true;a.processEvents();a.update(seconds);a.input_.endFrame(); ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+       [&] { return a.profileUiBusy() || static_cast<bool>(a.pendingInventoryBarrierAction_); },
+       [&] { a.windowHasInputFocus_=true;a.processEvents();a.update(0);a.input_.endFrame(); })) << a.gameSession_.persistenceMessage(); }
  static void attach(App &a,SDL_Renderer *r){a.renderer_=r;EXPECT_TRUE(a.uiTextRenderer_.initialize(r));}
  static void detach(App &a){a.uiTextRenderer_.shutdown();a.renderer_=nullptr;}
  static void inventory(App &a){a.inventoryOverlayState_.openPlayerInventory();a.renderProfileInventory(true,false);}
@@ -23,7 +26,7 @@ struct MeleeUiTestAccess {
  static void storeKnife(App &a,AssetInstanceId id){auto &s=a.gameSession_;const auto &c=publishedContentRegistry();
   const auto fit=findFirstProfileFit(s.profile(),c,ProfileContainerId::stash(),c.item(alpha_content::utilityKnife),ItemOrientation::Degrees0);ASSERT_TRUE(fit);
   ASSERT_TRUE(s.executeProfileInventory(InventoryMoveCommand{id,0,{ProfileContainerId::stash(),*fit}},"ui-store-knife").succeeded);}
- static void serviceClick(App &a,MousePosition p){a.handleBaseSupplyEvent({UiBaseSupplyEventKind::Down,{p.x,p.y}});a.handleBaseSupplyEvent({UiBaseSupplyEventKind::Up,{p.x,p.y}});}
+ static void serviceClick(App &a,MousePosition p){a.handleBaseSupplyEvent({UiBaseSupplyEventKind::Down,{p.x,p.y}});a.handleBaseSupplyEvent({UiBaseSupplyEventKind::Up,{p.x,p.y}});frame(a);}
  static std::optional<AssetInstanceId> serviceSelection(const App &a){return a.supplyUi_.selection ? std::optional{a.supplyUi_.selection->instanceId}:std::nullopt;}
  static void context(App &a){a.handleProfileRightClick({178,540},false);}
  static bool menu(const App &a){return a.profileContextMenu_.has_value();}

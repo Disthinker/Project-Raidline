@@ -127,7 +127,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "raid-runner-infected-content-73");
+        "raid-weapon-handling-content-74");
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -2153,7 +2153,7 @@ TEST(ContentRegistryTest, FieldBandageRollIsManufacturedOnlyAndCannotIncreaseRec
 TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDefinitions)
 {
     const auto original = hospitalContentCandidateJson();
-    ASSERT_EQ(original.at("content_version"), "raid-runner-infected-content-73");
+    ASSERT_EQ(original.at("content_version"), "raid-weapon-handling-content-74");
     for (const auto *required : {"fortifications", "enemy_combat_definitions"})
     {
         SCOPED_TRACE(required);

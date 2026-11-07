@@ -156,8 +156,12 @@ TEST(WeaponSupplyProjectionTest,
   Loadout fixture;
   const auto empty = fixture.magazine(fixture.pocket(0U), 0U);
   const auto readiness = fixture.readiness();
-  EXPECT_EQ(readiness.quickReloadMagazineId, empty);
-  EXPECT_TRUE(readiness.quickReloadCanInstall);
+  // Automatic R no longer selects an empty magazine; explicit installation is
+  // still legal, including the same empty instance displayed by the wheel.
+  EXPECT_FALSE(readiness.quickReloadMagazineId.has_value());
+  EXPECT_FALSE(readiness.quickReloadCanInstall);
+  EXPECT_TRUE(queryWeaponAmmo(fixture.profile, fixture.content,
+      InstallMagazineAndChamberCommand{fixture.weapon, empty}).canCommit);
   EXPECT_EQ(readiness.quickReloadMagazineRounds, 0U);
   EXPECT_EQ(readiness.quickReloadLoadedMagazineCount, 0U);
   EXPECT_FALSE(readiness.canFireNow);
@@ -400,7 +404,7 @@ TEST(WeaponSupplyProjectionTest,
         StoredAssetLocation{ProfileContainerId::stash(), {index, 0}}, 30U);
   const auto before = profileStateFingerprint(fixture.profile);
   const auto readiness = fixture.readiness(true);
-  EXPECT_TRUE(readiness.quickReloadMagazineId.has_value());
+  EXPECT_FALSE(readiness.quickReloadMagazineId.has_value());
   EXPECT_EQ(readiness.quickReloadLoadedMagazineCount, 0U);
   EXPECT_EQ(readiness.otherLoadedSpareMagazineCount, 0U);
   EXPECT_EQ(

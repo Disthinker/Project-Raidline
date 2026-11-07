@@ -124,12 +124,13 @@ bool App::handleBaseFortificationClick(MousePosition point)
             return true;
         }
         s.submitted = true;
-        const auto receipt = *row == 1
-            ? gameSession_.executeBaseFortification(StoreFortificationCommand{id})
-            : gameSession_.repairBaseFortification(gameFlow_.baseWorld(), id);
-        uiMessage_ = receipt.succeeded ? (*row == 1 ? "BARRICADE STORED" : "BARRICADE REPAIRED") : receipt.message;
-        gameAudio_.play(receipt.succeeded ? SoundEventId::UiConfirm : SoundEventId::UiDeny);
-        static_cast<void>(gameFlow_.baseWorld().configureFortifications(gameSession_.profile().baseFortifications, publishedContentRegistry()));
+        submitProfileUi<FortificationReceipt>(FortificationCommand{*row==1
+            ?FortificationCommand{StoreFortificationCommand{id}}:FortificationCommand{RepairFortificationCommand{id}}},
+            nextProfileTransactionId("base-fortification-menu"),[this,store=*row==1](const auto &receipt) {
+                uiMessage_=receipt.succeeded?(store?"BARRICADE STORED":"BARRICADE REPAIRED"):receipt.message;
+                gameAudio_.play(receipt.succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);
+                static_cast<void>(gameFlow_.baseWorld().configureFortifications(gameSession_.profile().baseFortifications,publishedContentRegistry()));
+            });
         return true;
     }
     if (inside(ui::purchase, point) || inside(ui::owned, point))
@@ -160,14 +161,15 @@ bool App::handleBaseFortificationClick(MousePosition point)
             else
             {
                 s.submitted = true;
-                const auto receipt = gameSession_.executeBaseFortification(BuildFortificationCommand{kWoodBarricadeDefinition});
-                uiMessage_ = receipt.succeeded ? "BARRICADE PURCHASED TO RESERVE" : receipt.message;
-                gameAudio_.play(receipt.succeeded ? SoundEventId::UiConfirm : SoundEventId::UiDeny);
-                if (receipt.succeeded)
-                {
-                    baseConstructionPage_ = BaseConstructionPage::Owned;
-                    baseConstructionCatalogPage_ = (reserves(gameSession_.profile()).size()-1)/ui::pageSize;
-                }
+                submitProfileUi<FortificationReceipt>(FortificationCommand{BuildFortificationCommand{kWoodBarricadeDefinition}},
+                    nextProfileTransactionId("base-fortification-build"),[this](const auto &receipt) {
+                        uiMessage_=receipt.succeeded?"BARRICADE PURCHASED TO RESERVE":receipt.message;
+                        gameAudio_.play(receipt.succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);
+                        if(receipt.succeeded) {
+                            baseConstructionPage_=BaseConstructionPage::Owned;
+                            baseConstructionCatalogPage_=(reserves(gameSession_.profile()).size()-1)/ui::pageSize;
+                        }
+                    });
             }
             return true;
         }
@@ -182,13 +184,14 @@ bool App::handleBaseFortificationClick(MousePosition point)
         const auto plan = *s.previews[*s.hover];
         if (!plan.canCommit) { uiMessage_ = plan.message; return true; }
         s.submitted = true;
-        const auto receipt = gameSession_.installBaseFortification(gameFlow_.baseWorld(),
-            {*s.placing, s.slots[*s.hover].key}, plan.revision);
-        uiMessage_ = receipt.succeeded ? "BARRICADE INSTALLED" : receipt.message;
-        gameAudio_.play(receipt.succeeded ? SoundEventId::UiConfirm : SoundEventId::UiDeny);
-        s.previews = {};
-        if (receipt.succeeded) { s.placing.reset(); s.hover.reset(); }
-        static_cast<void>(gameFlow_.baseWorld().configureFortifications(gameSession_.profile().baseFortifications, publishedContentRegistry()));
+        submitProfileUi<FortificationReceipt>(InstallFortificationCommand{*s.placing,s.slots[*s.hover].key},
+            nextProfileTransactionId("base-fortification-install"),[this](const auto &receipt) {
+                uiMessage_=receipt.succeeded?"BARRICADE INSTALLED":receipt.message;
+                gameAudio_.play(receipt.succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);
+                auto &state=fortificationBuildUi_;state.previews={};
+                if(receipt.succeeded){state.placing.reset();state.hover.reset();}
+                static_cast<void>(gameFlow_.baseWorld().configureFortifications(gameSession_.profile().baseFortifications,publishedContentRegistry()));
+            });
     }
     return true;
 }

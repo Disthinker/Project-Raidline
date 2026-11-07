@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "test_temp_directory.h"
 #include <gtest/gtest.h>
 #include <SDL3_image/SDL_image.h>
@@ -31,7 +32,13 @@ struct UiFinalConsolidationTestAccess {
   static auto &scroll(App &a) { return a.finalFeedbackScroll_; }
   static bool settings(App &a) { return a.settingsOpen_; }
   static void settings(App &a, bool value) { a.settingsOpen_=value; }
-  static void frame(App &a) { a.processEvents(); a.update(0); a.input_.endFrame(); }
+  static void frame(App &a) {
+    a.processEvents(); a.update(0); a.input_.endFrame();
+    ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+        [&] { return a.profileUiBusy() || static_cast<bool>(a.pendingInventoryBarrierAction_); },
+        [&] { a.processEvents(); a.update(0); a.input_.endFrame(); }))
+        << a.gameSession_.persistenceMessage();
+  }
   static void events(App &a) { a.processEvents(); a.input_.endFrame(); }
   static auto page(App &a) { return a.baseConstructionPage_; }
   static void revision(App &a) { ++const_cast<ProfileState &>(a.gameSession_.profile()).revision; }
@@ -42,7 +49,7 @@ struct UiFinalConsolidationTestAccess {
   static void overwrite(App &a,bool value) { a.newGameOverwriteArmed_=value; }
   static void abandon(App &a,bool value) { a.baseDefenseAbandonArmed_=value; }
   static void drawMenu(App &a,bool paused) { a.renderFoundationMenu(paused); }
-  static void drawBase(App &a) { a.renderBaseDailyHud(); a.renderBaseCombatVitals(); }
+  static void drawBase(App &a) { a.renderBaseDailyHud(); a.renderBaseCombatVitals(); a.renderBaseFeedback(); }
   static void drawFullBase(App &a) { a.renderBase(); }
   static void presentationTick(App &a,float delta) { a.updateBasePresentation(delta); }
   static bool baseCombatStatusVisible(App &a) { return a.baseCombatStatusVisible(); }
@@ -55,6 +62,7 @@ struct UiFinalConsolidationTestAccess {
   static void closeConstructionView(App &a) {
     a.baseConstructionPanelOpen_=false;a.selectedBaseFixedFacility_.reset();a.deactivateBaseBuildCamera();
   }
+  static void clearConstructionSelection(App &a) { a.selectedBaseFixedFacility_.reset(); }
   static bool mapOpen(App &a) { return a.tacticalMapOpen_; }
   static void toggleBaseMap(App &a) {
     SDL_Event event{};event.type=SDL_EVENT_KEY_DOWN;event.key.scancode=SDL_SCANCODE_M;
@@ -335,12 +343,20 @@ TEST_F(UiFinalConsolidationTest, ActualBaseCompositionUsesShortFacilityNamesAndO
       const auto shortName=language==UiLanguage::SimplifiedChinese?(isDorm?"宿舍":"工坊"):(isDorm?"Dorm":"Workshop");
       const auto prompt=fmt::format(fmt::runtime(language==UiLanguage::SimplifiedChinese?"E · 打开 {}":"E · Open {}"),shortName);
       expectCompleteText({450,678,380,22},prompt,13,scale,UiTextAlign::Center);
+      // Walking keeps the real observation mask: the building's interior
+      // label need not be visible from its entrance. Prove the complete short
+      // name in the existing unmasked construction view at the normal 1x zoom.
+      A::constructionView(*app,facility->kind,2U);
+      // The inspector intentionally covers the small Dormitory label. The
+      // walking prompt was checked above; inspect the unoccluded static name.
+      A::clearConstructionSelection(*app);
       clear();A::drawFullBase(*app);
       const auto bounds=A::labelBounds(*app,facility->bounds.position.x+18,facility->bounds.position.y+facility->bounds.size.y*.5F,shortName);
       const auto camera=A::baseCamera(*app);
       const SDL_FRect screen{bounds.x+std::lround(-camera.x),bounds.y+std::lround(-camera.y),bounds.w,bounds.h};
       ASSERT_GE(screen.x,0);ASSERT_GE(screen.y,0);ASSERT_LE(screen.x+screen.w,1280);ASSERT_LE(screen.y+screen.h,720);
       expectCompleteText(screen,shortName,12,scale);
+      A::closeConstructionView(*app);
     }
     // Selecting and zooming must retain the code glyphs/short names instead of
     // bringing the former entrance/worker/resident ledgers back into the world.
@@ -360,11 +376,15 @@ TEST_F(UiFinalConsolidationTest, ActualBaseNoticeFadesAfterThreeVisibleSecondsWh
   // Complete this real setup before measuring presentation-only preservation.
   const auto loaded=A::session(*app).profile();ASSERT_TRUE(loaded.homePerimeter.sites.empty());
   A::flow(*app).updateBase({},0);
+  frame();
   const auto &initialized=A::session(*app).profile();
   ASSERT_TRUE(initialized.homePerimeter.sites.contains(RegionalBaseSiteDefinitionId{A::flow(*app).baseWorld().siteDefinitionId()}));
   auto expectedInitialization=loaded;expectedInitialization.assets=initialized.assets;
   expectedInitialization.homePerimeter=initialized.homePerimeter;expectedInitialization.revision=initialized.revision;
   expectedInitialization.committedTransactions=initialized.committedTransactions;
+  ASSERT_TRUE(initialized.basePlayerEffects);
+  EXPECT_EQ(initialized.basePlayerEffects->scope,A::session(*app).playerGameplayContext().activity);
+  expectedInitialization.basePlayerEffects=initialized.basePlayerEffects;
   EXPECT_EQ(profileStateFingerprint(initialized),profileStateFingerprint(expectedInitialization));
   const auto fixtureDiff=nlohmann::json::diff(
       nlohmann::json::parse(serializeProfileEnvelope(loaded,publishedContentRegistry().contentVersion())),
@@ -376,17 +396,18 @@ TEST_F(UiFinalConsolidationTest, ActualBaseNoticeFadesAfterThreeVisibleSecondsWh
     stream<<fixtureDiff.dump(2)<<'\n';ASSERT_TRUE(stream.good());
   }
   const auto before=profileStateFingerprint(initialized);
-  constexpr SDL_FRect notice{24,646,360,24},failure{24,590,400,110};
   for(const auto size:kUiWindowSizes)for(const auto language:{UiLanguage::SimplifiedChinese,UiLanguage::English}) {
     SCOPED_TRACE(std::to_string(size.width)+" "+uiLanguageCode(language));
     detach();attach(size.width,size.height);A::loadArt(*app);A::text(*app).setLanguage(language);
     const float scale=size.width/1280.0F;const auto prefix="declutter-notice-"+std::to_string(size.width)+"-"+uiLanguageCode(language);
+    const auto noticeLayout=layoutUiCompactFeedback(renderer,A::text(*app),"PROFILE LOADED",{24,674});
+    const auto notice=noticeLayout.panel;
     A::message(*app,"");A::presentationTick(*app,0);clear();A::drawFullBase(*app);ASSERT_TRUE(SDL_RenderPresent(renderer));
     const auto empty=pixels(notice,scale);
     A::message(*app,"PROFILE LOADED");A::presentationTick(*app,0);
     clear();A::drawFullBase(*app);save(prefix+"-initial");
     const auto initialNotice=pixels(notice,scale);EXPECT_NE(initialNotice,empty);
-    expectCompleteText(notice,language==UiLanguage::SimplifiedChinese?"存档已载入":"PROFILE LOADED",13,scale);
+    expectCompleteText(noticeLayout.text,language==UiLanguage::SimplifiedChinese?"存档已载入":"PROFILE LOADED",noticeLayout.fontSize,scale);
     A::pause(*app);A::presentationTick(*app,20);A::resume(*app);EXPECT_FLOAT_EQ(A::toastSeconds(*app),0);
     A::build(*app);A::presentationTick(*app,20);A::closeBuild(*app);EXPECT_FLOAT_EQ(A::toastSeconds(*app),0);
     A::presentationTick(*app,2.7F);clear();A::drawFullBase(*app);save(prefix+"-fading");
@@ -403,14 +424,17 @@ TEST_F(UiFinalConsolidationTest, ActualBaseNoticeFadesAfterThreeVisibleSecondsWh
     expectNoOldBasePanels(scale);
     // Exercise the real map-close adapter, rather than inventing a success
     // classification solely for the rendering fixture.
+    const auto mapNotice=layoutUiCompactFeedback(renderer,A::text(*app),"HOME REGION MAP CLOSED",{24,674}).panel;
+    const auto mapEmpty=pixels(mapNotice,scale);
     ASSERT_FALSE(A::mapOpen(*app));A::toggleBaseMap(*app);ASSERT_TRUE(A::mapOpen(*app));
     A::toggleBaseMap(*app);ASSERT_FALSE(A::mapOpen(*app));ASSERT_EQ(A::message(*app),"HOME REGION MAP CLOSED");
     A::presentationTick(*app,0);clear();A::drawFullBase(*app);ASSERT_TRUE(SDL_RenderPresent(renderer));
-    EXPECT_NE(pixels(notice,scale),empty);A::presentationTick(*app,3.1F);
+    EXPECT_NE(pixels(mapNotice,scale),mapEmpty);A::presentationTick(*app,3.1F);
     clear();A::drawFullBase(*app);ASSERT_TRUE(SDL_RenderPresent(renderer));
-    EXPECT_EQ(pixels(notice,scale),empty);EXPECT_EQ(A::message(*app),"HOME REGION MAP CLOSED");
+    EXPECT_EQ(pixels(mapNotice,scale),mapEmpty);EXPECT_EQ(A::message(*app),"HOME REGION MAP CLOSED");
     for(const auto &error:{std::string{"SAVE FAILED | isolated-profile-directory/profile.json | original profile unchanged"},
                           std::string{"UNCLASSIFIED TEST FAILURE | keep the complete reason"}}) {
+      const auto failure=layoutUiCompactFeedback(renderer,A::text(*app),error,{24,700}).panel;
       A::message(*app,error);A::presentationTick(*app,0);clear();A::drawFullBase(*app);ASSERT_TRUE(SDL_RenderPresent(renderer));
       const auto initial=pixels(failure,scale);EXPECT_GT(bright(failure,scale),30);
       A::presentationTick(*app,90);clear();A::drawFullBase(*app);
@@ -423,12 +447,27 @@ TEST_F(UiFinalConsolidationTest, ActualBaseNoticeFadesAfterThreeVisibleSecondsWh
   std::string longError;
   for(int line=0;line<28;++line)longError+="Isolated full save failure line "+std::to_string(line)+".\n";
   const std::string tail="END OF ORIGINAL SAVE FAILURE";longError+=tail;
+  const auto failureLayout=layoutUiCompactFeedback(renderer,A::text(*app),longError,{24,700});
+  const auto failure=failureLayout.panel;
   A::message(*app,longError);A::presentationTick(*app,0);clear();A::drawFullBase(*app);ASSERT_TRUE(SDL_RenderPresent(renderer));
-  const auto first=pixels(failure,1);wheel({100,630},-1000);A::events(*app);
+  const auto first=pixels(failure,1);wheel({failure.x+failure.w*.5F,failure.y+failure.h*.5F},-1000);A::events(*app);
   clear();A::drawFullBase(*app);save("declutter-long-error-1280-zh-CN-tail");
   EXPECT_GT(A::scroll(*app),0);EXPECT_NE(pixels(failure,1),first);EXPECT_EQ(A::message(*app),longError);
-  // Four visible rows leave the final line at y=600+3*ceil(12*1.4).
-  expectCompleteText({36,651,366,17},tail,12,1);
+  // The compact error keeps one body row above its disclosure hint. Its width
+  // may wrap the original final line, so inspect every tail segment through
+  // real one-row wheel steps rather than requiring a former wide text box.
+  const auto tailLines=wrapUiText(tail,failureLayout.text.w-10,0,
+      [&](auto value){return A::text(*app).measure(value,failureLayout.fontSize);});
+  ASSERT_FALSE(tailLines.empty());
+  for(std::size_t remaining=tailLines.size();remaining>0;--remaining) {
+    if(remaining!=tailLines.size()) {
+      wheel({failure.x+failure.w*.5F,failure.y+failure.h*.5F},.5F);A::events(*app);
+      clear();A::drawFullBase(*app);
+    }
+    expectCompleteText({failureLayout.text.x,failureLayout.text.y,failureLayout.text.w-10,
+        std::ceil(failureLayout.fontSize*1.4F)},tailLines[remaining-1].text,failureLayout.fontSize,1);
+    EXPECT_EQ(A::message(*app),longError);
+  }
   EXPECT_EQ(profileStateFingerprint(A::session(*app).profile()),before);
 }
 

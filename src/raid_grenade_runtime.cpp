@@ -78,3 +78,23 @@ void RaidGrenadeRuntime::clear() noexcept
     fuse_.reset();
     explosion_.reset();
 }
+
+GrenadeRuntimeCheckpoint RaidGrenadeRuntime::checkpoint() const
+{
+    return {flight_, fuse_, explosion_, nextExplosionId_};
+}
+
+bool RaidGrenadeRuntime::restore(const GrenadeRuntimeCheckpoint &s)
+{
+    if (!s.nextExplosionId || unsigned(s.flight.has_value()) + unsigned(s.fuse.has_value()) + unsigned(s.explosion.has_value()) > 1) return false;
+    const auto valid=[](const GrenadeLanding &v) {
+        return v.space.valid() && finite(v.origin) && finite(v.point) && v.use.valid();
+    };
+    if (s.flight && (!valid(s.flight->landing) || !std::isfinite(s.flight->elapsed) || s.flight->elapsed < 0 || s.flight->elapsed > s.flight->landing.use.flightSeconds)) return false;
+    if (s.fuse && (!valid(s.fuse->landing) || !std::isfinite(s.fuse->elapsed) || s.fuse->elapsed < 0 || s.fuse->elapsed > s.fuse->landing.use.fuseSeconds)) return false;
+    if (s.explosion && (!valid(s.explosion->landing) || !s.explosion->id || s.explosion->id >= s.nextExplosionId)) return false;
+    RaidGrenadeRuntime candidate;
+    candidate.flight_=s.flight;candidate.fuse_=s.fuse;candidate.explosion_=s.explosion;candidate.nextExplosionId_=s.nextExplosionId;
+    *this=std::move(candidate);
+    return true;
+}

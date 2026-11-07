@@ -11,6 +11,7 @@
 
 #include "alpha_content_ids.h"
 #include "game_session.h"
+#include "profile_ui_test_wait.h"
 #include "medical_domain.h"
 
 namespace
@@ -559,6 +560,7 @@ TEST(AlphaExtractionSessionTest, HospitalMedicineKeepsCarriedLocationAcrossDiskR
         ASSERT_TRUE(player.setPosition(session.world().extractionPoint().bounds().position));
         for (int i=0; i<40 && session.profile().pendingRaid; ++i)
             session.update(GameplayInput{}, 0.1F);
+        ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
         ASSERT_FALSE(session.profile().pendingRaid);
         EXPECT_EQ(session.profile().assets.find(medicalId)->location, *carriedLocation);
     }
@@ -1122,7 +1124,8 @@ TEST(AlphaExtractionSessionTest, ReloadRetainsAdsAndLocksMaximumSpread)
     ASSERT_TRUE(session.deployAlpha(90823));
 
     GameplayInput reload{};
-    reload.reloadJustPressed = true;
+    reload.raidReloadIntents.push_back({RaidReloadInputKind::Automatic,
+        *session.activeAlphaWeapon(), std::nullopt, 0});
     reload.aimDownSights = true;
     reload.aimWorldPosition = Vec2{1000.0F, 360.0F};
     session.update(reload, 0.0F);
@@ -1326,7 +1329,8 @@ TEST(AlphaExtractionSessionTest, SignalReadinessMatchesReloadAndInventoryGates)
     ASSERT_TRUE(session.canCallSignalExtraction());
     EXPECT_FALSE(session.canCallSignalExtraction(true));
     GameplayInput reload;
-    reload.reloadJustPressed = true;
+    reload.raidReloadIntents.push_back({RaidReloadInputKind::Automatic,
+        *session.activeAlphaWeapon(), std::nullopt, 0});
     session.update(reload, 0.0F);
     ASSERT_TRUE(session.raidActionState().active().has_value());
     EXPECT_FALSE(session.canCallSignalExtraction());
@@ -1353,7 +1357,8 @@ TEST(AlphaExtractionSessionTest, ReloadCommitsSelectedChestMagazineAfterTwoSecon
     ASSERT_TRUE(session.deployAlpha(3319));
 
     GameplayInput reload{};
-    reload.reloadJustPressed = true;
+    reload.raidReloadIntents.push_back({RaidReloadInputKind::Automatic,
+        *session.activeAlphaWeapon(), std::nullopt, 0});
     session.update(reload, 0.0F);
     ASSERT_TRUE(session.raidActionState().active().has_value());
     session.update(GameplayInput{}, 2.0F);
@@ -1614,8 +1619,11 @@ TEST(AlphaExtractionSessionTest, TargetedReloadIsAtomicAndChambersAfterTwoSecond
     EXPECT_EQ(magazineRoundCount(session.profile(), *target), 19U);
     EXPECT_EQ(
         session.takePresentationEvents(),
-        std::vector<GameSessionPresentationEvent>{
-            GameSessionPresentationEvent::ReloadCompleted});
+        (std::vector<GameSessionPresentationEvent>{
+            GameSessionPresentationEvent::WeaponMagazineRemoved,
+            GameSessionPresentationEvent::WeaponMagazineInserted,
+            GameSessionPresentationEvent::WeaponChambered,
+            GameSessionPresentationEvent::ReloadCompleted}));
 }
 
 TEST(AlphaExtractionSessionTest, RaidWeaponMaintenanceAllowsSlowMovement)
@@ -2122,6 +2130,7 @@ TEST(AlphaExtractionSessionTest, SecuredRescuePersistsThroughActiveQuit)
         transfer.interactPressed = true;
         session.update(transfer, 2.1F);
 
+        ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
         ASSERT_TRUE(session.profile().pendingRaid.has_value());
         ASSERT_TRUE(session.profile().pendingRaid->rescue.has_value());
         EXPECT_TRUE(session.profile().pendingRaid->rescue->secured);
@@ -2158,6 +2167,7 @@ TEST(AlphaExtractionSessionTest, SecuredRescueIsCleanAbnormalExitCheckpoint)
         GameplayInput transfer;
         transfer.interactPressed = true;
         session.update(transfer, 2.1F);
+        ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
         ASSERT_EQ(session.profile().basePopulation.ordinaryResidents, 9U);
         ASSERT_TRUE(session.profile().pendingRaid.has_value());
     }
@@ -2199,6 +2209,7 @@ TEST(AlphaExtractionSessionTest, RescueCheckpointSaveFailureIsZeroCommit)
     transfer.interactPressed = true;
     session.update(transfer, 2.1F);
 
+    EXPECT_FALSE(waitForProfileUiDurability(session));
     EXPECT_EQ(session.profile().revision, revision);
     EXPECT_EQ(session.profile().assets.nextAssetId(), nextAssetId);
     EXPECT_EQ(session.profile().currency, currency);
@@ -2207,6 +2218,6 @@ TEST(AlphaExtractionSessionTest, RescueCheckpointSaveFailureIsZeroCommit)
     EXPECT_FALSE(session.profile().pendingRaid->rescue->secured);
     EXPECT_FLOAT_EQ(
         session.world().ordinarySurvivorRescueProgress(),
-        0.0F);
+        1.0F); // The completed interaction waits for its immutable save candidate.
     EXPECT_FALSE(session.persistenceMessage().empty());
 }

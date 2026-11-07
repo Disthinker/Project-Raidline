@@ -39,14 +39,6 @@ struct MedicalAdvanceResult
     std::uint32_t elapsedMs,
     std::uint32_t nextScreamDelayMs) noexcept;
 
-enum class MedicalUseEffect
-{
-    RestoreHealth,
-    StopLightBleeding,
-    StopAnyBleeding,
-    SuppressPain
-};
-
 struct MedicalUsePlan
 {
     bool canCommit{};

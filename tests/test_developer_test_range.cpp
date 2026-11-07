@@ -115,6 +115,7 @@ TEST(DeveloperRangeTest, ExitAndActiveQuitRestoreExactOriginalSessionAndSaveByte
         GameFlow flow;
         flow.configurePersistence(path);
         ASSERT_TRUE(flow.startNewGame("range-isolation"));
+        ASSERT_TRUE(flow.gameSession().checkpointWorldClock());
         const auto before = profileStateFingerprint(flow.gameSession().profile());
         SaveRepository repository(path);
         const auto bytes = read(repository.primaryPath());
@@ -155,6 +156,7 @@ TEST(DeveloperRangeTest, DeathReturnsToBaseWithoutAResultAndProductionRaidReject
 {
     GameFlow flow;
     ASSERT_TRUE(flow.startNewGame("range-death"));
+    ASSERT_TRUE(flow.gameSession().checkpointWorldClock());
     const auto before = profileStateFingerprint(flow.gameSession().profile());
     ASSERT_TRUE(flow.enterDeveloperRange());
     ASSERT_TRUE(flow.gameSession().world().damagePlayer(1000));

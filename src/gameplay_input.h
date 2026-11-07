@@ -1,10 +1,25 @@
 #pragma once
 
 #include <optional>
+#include <cstdint>
+#include <vector>
 
 #include "item_definition.h"
 #include "rect.h"
 #include "vec2.h"
+
+enum class RaidReloadInputKind { Automatic, Selected, UpgradeEmergency };
+// Stable asset IDs only: this device-independent intent never owns assets.
+struct RaidReloadIntent {
+    RaidReloadInputKind kind{};
+    std::uint64_t expectedWeaponId{};
+    std::optional<std::uint64_t> magazineId;
+    float ageSeconds{};
+    // One short-lived identity joins the first release and its double tap.
+    // Event timing is independent of frame/action progression.
+    std::uint64_t gestureId{};
+    double doubleTapSeconds{};
+};
 
 struct GameplayInput
 {
@@ -17,6 +32,9 @@ struct GameplayInput
 
     bool fireJustPressed{};
     bool firePressed{};
+    // Only the service's release barrier reads this unmasked device fact.
+    // It never grants permission to shoot through a modal surface.
+    bool firePhysicallyPressed{};
     bool aimDownSights{};
     bool forceMaximumWeaponSpread{};
 
@@ -49,6 +67,10 @@ struct GameplayInput
     bool interactPressed{};
 
     bool reloadJustPressed{};
+    bool cycleFireModeJustPressed{};
+    std::vector<RaidReloadIntent> raidReloadIntents;
+    // Interrupt intent only. Starting an action requires an ordered intent.
+    bool reloadGestureJustPressed{};
     bool healJustPressed{};
     bool lightJustPressed{}, lightJustReleased{}, lightPressed{};
     std::optional<EquipmentSlotKind> weaponSlotJustPressed;

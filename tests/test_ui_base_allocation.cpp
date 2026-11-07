@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "test_temp_directory.h"
 #include "alpha_content_ids.h"
 #include <algorithm>
@@ -19,13 +20,18 @@ struct UiBaseAllocationTestAccess {
     static auto generation(App &a){return a.allocationProjectionGeneration_;}
     static auto &anchor(App &a){return a.worldAimPointerAnchor_;}
     static void refresh(App &a){a.refreshBaseAllocationUi(true);}
-    static void frame(App &a,float dt=0){a.processEvents();a.update(dt);a.input_.endFrame();}
+    static void settle(App &a) {
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+            [&] { return a.profileUiBusy() || static_cast<bool>(a.pendingInventoryBarrierAction_); },
+            [&] { a.processEvents();a.update(0);a.input_.endFrame(); })) << a.gameSession_.persistenceMessage();
+    }
+    static void frame(App &a,float dt=0) { a.processEvents();a.update(dt);a.input_.endFrame(); settle(a); }
     static void draw(App &a){a.renderBaseAllocation();}
     static void legacy(App &a,Vec2 p){a.handleBasePointerClick({{p.x,p.y}});}
     static void pause(App &a){a.pauseMenu_.open();}
     static void resume(App &a){a.pauseMenu_.close();}
     static void reset(App &a){a.resetBaseAllocationUi();}
-    static void direct(App &a,UiAllocationEvent e){a.handleBaseAllocationEvent(e);}
+    static void direct(App &a,UiAllocationEvent e){a.handleBaseAllocationEvent(e); settle(a); }
     static void attach(App &a,SDL_Renderer *r,float scale){a.renderer_=r;ASSERT_TRUE(a.uiTextRenderer_.initialize(r));a.uiTextRenderer_.setRasterScale(scale);}
     static void detach(App &a){a.uiTextRenderer_.shutdown();a.renderer_=nullptr;}
 };

@@ -1,5 +1,6 @@
 #include "app.h"
 #include "test_temp_directory.h"
+#include "ui_app_persistence_wait.h"
 #include "alpha_content_ids.h"
 #include "ui_base_deployment_presentation.h"
 #include "ui_lost_recovery_presentation.h"
@@ -18,6 +19,7 @@
 #include <SDL3_image/SDL_image.h>
 
 struct UiBaseDeploymentTestAccess {
+    static void bindWindow(App &a,SDL_Window *window){a.window_=window;}
     static auto &flow(App &a) { return a.gameFlow_; }
     static auto &session(App &a) { return a.gameSession_; }
     static auto &state(App &a) { return a.deploymentUi_; }
@@ -38,7 +40,12 @@ struct UiBaseDeploymentTestAccess {
     static void refresh(App &a) { a.refreshBaseDeploymentUi(true); }
     static void reset(App &a) { a.resetBaseDeploymentUi(); }
     static void draw(App &a) { a.renderBaseDeployment(); }
-    static void frame(App &a) { a.processEvents(); a.update(0); a.input_.endFrame(); }
+    static void frame(App &a) {
+        a.processEvents(); a.update(0); a.syncRaidPointerCapture(); a.pendingRelativeAimMotion_={}; a.input_.endFrame();
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+            [&] { return a.profileUiBusy() || bool(a.pendingInventoryBarrierAction_); },
+            [&] { a.processEvents(); a.update(0); a.syncRaidPointerCapture(); a.pendingRelativeAimMotion_={}; a.input_.endFrame(); }));
+    }
     static void direct(App &a, UiDeploymentEvent e) { a.handleBaseDeploymentEvent(e); }
     static bool confirm(App &a) { return a.handleBaseDeploymentConfirm(); }
     static void newGestureFrame(App &a) { a.deploymentConfirmConsumedThisFrame_ = false; }
@@ -93,7 +100,7 @@ protected:
         bool operator==(const WorldSnapshot &) const = default;
     };
     raidline::test::TemporaryDirectory saveDirectory;
-    std::unique_ptr<App> app;
+    std::unique_ptr<App> app; SDL_Window *window{};
     SDL_Surface *surface{};
     SDL_Renderer *renderer{};
     std::filesystem::path path;
@@ -102,7 +109,10 @@ protected:
     ProfileState &profile() { return const_cast<ProfileState &>(A::session(*app).profile()); }
 
     void SetUp() override {
-        ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
+        ASSERT_TRUE(SDL_SetHint(SDL_HINT_VIDEO_DRIVER,"dummy"));
+        ASSERT_TRUE(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS));
+        window=SDL_CreateWindow("headless UI capture regression",1280,720,SDL_WINDOW_HIDDEN);
+        ASSERT_NE(window,nullptr);
         ASSERT_NO_THROW(saveDirectory.claim("raidline-deployment-ui-",
             testing::UnitTest::GetInstance()->current_test_info()->name()));
         path = saveDirectory.path();
@@ -120,9 +130,9 @@ protected:
         ASSERT_TRUE(validateProfileState(p, content).valid) << validateProfileState(p, content).message;
         ASSERT_TRUE(projectWeaponSupply(p, content, false).anyWeaponCanFire);
         ASSERT_TRUE(SaveRepository(path).save(p, content.contentVersion()).succeeded);
-        app = std::make_unique<App>();
+        app = std::make_unique<App>();A::bindWindow(*app,window);
         A::flow(*app).configurePersistence(path); ASSERT_TRUE(A::flow(*app).continueGame()); A::frame(*app);
-        ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::RaidGate));
+        ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::RaidGate));A::frame(*app);
         attach(1280, 720); A::text(*app).setLanguage(UiLanguage::English); A::refresh(*app);
         initialWorld = captureWorld();
     }
@@ -137,7 +147,7 @@ protected:
         SDL_DestroyRenderer(renderer); SDL_DestroySurface(surface); renderer = nullptr; surface = nullptr;
     }
     void TearDown() override {
-        detach(); app.reset(); SDL_Quit();
+        detach(); if(app)A::bindWindow(*app,nullptr);SDL_DestroyWindow(window);window=nullptr;app.reset(); SDL_Quit();
         ASSERT_NO_THROW(saveDirectory.cleanup());
     }
     void click(Vec2 p) { pointer(p, true); pointer(p, false); A::frame(*app); }
@@ -153,7 +163,7 @@ protected:
     void reopen() {
         A::flow(*app).closeBaseFacility(); A::reset(*app); A::closeInventory(*app); A::resume(*app);
         A::lost(*app) = A::regional(*app) = false;
-        ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::RaidGate)); A::refresh(*app);
+        ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::RaidGate));A::frame(*app); A::refresh(*app);
     }
     void map(std::size_t index) {
         ASSERT_LT(index, content.maps().size()); A::state(*app).mapPage = index / uiDeploymentMapPageSize();
@@ -383,8 +393,8 @@ TEST_F(UiBaseDeploymentTest, NativeCancellationBoundariesDiscardHeldPurchase) {
 
 TEST_F(UiBaseDeploymentTest, PauseAndTabInventoryCancelHeldPurchase) {
     intelligence(); const auto point = center(uiDeploymentIntelligenceRect(0, true)); down(point);
-    A::pause(*app); A::frame(*app); A::resume(*app); const auto fp = profileStateFingerprint(profile()); up(point); EXPECT_EQ(profileStateFingerprint(profile()), fp);
-    down(point); key(SDL_SCANCODE_TAB); A::frame(*app); A::closeInventory(*app); up(point); EXPECT_EQ(profileStateFingerprint(profile()), fp);
+    A::pause(*app); A::frame(*app); A::resume(*app); const auto beforeProfile=profile();const auto fp = profileStateFingerprint(profile()); up(point); EXPECT_EQ(profileStateFingerprint(profile()), fp) << raidline::test::describeUiProfileChange(beforeProfile,profile());
+    down(point); key(SDL_SCANCODE_TAB); A::frame(*app); A::closeInventory(*app); up(point); EXPECT_EQ(profileStateFingerprint(profile()), fp) << raidline::test::describeUiProfileChange(beforeProfile,profile());
 }
 
 TEST_F(UiBaseDeploymentTest, ChangingMapClearsOldIntelligenceRecoveryAndRiskConfirmation) {

@@ -53,7 +53,7 @@ std::size_t firstRunner(const PendingRaidSnapshot &raid)
 TEST(RunnerInfectedDomainTest, PublishedContentDefinesAnIsolatedAmbushReplacement)
 {
     const auto &content = publishedContentRegistry();
-    EXPECT_EQ(content.contentVersion(), "raid-runner-infected-content-73");
+    EXPECT_EQ(content.contentVersion(), "raid-weapon-handling-content-74");
     const auto &definition = content.enemyCombatDefinition(
         EnemyCombatDefinitionId{"enemy.infected.runner"});
     EXPECT_EQ(definition.maximumHealth, 8);
