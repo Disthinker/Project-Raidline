@@ -3,6 +3,7 @@
 #include "test_temp_directory.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -274,9 +275,10 @@ TEST_F(InventoryUiPersistence, RealDefenseUsesItsWriterGenerationsToConfirmACoal
   store->release(); ASSERT_TRUE(waitSettled());
   const auto status = session().baseDefenseCheckpointStatus(); EXPECT_EQ(status.durableGeneration, status.requestedGeneration);
   const auto completed = session().takeInventoryUiCompletions(); ASSERT_EQ(completed.size(), 3U);
+  const std::array expectedRequestIds{first.requestId, second.requestId, third.requestId};
   for (std::size_t index = 0; index < completed.size(); ++index) {
     EXPECT_TRUE(completed[index].succeeded);
-    EXPECT_EQ(completed[index].requestId, (std::array{first.requestId, second.requestId, third.requestId})[index]);
+    EXPECT_EQ(completed[index].requestId, expectedRequestIds[index]);
   }
   const auto saved = SaveRepository{directory.path()}.load(publishedContentRegistry()); ASSERT_TRUE(saved.profile) << saved.message;
   ASSERT_TRUE(saved.profile->activeBaseDefense); EXPECT_EQ(saved.profile->activeBaseDefense->eventId, event);
