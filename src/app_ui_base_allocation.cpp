@@ -59,6 +59,7 @@ void App::refreshBaseAllocationUi(bool force) {
     allocationProjectionRevision_=profile.revision; ++allocationProjectionGeneration_;
 }
 void App::handleBaseAllocationEvent(const UiAllocationEvent &event) {
+    if(profileUiBusy())return;
     if(gameFlow_.state()!=GameFlowState::Base || gameFlow_.activeBaseFacility()!=BaseFacilityKind::Allocation ||
         pauseMenu_.isOpen() || inventoryOverlayState_.isOpen() || developerWeaponPanelOpen_ ||
         developerWeaponPanelBlocksGameplayThisFrame_ || !windowHasInputFocus_ || baseSiegeWarningVisible() ||
@@ -142,29 +143,26 @@ void App::handleBaseAllocationEvent(const UiAllocationEvent &event) {
         s.contributions.clear(); s.pages[static_cast<int>(s.tab)]=0; s.detailsScroll=0;
         allocationFeedback_.clear(); refreshBaseAllocationUi(true); return;
     }
-    bool succeeded=false;
+    const auto finish=[this,feedback](bool succeeded,std::string message){
+        feedback(std::move(message));gameAudio_.play(succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);refreshBaseAllocationUi(true);
+    };
     if(control==C::Focus || control==C::ClearFocus) {
         const auto target=control==C::Focus?p.selectedWish:std::nullopt;
-        const auto receipt=gameSession_.executeBaseWishFocus(target,nextProfileTransactionId("allocation-wish-focus"));
-        succeeded=receipt.succeeded; feedback(tr(succeeded?"WISH FOCUS SAVED":receipt.message));
-        if(succeeded)s.focusOnly=false;
+        submitProfileUi<BasePriorityReceipt>(ProfileUiWishFocusCommand{target},nextProfileTransactionId("allocation-wish-focus"),
+            [this,finish,tr](const auto &r){if(r.succeeded)allocationUi_.focusOnly=false;finish(r.succeeded,tr(r.succeeded?"WISH FOCUS SAVED":r.message));});
     } else if(control==C::Main && s.tab==T::Supply && p.supplySelection) {
-        const auto receipt=gameSession_.executeBaseSupplyAssignment(*p.supplySelection,p.targetAssignment,nextProfileTransactionId("allocation-supply-policy"));
-        succeeded=receipt.succeeded;
-        feedback(tr(succeeded?(p.targetAssignment?"AUTOMATIC BASE SUPPLY ENABLED":"AUTOMATIC BASE SUPPLY DISABLED"):receipt.message));
+        const auto assignment=p.targetAssignment;
+        submitProfileUi<BaseSupplyAssignmentReceipt>(SetBaseSupplyAssignmentCommand{*p.supplySelection,assignment},nextProfileTransactionId("allocation-supply-policy"),
+            [finish,tr,assignment](const auto &r){finish(r.succeeded,tr(r.succeeded?(assignment?"AUTOMATIC BASE SUPPLY ENABLED":"AUTOMATIC BASE SUPPLY DISABLED"):r.message));});
     } else if(control==C::Main && s.tab==T::Wishes && p.selectedWish) {
-        std::vector<AssetInstanceId> ids; for(const auto &a:p.chosen)ids.push_back(a.id);
-        const auto receipt=gameSession_.executeBasePrioritySubmission(p.selectedWish->definitionId,ids,nextProfileTransactionId("allocation-submit-wish"));
-        succeeded=receipt.succeeded; feedback(tr(succeeded?"BASE WISH FULFILLED":receipt.message));
-        if(succeeded)s.contributions.clear();
+        std::vector<AssetInstanceId> ids;for(const auto &item:p.chosen)ids.push_back(item.id);
+        submitProfileUi<BasePriorityReceipt>(SubmitBasePriorityCommand{p.selectedWish->definitionId,std::move(ids)},nextProfileTransactionId("allocation-submit-wish"),
+            [this,finish,tr](const auto &r){if(r.succeeded)allocationUi_.contributions.clear();finish(r.succeeded,tr(r.succeeded?"BASE WISH FULFILLED":r.message));});
     } else if(control==C::Main && s.tab==T::Materials && p.material) {
-        const auto receipt=gameSession_.executeConstructionMaterialContribution(p.material->id,nextProfileTransactionId("allocation-process-material"));
-        succeeded=receipt.succeeded;
-        feedback(succeeded?fmt::format("{} +{}",tr("BUILD MATERIAL GAIN"),receipt.materialUnits):tr(receipt.message));
-        if(succeeded)s.material.reset();
-    } else return;
-    gameAudio_.play(succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);
-    refreshBaseAllocationUi(true);
+        submitProfileUi<ConstructionMaterialReceipt>(ContributeConstructionMaterialCommand{p.material->id},nextProfileTransactionId("allocation-process-material"),
+            [this,finish,tr](const auto &r){if(r.succeeded)allocationUi_.material.reset();finish(r.succeeded,r.succeeded?fmt::format("{} +{}",tr("BUILD MATERIAL GAIN"),r.materialUnits):tr(r.message));});
+    }
+
 }
 
 void App::renderBaseAllocation() {

@@ -1,5 +1,6 @@
 #include "app.h"
 #include "test_temp_directory.h"
+#include "ui_app_persistence_wait.h"
 #include "alpha_content_ids.h"
 #include "ui_base_deployment_presentation.h"
 #include "ui_lost_recovery_presentation.h"
@@ -36,7 +37,12 @@ struct UiLostRecoveryTestAccess {
     static void refresh(App &a) { a.refreshLostRecoveryUi(true); }
     static void reset(App &a) { a.resetLostRecoveryUi(); }
     static void draw(App &a) { a.renderLostRaidRecords(); }
-    static void frame(App &a) { a.processEvents(); a.update(0); a.input_.endFrame(); }
+    static void frame(App &a) {
+        a.processEvents(); a.update(0); a.input_.endFrame();
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+            [&] { return a.profileUiBusy() || bool(a.pendingInventoryBarrierAction_); },
+            [&] { a.processEvents(); a.update(0); a.input_.endFrame(); }));
+    }
     static void legacy(App &a, Vec2 p) { a.handleBasePointerClick({{p.x, p.y}}); }
     static void pause(App &a) { a.pauseMenu_.open(); }
     static void resume(App &a) { a.pauseMenu_.close(); }
@@ -152,8 +158,10 @@ protected:
         ASSERT_NE(it, records.end());
         const auto index = static_cast<std::size_t>(it - records.begin());
         const auto page = index / uiLostRecoveryPageSize();
-        while (A::state(*app).recordPage < page) control(C::Next);
-        while (A::state(*app).recordPage > page) control(C::Previous);
+        const auto attempts=uiLostRecoveryPageCount(records.size())+1;
+        for(std::size_t step=0;step<attempts && A::state(*app).recordPage!=page;++step)
+            control(A::state(*app).recordPage<page?C::Next:C::Previous);
+        ASSERT_EQ(A::state(*app).recordPage,page);
         click(center(uiLostRecoveryRecordRect(index % uiLostRecoveryPageSize())));
         ASSERT_EQ(A::projection(*app).selectedRecordId, id);
     }

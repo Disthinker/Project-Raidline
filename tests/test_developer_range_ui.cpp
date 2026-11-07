@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include <gtest/gtest.h>
 #include <memory>
 
@@ -11,7 +12,12 @@ struct DeveloperRangeUiTestAccess {
     }
     static bool capture(const App &app) { return app.shouldCaptureWorldPointer(); }
     static bool open(const App &app) { return app.developerRangePanelOpen_; }
-    static void events(App &app) { app.processEvents(); app.update(0); app.input_.endFrame(); }
+    static void events(App &app) {
+        app.processEvents(); app.update(0); app.input_.endFrame();
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(app.gameSession_,
+            [&] { return app.profileUiBusy() || bool(app.pendingInventoryBarrierAction_); },
+            [&] { app.processEvents(); app.update(0); app.input_.endFrame(); }));
+    }
     static bool renderer(App &app, SDL_Renderer *renderer) {
         app.renderer_ = renderer;
         return app.uiTextRenderer_.initialize(renderer);
@@ -44,7 +50,9 @@ protected:
         ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
         app = std::make_unique<App>();
         ASSERT_TRUE(Access::flow(*app).startNewGame("range-ui-test"));
+        Access::events(*app);
         Access::enter(*app);
+        Access::events(*app);
         ASSERT_TRUE(Access::open(*app));
     }
     void TearDown() override {

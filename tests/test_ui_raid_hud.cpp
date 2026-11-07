@@ -3,6 +3,7 @@
 #include "developer_test_range.h"
 #include "raid_lifecycle.h"
 #include <algorithm>
+#include <cmath>
 #include "ui_raid_hud_presentation.h"
 #include <gtest/gtest.h>
 #include <SDL3_image/SDL_image.h>
@@ -90,7 +91,15 @@ TEST_F(UiRaidHudTest, ActionAndHazardPaintingShowReadableCurrentFactsWithoutMuta
         p.light=language==UiLanguage::SimplifiedChinese?"手电开启 · 68% · U":"LIGHT ON · 68% · U";
         clear();renderUiRaidHud(renderer,A::text(*app),p);SDL_RenderPresent(renderer);
         EXPECT_GT(bright({26,553,226,28}),60U);
-        EXPECT_GT(bright({446,485,388,28}),50U);EXPECT_GT(bright({446,529,388,34}),50U);
+        EXPECT_GT(bright({446,485,388,28}),50U);
+        const auto layout=layoutUiRaidHud();
+        const auto feedback=layoutUiCompactFeedback(renderer,A::text(*app),p.feedback,
+            {layout.feedback.x,layout.feedback.y+layout.feedback.h});
+        const SDL_Rect feedbackPixels{static_cast<int>(std::floor(feedback.text.x)),
+            static_cast<int>(std::floor(feedback.text.y)),
+            static_cast<int>(std::ceil(feedback.text.x+feedback.text.w)-std::floor(feedback.text.x)),
+            static_cast<int>(std::ceil(feedback.text.y+feedback.text.h)-std::floor(feedback.text.y))};
+        EXPECT_GT(bright(feedbackPixels),50U);
         const auto actualMedical=orangeGlyphMask({16,500,400,42});
         const auto actualCondition=orangeGlyphMask({276,630,360,22});
         EXPECT_GT(bright({650,630,400,22}),30U); // actual light label; no card/border here
@@ -138,6 +147,38 @@ TEST_F(UiRaidHudTest, AllAuxiliarySurfacesRenderInBothLanguagesAndThreeWindowSiz
 TEST(UiRaidHudLayoutTest, GuideCardsStayInsideWindowAtItsEdges){
     for(const auto x:{-90.0F,16.0F,1200.0F})for(const auto y:{-20.0F,590.0F,900.0F}){
         const auto b=uiAuxiliaryHintRect(4,x,y,620);EXPECT_GE(b.x,16);EXPECT_GE(b.y,12);EXPECT_LE(b.x+b.w,1264);EXPECT_LE(b.y+b.h,708);
+    }
+}
+
+TEST_F(UiRaidHudTest, GameplayBottomLanesReserveCompleteFootprintsWithEightUnitGaps) {
+    const auto separated=[](SDL_FRect a,SDL_FRect b) {
+        return a.x+a.w+kUiGameplayHudGap<=b.x+.001F || b.x+b.w+kUiGameplayHudGap<=a.x+.001F ||
+            a.y+a.h+kUiGameplayHudGap<=b.y+.001F || b.y+b.h+kUiGameplayHudGap<=a.y+.001F;
+    };
+    for(const auto size:kUiWindowSizes)for(const float dpi:{1.0F,1.25F,1.5F,2.0F}) {
+        detach();attach(size.width,size.height);
+        ASSERT_TRUE(SDL_SetFloatProperty(SDL_GetRendererProperties(renderer),kUiDisplayScaleProperty,dpi));
+        for(const auto language:{UiLanguage::English,UiLanguage::SimplifiedChinese}) {
+            A::text(*app).setLanguage(language);
+            const std::string message=language==UiLanguage::English
+                ?"Saved changes are confirmed. A second line still has its own bounded footprint."
+                :"更改已保存。多行反馈也必须避让同时可见的武器、控制和操作提示。";
+            for(const bool base:{false,true})for(const bool transient:{false,true})
+                for(const bool diagnostics:{false,true}) {
+                    const auto l=layoutUiGameplayBottomHud(renderer,A::text(*app),
+                        {base,true,true,transient,diagnostics,message});
+                    std::vector<SDL_FRect> occupied{l.vitals,l.action,l.condition,l.light,l.melee,l.feedback.panel};
+                    if(base) {occupied.push_back(l.interaction);if(diagnostics)occupied.push_back({16,562,1248,35});}
+                    else {occupied.push_back(l.weapon);occupied.push_back(l.medical);occupied.push_back(l.throwableHint);
+                        occupied.insert(occupied.end(),l.slots.begin(),l.slots.end());}
+                    for(std::size_t i=0;i<occupied.size();++i) {
+                        const auto a=occupied[i];EXPECT_GT(a.w,0);EXPECT_GT(a.h,0);
+                        EXPECT_GE(a.x,0);EXPECT_GE(a.y,0);EXPECT_LE(a.x+a.w,1280);EXPECT_LE(a.y+a.h,720);
+                        for(std::size_t j=i+1;j<occupied.size();++j)
+                            EXPECT_TRUE(separated(a,occupied[j]))<<"base="<<base<<" dpi="<<dpi<<" pair="<<i<<","<<j;
+                    }
+                }
+        }
     }
 }
 

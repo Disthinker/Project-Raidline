@@ -39,6 +39,7 @@ void App::resetBaseSupplyUi() {
     weaponComponentsOpen_ = false;
 }
 void App::handleBaseSupplyEvent(const UiBaseSupplyEvent &event) {
+    if(profileUiBusy())return;
     if (gameFlow_.state() != GameFlowState::Base || gameFlow_.activeBaseFacility() != BaseFacilityKind::Supply ||
         inventoryOverlayState_.isOpen() || pauseMenu_.isOpen() || !windowHasInputFocus_) {
         supplyUi_.press.reset(); return;
@@ -87,43 +88,46 @@ void App::handleBaseSupplyEvent(const UiBaseSupplyEvent &event) {
         supplyUi_.selection.reset(); openWeaponComponentsUi(); weaponComponentsOpen_ = true; break;
     case Control::Relief: {
         if (!isReliefEligible(gameSession_.profile(), publishedContentRegistry())) return;
-        const auto receipt = gameSession_.executeProfileEconomy(ClaimReliefCommand{nextProfileTransactionId("relief-batch")}, nextProfileTransactionId("claim-relief"));
-        uiMessage_ = receipt.succeeded ? "RELIEF BATCH ADDED TO STASH" : receipt.message;
-        gameAudio_.play(receipt.succeeded ? SoundEventId::UiConfirm : SoundEventId::UiDeny);
-        supplyRowsRevision_.reset(); break;
+        submitProfileUi<EconomyReceipt>(EconomyCommand{ClaimReliefCommand{nextProfileTransactionId("relief-batch")}},nextProfileTransactionId("claim-relief"),
+            [this](const auto &receipt){
+                uiMessage_=receipt.succeeded?"RELIEF BATCH ADDED TO STASH":receipt.message;
+                gameAudio_.play(receipt.succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);
+                supplyRowsRevision_.reset();
+            });
+        break;
     }
     case Control::Main: executeBaseSupplyAction(); break;
     }
 }
 void App::executeBaseSupplyAction() {
+    if(profileUiBusy())return;
     refreshBaseSupplyRows(true);
     const auto &p = gameSession_.profile();
-    bool succeeded = false;
-    if (supplyUi_.tab == Tab::Maintenance && p.gunsmithMaintenanceJob) {
-        const auto result = gameSession_.collectBaseGunsmithMaintenance(nextProfileTransactionId("collect-gunsmith"));
-        succeeded = result.succeeded; uiMessage_ = succeeded ? "SERVICED WEAPON COLLECTED" : result.message;
+    const auto tab=supplyUi_.tab;
+    const auto finish=[this,tab](bool succeeded,std::string message){
+        uiMessage_=std::move(message);
+        if(succeeded && tab!=Tab::Purchase)supplyUi_.selection.reset();
+        supplyUi_.press.reset();supplyRowsRevision_.reset();refreshBaseSupplyRows();
+        gameAudio_.play(succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);
+    };
+    if(tab==Tab::Maintenance && p.gunsmithMaintenanceJob) {
+        submitProfileUi<GunsmithCollectionReceipt>(ProfileUiCollectGunsmithCommand{},nextProfileTransactionId("collect-gunsmith"),
+            [finish](const auto &r){finish(r.succeeded,r.succeeded?"SERVICED WEAPON COLLECTED":r.message);});
     } else {
-        if (!supplyUi_.selection) return;
-        const auto selected = *supplyUi_.selection;
-        const auto row = std::find_if(supplyRows_.begin(), supplyRows_.end(), [&](const auto &r) { return r.key == selected; });
-        if (row == supplyRows_.end()) { supplyUi_.selection.reset(); uiMessage_ = "ITEM STATE CHANGED"; return; }
-        if (supplyUi_.tab == Tab::Maintenance) {
-            const auto result = gameSession_.executeBaseGunsmithMaintenance(selected.instanceId, nextProfileTransactionId("start-gunsmith"));
-            succeeded = result.succeeded;
-            uiMessage_ = succeeded ? fmt::format("WEAPON FULLY SERVICED | PAID {}", result.currencyPaid) : result.message;
+        if(!supplyUi_.selection)return;
+        const auto selected=*supplyUi_.selection;
+        const auto row=std::find_if(supplyRows_.begin(),supplyRows_.end(),[&](const auto &r){return r.key==selected;});
+        if(row==supplyRows_.end()){supplyUi_.selection.reset();uiMessage_="ITEM STATE CHANGED";return;}
+        if(tab==Tab::Maintenance) {
+            submitProfileUi<GunsmithMaintenanceReceipt>(StartGunsmithMaintenanceCommand{selected.instanceId},nextProfileTransactionId("start-gunsmith"),
+                [finish](const auto &r){finish(r.succeeded,r.succeeded?fmt::format("WEAPON FULLY SERVICED | PAID {}",r.currencyPaid):r.message);});
         } else {
-            const auto command = supplyUi_.tab == Tab::Purchase
-                ? EconomyCommand{PurchaseCommand{selected.definitionId, row->quantity}}
-                : EconomyCommand{RecycleCommand{selected.instanceId}};
-            const auto result = gameSession_.executeProfileEconomy(command,
-                nextProfileTransactionId(supplyUi_.tab == Tab::Purchase ? "purchase" : "recycle"));
-            succeeded = result.succeeded;
-            uiMessage_ = succeeded ? fmt::format("{} | CURRENCY {}", supplyUi_.tab == Tab::Purchase ? "PURCHASED" : "RECYCLED", gameSession_.profile().currency) : result.message;
+            const auto command=tab==Tab::Purchase?EconomyCommand{PurchaseCommand{selected.definitionId,row->quantity}}:EconomyCommand{RecycleCommand{selected.instanceId}};
+            submitProfileUi<EconomyReceipt>(command,nextProfileTransactionId(tab==Tab::Purchase?"purchase":"recycle"),
+                [this,finish,tab](const auto &r){finish(r.succeeded,r.succeeded?fmt::format("{} | CURRENCY {}",tab==Tab::Purchase?"PURCHASED":"RECYCLED",gameSession_.profile().currency):r.message);});
         }
     }
-    if (succeeded && supplyUi_.tab != Tab::Purchase) supplyUi_.selection.reset();
-    supplyUi_.press.reset(); supplyRowsRevision_.reset(); refreshBaseSupplyRows();
-    gameAudio_.play(succeeded ? SoundEventId::UiConfirm : SoundEventId::UiDeny);
+
 }
 
 void App::renderBaseSupplyImage(const ItemDefinitionId &id, const SDL_FRect &bounds) {

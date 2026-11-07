@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "alpha_content_ids.h"
 #include <gtest/gtest.h>
 #include <chrono>
@@ -16,10 +17,12 @@ struct InventoryPresentationUiTestAccess
     static void event(App &a, InventoryUiEvent e)
     {
         a.handleProfileInventoryUiEvent(e, false);
+        wait(a);
     }
     static void raidEvent(App &a, InventoryUiEvent e)
     {
         a.handleProfileInventoryUiEvent(e, true);
+        wait(a);
     }
     static void right(App &a, MousePosition p)
     {
@@ -41,6 +44,13 @@ struct InventoryPresentationUiTestAccess
         a.processEvents();
         a.update(0);
         a.input_.endFrame();
+        wait(a);
+    }
+    static void wait(App &a)
+    {
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+            [&] { return a.profileUiBusy() || bool(a.pendingInventoryBarrierAction_); },
+            [&] { a.processEvents(); a.update(0); a.input_.endFrame(); }));
     }
     static bool isOpen(const App &a)
     {
@@ -136,6 +146,7 @@ class InventoryPresentationUiTest : public testing::Test
         app = std::make_unique<App>();
         A::flow(*app).configurePersistence(path);
         ASSERT_TRUE(A::flow(*app).continueGame());
+        A::frame(*app);
         A::open(*app);
     }
     void TearDown() override
@@ -169,6 +180,7 @@ class InventoryPresentationUiTest : public testing::Test
         app = std::make_unique<App>();
         A::flow(*app).configurePersistence(path);
         ASSERT_TRUE(A::flow(*app).continueGame());
+        A::frame(*app);
         A::open(*app);
     }
     void render(int width = 1280, int height = 720)
@@ -331,6 +343,7 @@ TEST_F(InventoryPresentationUiTest,
     app = std::make_unique<App>();
     A::flow(*app).configurePersistence(path);
     ASSERT_TRUE(A::flow(*app).continueGame());
+    A::frame(*app);
     A::open(*app);
     A::view(*app).tab = ProfileInventoryTab::Backpack;
     A::event(*app, InventoryQuickTransferEvent{
@@ -435,7 +448,7 @@ TEST_F(InventoryPresentationUiTest, ReturnsHoverSwitchesOnceWithoutReleasingDrag
     static_cast<void>(p.assets.create(c.item(alpha_content::ammunition),StoredAssetLocation{ProfileContainerId::baseIntake(),{12,10}},1));
     ASSERT_TRUE(validateProfileState(p,c).valid)<<validateProfileState(p,c).message;
     ASSERT_TRUE(SaveRepository{path}.save(p,c.contentVersion()).succeeded);
-    app=std::make_unique<App>();A::flow(*app).configurePersistence(path);ASSERT_TRUE(A::flow(*app).continueGame());A::open(*app);
+    app=std::make_unique<App>();A::flow(*app).configurePersistence(path);ASSERT_TRUE(A::flow(*app).continueGame());A::frame(*app);A::open(*app);
     const auto fingerprint=profileStateFingerprint(profile());
     pointer(InventoryPointerEventType::LeftButtonDown,{934.0F, 310.0F});pointer(InventoryPointerEventType::Motion,{1064.0F, 76.0F});
     A::hover(*app,.36F);EXPECT_TRUE(A::view(*app).returns);A::hover(*app,1.0F);EXPECT_TRUE(A::view(*app).returns);
@@ -568,7 +581,7 @@ TEST_F(InventoryPresentationUiTest,
 
     ASSERT_TRUE(validateProfileState(prepared,content).valid)<<validateProfileState(prepared,content).message;
     ASSERT_TRUE(SaveRepository{path}.save(prepared,content.contentVersion()).succeeded);
-    app=std::make_unique<App>();A::flow(*app).configurePersistence(path);ASSERT_TRUE(A::flow(*app).continueGame());A::open(*app);
+    app=std::make_unique<App>();A::flow(*app).configurePersistence(path);ASSERT_TRUE(A::flow(*app).continueGame());A::frame(*app);A::open(*app);
     const auto fingerprint = profileStateFingerprint(profile());
     for (const auto size : kUiWindowSizes)
     {

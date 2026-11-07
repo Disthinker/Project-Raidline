@@ -1292,6 +1292,7 @@ TEST(RaidLifecycleTest,
             asset->magazineRounds.clear();
             asset->chamberedRound.reset();
             asset->weaponMalfunction = WeaponMalfunctionType::None;
+            asset->fireMode.reset();
         }
     }
     raid.spatialLayout.layoutHash = raidMapLayoutHash(raid.spatialLayout);

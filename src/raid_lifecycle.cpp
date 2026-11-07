@@ -2,6 +2,7 @@
 #include "raid_credential_extraction.h"
 #include "tactical_device_domain.h"
 #include "raid_lifecycle.h"
+#include "weapon_ammo_domain.h"
 #include "base_wish_expedition.h"
 
 #include "base_construction_domain.h"
@@ -179,6 +180,8 @@ std::set<AssetInstanceId> assetTreeIds(
                 child = result.contains(component->weaponAssetId);
             if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset.location))
                 child = result.contains(battery->deviceAssetId);
+            if (const auto *retained = std::get_if<RetainedRaidMagazineLocation>(&asset.location))
+                child = result.contains(retained->weaponAssetId);
             if (child && result.insert(assetId).second)
             {
                 changed = true;
@@ -415,6 +418,9 @@ DeployReceipt executeDeploy(
             "a Raid is already pending",
             profile.revision);
     }
+    const auto &effects=profile.basePlayerEffects;
+    if(profile.baseReloadRecovery || (effects && (effects->grenade.flight || effects->grenade.fuse || effects->grenade.explosion || effects->noiseDecoy.flight || effects->noiseDecoy.source)))
+        return deployFailure(RaidLifecycleError::InvalidCommand,"Finish the Base player action before deploying",profile.revision);
     if (!profile.homeFounding.established)
         return deployFailure(RaidLifecycleError::InvalidCommand,
             "Establish your main base before deploying", profile.revision);
@@ -434,6 +440,7 @@ DeployReceipt executeDeploy(
     }
 
     ProfileState candidate = profile;
+    candidate.basePlayerEffects.reset();
     const MapDefinition *map{};
     try
     {
@@ -667,7 +674,8 @@ DeployReceipt executeDeploy(
         std::any_of(map->proceduralOutdoor.encounterArchetypes.begin(), map->proceduralOutdoor.encounterArchetypes.end(),
             [](const auto &group) { return group.id == "encounter.frontier.resource_guard" && group.armoredMemberDefinition.has_value(); });
     const bool runnerEcologyRules = regionalMissionCount == 0U && corpseTrial && highRiskCrisisRules &&
-        content.contentVersion() == "raid-runner-infected-content-73" &&
+        (content.contentVersion() == "raid-runner-infected-content-73" ||
+         content.contentVersion() == "raid-weapon-handling-content-74") &&
         std::any_of(map->proceduralOutdoor.encounterArchetypes.begin(), map->proceduralOutdoor.encounterArchetypes.end(),
             [](const auto &group) { return group.id == "encounter.frontier.route_ambush" && group.runnerMemberDefinition.has_value(); });
     snapshot.rulesVersion = runnerEcologyRules ? std::string{kRaidRunnerRulesVersion} : highRiskCrisisRules
@@ -1865,7 +1873,8 @@ RaidSettlementReceipt settlePendingRaid(
     // Abandoned overflow cells are not rewards or carried loss roots.
     std::vector<AssetInstanceId> abandonedCells;
     for (const auto &[id, asset] : candidate.assets.records())
-        if (std::holds_alternative<RaidDroppedBatteryLocation>(asset.location)) abandonedCells.push_back(id);
+        if (std::holds_alternative<RaidDroppedBatteryLocation>(asset.location) ||
+            std::holds_alternative<RaidDroppedMagazineLocation>(asset.location)) abandonedCells.push_back(id);
     for (auto id : abandonedCells) static_cast<void>(candidate.assets.erase(id));
 
     const PendingRaidSnapshot raidSnapshot = *candidate.pendingRaid;
@@ -2021,6 +2030,11 @@ RaidSettlementReceipt settlePendingRaid(
     std::optional<std::string> lostRecordId;
     if (outcome != RaidResultOutcome::Extracted)
     {
+        const auto retained = retainRaidReloadMagazinesForLossInCandidate(
+            candidate, content, raidSnapshot.raidId);
+        if (!retained.valid)
+            return settlementFailure(RaidLifecycleError::InvalidProfile,
+                retained.message, profile.revision, outcome);
         lostRecordId = createLostRaidRecord(
             candidate, content, raidSnapshot, outcome);
     }
@@ -2248,8 +2262,17 @@ InventoryReceipt pickupRaidLoot(
     AssetInstanceId assetId,
     const CommandContext &context,
     const RaidVisibilityProjection *observation,
-    const RaidObservationKey *currentObservation)
+    const RaidObservationKey *currentObservation,
+    const RaidReloadWorldAccess *reloadAccess)
 {
+    if (const auto *magazine = profile.assets.find(assetId);
+        magazine && std::holds_alternative<RaidDroppedMagazineLocation>(magazine->location))
+    {
+        if (!reloadAccess)
+            return {false, false, DomainErrorCode::IllegalDestination,
+                "dropped magazine requires current world access", profile.revision};
+        return pickupDroppedMagazine(profile, content, assetId, context, *reloadAccess);
+    }
     if (const auto *cell = profile.assets.find(assetId); cell && std::holds_alternative<RaidDroppedBatteryLocation>(cell->location))
         return pickupDroppedBattery(profile, content, assetId, context, observation, currentObservation);
 

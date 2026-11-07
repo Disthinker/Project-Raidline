@@ -2,6 +2,7 @@
 #include "game_session.h"
 #include "game_flow.h"
 #include "gameplay_world.h"
+#include "profile_ui_test_wait.h"
 #include <array>
 #include <chrono>
 #include <filesystem>
@@ -714,6 +715,7 @@ static void checkDailyPersistence(bool rejectFirstSave) {
   EnemyLifecycleTestAccess fixture{Activity::Daily};
   fixture.daily = std::make_unique<BaseWorld>();
   static_cast<void>(session.updateBaseWorld(*fixture.daily, {}, 0.000001F));
+  ASSERT_TRUE(waitForProfileUiDurability(session));
   ASSERT_GE(fixture.actors().size(), 2U);
   const auto victim = fixture.actors()[0].combatTargetId();
   const auto survivor = fixture.actors()[1].combatTargetId();
@@ -841,6 +843,7 @@ TEST(CombatRuntimeBoundary, SameProcessProfileLoadMatchesFreshProcess) {
     ASSERT_TRUE(reused.gameSession().executeProfileInventory(
         InventoryEquipCommand{rifle->first, EquipmentSlotKind::PrimaryWeapon}, "boundary-equip").succeeded);
     reused.updateBase({}, 0.000001F);
+    ASSERT_TRUE(waitForProfileUiDurability(reused.gameSession()));
     const auto initialCount = reused.baseWorld().perimeterEnemies().size();
     ASSERT_GT(initialCount, 1U);
     queueBaseFlight(reused.baseWorld());
@@ -854,10 +857,12 @@ TEST(CombatRuntimeBoundary, SameProcessProfileLoadMatchesFreshProcess) {
     else ASSERT_TRUE(reused.continueGame());
     EXPECT_TRUE(EnemyLifecycleTestAccess::baseShooting(reused.baseWorld()).logicalBallistics().empty());
     reused.updateBase({}, 0.000001F);
+    ASSERT_TRUE(waitForProfileUiDurability(reused.gameSession()));
     GameFlow fresh;
     fresh.configurePersistence(save.path);
     ASSERT_TRUE(fresh.continueGame());
     fresh.updateBase({}, 0.000001F);
+    ASSERT_TRUE(waitForProfileUiDurability(fresh.gameSession()));
     expectSameRoster(reused.baseWorld(), fresh.baseWorld());
     EXPECT_EQ(reused.baseWorld().perimeterEnemies().size(), initialCount);
     if (!newProfile)

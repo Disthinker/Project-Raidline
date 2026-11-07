@@ -3,11 +3,12 @@
 #include "profile_inventory_interaction.h"
 #include "ui_foundation.h"
 #include "weapon_supply_projection.h"
+#include "medical_domain.h"
 
 // These IDs name existing client entry points, never new domain operations.
 enum class UiItemAction {
     WeaponDetails, ModifyWeapon, MeleeDetails, DecoyDetails,
-    UnloadMagazine, UseMedical, ChamberRound
+    UnloadMagazine, UseMedical, ChamberRound, CycleFireMode
 };
 struct UiItemActionEntry {
     UiItemAction id{};
@@ -15,7 +16,8 @@ struct UiItemActionEntry {
 };
 [[nodiscard]] std::string compactUiItemName(const ItemDefinition &, UiLanguage);
 [[nodiscard]] std::vector<UiItemActionEntry> projectUiItemActions(
-    const ProfileState &, const ContentRegistry &, AssetInstanceId, bool inRaid);
+    const ProfileState &, const ContentRegistry &, AssetInstanceId, bool inRaid,
+    MedicalAccess medicalAccess = MedicalAccess::AnyOwned);
 [[nodiscard]] std::vector<std::string> projectUiItemSummary(
     const AssetRecord &, const ItemDefinition &);
 [[nodiscard]] std::vector<std::string> projectUiWeaponSupplyLines(

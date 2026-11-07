@@ -155,7 +155,7 @@ TEST(NoiseDecoyTest, RealVisualDiscoveryWinsOverDecoyAndNoImmediateDisengage){
 }
 TEST(NoiseDecoyTest, DisabledActivitiesRejectBeforePreparingRuntime){
     auto c=config();c.noiseDecoyEnabled=false;GameplayWorld baseLike(c);EXPECT_FALSE(baseLike.previewNoiseDecoy({500,250},use()));
-    c.noiseDecoyEnabled=true;c.developerRange=true;GameplayWorld range(c);EXPECT_FALSE(range.previewNoiseDecoy({500,250},use()));
+    c.noiseDecoyEnabled=true;c.developerRange=true;GameplayWorld range(c);const auto plan=range.previewNoiseDecoy({500,250},use());ASSERT_TRUE(plan);RaidNoiseDecoyRuntime runtime;ASSERT_TRUE(runtime.start(*plan));range.commitNoiseDecoy(std::move(runtime));EXPECT_TRUE(range.noiseDecoy().flight());
 }
 
 struct NoiseDecoyTestAccess {

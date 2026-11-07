@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "test_temp_directory.h"
 #include <algorithm>
 #include <chrono>
@@ -8,6 +9,7 @@
 #include <SDL3_image/SDL_image.h>
 
 struct UiWeaponComponentsTestAccess {
+    static void bindWindow(App &a,SDL_Window *window){a.window_=window;}
     static auto &flow(App &a) { return a.gameFlow_; }
     static auto &session(App &a) { return a.gameSession_; }
     static auto &rows(App &a) { a.refreshWeaponComponents(); return a.componentRows_; }
@@ -30,7 +32,12 @@ struct UiWeaponComponentsTestAccess {
     }
     static auto &supply(App &a) { return a.supplyUi_; }
     static auto &presentation(App &a) { return a.profilePresentation_; }
-    static void frame(App &a) { a.processEvents(); a.update(0); a.input_.endFrame(); }
+    static void settle(App &a) {
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+            [&] { return a.profileUiBusy() || static_cast<bool>(a.pendingInventoryBarrierAction_); },
+            [&] { a.processEvents(); a.update(0); a.syncRaidPointerCapture(); a.pendingRelativeAimMotion_={}; a.input_.endFrame(); })) << a.gameSession_.persistenceMessage();
+    }
+    static void frame(App &a) { a.processEvents(); a.update(0); a.syncRaidPointerCapture(); a.pendingRelativeAimMotion_={}; a.input_.endFrame(); settle(a); }
     static void draw(App &a) { a.renderWeaponComponents(); }
     static void attach(App &a, SDL_Renderer *r, float scale) {
         a.renderer_ = r; ASSERT_TRUE(a.uiTextRenderer_.initialize(r)); a.uiTextRenderer_.setRasterScale(scale);
@@ -62,7 +69,7 @@ class UiWeaponComponentsTest : public testing::Test {
 protected:
     const ContentRegistry &content = publishedContentRegistry();
     raidline::test::TemporaryDirectory saveDirectory;
-    std::unique_ptr<App> app;
+    std::unique_ptr<App> app; SDL_Window *window{};
     std::filesystem::path path;
     SDL_Surface *surface{}; SDL_Renderer *renderer{};
     ProfileState &profile() { return const_cast<ProfileState &>(A::session(*app).profile()); }
@@ -71,15 +78,18 @@ protected:
         return 0;
     }
     void SetUp() override {
-        ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
+        ASSERT_TRUE(SDL_SetHint(SDL_HINT_VIDEO_DRIVER,"dummy"));
+        ASSERT_TRUE(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS));
+        window=SDL_CreateWindow("headless UI capture regression",1280,720,SDL_WINDOW_HIDDEN);
+        ASSERT_NE(window,nullptr);
         ASSERT_NO_THROW(saveDirectory.claim("raidline-component-ui-",
             testing::UnitTest::GetInstance()->current_test_info()->name()));
         path = saveDirectory.path();
         auto p = makeNewPublishedProfile("component-ui", content);
         p.tutorial = TutorialProgress::Complete; p.homeFounding.hintsDismissed = true;
         ASSERT_TRUE(SaveRepository(path).save(p, content.contentVersion()).succeeded);
-        app = std::make_unique<App>(); A::flow(*app).configurePersistence(path); ASSERT_TRUE(A::flow(*app).continueGame());
-        A::frame(*app); ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Supply));
+        app = std::make_unique<App>();A::bindWindow(*app,window); A::flow(*app).configurePersistence(path); ASSERT_TRUE(A::flow(*app).continueGame());
+        A::frame(*app); ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Supply));A::frame(*app);
         attach(1280, 720); A::open(*app, find(rifle));
     }
     void attach(int w, int h) {
@@ -90,7 +100,7 @@ protected:
     }
     void detach() { if (app) A::detach(*app); SDL_DestroyRenderer(renderer); SDL_DestroySurface(surface); }
     void TearDown() override {
-        detach(); app.reset(); SDL_Quit();
+        detach(); if(app)A::bindWindow(*app,nullptr);SDL_DestroyWindow(window);window=nullptr;app.reset(); SDL_Quit();
         ASSERT_NO_THROW(saveDirectory.cleanup());
     }
     void click(SDL_FRect r) { const auto p = center(r); pointer(p, true); pointer(p, false); A::frame(*app); }
@@ -100,8 +110,10 @@ protected:
         auto rows = A::rows(*app).choices;
         auto it = std::find_if(rows.begin(), rows.end(), [id](const auto &r) { return r.id == id; });
         ASSERT_NE(it, rows.end()); const auto index = static_cast<std::size_t>(it - rows.begin());
-        while (A::choicePage(*app) < index / kUiComponentPageSize) control(Control::ChoiceNext);
-        while (A::choicePage(*app) > index / kUiComponentPageSize) control(Control::ChoicePrevious);
+        const auto page=index/kUiComponentPageSize;
+        for(std::size_t moves=0;A::choicePage(*app)!=page && moves<=rows.size()/kUiComponentPageSize+1;++moves)
+            control(A::choicePage(*app)<page?Control::ChoiceNext:Control::ChoicePrevious);
+        ASSERT_EQ(A::choicePage(*app),page);
         click(uiComponentChoiceRow(index % kUiComponentPageSize)); ASSERT_TRUE(A::action(*app)); EXPECT_EQ(A::choice(*app), id);
     }
     AssetInstanceId create(const ItemDefinitionId &id) {
@@ -232,7 +244,8 @@ TEST_F(UiWeaponComponentsTest, EveryWeaponAndComponentInstanceAcrossIndependentP
     A::open(*app, find(rifle)); const auto before = profileStateFingerprint(profile());
     const auto weapons = A::rows(*app).weapons;
     for (std::size_t i = 0; i < weapons.size(); ++i) {
-        while (A::weaponPage(*app) < i / 6) control(Control::WeaponNext);
+        for(std::size_t moves=0;A::weaponPage(*app)<i/6 && moves<=weapons.size()/6+1;++moves)control(Control::WeaponNext);
+        ASSERT_EQ(A::weaponPage(*app),i/6);
         click(uiComponentWeaponRow(i % 6)); EXPECT_EQ(A::weapon(*app), weapons[i].id); EXPECT_FALSE(A::action(*app));
     }
     const auto choices = A::rows(*app).choices;

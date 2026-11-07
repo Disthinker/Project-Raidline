@@ -17,6 +17,7 @@
 #include "economy_domain.h"
 #include "base_construction_domain.h"
 #include "base_ground_domain.h"
+#include "base_corpse_domain.h"
 #include "base_facility_layout_domain.h"
 #include "base_migration_domain.h"
 #include "base_site_feature_domain.h"
@@ -47,6 +48,9 @@
 #include "stash.h"
 #include "maintenance_domain.h"
 #include "weapon_clear_gesture.h"
+#include "profile_inventory_persistence.h"
+#include "profile_ui_persistence.h"
+#include "player_transition.h"
 
 enum class BaseFacilityKind;
 class BaseWorld;
@@ -115,6 +119,8 @@ enum class GameSessionPresentationEvent
     BaseResidentTreatmentCompleted,
     PlayerHurtLight,
     PlayerHurtHeavy,
+    WeaponMagazineRemoved,
+    WeaponMagazineInserted,
 };
 
 struct DeveloperWeaponTuningSnapshot
@@ -124,6 +130,16 @@ struct DeveloperWeaponTuningSnapshot
     WeaponUseDefinition weaponUse;
     WeaponHandlingParameters handling;
     bool overridden{};
+};
+
+struct PlayerGameplayContext
+{
+    bool available{};
+    WeaponActionScope activity;
+    std::optional<AssetInstanceId> activeWeapon;
+    Vec2 playerCenter{}, playerSize{}, facingDirection{}, worldSize{};
+    RaidSpaceDefinitionId spaceId;
+    bool controlled{}, dead{}, stashAccessible{}, coreBuildAvailable{};
 };
 
 struct RaidSelfRecoveryProjection
@@ -196,6 +212,14 @@ public:
         BaseWorld &baseWorld,
         const GameplayInput &input,
         float deltaTime);
+    void bindBasePlayerWorld(BaseWorld *world) noexcept;
+    [[nodiscard]] PlayerGameplayContext playerGameplayContext() const noexcept;
+    [[nodiscard]] const RaidActionState &playerActionState() const noexcept { return raidActionState_; }
+    [[nodiscard]] std::optional<BaseCorpseRecord> nearbyBaseCorpse() const;
+    [[nodiscard]] InventoryPlan queryBaseCorpseInspection(std::string_view corpseId) const;
+    void cancelPlayerControlIntent() noexcept;
+    [[nodiscard]] bool preparePlayerActivityBoundary(bool requireFinishedThrowables = true);
+    [[nodiscard]] bool restoreBasePlayerRuntime(BaseWorld &);
 
     // 只有完整结算后才能开始下一局。候选世界完整构造成功后才交换，
     // 因此失败不会破坏旧终局、Stash、结算或 Raid 编号。
@@ -255,6 +279,7 @@ public:
     [[nodiscard]] bool triggerDeveloperBaseSiegeWarning();
     [[nodiscard]] bool baseDefenseActive() const noexcept;
     [[nodiscard]] bool baseDefenseSaveBlocked() const noexcept;
+    [[nodiscard]] bool baseDefenseNeedsCheckpointReload() const noexcept { return baseDefenseSimulationRejected_; }
     [[nodiscard]] BaseDefenseCheckpointStatus baseDefenseCheckpointStatus() const;
     [[nodiscard]] bool baseDailySaveBlocked() const noexcept;
     [[nodiscard]] bool retryBaseDailySave();
@@ -316,6 +341,11 @@ public:
     [[nodiscard]] bool startAlphaReload(
         AssetInstanceId weaponAssetId,
         AssetInstanceId magazineAssetId);
+    [[nodiscard]] bool startAlphaChamber(AssetInstanceId weaponAssetId);
+    [[nodiscard]] bool upgradeAlphaReloadEmergency(AssetInstanceId expectedWeaponId);
+    [[nodiscard]] std::optional<WeaponFireMode> weaponFireMode(
+        AssetInstanceId weaponAssetId) const noexcept;
+    [[nodiscard]] std::vector<AssetInstanceId> droppedRaidMagazineIds() const;
     [[nodiscard]] bool startAlphaLoadMagazine(
         AssetInstanceId ammunitionAssetId,
         AssetInstanceId magazineAssetId,
@@ -368,6 +398,25 @@ public:
     [[nodiscard]] InventoryReceipt executeProfileInventory(
         const InventoryCommand &command,
         std::string transactionId);
+    [[nodiscard]] InventoryUiSubmission requestProfileInventory(const InventoryCommand &, std::string);
+    [[nodiscard]] InventoryUiSubmission requestBaseGroundContainerInventory(
+        AssetInstanceId, const BaseGroundAccess &, const InventoryCommand &, std::string);
+    [[nodiscard]] const ProfileState &profileForInventoryPresentation() const noexcept;
+    [[nodiscard]] std::vector<InventoryUiCompletion> takeInventoryUiCompletions();
+    void updateInventoryPersistence(float);
+    [[nodiscard]] bool inventoryPersistencePending() const noexcept;
+    void requestInventoryPersistenceBarrier();
+    [[nodiscard]] bool inventoryPersistenceBarrierReady() const noexcept;
+    [[nodiscard]] ProfileUiSubmission requestProfileUiCommand(const ProfileUiCommand &, std::string);
+    [[nodiscard]] std::vector<ProfileUiCompletion> takeProfileUiCompletions();
+    [[nodiscard]] bool profileUiCommitPending() const noexcept;
+    [[nodiscard]] ProfileUiSubmission requestWorldDurabilityBarrier();
+    [[nodiscard]] bool profileUiCompletionReady(std::uint64_t, ProfileUiCompletionKind) const noexcept;
+    [[nodiscard]] ProfileUiSubmission retryProfileUiCommit();
+    [[nodiscard]] ProfileUiSubmission requestDeployAlpha(const AlphaDeployRequest &,
+        const RaidDeploymentProgressCallback &progress = {});
+    [[nodiscard]] ProfileUiSubmission requestActiveQuitAlphaRaid();
+    [[nodiscard]] ProfileUiSubmission requestStartBaseRealtimeDefense(BaseWorld &);
 
     [[nodiscard]] FortificationReceipt executeBaseFortification(const FortificationCommand &);
     [[nodiscard]] FortificationReceipt repairBaseFortification(const BaseWorld &, FortificationInstanceId);
@@ -538,7 +587,7 @@ private:
     bool currentMeleeUsable() const;
     void prepareMeleeInput(GameplayInput &,float seconds,float recovery);
     bool commitPlayerMelee(GameplayWorld &,bool allow=true);
-    bool commitPlayerMelee(BaseWorld &,bool allow=true);
+    bool commitPlayerMelee(BaseWorld &,bool allow=true,ProfileState *privateCandidate=nullptr);
     bool meleeSuppressedUntilRelease_{};
     bool decoyFireSuppressedUntilRelease_{};
     void prepareNoiseDecoyInput(GameplayInput &, const GameplayInput &);
@@ -550,12 +599,40 @@ private:
     friend struct NoiseDecoyTestAccess;
     friend struct GrenadeTestAccess;
     friend struct RunnerInfectedTestAccess;
+    friend struct WeaponHandlingTestAccess;
+    friend struct InventoryCheckpointTestAccess;
+    friend struct ProfileUiPersistenceTestAccess;
     friend struct RunnerInfectedUiTestAccess;
-    bool processGrenadeExplosion();
+    bool processGrenadeExplosion(std::optional<IncomingDamageCommand> *dailyDamage=nullptr);
     friend struct NoiseDecoyUiTestAccess;
     friend struct BaseDailyCheckpointTestAccess;
     bool developerRange_{};
     ProfileState profile_;
+    std::shared_ptr<ProfileInventoryPersistenceState> inventoryPersistence_;
+    std::shared_ptr<ProfileUiPersistenceState> profileUiPersistence_;
+    std::uint64_t profileUiEpoch_{1};
+    // Receipts from an earlier Profile must never alias a later operation.
+    std::uint64_t profileUiNextRequestId_{1};
+    void pollProfileUiPersistence();
+    [[nodiscard]] bool profileUiSaveOwnsWriter() const noexcept;
+    [[nodiscard]] ProfileUiSubmission enqueuePreparedProfileUi(ProfileState,
+        std::optional<ProfileState>, ProfileUiCompletionKind,
+        std::optional<ProfileUiCommandResult>, std::shared_ptr<PreparedPlayerTransition>);
+    void completePreparedPlayerTransition(const std::shared_ptr<PreparedPlayerTransition> &);
+    void completeProfileUiCommand(const ProfileUiCommandResult &);
+    [[nodiscard]] bool prepareBaseBoundaryInCandidate(ProfileState &, bool, bool allowOwnedUiOperation = false);
+    [[nodiscard]] bool prepareDailyOutingEndCandidate(ProfileState &,BaseWorld &,bool rescued);
+    [[nodiscard]] bool prepareBaseDefenseStartCandidate(BaseWorld &, ProfileState &);
+    [[nodiscard]] std::shared_ptr<PreparedPlayerTransition> prepareAlphaDeployment(
+        const AlphaDeployRequest &, ProfileState &, ProfileState &,
+        const RaidDeploymentProgressCallback &);
+    [[nodiscard]] ProfileUiSubmission requestRaidSettlement(RaidResultOutcome);
+    [[nodiscard]] ProfileUiSubmission requestOrdinarySurvivorRescue();
+    [[nodiscard]] bool prepareRaidSettlementCandidate(RaidResultOutcome, ProfileState &);
+    [[nodiscard]] bool prepareOrdinarySurvivorRescueCandidate(ProfileState &, ProfileState &);
+    [[nodiscard]] ProfileState inventoryCheckpointCandidate(const ProfileState &current);
+    void noteInventoryCheckpointRequested(std::uint64_t generation, bool defense);
+    [[nodiscard]] bool drainProfileWritersForReplacement();
     std::optional<SaveRepository> saveRepository_;
     std::optional<ProfileState> activeRaidRecoveryProfile_;
     SaveLoadStatus lastSaveLoadStatus_{SaveLoadStatus::NotFound};
@@ -586,6 +663,26 @@ private:
     float baseSiegeWarningSecondAccumulator_{};
     bool worldClockDirty_{};
     WeaponClearGesture weaponClearGesture_;
+    WeaponTriggerGate weaponTriggerGate_;
+    // Updated only by actual drop/pickup receipts, never a per-frame Registry scan.
+    std::vector<AssetInstanceId> droppedRaidMagazineIds_;
+    [[nodiscard]] bool beginAlphaReload(AssetInstanceId, AssetInstanceId, RaidReloadSource);
+    [[nodiscard]] bool cancelActiveRaidAction();
+    [[nodiscard]] bool advanceRaidWeaponAction(float deltaTime, bool interrupted);
+    [[nodiscard]] float preparePlayerActionInput(GameplayInput &, float deltaTime, bool meleeSuppressed);
+    void advancePlayerAction(const GameplayInput &, float deltaTime, float weaponActionDelta);
+    void preparePlayerCombatInput(GameplayInput &, const GameplayInput &, float,
+        const std::optional<WeaponHandlingParameters> &);
+    void preparePlayerLightInput(const GameplayInput &, float);
+    void finishBasePlayerFrame(const GameplayInput &, float, float);
+    void recordBaseEnemyDeaths(ProfileState &);
+    [[nodiscard]] bool playerThrowFlightActive() const noexcept;
+    void recordRaidReloadReceipt(const RaidReloadReceipt &);
+    [[nodiscard]] RaidDroppedMagazineLocation raidMagazineDrop() const;
+    [[nodiscard]] RaidReloadWorldAccess raidReloadAccess(
+        const RaidObservationKey &key) const;
+    void prepareWeaponTrigger(GameplayInput &, const GameplayInput &,
+        std::optional<AssetInstanceId> weapon, bool controlsAvailable);
     mutable WeaponLightBinding weaponLightBinding_;
     mutable ProfileRevision weaponLightBindingRevision_{};
     bool lightKeyPending_{}, lightLongPressConsumed_{};
@@ -602,12 +699,15 @@ private:
     float baseCombatElapsedSeconds_{};
     // BaseWorld is owned by the surrounding GameFlow. No worker accesses it.
     BaseWorld *baseDefenseWorld_{};
+    BaseWorld *basePlayerWorld_{};
     std::unique_ptr<BaseDefenseCheckpointWriter> baseDefenseWriter_;
     float baseDefenseCheckpointElapsed_{};
     bool baseDefenseSaveBlocked_{};
     bool baseDefenseLagPause_{};
     bool baseDefenseSimulationRejected_{};
     std::optional<BaseDefenseEndReason> pendingBaseDefenseEnd_;
+    std::optional<ProfileState> pendingBaseDefenseSettlement_;
+    std::uint64_t pendingBaseDefenseSettlementGeneration_{};
     // Reuses the bounded immutable-Profile writer, never a second concurrent
     // writer for the same repository. Daily owns only its cadence/failure policy.
     std::unique_ptr<BaseDefenseCheckpointWriter> baseDailyWriter_;
@@ -654,8 +754,10 @@ private:
         ProfileState candidate,
         bool persist = true);
     [[nodiscard]] bool captureBaseDefenseCheckpoint(ProfileState &candidate) const;
+    [[nodiscard]] bool captureBasePlayerEffects(ProfileState &candidate) const;
+    [[nodiscard]] bool restoreBasePlayerEffects(BaseWorld &world);
     [[nodiscard]] bool checkpointBaseDefense(bool wait);
-    [[nodiscard]] bool finalizeBaseDefense(BaseDefenseEndReason reason);
+    [[nodiscard]] bool finalizeBaseDefense(BaseDefenseEndReason reason, bool wait = false);
     [[nodiscard]] bool prepareBaseDefenseFrame(BaseWorld &world);
     void finishBaseDefenseFrame(BaseWorld &world, float deltaTime);
     [[nodiscard]] bool prepareBaseDailyFrame(float deltaTime);

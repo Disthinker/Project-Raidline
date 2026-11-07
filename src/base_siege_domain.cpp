@@ -1,4 +1,5 @@
 #include "base_siege_domain.h"
+#include "base_corpse_domain.h"
 #include "base_defense_ownership.h"
 
 #include "base_workforce_domain.h"
@@ -587,6 +588,16 @@ BaseAutoDefenseReceipt executeBaseRealtimeDefenseStart(
         return {false, false, plan.error, plan.message, profile.revision};
     ProfileState candidate = profile;
     candidate.activeBaseDefense = snapshot;
+    pruneBaseCorpseRecordsInCandidate(candidate);
+    if (candidate.basePlayerEffects)
+    {
+        auto &effects=*candidate.basePlayerEffects;
+        effects.scope={WeaponActionActivity::BaseDefense,RegionalBaseSiteDefinitionId{snapshot.siteDefinitionId},snapshot.eventId};
+        effects.dailyCommandSequence=effects.dailyWeaponFaultSequence=effects.dailyMedicalRandomSequence=effects.dailyWoundRandomSequence=0;
+        effects.dailyDamageProtectionSeconds=0;
+        effects.medical.reset();
+        effects.noiseDecoy.investigations.clear();
+    }
     // The Base event takes over the existing outing without invoking its
     // return/rescue settlement. Personal Loot stays where it is, and a later
     // defense rescue is therefore charged once instead of 240 + 90 minutes.
@@ -658,6 +669,16 @@ BaseAutoDefenseReceipt executeBaseRealtimeDefenseSettlement(
     candidate.baseSiege.lastSecuritySpent = 0U;
     applyDefenseOutcome(candidate, content, reason == BaseDefenseEndReason::Completed);
     candidate.activeBaseDefense.reset();
+    if (candidate.basePlayerEffects)
+    {
+        auto &effects=*candidate.basePlayerEffects;
+        effects.scope={WeaponActionActivity::BaseDaily,RegionalBaseSiteDefinitionId{snapshot.siteDefinitionId},snapshot.siteDefinitionId};
+        effects.dailyActiveWeaponSlot=static_cast<EquipmentSlotKind>(snapshot.activeWeaponSlot);
+        effects.dailyCommandSequence=snapshot.commandSequence;effects.dailyWeaponFaultSequence=snapshot.weaponFaultSequence;
+        effects.dailyMedicalRandomSequence=snapshot.medicalRandomSequence;effects.dailyWoundRandomSequence=snapshot.woundRandomSequence;
+        effects.medical.reset();
+        effects.noiseDecoy.investigations.clear();
+    }
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
     const auto validation = validateProfileState(candidate, content);

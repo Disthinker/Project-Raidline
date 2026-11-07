@@ -46,6 +46,37 @@ bool RaidNoiseDecoyRuntime::start(const NoiseDecoyLanding &landing)
         !std::isfinite(u.radius) || u.radius<=0 || u.radius>1000) return false;
     flight_=NoiseDecoyFlight{landing,0};return true;
 }
+
+NoiseDecoyRuntimeCheckpoint RaidNoiseDecoyRuntime::checkpoint() const
+{
+    NoiseDecoyRuntimeCheckpoint s{flight_,source_,nextSource_,{}};
+    s.investigations.reserve(investigations_.size());
+    for(const auto &[id,state]:investigations_)s.investigations.push_back({id,state});
+    return s;
+}
+
+bool RaidNoiseDecoyRuntime::restore(const NoiseDecoyRuntimeCheckpoint &s)
+{
+    if(!s.nextSourceId || s.investigations.size()>10000)return false;
+    const auto valid=[](const NoiseDecoyLanding &v) {
+        const auto &u=v.use;
+        return v.space.valid() && finite(v.origin) && finite(v.point) &&
+            std::isfinite(u.flightSeconds) && u.flightSeconds>0 && std::isfinite(u.durationSeconds) && u.durationSeconds>0 &&
+            std::isfinite(u.pulseIntervalSeconds) && u.pulseIntervalSeconds>=.1F && u.durationSeconds/u.pulseIntervalSeconds<=32 &&
+            std::isfinite(u.radius) && u.radius>0 && u.radius<=1000;
+    };
+    if(s.flight && (!valid(s.flight->landing) || !std::isfinite(s.flight->elapsed) || s.flight->elapsed<0 || s.flight->elapsed>s.flight->landing.use.flightSeconds))return false;
+    if(s.source && (!valid(s.source->landing) || !s.source->id || s.source->id>=s.nextSourceId ||
+        !std::isfinite(s.source->elapsed) || s.source->elapsed<0 || s.source->elapsed>s.source->landing.use.durationSeconds ||
+        !s.source->pulses || s.source->pulses>32))return false;
+    RaidNoiseDecoyRuntime candidate;candidate.flight_=s.flight;candidate.source_=s.source;candidate.nextSource_=s.nextSourceId;
+    for(const auto &item:s.investigations) {
+        const auto &v=item.investigation;
+        if(!item.targetId || !v.space.valid() || !v.source || v.source>=s.nextSourceId || !finite(v.point) || !finite(v.home) ||
+            (!v.returning && (!s.source || v.source!=s.source->id)) || !candidate.investigations_.emplace(item.targetId,v).second)return false;
+    }
+    *this=std::move(candidate);return true;
+}
 void RaidNoiseDecoyRuntime::endSource()
 {
     if(source_)for(auto &[id,goal]:investigations_)if(goal.source==source_->id)goal.returning=true;

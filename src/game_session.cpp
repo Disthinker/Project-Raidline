@@ -97,6 +97,7 @@ void GameSession::update(
     const GameplayInput &input,
     float deltaTime)
 {
+    if(profileUiCommitPending())return;
     if (alphaRaidActive_ ||
         (profile_.pendingRaid.has_value() &&
          state_ == GameSessionState::SettlementBlocked))
@@ -133,7 +134,10 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     const GameplayInput &rawInput,
     float deltaTime)
 {
+    bindBasePlayerWorld(&baseWorld);
+    if(profileUiCommitPending())return std::nullopt;
     GameplayInput input=rawInput;
+    lastIncomingDamage_.reset();
     if (alphaRaidActive_ || profile_.pendingRaid.has_value() ||
         state_ != GameSessionState::BetweenRaids)
     {
@@ -154,6 +158,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     if (profile_.homeFounding.established && !baseDefenseActive() && needsPerimeter)
     {
         ProfileState candidate = profile_;
+        std::erase_if(candidate.baseCorpses,[&](const auto &corpse){return corpse.activity.activity==WeaponActionActivity::BaseDaily && corpse.activity.baseSiteDefinitionId==perimeterSite;});
         HomePerimeterGenerationContext generation{
             perimeterSite,
             baseWorld.worldSize(),
@@ -172,9 +177,12 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
             persistenceMessage_ = ensured.message;
             return std::nullopt;
         }
-        if (ensured.changed &&
-            !commitProfileCandidate(std::move(candidate)))
-            return std::nullopt;
+        if (ensured.changed) {
+            auto prepared=std::make_shared<PreparedPlayerTransition>();prepared->kind=PreparedPlayerTransition::Kind::BaseSnapshot;
+            prepared->restorePerimeterSite=perimeterSite;
+            const auto queued=enqueuePreparedProfileUi(std::move(candidate),std::nullopt,ProfileUiCompletionKind::BaseSnapshot,std::nullopt,std::move(prepared));
+            if(!queued.accepted || queued.pending)return std::nullopt;
+        }
     }
     const auto perimeterSnapshot = profile_.homePerimeter.sites.find(
         perimeterSite);
@@ -209,20 +217,15 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
 
     const auto meleeId=equippedAsset(profile_,EquipmentSlotKind::QuickMelee);
     baseWorld.configureMelee(currentMeleeDefinition(),currentMeleeUsable(),meleeId.value_or(0));
+    prepareNoiseDecoyInput(input,rawInput);
+    const bool meleeSuppressesThisFrame=input.meleeJustPressed || baseWorld.melee().recoverySeconds()>
+        (std::isfinite(deltaTime)?std::max(0.0F,deltaTime):0.0F)+0.000001F;
     prepareMeleeInput(input,deltaTime,baseWorld.melee().recoverySeconds());
+    if (state_ == GameSessionState::SettlementBlocked) return std::nullopt;
     if(fireSuppressedUntilRelease_){if(rawInput.firePressed || rawInput.fireJustPressed)input.firePressed=input.fireJustPressed=false;else fireSuppressedUntilRelease_=false;}
     if(sprintSuppressedUntilRelease_){if(rawInput.sprint)input.sprint=false;else sprintSuppressedUntilRelease_=false;}
-    if (input.weaponSlotJustPressed.has_value() &&
-        isWeaponEquipmentSlot(*input.weaponSlotJustPressed) &&
-        *input.weaponSlotJustPressed != activeWeaponSlot_ &&
-        equippedAsset(profile_, *input.weaponSlotJustPressed).has_value())
-    {
-        activeWeaponSlot_ = *input.weaponSlotJustPressed;
-        configuredBaseWeaponAssetId_.reset();
-        weaponClearGesture_.reset();
-        presentationEvents_.push_back(
-            GameSessionPresentationEvent::WeaponEquipped);
-    }
+    const float weaponActionDelta=preparePlayerActionInput(input,deltaTime,meleeSuppressesThisFrame);
+    if(state_==GameSessionState::SettlementBlocked)return std::nullopt;
 
     synchronizeActiveBaseWeapon(baseWorld);
     const std::optional<AssetInstanceId> weapon = activeAlphaWeapon();
@@ -231,7 +234,6 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     simulationInput.healJustPressed = false;
     simulationInput.quitRaidJustPressed = false;
 
-    bool automaticFire{};
     int ammunitionPenetration{};
     std::optional<WeaponHandlingParameters> weaponHandling;
     if (weapon.has_value())
@@ -244,8 +246,6 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
                 const ItemDefinition &definition =
                     publishedContentRegistry().item(
                         weaponAsset->definitionId);
-                automaticFire = definition.weaponUse.has_value() &&
-                    definition.weaponUse->automaticFire;
                 if (definition.weaponUse.has_value())
                 {
                     if (const auto index =
@@ -278,32 +278,27 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
             }
             catch (...)
             {
-                automaticFire = false;
             }
         }
     }
     baseWorld.configureWeaponAmmunition(ammunitionPenetration);
-    if (baseDefenseActive() && hasPain(profile_.medicalStatus) &&
-        !painIsSuppressed(profile_.medicalStatus))
-        simulationInput.movementSpeedMultiplier *= 0.9F;
-    if (simulationInput.sprint)
-    {
-        simulationInput.aimDownSights = false;
+    baseWorld.setDaylight(worldClockProjection().timeOfDay == WorldTimeOfDay::Day);
+    prepareWeaponTrigger(simulationInput,rawInput,weapon,
+        !input.inventoryOpen && !input.freezeObservationDirection && !input.throwableModal &&
+        !baseWorld.playerControlled() && !fireSuppressedUntilRelease_ && !decoyFireSuppressedUntilRelease_ &&
+        !baseWorld.noiseDecoy().flight() && !baseWorld.grenade().active());
+    if(raidActionState_.active()) {
+        weaponTriggerGate_.cancelPending();simulationInput.firePressed=simulationInput.fireJustPressed=false;
+        simulationInput.interactPressed=simulationInput.interactJustPressed=false;
     }
-    else if (simulationInput.aimDownSights && weaponHandling.has_value())
-    {
-        simulationInput.movementSpeedMultiplier *=
-            weaponHandling->aimDownSightsMovementMultiplier;
-    }
-    if (!automaticFire)
-    {
-        simulationInput.firePressed = false;
-    }
+    preparePlayerCombatInput(simulationInput,input,deltaTime,weaponHandling);
+    preparePlayerLightInput(input,deltaTime);
 
     std::optional<FireWeaponCommand> pendingFireCommand;
+    std::optional<std::string> pendingFireTransaction;
     if (weapon.has_value() && !input.inventoryOpen &&
         (simulationInput.fireJustPressed ||
-         (automaticFire && simulationInput.firePressed)))
+         simulationInput.firePressed))
     {
         Pcg32 faultRandom{
             profile_.revision ^ 0x776561706f6e2d66ULL,
@@ -311,7 +306,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         const FireWeaponCommand command{
             *weapon,
             faultRandom.bounded(10000U),
-            faultRandom.next()};
+            faultRandom.next(), EmptyChamberPolicy::RequireExplicitChamber};
         const WeaponAmmoPlan fire = queryFireWeapon(
             profile_, publishedContentRegistry(), command);
         if (!input.developerInfiniteAmmo && fire.canCommit &&
@@ -345,11 +340,18 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         {
             if (!input.developerInfiniteAmmo)
             {
-                pendingFireCommand = command;
+                pendingFireTransaction.emplace(nextRaidTransaction("base-fire"));
+                if (pendingFireTransaction->empty())
+                {
+                    weaponTriggerGate_.cancelUntilRelease();
+                    simulationInput.fireJustPressed = simulationInput.firePressed = false;
+                }
+                else pendingFireCommand = command;
             }
         }
         else
         {
+            weaponTriggerGate_.cancelUntilRelease();
             simulationInput.fireJustPressed = false;
             simulationInput.firePressed = false;
             if (fire.result == WeaponAmmoResult::Dry)
@@ -365,8 +367,9 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         simulationInput.firePressed = false;
     }
 
+    std::optional<IncomingDamageCommand> dailyGrenadeDamage;
     const std::optional<BaseFacilityKind> facility =
-        baseWorld.update(simulationInput, deltaTime);
+        baseWorld.update(simulationInput, deltaTime, [this,&dailyGrenadeDamage]{return processGrenadeExplosion(&dailyGrenadeDamage);});
     if (baseWorld.shotFiredLastUpdate() &&
         !input.developerInfiniteAmmo && pendingFireCommand.has_value())
     {
@@ -376,7 +379,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
             *pendingFireCommand,
             CommandContext{
                 profile_.revision,
-                nextRaidTransaction("base-fire")});
+                *pendingFireTransaction});
         if (!committed.succeeded ||
             (committed.result != WeaponAmmoResult::Fired &&
              committed.result != WeaponAmmoResult::FiredAndMalfunctioned))
@@ -398,6 +401,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     }
     if (baseWorld.shotFiredLastUpdate())
     {
+        weaponTriggerGate_.acceptedShot();
         const AssetRecord *currentWeapon = weapon.has_value()
             ? profile_.assets.find(*weapon)
             : nullptr;
@@ -406,17 +410,36 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         {
             weaponClearGesture_.reset();
             persistenceMessage_ = "weapon malfunction";
+            weaponTriggerGate_.cancelUntilRelease();
         }
     }
 
     if (baseDefenseActive())
     {
         finishBaseDefenseFrame(baseWorld, deltaTime);
+        if(baseDefenseActive())finishBasePlayerFrame(input,deltaTime,weaponActionDelta);
         return facility;
     }
     if (!profile_.homeFounding.established) {
+        finishBasePlayerFrame(input,deltaTime,weaponActionDelta);
         finishBaseDailyFrame();
         return facility;
+    }
+    std::optional<ProfileState> grenadeCandidate;
+    if(dailyGrenadeDamage) {
+        grenadeCandidate=profile_;
+        if(!homePerimeterOutingActive(*grenadeCandidate,perimeterSite)) {
+            // An already armed legal flight can outlive a completed return.
+            // Re-enter this real site's outing before resolving its self-hit.
+            const auto begun=beginHomePerimeterOuting(*grenadeCandidate,perimeterSite,
+                {grenadeCandidate->revision,nextRaidTransaction("home-perimeter-outing")});
+            if(!begun.succeeded){persistenceMessage_=begun.message;restorePerimeterRuntime();return facility;}
+        }
+        const auto damaged=executeIncomingDamageForHomePerimeterCandidate(*grenadeCandidate,publishedContentRegistry(),
+            *dailyGrenadeDamage,{grenadeCandidate->revision,nextRaidTransaction("base-grenade-damage")},perimeterSite);
+        if(!damaged.succeeded){persistenceMessage_=damaged.message;restorePerimeterRuntime();return facility;}
+        lastIncomingDamage_=damaged.resolution;
+        if(damaged.resolution.damageApplied>0)baseWorld.applyPlayerImpactSlow(.18F);
     }
     // A daily hit can be followed by a return/rescue save transaction. Keep
     // only the knife participant until that transaction accepts; rejected
@@ -431,27 +454,29 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         std::uint32_t durability{};
         ProfileRevision revision{};
         bool wasDirty{};
-        ~DailyMeleeRollback()
+        void rollback()
         {
             if (!asset) return;
             profile.assets.findMutable(*asset)->currentDurability=durability;
-            profile.revision=revision;dirty=wasDirty;restore();
+            profile.revision=revision;dirty=wasDirty;asset.reset();restore();
         }
+        ~DailyMeleeRollback(){rollback();}
         void accept() noexcept {asset.reset();}
     } meleeRollback{profile_,worldClockDirty_,restorePerimeterRuntime,
         baseWorld.melee().result().contact ? equippedAsset(profile_,EquipmentSlotKind::QuickMelee):std::nullopt,
         0,profile_.revision,worldClockDirty_};
     if(meleeRollback.asset)meleeRollback.durability=profile_.assets.find(*meleeRollback.asset)->currentDurability;
-    bool meleeAllowed=profile_.currentHealth>0;
+    ProfileState &meleeProfile=grenadeCandidate?*grenadeCandidate:profile_;
+    bool meleeAllowed=meleeProfile.currentHealth>0;
     if(baseWorld.melee().result().attempted)
     {
-        if(const auto damage=baseWorld.perimeterDamageObservation();damage && damage->baseDamage>0)
+        if(const auto damage=baseWorld.perimeterDamageObservation();meleeAllowed && damage && damage->baseDamage>0)
         {
-            const auto expected=queryIncomingDamage(profile_,publishedContentRegistry(),
+            const auto expected=queryIncomingDamage(meleeProfile,publishedContentRegistry(),
                 {damage->baseDamage,damage->region,damage->penetration,damage->armorDamage,damage->weakPoint,{}});
-            meleeAllowed=expected.canCommit && expected.resolution.damageApplied<profile_.currentHealth;
+            meleeAllowed=expected.canCommit && expected.resolution.damageApplied<meleeProfile.currentHealth;
         }
-        if(!commitPlayerMelee(baseWorld,meleeAllowed)){restorePerimeterRuntime();return facility;}
+        if(!commitPlayerMelee(baseWorld,meleeAllowed,grenadeCandidate?&*grenadeCandidate:nullptr)){restorePerimeterRuntime();return facility;}
     }
     const auto runtimeSnapshot = baseWorld.perimeterEnemySnapshots();
     const auto currentSite = profile_.homePerimeter.sites.find(perimeterSite);
@@ -469,13 +494,14 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     const bool outing = homePerimeterOutingActive(profile_, perimeterSite);
     const auto zone = baseWorld.playerSafetyZone();
     const auto damageObservation = baseWorld.perimeterDamageObservation();
-    const bool otherPerimeterFact = (damageObservation && damageObservation->baseDamage > 0) ||
+    const bool otherPerimeterFact = dailyGrenadeDamage.has_value() || (damageObservation && damageObservation->baseDamage > 0) ||
         (!outing && zone == HomeRegionSafetyZone::Perimeter) ||
         (outing && zone == HomeRegionSafetyZone::SafeCore) || profile_.currentHealth <= 0;
     // No full Profile copy on idle/movement frames. Movement remains transient;
     // only accepted discrete facts need a candidate, not every frame or shot.
     if (!enemyChanged && !otherPerimeterFact) {
         meleeRollback.accept();
+        finishBasePlayerFrame(input,deltaTime,weaponActionDelta);
         finishBaseDailyFrame();
         return facility;
     }
@@ -492,53 +518,27 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         checkpointPerimeterEnemies(currentSite->second, runtimeSnapshot,
             baseWorld.perimeterRemovalsLastUpdate());
         ++profile_.revision;
+        recordBaseEnemyDeaths(profile_);
         worldClockDirty_ = true;
         meleeRollback.accept();
+        finishBasePlayerFrame(input,deltaTime,weaponActionDelta);
         finishBaseDailyFrame();
         return facility;
     }
-    bool perimeterChanged{};
-    ProfileState perimeterCandidate = profile_;
+    bool perimeterChanged=dailyGrenadeDamage.has_value();
+    ProfileState perimeterCandidate = grenadeCandidate?std::move(*grenadeCandidate):profile_;
     auto candidateSite = perimeterCandidate.homePerimeter.sites.find(
         perimeterSite);
     if (candidateSite != perimeterCandidate.homePerimeter.sites.end())
     {
         checkpointPerimeterEnemies(candidateSite->second, runtimeSnapshot,
             baseWorld.perimeterRemovalsLastUpdate());
-        perimeterChanged = enemyChanged;
+        perimeterChanged = perimeterChanged || enemyChanged;
     }
 
-    if (const auto damage = baseWorld.perimeterDamageObservation();
-        damage && damage->baseDamage > 0)
-    {
-        Pcg32 woundRandom{
-            perimeterCandidate.revision ^
-                perimeterCandidate.worldClock.elapsedWorldMinutes,
-            0x686f6d652d776f75ULL};
-        const IncomingDamageReceipt damaged = executeIncomingDamage(
-            perimeterCandidate,
-            publishedContentRegistry(),
-            IncomingDamageCommand{
-                damage->baseDamage,
-                damage->region,
-                damage->penetration,
-                damage->armorDamage,
-                damage->weakPoint,
-                WoundRollCommand{
-                    damage->woundSource,
-                    woundRandom.bounded(10000U),
-                    15000U + woundRandom.bounded(10001U)}},
-            CommandContext{
-                perimeterCandidate.revision,
-                nextRaidTransaction("home-perimeter-damage")});
-        if (!damaged.succeeded)
-        {
-            persistenceMessage_ = damaged.message;
-            return facility;
-        }
-        perimeterChanged = true;
-    }
-
+    // Enter the real Daily outing before applying contact damage. Its private
+    // candidate may pass through zero HP only until the rescue below resolves.
+    const ProfileRevision damageWoundRevision=perimeterCandidate.revision;
     const HomeRegionSafetyZone zoneAfter = baseWorld.playerSafetyZone();
     if (!homePerimeterOutingActive(perimeterCandidate, perimeterSite) &&
         zoneAfter == HomeRegionSafetyZone::Perimeter)
@@ -557,34 +557,48 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         perimeterChanged = perimeterChanged || begun.changed;
     }
 
+    if (const auto damage = baseWorld.perimeterDamageObservation();
+        perimeterCandidate.currentHealth>0 && damage && damage->baseDamage > 0)
+    {
+        Pcg32 woundRandom{
+            damageWoundRevision ^
+                perimeterCandidate.worldClock.elapsedWorldMinutes,
+            0x686f6d652d776f75ULL};
+        const IncomingDamageReceipt damaged = executeIncomingDamageForHomePerimeterCandidate(
+            perimeterCandidate,
+            publishedContentRegistry(),
+            IncomingDamageCommand{
+                damage->baseDamage,
+                damage->region,
+                damage->penetration,
+                damage->armorDamage,
+                damage->weakPoint,
+                WoundRollCommand{
+                    damage->woundSource,
+                    woundRandom.bounded(10000U),
+                    15000U + woundRandom.bounded(10001U)}},
+            CommandContext{
+                perimeterCandidate.revision,
+                nextRaidTransaction("home-perimeter-damage")},perimeterSite);
+        if (!damaged.succeeded)
+        {
+            persistenceMessage_ = damaged.message;
+            return facility;
+        }
+        lastIncomingDamage_=damaged.resolution;
+        if(damaged.resolution.damageApplied>0) {
+            baseWorld.applyPlayerImpactSlow(0.18F);
+        }
+        perimeterChanged = true;
+    }
+
     const bool rescue = perimeterCandidate.currentHealth <= 0;
     const bool returned =
         homePerimeterOutingActive(perimeterCandidate, perimeterSite) &&
         zoneAfter == HomeRegionSafetyZone::SafeCore;
     if (rescue || returned)
     {
-        const HomePerimeterResultReceipt result =
-            completeHomePerimeterOuting(
-                perimeterCandidate,
-                rescue,
-                CommandContext{
-                    perimeterCandidate.revision,
-                    nextRaidTransaction(
-                        rescue ? "home-perimeter-rescue"
-                               : "home-perimeter-return")});
-        if (!result.succeeded)
-        {
-            persistenceMessage_ = result.message;
-            return facility;
-        }
-        static_cast<void>(synchronizeBaseDailySystemsThrough(
-            perimeterCandidate, publishedContentRegistry()));
-        static_cast<void>(applyBaseConstructionThrough(
-            perimeterCandidate, publishedContentRegistry()));
-        static_cast<void>(applyBaseManufacturingThrough(
-            perimeterCandidate, publishedContentRegistry()));
-        static_cast<void>(applyResidentTreatmentThrough(perimeterCandidate));
-        static_cast<void>(applyRecoveryTaskThrough(perimeterCandidate));
+        if(!prepareDailyOutingEndCandidate(perimeterCandidate,baseWorld,rescue))return facility;
         perimeterChanged = true;
     }
     else if (perimeterChanged &&
@@ -613,16 +627,29 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
             baseWorld.perimeterRemovalsLastUpdate());
     }
 
+    if(perimeterChanged)recordBaseEnemyDeaths(perimeterCandidate);
+    if(rescue || returned) {
+        const auto valid=validateProfileState(perimeterCandidate,publishedContentRegistry());
+        if(!valid.valid){persistenceMessage_=valid.message;return facility;}
+        auto prepared=std::make_shared<PreparedPlayerTransition>();prepared->kind=PreparedPlayerTransition::Kind::DailyEnd;
+        prepared->restorePerimeterSite=perimeterSite;prepared->rescued=rescue;
+        prepared->resumeBaseFrame=true;prepared->resumeInput=input;prepared->resumeDelta=deltaTime;prepared->resumeWeaponActionDelta=weaponActionDelta;
+        // Queue against the original authority. The immutable candidate owns
+        // this frame's accepted wear/damage/tombstones until it is durable.
+        const bool hadMelee=meleeRollback.asset.has_value();meleeRollback.rollback();
+        if(!hadMelee)restorePerimeterRuntime();
+        static_cast<void>(enqueuePreparedProfileUi(std::move(perimeterCandidate),std::nullopt,ProfileUiCompletionKind::DailyEnd,std::nullopt,std::move(prepared)));
+        return facility;
+    }
     if (perimeterChanged &&
         !commitProfileCandidate(std::move(perimeterCandidate), false))
     {
         restorePerimeterRuntime();
         return facility;
     }
-    if (rescue)
-        baseWorld.resetAtMedicalPoint();
     if (perimeterChanged) worldClockDirty_ = true;
     meleeRollback.accept();
+    finishBasePlayerFrame(input,deltaTime,weaponActionDelta);
     finishBaseDailyFrame();
     return facility;
 }
@@ -758,13 +785,15 @@ GameSession::nextItemInstanceId() const noexcept
 void GameSession::configurePersistence(
     std::filesystem::path directory)
 {
-    if (!drainBaseDailyCheckpoint())
+    if (!drainProfileWritersForReplacement())
         throw std::runtime_error{"Cannot change repository with an unsaved Base checkpoint"};
     baseDefenseWriter_.reset();
     baseDefenseWorld_ = nullptr;
     weaponLightBindingRevision_=0; weaponLightBinding_={};
     lightKeyPending_=false; lightKeyHeldSeconds_=0;
     saveRepository_.emplace(std::move(directory));
+    inventoryPersistence_.reset();
+    profileUiPersistence_.reset();++profileUiEpoch_;
     lastSaveLoadStatus_ = SaveLoadStatus::NotFound;
     persistenceMessage_.clear();
 }
@@ -777,11 +806,12 @@ bool GameSession::hasSavedProfile() const
 
 bool GameSession::startNewProfile(std::string profileId, bool survey)
 {
-    if (!drainBaseDailyCheckpoint()) return false;
+    if (!drainProfileWritersForReplacement()) return false;
     baseDefenseWriter_.reset();
     baseDefenseWorld_ = nullptr;
     baseDefenseSaveBlocked_ = false;
     pendingBaseDefenseEnd_.reset();
+    pendingBaseDefenseSettlement_.reset();pendingBaseDefenseSettlementGeneration_=0;
     ProfileState candidate;
     std::string saveMessage;
     try
@@ -809,6 +839,9 @@ bool GameSession::startNewProfile(std::string profileId, bool survey)
         saveMessage = result.message;
     }
     profile_ = std::move(candidate);
+    inventoryPersistence_.reset();
+    profileUiPersistence_.reset();++profileUiEpoch_;
+    raidActionState_.cancel();
     activeRaidRecoveryProfile_.reset();
     resetWorldClockRuntime();
     configuredBaseWeaponAssetId_.reset();
@@ -862,7 +895,7 @@ bool GameSession::finishFirstRaidHints()
 
 bool GameSession::continueProfile()
 {
-    if (!drainBaseDailyCheckpoint()) return false;
+    if (!drainProfileWritersForReplacement()) return false;
     if (!saveRepository_.has_value())
     {
         persistenceMessage_ = "persistence is not configured";
@@ -958,7 +991,11 @@ bool GameSession::continueProfile()
     baseDefenseWorld_ = nullptr;
     baseDefenseSaveBlocked_ = false;
     pendingBaseDefenseEnd_.reset();
+    pendingBaseDefenseSettlement_.reset();pendingBaseDefenseSettlementGeneration_=0;
     profile_ = std::move(candidate);
+    inventoryPersistence_.reset();
+    profileUiPersistence_.reset();++profileUiEpoch_;
+    raidActionState_.cancel();
     activeRaidRecoveryProfile_.reset();
     resetWorldClockRuntime();
     configuredBaseWeaponAssetId_.reset();
@@ -981,345 +1018,20 @@ bool GameSession::deployAlpha(
     std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId,
     const RaidDeploymentProgressCallback &progress)
 {
-    if (alphaRaidActive_ || profile_.pendingRaid.has_value() || baseDefenseActive() || seed == 0 ||
-        mapDefinitionId.value().empty())
-    {
-        return false;
+    if(!drainBaseDailyCheckpoint())return false;
+    ProfileState candidate,recoveryProfile;
+    auto prepared=prepareAlphaDeployment({seed,std::move(mapDefinitionId),intelligence,std::move(selfRecoveryRecordId),
+        std::move(outpostRestorationId),std::move(baseSiteClearanceId),std::move(basePerimeterSweepId)},candidate,recoveryProfile,progress);
+    if(!prepared)return false;
+    reportRaidDeploymentProgress(progress,.93F,RaidDeploymentProgressStage::SavingProfile);
+    if(saveRepository_) {
+        const auto saved=saveRepository_->save(recoveryProfile,publishedContentRegistry().contentVersion());
+        if(!saved.succeeded){persistenceMessage_=saved.message;return false;}
+        persistenceMessage_=saved.message;
     }
-    const std::size_t number = profile_.committedSettlements.size() + 1U;
-    if (!drainBaseDailyCheckpoint()) return false;
-    ProfileState recoveryProfile = profile_;
-    // Reopening after a committed result may skip its result-screen button.
-    // A second deployment acknowledges that guide in the same clean Base
-    // checkpoint as deployment; rejection or save failure commits neither.
-    if (!recoveryProfile.homeFounding.hintsDismissed &&
-        hasCommittedRaidResult(recoveryProfile))
-    {
-        if (recoveryProfile.revision == std::numeric_limits<ProfileRevision>::max()) return false;
-        recoveryProfile.homeFounding.hintsDismissed = true;
-        recoveryProfile.tutorial = TutorialProgress::Complete;
-        ++recoveryProfile.revision;
-    }
-    ProfileState candidate = recoveryProfile;
-    const std::string raidId = candidate.profileId + "-raid-" +
-        std::to_string(number);
-    const std::string settlementId = candidate.profileId + "-settlement-" +
-        std::to_string(number);
-    reportRaidDeploymentProgress(
-        progress, 0.08F, RaidDeploymentProgressStage::Validating);
-    const DeployReceipt receipt = executeDeploy(
-        candidate,
-        publishedContentRegistry(),
-        DeployCommand{
-            raidId,
-            settlementId,
-            seed,
-            std::move(mapDefinitionId),
-            intelligence,
-            std::move(selfRecoveryRecordId),
-            std::move(outpostRestorationId),
-            std::move(baseSiteClearanceId),
-            std::move(basePerimeterSweepId)},
-        CommandContext{
-            recoveryProfile.revision,
-            "deploy:" + raidId},
-        progress);
-    if (!receipt.succeeded || !candidate.pendingRaid.has_value())
-    {
-        persistenceMessage_ = receipt.message;
-        return false;
-    }
-
-    std::unique_ptr<GameplayWorld> candidateWorld;
-    try
-    {
-        reportRaidDeploymentProgress(
-            progress, 0.82F, RaidDeploymentProgressStage::BuildingWorld);
-        const PendingRaidSnapshot &snapshot = *candidate.pendingRaid;
-        std::vector<EnemySpawn> enemies;
-        enemies.reserve(snapshot.enemies.size());
-        for (const RaidEnemySnapshot &enemy : snapshot.enemies)
-        {
-            if (enemy.spaceId != outdoorRaidSpaceId())
-            {
-                continue;
-            }
-            const auto group = std::find_if(
-                snapshot.encounterGroups.begin(),
-                snapshot.encounterGroups.end(),
-                [&](const RaidEncounterGroupSnapshot &candidate)
-                {
-                    return candidate.instanceId ==
-                        enemy.encounterGroupInstanceId;
-                });
-            EnemySpawn spawn{
-                enemy.position,
-                enemy.size,
-                enemy.maximumHealth};
-            spawn.torsoArmor = enemy.torsoArmor;
-            spawn.variant = enemy.variant;
-            spawn.sourceEnemyId = enemy.sourceEnemyId;
-            if (group != snapshot.encounterGroups.end())
-            {
-                spawn.encounterGroupInstanceId = group->instanceId;
-                spawn.encounterKind = group->kind;
-                spawn.encounterHome = group->homePosition;
-                spawn.patrolPoints = group->patrolPoints;
-                spawn.ambushActivationDistance = group->activationDistance;
-            }
-            enemies.push_back(std::move(spawn));
-        }
-        const MapDefinition &map =
-            publishedContentRegistry().map(snapshot.mapDefinitionId);
-        std::vector<BallisticBlocker> blockers;
-        blockers.reserve(snapshot.spatialLayout.ballisticBlockers.size());
-        for (std::size_t index = 0;
-             index < snapshot.spatialLayout.ballisticBlockers.size();
-             ++index)
-        {
-            const ContentRect &definition =
-                snapshot.spatialLayout.ballisticBlockers[index];
-            blockers.push_back(BallisticBlocker{
-                static_cast<BallisticBlockerId>(index + 1U),
-                Rect{definition.position, definition.size}});
-        }
-        std::vector<EnemySpawn> pressureSpawns;
-        if (snapshot.highRiskCrisis.has_value())
-        {
-            pressureSpawns.reserve(
-                snapshot.highRiskCrisis->pressureSpawns.size());
-            for (const RaidHighRiskPressureSpawnSnapshot &spawn :
-                 snapshot.highRiskCrisis->pressureSpawns)
-            {
-                pressureSpawns.push_back(EnemySpawn{
-                    spawn.position, spawn.size, spawn.maximumHealth});
-            }
-        }
-        else
-        {
-            pressureSpawns.reserve(map.highRisk.pressureSpawns.size());
-            for (std::size_t index{};
-                 index < map.highRisk.pressureSpawns.size(); ++index)
-            {
-                const EnemySpawnDefinition &spawn =
-                    map.highRisk.pressureSpawns[index];
-                const RaidAnchorPlacementSnapshot *placement =
-                    findRaidAnchorPlacement(
-                        snapshot.spatialLayout,
-                        raidIndexedAnchorId("pressure", index));
-                pressureSpawns.push_back(EnemySpawn{
-                    placement != nullptr
-                        ? placement->bounds.position
-                        : spawn.position,
-                    spawn.size,
-                    spawn.maximumHealth});
-            }
-        }
-
-        const auto frozenRegion = [&](std::string_view id,
-                                      ContentRect fallback)
-        {
-            const RaidAnchorPlacementSnapshot *placement =
-                findRaidAnchorPlacement(snapshot.spatialLayout, id);
-            return placement != nullptr ? placement->bounds : fallback;
-        };
-
-        RaidWorldConfig worldConfig;
-        worldConfig.noiseDecoyEnabled = !snapshot.selfRecovery && !snapshot.outpostRestoration &&
-            !snapshot.baseSiteClearance && !snapshot.basePerimeterSweep;
-        worldConfig.grenadeEnabled = worldConfig.noiseDecoyEnabled;
-        worldConfig.lightConeObservationEnabled =
-            candidate.pendingRaid->mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"} ||
-            candidate.pendingRaid->mapDefinitionId == MapDefinitionId{"map.raid.hospital_district"};
-        worldConfig.worldSize = map.worldSize;
-        worldConfig.playerSpawn = snapshot.playerSpawn;
-        worldConfig.extractionPoint = snapshot.extractionPoint;
-        worldConfig.initialEnemies = std::move(enemies);
-        worldConfig.playerMaximumHealth = 100;
-        worldConfig.playerCurrentHealth = candidate.currentHealth;
-        worldConfig.deferPlayerDamageResolution = true;
-        worldConfig.ballisticBlockers = std::move(blockers);
-        worldConfig.outdoorLayout = snapshot.spatialLayout;
-        worldConfig.outdoorColumns = map.proceduralOutdoor.columns;
-        worldConfig.outdoorRows = map.proceduralOutdoor.rows;
-        worldConfig.outdoorChunkSizeCells =
-            map.proceduralOutdoor.chunkSizeCells;
-        worldConfig.interiors.reserve(snapshot.interiors.size());
-        for (const RaidInteriorSnapshot &interior : snapshot.interiors)
-        {
-            RaidInteriorWorldConfig runtime;
-            runtime.id = interior.id;
-            runtime.displayName = interior.displayName;
-            runtime.layoutKnown = interior.layoutKnown;
-            runtime.worldSize = interior.worldSize;
-            runtime.exteriorEntrance = interior.exteriorEntrance;
-            runtime.exteriorReturn = interior.exteriorReturn;
-            runtime.interiorSpawn = interior.interiorSpawn;
-            runtime.interiorExit = interior.interiorExit;
-            runtime.ballisticBlockers.reserve(
-                interior.ballisticBlockers.size());
-            for (std::size_t index{};
-                 index < interior.ballisticBlockers.size(); ++index)
-            {
-                runtime.ballisticBlockers.push_back(BallisticBlocker{
-                    static_cast<BallisticBlockerId>(index + 1U),
-                    Rect{interior.ballisticBlockers[index].position,
-                         interior.ballisticBlockers[index].size}});
-            }
-            for (const RaidEnemySnapshot &enemy : snapshot.enemies)
-            {
-                if (enemy.spaceId == interior.id)
-                {
-                    runtime.initialEnemies.push_back(EnemySpawn{
-                        enemy.position,
-                        enemy.size,
-                        enemy.maximumHealth});
-                    runtime.initialEnemies.back().torsoArmor = enemy.torsoArmor;
-                    runtime.initialEnemies.back().variant = enemy.variant;
-                }
-            }
-            worldConfig.interiors.push_back(std::move(runtime));
-        }
-        worldConfig.normalExtractionDurationSeconds =
-            map.raidRules.extractionDurationSeconds;
-        worldConfig.credentialExtraction = snapshot.credentialExtraction;
-        worldConfig.intelligence = snapshot.intelligence;
-        if (snapshot.rescue.has_value() && !snapshot.rescue->secured)
-        {
-            worldConfig.rescue = RaidWorldConfig::OrdinarySurvivorRescue{
-                snapshot.rescue->transferPoint,
-                snapshot.rescue->interactionDurationSeconds};
-        }
-        const RaidHighRiskCrisisSnapshot *crisis =
-            snapshot.highRiskCrisis.has_value()
-            ? &*snapshot.highRiskCrisis
-            : nullptr;
-        worldConfig.highRisk = HighRiskWorldConfig{
-            map.highRisk.enabled,
-            map.highRisk.regularPhaseDurationSeconds,
-            frozenRegion(kRaidAnchorEmergencyExtraction,
-                         map.highRisk.emergencyExtractionPoint),
-            map.highRisk.emergencyExtractionDurationSeconds,
-            crisis != nullptr
-                ? crisis->initialWaveDelaySeconds
-                : map.highRisk.initialWaveDelaySeconds,
-            crisis != nullptr
-                ? crisis->waveIntervalSeconds
-                : map.highRisk.waveIntervalSeconds,
-            crisis != nullptr ? crisis->waveSize : map.highRisk.waveSize,
-            crisis != nullptr
-                ? crisis->activeEnemyCap
-                : map.highRisk.activeEnemyCap,
-            std::move(pressureSpawns),
-            frozenRegion(kRaidAnchorHighRiskControl,
-                         map.highRisk.activationControlPoint),
-            map.highRisk.activationDurationSeconds,
-            crisis != nullptr
-                ? crisis->focusArea
-                : frozenRegion(kRaidAnchorAdvancedResource,
-                               map.highRisk.advancedResourceArea),
-            snapshot.seed,
-            frozenRegion(kRaidAnchorConditionalExtraction,
-                         map.highRisk.conditionalExtractionPoint),
-            map.highRisk.conditionalExtractionDurationSeconds,
-            map.highRisk.conditionalExtractionMaximumWeightGrams};
-        if (map.highRisk.enabled)
-        {
-            worldConfig.tacticalObjectives.push_back(
-                RaidTacticalObjective{
-                    RaidTacticalObjectiveKind::HighRiskControl,
-                    frozenRegion(
-                        kRaidAnchorHighRiskControl,
-                        map.highRisk.activationControlPoint),
-                    RaidTacticalObjectiveVisibility::Explored});
-        }
-        if (snapshot.rescue.has_value() && !snapshot.rescue->secured)
-        {
-            worldConfig.tacticalObjectives.push_back(
-                RaidTacticalObjective{
-                    RaidTacticalObjectiveKind::Rescue,
-                    snapshot.rescue->transferPoint,
-                    RaidTacticalObjectiveVisibility::Briefed});
-        }
-        if (snapshot.selfRecovery.has_value())
-        {
-            constexpr Vec2 markerSize{96.0F, 96.0F};
-            const Vec2 cache = snapshot.selfRecovery->cachePosition;
-            const ContentRect marker{
-                {std::clamp(
-                     cache.x - markerSize.x * 0.5F,
-                     0.0F,
-                     map.worldSize.x - markerSize.x),
-                 std::clamp(
-                     cache.y - markerSize.y * 0.5F,
-                     0.0F,
-                     map.worldSize.y - markerSize.y)},
-                markerSize};
-            worldConfig.tacticalObjectives.push_back(
-                RaidTacticalObjective{
-                    RaidTacticalObjectiveKind::SelfRecovery,
-                    marker,
-                    RaidTacticalObjectiveVisibility::Briefed});
-        }
-        candidateWorld =
-            std::make_unique<GameplayWorld>(std::move(worldConfig));
-    }
-    catch (const std::exception &error)
-    {
-        persistenceMessage_ = error.what();
-        return false;
-    }
-    std::string saveMessage;
-    reportRaidDeploymentProgress(
-        progress, 0.93F, RaidDeploymentProgressStage::SavingProfile);
-    if (saveRepository_.has_value())
-    {
-        const SaveWriteResult saved = saveRepository_->save(
-            recoveryProfile,
-            publishedContentRegistry().contentVersion());
-        if (!saved.succeeded)
-        {
-            persistenceMessage_ = saved.message;
-            return false;
-        }
-        saveMessage = saved.message;
-    }
-    worldClockDirty_ = false;
-    worldClockCheckpointElapsedSeconds_ = 0.0F;
-    if (!commitProfileCandidate(std::move(candidate), false))
-    {
-        return false;
-    }
-    persistenceMessage_ = std::move(saveMessage);
-    world_.swap(candidateWorld);
-    world_->setRaidDaylight(worldClockProjection().timeOfDay == WorldTimeOfDay::Day);
-    activeRaidRecoveryProfile_ = std::move(recoveryProfile);
-    deferredRaidBasePresentationEvents_.clear();
-    settlement_ = RaidSettlement{};
-    state_ = GameSessionState::InRaid;
-    raidNumber_ = number;
-    alphaRaidActive_ = true;
-    recoveredAbandonedRaid_ = false;
-    raidActionState_.cancel();
-    medicalTickAccumulatorSeconds_ = 0.0F;
-    medicalRandomSequence_ = 0;
-    woundRandomSequence_ = 0;
-    weaponFaultSequence_ = 0;
-    raidElapsedSeconds_ = 0.0F;
-    selfRecoveryInteractionSeconds_ = 0.0F;
-    outpostRestorationObjectiveSecured_ = false;
-    baseSiteClearanceObjectiveSecured_ = false;
-    basePerimeterSweepObjectiveSecured_ = false;
-    weaponClearGesture_.reset();
-    fireSuppressedUntilRelease_ = false;
-    sprintSuppressedUntilRelease_ = false;
-    sprintFireIntentPending_ = false;
-    sprintFireReadyRemaining_ = 0.0F;
-    activeWeaponSlot_ = EquipmentSlotKind::PrimaryWeapon;
-    configuredWeaponAssetId_.reset();
-    synchronizeActiveAlphaWeapon();
-    reportRaidDeploymentProgress(
-        progress, 1.0F, RaidDeploymentProgressStage::Complete);
+    if(!commitProfileCandidate(std::move(candidate),false))return false;
+    completePreparedPlayerTransition(prepared);
+    reportRaidDeploymentProgress(progress,1.0F,RaidDeploymentProgressStage::Complete);
     return true;
 }
 
@@ -1392,6 +1104,7 @@ GameSession::raidHighRiskCrisisProjection() const noexcept
 
 bool GameSession::triggerDeveloperHighRisk() noexcept
 {
+    if(profileUiCommitPending())return false;
     if (!alphaRaidActive_ || world_ == nullptr ||
         !world_->raidSession().isActive())
     {
@@ -1402,6 +1115,7 @@ bool GameSession::triggerDeveloperHighRisk() noexcept
 
 bool GameSession::activeQuitAlphaRaid()
 {
+    if(profileUiCommitPending())return false;
     return alphaRaidActive_ && settleAlphaRaid(RaidResultOutcome::ActiveQuit);
 }
 
@@ -1409,20 +1123,36 @@ bool GameSession::startAlphaReload(
     AssetInstanceId weaponAssetId,
     AssetInstanceId magazineAssetId)
 {
-    if (world_ && (world_->noiseDecoy().flight() || world_->grenade().flight())) return false;
-    if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
-        activeAlphaWeapon() !=
-            std::optional<AssetInstanceId>{weaponAssetId} ||
-        !assetIsCarried(profile_, magazineAssetId))
+    return beginAlphaReload(weaponAssetId, magazineAssetId, RaidReloadSource::ExplicitStored);
+}
+
+std::optional<WeaponFireMode> GameSession::weaponFireMode(
+    AssetInstanceId weaponAssetId) const noexcept
+{
+    return queryWeaponFireMode(profile_, publishedContentRegistry(), weaponAssetId);
+}
+
+bool GameSession::beginAlphaReload(
+    AssetInstanceId weaponAssetId, AssetInstanceId magazineAssetId,
+    RaidReloadSource source)
+{
+    const auto context = playerGameplayContext();
+    if(profileUiCommitPending())return false;
+    if(inventoryPersistencePending()){requestInventoryPersistenceBarrier();persistenceMessage_="INVENTORY SAVE PENDING";return false;}
+    const bool flying = alphaRaidActive_ ? (world_->noiseDecoy().flight().has_value() || world_->grenade().flight().has_value())
+        : basePlayerWorld_ && (basePlayerWorld_->noiseDecoy().flight().has_value() || basePlayerWorld_->grenade().flight().has_value());
+    if (!context.available || context.dead || context.controlled || flying ||
+        raidActionState_.active().has_value() ||
+        activeAlphaWeapon() != std::optional<AssetInstanceId>{weaponAssetId})
     {
         return false;
     }
-    const WeaponAmmoPlan plan = queryWeaponAmmo(
-        profile_,
-        publishedContentRegistry(),
-        InstallMagazineAndChamberCommand{
-            weaponAssetId,
-            magazineAssetId});
+    RaidReloadBinding binding{profile_.pendingRaid ? profile_.pendingRaid->raidId : std::string{},
+        context.spaceId, weaponAssetId, nextRaidTransaction("reload-action"), magazineAssetId,
+        installedMagazine(profile_, weaponAssetId)};
+    if (!profile_.pendingRaid) binding.activity = context.activity;
+    const auto plan = queryRaidReload(profile_, publishedContentRegistry(),
+        RaidReloadRequest{binding, RaidReloadKind::Normal, source, context.stashAccessible});
     const float handlingMultiplier =
         hasPain(profile_.medicalStatus) &&
                 !painIsSuppressed(profile_.medicalStatus)
@@ -1433,7 +1163,7 @@ bool GameSession::startAlphaReload(
             weaponAssetId,
             magazineAssetId,
             0.0F,
-            2.0F / handlingMultiplier});
+            2.0F / handlingMultiplier, plan, handlingMultiplier, 0});
     if (started)
     {
         presentationEvents_.push_back(
@@ -1442,15 +1172,188 @@ bool GameSession::startAlphaReload(
     return started;
 }
 
+bool GameSession::startAlphaChamber(AssetInstanceId weaponAssetId)
+{
+    const auto context=playerGameplayContext();
+    if (!context.available || context.dead || context.controlled || playerThrowFlightActive() || profileUiCommitPending() || inventoryPersistencePending() || raidActionState_.active() ||
+        activeAlphaWeapon() != std::optional<AssetInstanceId>{weaponAssetId}) return false;
+    const auto plan = queryWeaponAmmo(profile_, publishedContentRegistry(),
+        ChamberWeaponCommand{weaponAssetId});
+    if (!plan.canCommit) return false;
+    const float efficiency = hasPain(profile_.medicalStatus) &&
+        !painIsSuppressed(profile_.medicalStatus) ? 0.9F : 1.0F;
+    return raidActionState_.start(ChamberRaidAction{weaponAssetId, 0, 0.5F / efficiency});
+}
+
+bool GameSession::upgradeAlphaReloadEmergency(AssetInstanceId expectedWeaponId)
+{
+    auto *active = raidActionState_.activeMutable();
+    auto *reload = active ? std::get_if<ReloadRaidAction>(active) : nullptr;
+    if (!reload || reload->weaponAssetId != expectedWeaponId ||
+        reload->plan.kind != RaidReloadKind::Normal ||
+        !reload->plan.binding.oldMagazineAssetId ||
+        installedMagazine(profile_, expectedWeaponId) !=
+            reload->plan.binding.oldMagazineAssetId) return false;
+    reload->plan.kind = RaidReloadKind::Emergency;
+    reload->plan.oldReturn.reset();
+    reload->durationSeconds = 1.2F / reload->handlingMultiplier;
+    return true;
+}
+
+RaidDroppedMagazineLocation GameSession::raidMagazineDrop() const
+{
+    const Vec2 p = world_->player().position();
+    const float half = world_->player().size() * 0.5F;
+    return {profile_.pendingRaid->raidId, world_->activeRaidSpaceId(),
+        {p.x + half, p.y + half}};
+}
+
+RaidReloadWorldAccess GameSession::raidReloadAccess(const RaidObservationKey &key) const
+{
+    const auto context=playerGameplayContext();
+    RaidReloadWorldAccess access{context.spaceId, context.playerCenter,
+        alphaRaidActive_ ? &world_->raidObservation() : basePlayerWorld_ ? &basePlayerWorld_->observation() : nullptr, &key};
+    if (!profile_.pendingRaid) access.activity=context.activity;
+    access.worldSize=context.worldSize;access.stashAccessible=context.stashAccessible;
+    return access;
+}
+
+void GameSession::recordRaidReloadReceipt(const RaidReloadReceipt &receipt)
+{
+    if (!receipt.succeeded || receipt.alreadyCommitted) return;
+    if (receipt.magazineRemoved)
+        presentationEvents_.push_back(GameSessionPresentationEvent::WeaponMagazineRemoved);
+    if (receipt.magazineInserted)
+        presentationEvents_.push_back(GameSessionPresentationEvent::WeaponMagazineInserted);
+    if (receipt.chamberedRound)
+        presentationEvents_.push_back(GameSessionPresentationEvent::WeaponChambered);
+    for (auto id : receipt.droppedMagazineAssetIds)
+        if (std::find(droppedRaidMagazineIds_.begin(), droppedRaidMagazineIds_.end(), id) ==
+            droppedRaidMagazineIds_.end()) droppedRaidMagazineIds_.push_back(id);
+}
+
+bool GameSession::cancelActiveRaidAction()
+{
+    const auto *active = raidActionState_.activeMutable();
+    const auto *reload = active ? std::get_if<ReloadRaidAction>(active) : nullptr;
+    if (reload && reload->nextStage != 0U && !reload->plan.binding.actionId.empty())
+    {
+        const auto context=playerGameplayContext();
+        if (!context.available) return false;
+        const auto key = alphaRaidActive_ ? world_->raidObservationKey() : basePlayerWorld_->observationKey();
+        RaidReloadCancelCommand command{reload->plan.binding, reload->plan.newSource};
+        if (profile_.pendingRaid) command.newFallbackDrop=command.oldFallbackDrop=raidMagazineDrop();
+        else {
+            const AssetLocation drop=developerRange_ ? AssetLocation{TrainingDroppedMagazineLocation{context.activity.activityId,context.playerCenter}}
+                : AssetLocation{BaseGroundAssetLocation{context.activity.baseSiteDefinitionId,context.playerCenter}};
+            command.newWorldFallbackDrop=command.oldWorldFallbackDrop=drop;
+        }
+        const auto receipt = executeRaidReloadCancel(profile_, publishedContentRegistry(), command,
+            {profile_.revision, reload->plan.binding.actionId + "/cancel"}, raidReloadAccess(key));
+        if (!receipt.succeeded)
+        {
+            persistenceMessage_ = receipt.message;
+            return false;
+        }
+        recordRaidReloadReceipt(receipt);
+    }
+    raidActionState_.cancel();
+    return true;
+}
+
+bool GameSession::advanceRaidWeaponAction(float deltaTime, bool interrupted)
+{
+    auto *active = raidActionState_.activeMutable();
+    if (!active) return true;
+    if (interrupted) return cancelActiveRaidAction();
+    auto *reload = std::get_if<ReloadRaidAction>(active);
+    if (!reload) return true;
+    if(inventoryPersistencePending()){requestInventoryPersistenceBarrier();return true;}
+    if (!std::isfinite(deltaTime) || deltaTime <= 0) return true;
+    reload->elapsedSeconds = std::min(reload->durationSeconds,
+        reload->elapsedSeconds + deltaTime);
+    constexpr std::array<float, 5> normal{0.2F, 0.6F, 1.2F, 1.6F, 2.0F};
+    constexpr std::array<float, 5> emergency{0.2F, 0.35F, 0.8F, 0.8F, 1.2F};
+    while (reload->nextStage < normal.size())
+    {
+        const auto index = reload->nextStage;
+        const bool urgent = reload->plan.kind == RaidReloadKind::Emergency;
+        const float deadline = (urgent ? emergency[index] : normal[index]) /
+            reload->handlingMultiplier;
+        if (reload->elapsedSeconds + 0.000001F < deadline) break;
+        const auto stage = static_cast<RaidReloadStage>(index);
+        if ((stage == RaidReloadStage::RemoveOld && !reload->plan.binding.oldMagazineAssetId) ||
+            (stage == RaidReloadStage::StowOld && (urgent || !reload->plan.binding.oldMagazineAssetId)))
+        {
+            ++reload->nextStage;
+            continue;
+        }
+        const auto context=playerGameplayContext();
+        const auto key = alphaRaidActive_ ? world_->raidObservationKey() : basePlayerWorld_->observationKey();
+        RaidReloadStageCommand command{reload->plan.binding, stage, reload->plan.kind,
+            reload->plan.source, reload->plan.newSource, reload->plan.oldReturn, std::nullopt};
+        if (stage == RaidReloadStage::RemoveOld && urgent) {
+            if (profile_.pendingRaid) command.drop=raidMagazineDrop();
+            else command.worldDrop=developerRange_ ? AssetLocation{TrainingDroppedMagazineLocation{context.activity.activityId,context.playerCenter}}
+                : AssetLocation{BaseGroundAssetLocation{context.activity.baseSiteDefinitionId,context.playerCenter}};
+        }
+        const auto receipt = executeRaidReloadStage(profile_, publishedContentRegistry(), command,
+            {profile_.revision, reload->plan.binding.actionId + "/" + std::to_string(index)},
+            raidReloadAccess(key));
+        if (!receipt.succeeded)
+        {
+            persistenceMessage_ = receipt.message;
+            return cancelActiveRaidAction();
+        }
+        recordRaidReloadReceipt(receipt);
+        ++reload->nextStage;
+    }
+    if (reload->nextStage == normal.size())
+    {
+        raidActionState_.cancel();
+        presentationEvents_.push_back(GameSessionPresentationEvent::ReloadCompleted);
+    }
+    return true;
+}
+
+std::vector<AssetInstanceId> GameSession::droppedRaidMagazineIds() const
+{
+    std::vector<AssetInstanceId> result;
+    if (!world_ || (!profile_.pendingRaid && !developerRange_)) return result;
+    for (auto id : droppedRaidMagazineIds_)
+        if (const auto *asset = profile_.assets.find(id)) {
+            if (const auto *drop=std::get_if<RaidDroppedMagazineLocation>(&asset->location);
+                drop && profile_.pendingRaid && drop->raidId==profile_.pendingRaid->raidId && drop->spaceId==world_->activeRaidSpaceId())result.push_back(id);
+            else if(const auto *drop=std::get_if<TrainingDroppedMagazineLocation>(&asset->location);
+                drop && developerRange_ && drop->sessionId==profile_.profileId)result.push_back(id);
+        }
+    return result;
+}
+
+void GameSession::prepareWeaponTrigger(GameplayInput &simulation, const GameplayInput &input,
+    std::optional<AssetInstanceId> weapon, bool available)
+{
+    const auto mode = weapon ? weaponFireMode(*weapon) : std::nullopt;
+    unsigned count{};
+    if (weapon && mode)
+        if (const auto *asset = profile_.assets.find(*weapon))
+            count = publishedContentRegistry().item(asset->definitionId).weaponUse->burstShotCount;
+    const auto intent = weaponTriggerGate_.prepare(weapon.value_or(0),
+        mode.value_or(WeaponFireMode::SemiAutomatic), count,
+        input.firePressed || input.firePhysicallyPressed, input.fireJustPressed, available && mode.has_value());
+    simulation.firePressed = intent.pressed;
+    simulation.fireJustPressed = intent.justPressed;
+}
+
 bool GameSession::startAlphaLoadMagazine(
     AssetInstanceId ammunitionAssetId,
     AssetInstanceId magazineAssetId,
     std::uint32_t quantity)
 {
-    if (world_ && (world_->noiseDecoy().flight() || world_->grenade().flight())) return false;
+    if (playerThrowFlightActive() || profileUiCommitPending() || inventoryPersistencePending()) return false;
     const AssetRecord *ammunition = profile_.assets.find(ammunitionAssetId);
     const AssetRecord *magazine = profile_.assets.find(magazineAssetId);
-    if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
+    if (!playerGameplayContext().available || playerGameplayContext().dead || playerGameplayContext().controlled || raidActionState_.active().has_value() ||
         ammunition == nullptr || magazine == nullptr ||
         !assetIsCarried(profile_, ammunitionAssetId) ||
         !assetIsCarried(profile_, magazineAssetId))
@@ -1502,7 +1405,7 @@ bool GameSession::startAlphaLoadMagazine(
 
 bool GameSession::startAlphaHeal(AssetInstanceId medkitAssetId)
 {
-    if (world_ && (world_->noiseDecoy().flight() || world_->grenade().flight())) return false;
+    if (playerThrowFlightActive() || profileUiCommitPending() || inventoryPersistencePending()) return false;
     const AssetRecord *asset = profile_.assets.find(medkitAssetId);
     if (asset == nullptr)
     {
@@ -1525,8 +1428,8 @@ bool GameSession::startAlphaHeal(AssetInstanceId medkitAssetId)
 
 bool GameSession::startAlphaMedical(AssetInstanceId medicalAssetId)
 {
-    if (world_ && (world_->noiseDecoy().flight() || world_->grenade().flight())) return false;
-    if (!alphaRaidActive_ || raidActionState_.active().has_value())
+    if (playerThrowFlightActive() || profileUiCommitPending() || inventoryPersistencePending()) return false;
+    if (!playerGameplayContext().available || playerGameplayContext().dead || playerGameplayContext().controlled || raidActionState_.active().has_value())
     {
         return false;
     }
@@ -1565,8 +1468,8 @@ bool GameSession::startAlphaWeaponMaintenance(
     AssetInstanceId kitAssetId,
     AssetInstanceId weaponAssetId)
 {
-    if (world_ && (world_->noiseDecoy().flight() || world_->grenade().flight())) return false;
-    if (!alphaRaidActive_ || raidActionState_.active().has_value())
+    if (playerThrowFlightActive() || profileUiCommitPending() || inventoryPersistencePending()) return false;
+    if (!playerGameplayContext().available || playerGameplayContext().dead || playerGameplayContext().controlled || raidActionState_.active().has_value())
     {
         return false;
     }
@@ -1590,8 +1493,8 @@ bool GameSession::startAlphaArmorMaintenance(
     AssetInstanceId kitAssetId,
     AssetInstanceId armorAssetId)
 {
-    if (world_ && (world_->noiseDecoy().flight() || world_->grenade().flight())) return false;
-    if (!alphaRaidActive_ || raidActionState_.active().has_value())
+    if (playerThrowFlightActive() || profileUiCommitPending() || inventoryPersistencePending()) return false;
+    if (!playerGameplayContext().available || playerGameplayContext().dead || playerGameplayContext().controlled || raidActionState_.active().has_value())
     {
         return false;
     }
@@ -1613,8 +1516,8 @@ bool GameSession::startAlphaArmorMaintenance(
 
 bool GameSession::startAlphaWeaponSwitch(EquipmentSlotKind targetSlot)
 {
-    if (world_ && (world_->noiseDecoy().flight() || world_->grenade().flight())) return false;
-    if (!alphaRaidActive_ || raidActionState_.active().has_value() ||
+    if (playerThrowFlightActive() || profileUiCommitPending() || inventoryPersistencePending()) return false;
+    if (!playerGameplayContext().available || playerGameplayContext().dead || playerGameplayContext().controlled || raidActionState_.active().has_value() ||
         !isWeaponEquipmentSlot(targetSlot) ||
         targetSlot == activeWeaponSlot_)
     {
@@ -1664,30 +1567,30 @@ WeaponLightProjection GameSession::activeWeaponLight() const
         weaponLightBindingRevision_ = profile_.revision;
     }
     const bool switching = raidActionState_.active() && std::holds_alternative<WeaponSwitchRaidAction>(*raidActionState_.active());
-    const bool allowed = alphaRaidActive_ && !developerRange_ && world_ && world_->raidSession().isActive() &&
-                         world_->lightConeObservationEnabled() && !switching;
+    const bool allowed = playerGameplayContext().available && !playerGameplayContext().dead && !switching;
     return queryWeaponLight(profile_, publishedContentRegistry(), weaponLightBinding_, allowed);
 }
 
 void GameSession::synchronizeWeaponLight(float seconds)
 {
-    if (!world_) return;
+    if (!playerGameplayContext().available) return;
     auto projection = activeWeaponLight();
     const bool switching = raidActionState_.active() && std::holds_alternative<WeaponSwitchRaidAction>(*raidActionState_.active());
-    const bool allowed = alphaRaidActive_ && !developerRange_ && world_->raidSession().isActive() && world_->lightConeObservationEnabled() && !switching;
+    const bool allowed = playerGameplayContext().available && !playerGameplayContext().dead && !switching;
     advanceWeaponLight(profile_, publishedContentRegistry(), projection.binding, allowed, seconds);
     projection = activeWeaponLight();
-    world_->setWeaponLight(projection.output ? projection.binding.deviceAssetId : 0,
+    const auto setLight = [&](auto &consumer) { consumer.setWeaponLight(projection.output ? projection.binding.deviceAssetId : 0,
                            projection.output ? projection.binding.batteryAssetId : 0,
                            projection.output ? projection.light.angleDegrees : 0,
                            projection.output ? projection.light.maximumDistance : 0,
-                           projection.output ? projection.light.backgroundRadius : 0);
+                           projection.output ? projection.light.backgroundRadius : 0); };
+    if(alphaRaidActive_) setLight(*world_); else if(basePlayerWorld_) setLight(*basePlayerWorld_);
 }
 
 InventoryReceipt GameSession::toggleWeaponLight()
 {
     const auto light = activeWeaponLight();
-    if (!alphaRaidActive_ || !world_->raidSession().isActive() || !world_->lightConeObservationEnabled() || !light.binding.deviceAssetId)
+    if (!playerGameplayContext().available || !light.binding.deviceAssetId)
         return {false, false, DomainErrorCode::IllegalDestination, "NO ACTIVE WEAPON LIGHT", profile_.revision};
     auto candidate = profile_;
     auto receipt = executeDeviceSwitch(candidate, publishedContentRegistry(), light.binding.deviceAssetId,
@@ -1701,10 +1604,16 @@ InventoryReceipt GameSession::toggleWeaponLight()
 
 InventoryReceipt GameSession::changeDeviceBattery(DeviceBatteryCommand command, std::string transactionId)
 {
-    const bool raid = alphaRaidActive_ && world_ && world_->raidSession().isActive();
-    if ((alphaRaidActive_ && !raid) || (!raid && (profile_.pendingRaid || profile_.activeBaseDefense)))
+    if(profileUiCommitPending())return {false,false,DomainErrorCode::IllegalDestination,"PROFILE SAVE PENDING",profile_.revision};
+    const auto context=playerGameplayContext();
+    if ((alphaRaidActive_ && !context.available) || (!context.available && (profile_.pendingRaid || profile_.activeBaseDefense)))
         return {false, false, DomainErrorCode::IllegalDestination, "BATTERY CHANGE UNAVAILABLE", profile_.revision};
+    const bool raid=context.available && context.activity.activity==WeaponActionActivity::Raid;
     DeviceBatteryAccess access{raid};
+    if(context.available) {
+        access.activity=context.activity;
+        access.stashAccessible=context.activity.activity==WeaponActionActivity::BaseDaily && context.stashAccessible;
+    }
     if (raid && profile_.pendingRaid)
     {
         const auto p = world_->player().position(); const auto half = world_->player().size() * 0.5F;
@@ -1714,14 +1623,16 @@ InventoryReceipt GameSession::changeDeviceBattery(DeviceBatteryCommand command, 
     auto receipt = executeDeviceBatteryChange(candidate, publishedContentRegistry(), command, access,
                                              {candidate.revision, std::move(transactionId)});
     if (!receipt.succeeded) { persistenceMessage_=receipt.message; return receipt; }
-    if (!commitProfileCandidate(std::move(candidate), !raid))
+    if (!commitProfileCandidate(std::move(candidate), !context.available))
         return {false, false, DomainErrorCode::InvalidProfile, persistenceMessage_, profile_.revision};
+    if(context.available)worldClockDirty_=true;
     synchronizeWeaponLight();
     return receipt;
 }
 
 bool GameSession::observeAlphaWeaponClearMotion(Vec2 delta)
 {
+    if(profileUiCommitPending())return false;
     const bool inBase = !alphaRaidActive_ &&
         !profile_.pendingRaid.has_value() &&
         state_ == GameSessionState::BetweenRaids;
@@ -1736,7 +1647,7 @@ bool GameSession::observeAlphaWeaponClearMotion(Vec2 delta)
         ? profile_.assets.find(*weapon)
         : nullptr;
     const auto light = activeWeaponLight();
-    const bool lampFault = alphaRaidActive_ && world_->lightConeObservationEnabled() && light.switchOn && light.interrupted && light.remainingMs;
+    const bool lampFault = playerGameplayContext().available && light.switchOn && light.interrupted && light.remainingMs;
     const bool weaponFault = record && record->weaponMalfunction != WeaponMalfunctionType::None;
     if (!weaponFault && !lampFault) { weaponClearGesture_.reset(); return false; }
     const float elapsedSeconds = alphaRaidActive_
@@ -1774,8 +1685,8 @@ bool GameSession::observeAlphaWeaponClearMotion(Vec2 delta)
 bool GameSession::startAlphaUnloadMagazine(
     AssetInstanceId magazineAssetId)
 {
-    if (world_ && (world_->noiseDecoy().flight() || world_->grenade().flight())) return false;
-    if (!alphaRaidActive_ || raidActionState_.active().has_value())
+    if (playerThrowFlightActive() || profileUiCommitPending() || inventoryPersistencePending()) return false;
+    if (!playerGameplayContext().available || playerGameplayContext().dead || playerGameplayContext().controlled || raidActionState_.active().has_value())
     {
         return false;
     }
@@ -1880,6 +1791,7 @@ bool GameSession::adjustDeveloperWeaponTuning(
     int direction,
     bool coarseStep)
 {
+    if(profileUiCommitPending())return false;
     const bool activeRaid = alphaRaidActive_ && world_ != nullptr &&
         world_->raidSession().isActive();
     const bool activeBase = !alphaRaidActive_ &&
@@ -2185,6 +2097,7 @@ bool GameSession::adjustDeveloperWeaponTuning(
 
 bool GameSession::resetDeveloperWeaponTuning()
 {
+    if(profileUiCommitPending())return false;
     const bool activeRaid = alphaRaidActive_ && world_ != nullptr &&
         world_->raidSession().isActive();
     const bool activeBase = !alphaRaidActive_ &&
@@ -2655,7 +2568,9 @@ BaseMigrationReceipt GameSession::executeBaseMigration(
     RegionalBaseSiteDefinitionId targetSiteDefinitionId,
     std::string transactionId)
 {
+    if(!preparePlayerActivityBoundary())return {false,false,DomainErrorCode::IllegalDestination,persistenceMessage_,profile_.revision};
     ProfileState candidate = profile_;
+    candidate.basePlayerEffects.reset();
     BaseMigrationReceipt receipt = ::executeBaseMigration(
         candidate,
         publishedContentRegistry(),
@@ -2900,6 +2815,14 @@ WeaponAmmoReceipt GameSession::executeProfileWeaponAmmo(
 {
     if (alphaRaidActive_ && world_ && (world_->noiseDecoy().flight() || world_->grenade().flight()))
         return {false,false,DomainErrorCode::IllegalDestination,"DECOY UNAVAILABLE HERE",profile_.revision,WeaponAmmoResult::Dry,std::nullopt};
+    const auto weaponId = std::visit([](const auto &typed) -> std::optional<AssetInstanceId> {
+        if constexpr (requires { typed.weaponAssetId; }) return typed.weaponAssetId;
+        else return std::nullopt;
+    }, command);
+    const auto oldMagazine = weaponId ? installedMagazine(profile_, *weaponId) : std::nullopt;
+    const auto *oldWeapon = weaponId ? profile_.assets.find(*weaponId) : nullptr;
+    const bool oldChambered = oldWeapon && oldWeapon->chamberedRound.has_value();
+    const auto oldMode = oldWeapon ? oldWeapon->fireMode : std::nullopt;
     ProfileState candidate = profile_;
     WeaponAmmoReceipt receipt = executeWeaponAmmo(
         candidate,
@@ -2912,7 +2835,7 @@ WeaponAmmoReceipt GameSession::executeProfileWeaponAmmo(
     }
     if (!commitProfileCandidate(
             std::move(candidate),
-            !alphaRaidActive_))
+            !playerGameplayContext().available))
     {
         return WeaponAmmoReceipt{
             false,
@@ -2923,6 +2846,20 @@ WeaponAmmoReceipt GameSession::executeProfileWeaponAmmo(
             WeaponAmmoResult::Dry,
             std::nullopt};
     }
+    if(playerGameplayContext().available && !alphaRaidActive_)worldClockDirty_=true;
+    if (receipt.alreadyCommitted) return receipt;
+    if (weaponId)
+    {
+        const auto newMagazine = installedMagazine(profile_, *weaponId);
+        if (oldMagazine != newMagazine)
+        {
+            if (oldMagazine) presentationEvents_.push_back(GameSessionPresentationEvent::WeaponMagazineRemoved);
+            if (newMagazine) presentationEvents_.push_back(GameSessionPresentationEvent::WeaponMagazineInserted);
+        }
+        const auto *now = profile_.assets.find(*weaponId);
+        if (!oldChambered && now && now->chamberedRound)
+            presentationEvents_.push_back(GameSessionPresentationEvent::WeaponChambered);
+    }
     switch (receipt.result)
     {
     case WeaponAmmoResult::Loaded:
@@ -2930,9 +2867,10 @@ WeaponAmmoReceipt GameSession::executeProfileWeaponAmmo(
             GameSessionPresentationEvent::MagazineLoaded);
         break;
     case WeaponAmmoResult::Unloaded:
-    case WeaponAmmoResult::Uninstalled:
         presentationEvents_.push_back(
             GameSessionPresentationEvent::MagazineUnloaded);
+        break;
+    case WeaponAmmoResult::Uninstalled:
         break;
     case WeaponAmmoResult::Installed:
     case WeaponAmmoResult::InstalledAndChambered:
@@ -2940,8 +2878,10 @@ WeaponAmmoReceipt GameSession::executeProfileWeaponAmmo(
             GameSessionPresentationEvent::ReloadCompleted);
         break;
     case WeaponAmmoResult::Chambered:
-        presentationEvents_.push_back(
-            GameSessionPresentationEvent::WeaponChambered);
+        break;
+    case WeaponAmmoResult::FireModeChanged:
+        if (weaponId == activeAlphaWeapon() && oldMode != weaponFireMode(*weaponId))
+            weaponTriggerGate_.cancelUntilRelease();
         break;
     case WeaponAmmoResult::MalfunctionCleared:
         presentationEvents_.push_back(
@@ -3347,6 +3287,7 @@ GameSession::ordinarySurvivorRescuePlan() const
 
 void GameSession::advanceBaseWorldClock(float deltaTime)
 {
+    if(profileUiCommitPending())return;
     // The safe, pre-base survey has no operating Base or catch-up debt.
     // This is a pause of the existing clock, not a second tutorial clock.
     if (!profile_.homeFounding.established) return;
@@ -3425,6 +3366,8 @@ BaseAutoDefenseReceipt GameSession::executeBaseAutoDefense(
 
 bool GameSession::checkpointWorldClock()
 {
+    if(profileUiCommitPending())return baseDefenseActive()?checkpointBaseDefense(true):checkpointBaseDaily(true);
+    if (!alphaRaidActive_ && !preparePlayerActivityBoundary(false)) return false;
     if (baseDefenseActive()) return checkpointBaseDefense(true);
     if (alphaRaidActive_ || profile_.pendingRaid.has_value())
     {
@@ -3548,7 +3491,7 @@ void GameSession::advanceWorldClockFromSimulation(
     float deltaTime,
     bool allowPeriodicCheckpoint)
 {
-    if (baseDailySaveBlocked_ || !std::isfinite(deltaTime) || deltaTime <= 0.0F)
+    if (profileUiCommitPending() || baseDailySaveBlocked_ || !std::isfinite(deltaTime) || deltaTime <= 0.0F)
     {
         return;
     }
@@ -3675,20 +3618,18 @@ void GameSession::advanceWorldClockFromSimulation(
             if (construction.completed || manufacturing.completed ||
                 residentTreatment.completed || recovery.becameReady)
             {
-                if (!commitProfileCandidate(std::move(candidate)))
-                {
-                    pendingWorldSeconds_ = scaledSeconds;
-                    return;
-                }
-                recordBaseCompletionEvents(
-                    construction,
-                    manufacturing,
-                    residentTreatment,
-                    false);
+                auto prepared=std::make_shared<PreparedPlayerTransition>();
+                prepared->kind=PreparedPlayerTransition::Kind::TimedBaseCompletion;
+                prepared->construction=construction;prepared->manufacturing=manufacturing;
+                prepared->residentTreatment=residentTreatment;prepared->pendingWorldSeconds=remainingWorldSeconds;
+                const auto queued=enqueuePreparedProfileUi(std::move(candidate),std::nullopt,
+                    ProfileUiCompletionKind::TimedBaseCompletion,std::nullopt,std::move(prepared));
+                if(!queued.accepted)pendingWorldSeconds_=scaledSeconds;
+                return;
             }
             else
             {
-                profile_ = std::move(candidate);
+                if(!commitProfileCandidate(std::move(candidate),false)) {pendingWorldSeconds_=scaledSeconds;return;}
                 worldClockDirty_ = true;
             }
         }
@@ -3706,7 +3647,7 @@ void GameSession::advanceWorldClockFromSimulation(
         worldClockCheckpointElapsedSeconds_ >=
             kBaseClockCheckpointIntervalSeconds)
     {
-        static_cast<void>(checkpointWorldClock());
+        static_cast<void>(checkpointBaseDaily(false));
     }
 }
 
@@ -3720,6 +3661,8 @@ void GameSession::advanceBaseSiegeFromSimulation(float deltaTime)
         return;
     }
 
+    const float sourceAccumulator=baseSiegeWarningSecondAccumulator_;
+    float warningAccumulator=sourceAccumulator;
     ProfileState candidate = profile_;
     const bool activated = activateBaseSiegeWarningIfEligible(candidate);
     bool changed = activated;
@@ -3733,27 +3676,27 @@ void GameSession::advanceBaseSiegeFromSimulation(float deltaTime)
             return;
         }
         ++candidate.revision;
-        baseSiegeWarningSecondAccumulator_ = 0.0F;
+        warningAccumulator = 0.0F;
     }
 
     if (candidate.baseSiege.warningActive &&
         candidate.baseSiege.warningRemainingSeconds > 0U)
     {
-        baseSiegeWarningSecondAccumulator_ += deltaTime;
+        warningAccumulator += deltaTime;
         const std::uint32_t wholeSeconds = static_cast<std::uint32_t>(
-            std::floor(baseSiegeWarningSecondAccumulator_));
+            std::floor(warningAccumulator));
         if (wholeSeconds > 0U)
         {
             changed = advanceBaseSiegeWarning(candidate, wholeSeconds) ||
                 changed;
-            baseSiegeWarningSecondAccumulator_ -=
+            warningAccumulator -=
                 static_cast<float>(wholeSeconds);
         }
     }
 
     if (!changed)
     {
-        return;
+        baseSiegeWarningSecondAccumulator_=warningAccumulator;return;
     }
 
     if (candidate.baseSiege.warningActive &&
@@ -3767,14 +3710,11 @@ void GameSession::advanceBaseSiegeFromSimulation(float deltaTime)
             candidate,
             publishedContentRegistry(),
             CommandContext{candidate.revision, transactionId});
-        if (!receipt.succeeded ||
-            !commitProfileCandidate(std::move(candidate)))
-        {
-            persistenceMessage_ = receipt.message.empty()
-                ? persistenceMessage_
-                : receipt.message;
-        }
-        baseSiegeWarningSecondAccumulator_ = 0.0F;
+        if(!receipt.succeeded){persistenceMessage_=receipt.message;return;}
+        auto prepared=std::make_shared<PreparedPlayerTransition>();prepared->kind=PreparedPlayerTransition::Kind::BaseSnapshot;
+        prepared->warningAccumulatorSeconds=0.0F;
+        const auto queued=enqueuePreparedProfileUi(std::move(candidate),std::nullopt,ProfileUiCompletionKind::BaseSnapshot,std::nullopt,std::move(prepared));
+        if(!queued.accepted)baseSiegeWarningSecondAccumulator_=sourceAccumulator+deltaTime;
         return;
     }
 
@@ -3787,15 +3727,21 @@ void GameSession::advanceBaseSiegeFromSimulation(float deltaTime)
     }
     if (activated)
     {
-        static_cast<void>(commitProfileCandidate(std::move(candidate)));
+        auto prepared=std::make_shared<PreparedPlayerTransition>();prepared->kind=PreparedPlayerTransition::Kind::BaseSnapshot;
+        prepared->warningAccumulatorSeconds=warningAccumulator;
+        const auto queued=enqueuePreparedProfileUi(std::move(candidate),std::nullopt,ProfileUiCompletionKind::BaseSnapshot,std::nullopt,std::move(prepared));
+        if(!queued.accepted)baseSiegeWarningSecondAccumulator_=sourceAccumulator+deltaTime;
         return;
     }
+    baseSiegeWarningSecondAccumulator_=warningAccumulator;
     profile_ = std::move(candidate);
     worldClockDirty_ = true;
 }
 
 void GameSession::resetWorldClockRuntime() noexcept
 {
+    weaponTriggerGate_.reset();
+    droppedRaidMagazineIds_.clear();
     pendingWorldSeconds_ = 0.0;
     worldClockCheckpointElapsedSeconds_ = 0.0F;
     worldClockDirty_ = false;
@@ -3859,6 +3805,7 @@ void GameSession::updateAlphaRaid(
     float deltaTime)
 {
     GameplayInput input=rawInput;
+    float weaponActionDelta = deltaTime;
     lastIncomingDamage_.reset();
     if (std::isfinite(deltaTime) && deltaTime > 0.0F)
     {
@@ -3881,24 +3828,28 @@ void GameSession::updateAlphaRaid(
     if (input.quitRaidJustPressed && alphaRaidActive_)
     {
         if (developerRange_) state_ = GameSessionState::BetweenRaids;
-        else static_cast<void>(activeQuitAlphaRaid());
+        else static_cast<void>(requestActiveQuitAlphaRaid());
         return;
     }
     const RaidSessionState currentState = world_->raidSession().state();
     if (currentState == RaidSessionState::Extracted)
     {
-        static_cast<void>(settleAlphaRaid(RaidResultOutcome::Extracted));
+        if(developerRange_)static_cast<void>(settleAlphaRaid(RaidResultOutcome::Extracted));else static_cast<void>(requestRaidSettlement(RaidResultOutcome::Extracted));
         return;
     }
     if (currentState == RaidSessionState::PlayerDead)
     {
-        static_cast<void>(settleAlphaRaid(RaidResultOutcome::PlayerDead));
+        if(developerRange_)static_cast<void>(settleAlphaRaid(RaidResultOutcome::PlayerDead));else static_cast<void>(requestRaidSettlement(RaidResultOutcome::PlayerDead));
         return;
     }
     const auto meleeId=equippedAsset(profile_,EquipmentSlotKind::QuickMelee);
     world_->configureMelee(currentMeleeDefinition(),currentMeleeUsable(),meleeId.value_or(0));
     prepareNoiseDecoyInput(input,rawInput);
+    const bool meleeSuppressesThisFrame = input.meleeJustPressed ||
+        world_->melee().recoverySeconds() >
+            (std::isfinite(deltaTime) ? std::max(0.0F, deltaTime) : 0.0F) + 0.000001F;
     prepareMeleeInput(input,deltaTime,world_->melee().recoverySeconds());
+    if (state_ == GameSessionState::SettlementBlocked) return;
     if (input.inventoryOpen || input.sprint || input.firePressed ||
         input.fireJustPressed || input.reloadJustPressed ||
         input.healJustPressed || input.weaponSlotJustPressed.has_value() ||
@@ -3907,70 +3858,9 @@ void GameSession::updateAlphaRaid(
         weaponClearGesture_.reset();
     }
 
-    if (input.weaponSlotJustPressed.has_value() &&
-        isWeaponEquipmentSlot(*input.weaponSlotJustPressed) &&
-        *input.weaponSlotJustPressed != activeWeaponSlot_ &&
-        equippedAsset(profile_, *input.weaponSlotJustPressed).has_value())
-    {
-        bool interruptOnly{};
-        if (raidActionState_.active().has_value())
-        {
-            interruptOnly =
-                std::holds_alternative<MedicalRaidAction>(
-                    *raidActionState_.active()) ||
-                std::holds_alternative<WeaponMaintenanceRaidAction>(
-                    *raidActionState_.active()) ||
-                std::holds_alternative<ArmorMaintenanceRaidAction>(
-                    *raidActionState_.active());
-            raidActionState_.cancel();
-        }
-        if (!interruptOnly)
-        {
-            static_cast<void>(startAlphaWeaponSwitch(
-                *input.weaponSlotJustPressed));
-        }
-    }
-
+    weaponActionDelta = preparePlayerActionInput(input, deltaTime, meleeSuppressesThisFrame);
+    if (state_ == GameSessionState::SettlementBlocked) return;
     const auto weapon = activeAlphaWeapon();
-    if (!raidActionState_.active().has_value() && !input.inventoryOpen)
-    {
-        if (input.reloadJustPressed && weapon.has_value())
-        {
-            if (const auto magazine = selectRaidReloadMagazine(
-                    profile_,
-                    publishedContentRegistry(),
-                    *weapon))
-            {
-                static_cast<void>(startAlphaReload(*weapon, *magazine));
-            }
-        }
-        else if (input.healJustPressed)
-        {
-            MedicalUseEffect preferred = MedicalUseEffect::RestoreHealth;
-            if (profile_.medicalStatus.bleeding == BleedingSeverity::Heavy)
-            {
-                preferred = MedicalUseEffect::StopAnyBleeding;
-            }
-            else if (profile_.medicalStatus.bleeding == BleedingSeverity::Light)
-            {
-                preferred = MedicalUseEffect::StopLightBleeding;
-            }
-            if (const auto medical = selectQuickMedicalAsset(
-                    profile_, publishedContentRegistry(), preferred))
-            {
-                static_cast<void>(startAlphaMedical(*medical));
-            }
-            else if (preferred == MedicalUseEffect::StopLightBleeding)
-            {
-                if (const auto medical = selectQuickMedicalAsset(
-                        profile_, publishedContentRegistry(),
-                        MedicalUseEffect::StopAnyBleeding))
-                {
-                    static_cast<void>(startAlphaMedical(*medical));
-                }
-            }
-        }
-    }
 
     GameplayInput simulationInput = input;
     simulationInput.conditionalExtractionEligible =
@@ -3978,7 +3868,6 @@ void GameSession::updateAlphaRaid(
     simulationInput.reloadJustPressed = false;
     simulationInput.healJustPressed = false;
     simulationInput.quitRaidJustPressed = false;
-    bool automaticFire{};
     int ammunitionPenetration{};
     std::optional<WeaponHandlingParameters> weaponHandling;
     if (weapon.has_value())
@@ -3990,8 +3879,6 @@ void GameSession::updateAlphaRaid(
             {
                 const ItemDefinition &definition =
                     publishedContentRegistry().item(weaponAsset->definitionId);
-                automaticFire = definition.weaponUse.has_value() &&
-                    definition.weaponUse->automaticFire;
                 if (definition.weaponUse.has_value())
                 {
                     weaponHandling = deriveWeaponHandling(
@@ -4021,17 +3908,18 @@ void GameSession::updateAlphaRaid(
             }
             catch (...)
             {
-                automaticFire = false;
             }
         }
     }
     world_->configureWeaponAmmunition(ammunitionPenetration);
-    if (!automaticFire)
-    {
-        simulationInput.firePressed = false;
-    }
+    prepareWeaponTrigger(simulationInput, rawInput, weapon,
+        !input.inventoryOpen && !input.freezeObservationDirection && !input.throwableModal &&
+        !world_->player().isControlled() &&
+        !fireSuppressedUntilRelease_ && !decoyFireSuppressedUntilRelease_ &&
+        !world_->noiseDecoy().flight() && !world_->grenade().flight());
     if (input.inventoryOpen || raidActionState_.active().has_value())
     {
+        if (raidActionState_.active()) weaponTriggerGate_.cancelPending();
         simulationInput.fireJustPressed = false;
         simulationInput.firePressed = false;
         sprintFireIntentPending_ = false;
@@ -4072,97 +3960,15 @@ void GameSession::updateAlphaRaid(
         }
     }
 
-    const bool directFireIntent =
-        simulationInput.fireJustPressed ||
-        (automaticFire && simulationInput.firePressed);
-    if (simulationInput.sprint && directFireIntent &&
-        weaponHandling.has_value() && !input.inventoryOpen &&
-        !raidActionState_.active().has_value())
-    {
-        sprintFireIntentPending_ = true;
-        sprintFireReadyRemaining_ =
-            weaponHandling->sprintReadyDurationSeconds;
-        sprintSuppressedUntilRelease_ = true;
-        simulationInput.sprint = false;
-        simulationInput.fireJustPressed = false;
-        simulationInput.firePressed = false;
-    }
-    else if (sprintFireIntentPending_)
-    {
-        if (!weapon.has_value() || input.inventoryOpen ||
-            raidActionState_.active().has_value() ||
-            world_->player().isControlled())
-        {
-            sprintFireIntentPending_ = false;
-            sprintFireReadyRemaining_ = 0.0F;
-        }
-        else
-        {
-            simulationInput.sprint = false;
-            if (std::isfinite(deltaTime) && deltaTime > 0.0F)
-            {
-                sprintFireReadyRemaining_ = std::max(
-                    0.0F,
-                    sprintFireReadyRemaining_ - deltaTime);
-            }
-            if (sprintFireReadyRemaining_ <= 0.0F)
-            {
-                simulationInput.fireJustPressed = true;
-                simulationInput.firePressed = false;
-                sprintFireIntentPending_ = false;
-            }
-            else
-            {
-                simulationInput.fireJustPressed = false;
-                simulationInput.firePressed = false;
-            }
-        }
-    }
-
-    if (simulationInput.sprint)
-    {
-        simulationInput.aimDownSights = false;
-    }
-    else if (simulationInput.aimDownSights && weaponHandling.has_value())
-    {
-        simulationInput.movementSpeedMultiplier *=
-            weaponHandling->aimDownSightsMovementMultiplier;
-    }
-    if (hasPain(profile_.medicalStatus) &&
-        !painIsSuppressed(profile_.medicalStatus))
-    {
-        simulationInput.movementSpeedMultiplier *= 0.9F;
-    }
-    if (raidActionState_.active().has_value())
-    {
-        simulationInput.forceMaximumWeaponSpread =
-            std::holds_alternative<ReloadRaidAction>(
-                *raidActionState_.active());
-        const bool slowMovement = std::visit(
-            [](const auto &action)
-            {
-                using Action = std::decay_t<decltype(action)>;
-                if constexpr (std::is_same_v<Action, MedicalRaidAction>)
-                {
-                    return action.slowMovement;
-                }
-                return std::is_same_v<Action, WeaponMaintenanceRaidAction> ||
-                       std::is_same_v<Action, ArmorMaintenanceRaidAction>;
-            },
-            *raidActionState_.active());
-        if (slowMovement)
-        {
-            simulationInput.movementSpeedMultiplier *= 0.45F;
-            simulationInput.sprint = false;
-        }
-    }
+    preparePlayerCombatInput(simulationInput,input,deltaTime,weaponHandling);
 
     std::optional<FireWeaponCommand> pendingFireCommand;
+    std::optional<std::string> pendingFireTransaction;
     if (weapon.has_value() &&
         !raidActionState_.active().has_value() &&
         !input.inventoryOpen &&
         (simulationInput.fireJustPressed ||
-         (automaticFire && simulationInput.firePressed)))
+         simulationInput.firePressed))
     {
         Pcg32 faultRandom{
             (profile_.pendingRaid ? profile_.pendingRaid->seed : 1ULL) ^ 0x776561706f6e2d66ULL,
@@ -4170,46 +3976,29 @@ void GameSession::updateAlphaRaid(
         const FireWeaponCommand fireCommand{
             *weapon,
             faultRandom.bounded(10000U),
-            faultRandom.next()};
+            faultRandom.next(), developerRange_ && input.developerInfiniteAmmo ? EmptyChamberPolicy::ChamberOnTrigger
+                : EmptyChamberPolicy::RequireExplicitChamber};
         const WeaponAmmoPlan fire = queryFireWeapon(
             profile_,
             publishedContentRegistry(),
             fireCommand);
-        if (!input.developerInfiniteAmmo && fire.canCommit &&
-            fire.result == WeaponAmmoResult::Chambered)
-        {
-            const WeaponAmmoReceipt chambered = executeFireWeapon(
-                profile_,
-                publishedContentRegistry(),
-                fireCommand,
-                CommandContext{
-                    profile_.revision,
-                    nextRaidTransaction("fire-chamber")});
-            simulationInput.fireJustPressed = false;
-            simulationInput.firePressed = false;
-            if (chambered.succeeded &&
-                chambered.result == WeaponAmmoResult::Chambered)
-            {
-                presentationEvents_.push_back(
-                    GameSessionPresentationEvent::WeaponChambered);
-            }
-            else
-            {
-                persistenceMessage_ = chambered.message;
-            }
-        }
-        else if (fire.canCommit &&
-                 (fire.result == WeaponAmmoResult::Fired ||
-                  (input.developerInfiniteAmmo &&
-                   fire.result == WeaponAmmoResult::Chambered)))
+        if (fire.canCommit && (fire.result == WeaponAmmoResult::Fired ||
+            (developerRange_ && input.developerInfiniteAmmo && fire.result == WeaponAmmoResult::Chambered)))
         {
             if (!input.developerInfiniteAmmo)
             {
-                pendingFireCommand = fireCommand;
+                pendingFireTransaction.emplace(nextRaidTransaction("fire"));
+                if (pendingFireTransaction->empty())
+                {
+                    weaponTriggerGate_.cancelUntilRelease();
+                    simulationInput.fireJustPressed = simulationInput.firePressed = false;
+                }
+                else pendingFireCommand = fireCommand;
             }
         }
         else
         {
+            weaponTriggerGate_.cancelUntilRelease();
             simulationInput.fireJustPressed = false;
             simulationInput.firePressed = false;
             if (fire.result == WeaponAmmoResult::Dry)
@@ -4225,29 +4014,24 @@ void GameSession::updateAlphaRaid(
         simulationInput.firePressed = false;
     }
 
-    if (input.inventoryOpen || input.freezeObservationDirection)
-    { lightKeyPending_=false; lightKeyHeldSeconds_=0; lightLongPressConsumed_=false; }
-    else
-    {
-        if (input.lightJustPressed) { lightKeyPending_=true; lightKeyHeldSeconds_=0; lightLongPressConsumed_=false; }
-        if (lightKeyPending_ && std::isfinite(deltaTime) && deltaTime>0) lightKeyHeldSeconds_ += deltaTime;
-        if (lightKeyPending_ && lightKeyHeldSeconds_>=0.35F && !lightLongPressConsumed_)
-        { lightLongPressConsumed_=true; persistenceMessage_="ONLY WEAPON LIGHT | TAP U"; }
-        if (input.lightJustReleased)
-        {
-            if (lightKeyPending_ && !lightLongPressConsumed_) { const auto receipt=toggleWeaponLight(); if (!receipt.succeeded) persistenceMessage_=receipt.message; }
-            lightKeyPending_=false; lightKeyHeldSeconds_=0;
-        }
-    }
-    synchronizeWeaponLight(deltaTime);
+    preparePlayerLightInput(input,deltaTime);
     const bool restorationActive =
         profile_.pendingRaid && profile_.pendingRaid->outpostRestoration.has_value();
     const bool siteClearanceActive =
         profile_.pendingRaid && profile_.pendingRaid->baseSiteClearance.has_value();
     const bool perimeterSweepActive =
         profile_.pendingRaid && profile_.pendingRaid->basePerimeterSweep.has_value();
+    const bool weaponActionPortal = input.interactJustPressed && !input.inventoryOpen &&
+        raidActionState_.active() &&
+        (std::holds_alternative<ReloadRaidAction>(*raidActionState_.active()) ||
+         std::holds_alternative<ChamberRaidAction>(*raidActionState_.active()));
     world_->setRaidDaylight(worldClockProjection().timeOfDay == WorldTimeOfDay::Day);
-    world_->update(simulationInput, deltaTime, [this]{return processGrenadeExplosion();});
+    world_->update(simulationInput, deltaTime, [this]{return processGrenadeExplosion();},
+        [this] {
+            if (cancelActiveRaidAction()) return true;
+            state_ = GameSessionState::SettlementBlocked;
+            return false;
+        }, weaponActionPortal);
     if(!world_->raidSession().isActive())world_->commitNoiseDecoy({});
     const bool meleeFrame=world_->melee().result().attempted;
     if(meleeFrame)
@@ -4285,7 +4069,7 @@ void GameSession::updateAlphaRaid(
                 *pendingFireCommand,
                 CommandContext{
                     profile_.revision,
-                    nextRaidTransaction("fire")});
+                    *pendingFireTransaction});
             if (!committed.succeeded ||
                 (committed.result != WeaponAmmoResult::Fired &&
                  committed.result !=
@@ -4294,6 +4078,7 @@ void GameSession::updateAlphaRaid(
                 std::terminate();
             }
         }
+        weaponTriggerGate_.acceptedShot();
         world_->emitPlayerNoise(kUnsuppressedGunshotNoiseRadius *
             world_->shotAcousticsLastUpdate().noiseRadiusMultiplier);
         if (!input.developerInfiniteAmmo)
@@ -4308,11 +4093,20 @@ void GameSession::updateAlphaRaid(
         {
             weaponClearGesture_.reset();
             persistenceMessage_ = "weapon malfunction";
+            weaponTriggerGate_.cancelUntilRelease();
         }
     }
 
     if(!meleeFrame)applyAlphaIncomingDamage();
     if(state_==GameSessionState::SettlementBlocked || !processGrenadeExplosion())return;
+    if(developerRange_) {
+        for(const auto &fact:world_->trainingCorpseDeaths()) {
+            BaseCorpseRecord corpse{{},playerGameplayContext().activity,fact.id,0,fact.center,fact.size};
+            const auto id=baseCorpseIdentity(corpse);
+            static_cast<void>(recordBaseCorpseDeath(profile_,publishedContentRegistry(),std::move(corpse),{profile_.revision,id}));
+        }
+        world_->acknowledgeTrainingCorpseDeaths();
+    }
     const auto corpseDeaths = world_->pendingCorpseDeaths(); // Own values across Profile commits and queue erasure.
     for (const auto &fact : corpseDeaths)
         if (world_->grenadeExplodedLastUpdate()
@@ -4336,7 +4130,8 @@ void GameSession::updateAlphaRaid(
     }
     else if (world_->ordinarySurvivorRescueReady())
     {
-        static_cast<void>(secureOrdinarySurvivorRescue());
+        static_cast<void>(requestOrdinarySurvivorRescue());
+        if(profileUiCommitPending())return;
     }
     advanceAlphaMedicalStatus(deltaTime);
 
@@ -4410,349 +4205,18 @@ void GameSession::updateAlphaRaid(
 
     if (world_->raidSession().state() == RaidSessionState::PlayerDead)
     {
-        raidActionState_.cancel();
-        static_cast<void>(settleAlphaRaid(RaidResultOutcome::PlayerDead));
+        if(developerRange_)static_cast<void>(settleAlphaRaid(RaidResultOutcome::PlayerDead));else static_cast<void>(requestRaidSettlement(RaidResultOutcome::PlayerDead));
         return;
     }
+    if (world_->player().isControlled()) weaponTriggerGate_.cancelUntilRelease();
     if (world_->raidSession().state() == RaidSessionState::Extracted)
     {
-        raidActionState_.cancel();
-        static_cast<void>(settleAlphaRaid(RaidResultOutcome::Extracted));
+        if(developerRange_)static_cast<void>(settleAlphaRaid(RaidResultOutcome::Extracted));else static_cast<void>(requestRaidSettlement(RaidResultOutcome::Extracted));
         return;
     }
 
-    if (raidActionState_.active().has_value())
-    {
-        const bool controlled = world_->player().isControlled();
-        const bool tookDamage = lastIncomingDamage_.has_value() &&
-            lastIncomingDamage_->damageApplied > 0;
-        const bool interrupted = controlled || input.inventoryOpen ||
-            std::visit(
-                [&input, tookDamage](const auto &action)
-                {
-                    using Action = std::decay_t<decltype(action)>;
-                    if constexpr (std::is_same_v<Action, ReloadRaidAction>)
-                    {
-                        return input.firePressed || input.fireJustPressed ||
-                               input.healJustPressed;
-                    }
-                    else if constexpr (
-                        std::is_same_v<Action, LoadMagazineRaidAction>)
-                    {
-                        return input.firePressed || input.fireJustPressed ||
-                               input.reloadJustPressed ||
-                               input.healJustPressed;
-                    }
-                    else if constexpr (std::is_same_v<Action, HealRaidAction>)
-                    {
-                        return input.firePressed || input.fireJustPressed ||
-                               input.reloadJustPressed;
-                    }
-                    else if constexpr (
-                        std::is_same_v<Action, MedicalRaidAction>)
-                    {
-                        return input.firePressed || input.fireJustPressed ||
-                               input.reloadJustPressed || input.sprint;
-                    }
-                    else if constexpr (
-                        std::is_same_v<Action, UnloadMagazineRaidAction>)
-                    {
-                        return input.firePressed || input.fireJustPressed ||
-                               input.reloadJustPressed ||
-                               input.healJustPressed;
-                    }
-                    else if constexpr (
-                        std::is_same_v<Action, WeaponMaintenanceRaidAction>)
-                    {
-                        return tookDamage || input.sprint ||
-                               input.firePressed || input.fireJustPressed ||
-                               input.reloadJustPressed ||
-                               input.healJustPressed;
-                    }
-                    else if constexpr (
-                        std::is_same_v<Action, ArmorMaintenanceRaidAction>)
-                    {
-                        return tookDamage || input.sprint || input.firePressed ||
-                               input.fireJustPressed ||
-                               input.reloadJustPressed ||
-                               input.healJustPressed;
-                    }
-                    else if constexpr (
-                        std::is_same_v<Action, WeaponSwitchRaidAction>)
-                    {
-                        return input.sprint || input.firePressed ||
-                               input.fireJustPressed ||
-                               input.reloadJustPressed ||
-                               input.healJustPressed;
-                    }
-                    else
-                    {
-                        return false;
-                    }
-                },
-                *raidActionState_.active());
-        const bool suppressCombatAfterInterrupt =
-            std::holds_alternative<MedicalRaidAction>(
-                *raidActionState_.active()) ||
-            std::holds_alternative<WeaponMaintenanceRaidAction>(
-                *raidActionState_.active()) ||
-            std::holds_alternative<ArmorMaintenanceRaidAction>(
-                *raidActionState_.active()) ||
-            std::holds_alternative<WeaponSwitchRaidAction>(
-                *raidActionState_.active());
-        if (interrupted && suppressCombatAfterInterrupt)
-        {
-            fireSuppressedUntilRelease_ =
-                fireSuppressedUntilRelease_ || input.firePressed ||
-                input.fireJustPressed;
-            sprintSuppressedUntilRelease_ =
-                sprintSuppressedUntilRelease_ || input.sprint;
-        }
-        if (!interrupted)
-        {
-            if (RaidAction *active = raidActionState_.activeMutable())
-            {
-                if (auto *medical = std::get_if<MedicalRaidAction>(active);
-                    medical != nullptr &&
-                    !advanceContinuousHealing(*medical, deltaTime))
-                {
-                    raidActionState_.cancel();
-                    state_ = GameSessionState::SettlementBlocked;
-                    return;
-                }
-            }
-        }
-        const bool medicalAction =
-            std::holds_alternative<HealRaidAction>(
-                *raidActionState_.active()) ||
-            std::holds_alternative<MedicalRaidAction>(
-                *raidActionState_.active());
-        const RaidActionAdvance advance = raidActionState_.update(
-            deltaTime,
-            interrupted);
-        if (advance == RaidActionAdvance::Interrupted && medicalAction)
-        {
-            presentationEvents_.push_back(
-                GameSessionPresentationEvent::MedicalInterrupted);
-        }
-        if (advance == RaidActionAdvance::Completed)
-        {
-            const std::optional<RaidAction> completed =
-                raidActionState_.takeCompleted();
-            if (completed.has_value())
-            {
-                if (const auto *reload =
-                        std::get_if<ReloadRaidAction>(&*completed))
-                {
-                    ProfileState candidate = profile_;
-                    const WeaponAmmoReceipt receipt = executeWeaponAmmo(
-                        candidate,
-                        publishedContentRegistry(),
-                        InstallMagazineAndChamberCommand{
-                            reload->weaponAssetId,
-                            reload->magazineAssetId},
-                        CommandContext{
-                            profile_.revision,
-                            nextRaidTransaction("reload")});
-                    if (receipt.succeeded)
-                    {
-                        static_cast<void>(commitProfileCandidate(
-                            std::move(candidate),
-                            false));
-                        presentationEvents_.push_back(
-                            GameSessionPresentationEvent::ReloadCompleted);
-                    }
-                    else
-                    {
-                        persistenceMessage_ = receipt.message;
-                    }
-                }
-                else if (const auto *load =
-                             std::get_if<LoadMagazineRaidAction>(&*completed))
-                {
-                    ProfileState candidate = profile_;
-                    const WeaponAmmoReceipt receipt = executeWeaponAmmo(
-                        candidate,
-                        publishedContentRegistry(),
-                        LoadMagazineCommand{
-                            load->magazineAssetId,
-                            load->ammunitionAssetId,
-                            load->quantity},
-                        CommandContext{
-                            profile_.revision,
-                            nextRaidTransaction("load-magazine")});
-                    if (receipt.succeeded)
-                    {
-                        static_cast<void>(commitProfileCandidate(
-                            std::move(candidate),
-                            false));
-                        presentationEvents_.push_back(
-                            GameSessionPresentationEvent::MagazineLoaded);
-                    }
-                    else
-                    {
-                        persistenceMessage_ = receipt.message;
-                    }
-                }
-                else if (const auto *heal =
-                             std::get_if<HealRaidAction>(&*completed))
-                {
-                    ProfileState candidate = profile_;
-                    candidate.currentHealth = world_->player().health();
-                    const HealReceipt receipt = executeHeal(
-                        candidate,
-                        publishedContentRegistry(),
-                        heal->medkitAssetId,
-                        HealAccess::CarriedOnly,
-                        CommandContext{
-                            profile_.revision,
-                            nextRaidTransaction("heal")});
-                    if (receipt.succeeded && commitProfileCandidate(
-                            std::move(candidate),
-                            false))
-                    {
-                        static_cast<void>(
-                            world_->restorePlayerHealth(receipt.healedAmount));
-                        presentationEvents_.push_back(
-                            GameSessionPresentationEvent::MedicalCompleted);
-                    }
-                    else if (!receipt.succeeded)
-                    {
-                        persistenceMessage_ = receipt.message;
-                    }
-                }
-                else if (const auto *medical =
-                             std::get_if<MedicalRaidAction>(&*completed))
-                {
-                    if (medical->effect == MedicalUseEffect::RestoreHealth)
-                    {
-                        presentationEvents_.push_back(
-                            GameSessionPresentationEvent::MedicalCompleted);
-                        return;
-                    }
-                    ProfileState candidate = profile_;
-                    candidate.currentHealth = world_->player().health();
-                    const MedicalUseReceipt receipt = executeMedicalUse(
-                        candidate,
-                        publishedContentRegistry(),
-                        medical->medicalAssetId,
-                        MedicalAccess::CarriedOnly,
-                        CommandContext{
-                            profile_.revision,
-                            nextRaidTransaction("medical")});
-                    if (receipt.succeeded && commitProfileCandidate(
-                            std::move(candidate), false))
-                    {
-                        if (receipt.healedAmount > 0)
-                        {
-                            static_cast<void>(world_->restorePlayerHealth(
-                                receipt.healedAmount));
-                        }
-                        presentationEvents_.push_back(
-                            GameSessionPresentationEvent::MedicalCompleted);
-                    }
-                    else if (!receipt.succeeded)
-                    {
-                        persistenceMessage_ = receipt.message;
-                    }
-                }
-                else if (const auto *unload =
-                             std::get_if<UnloadMagazineRaidAction>(&*completed))
-                {
-                    ProfileState candidate = profile_;
-                    const WeaponAmmoReceipt receipt = executeWeaponAmmo(
-                        candidate,
-                        publishedContentRegistry(),
-                        UnloadMagazineCommand{
-                            unload->magazineAssetId,
-                            unload->destination},
-                        CommandContext{
-                            profile_.revision,
-                            nextRaidTransaction("unload-magazine")});
-                    if (receipt.succeeded)
-                    {
-                        static_cast<void>(commitProfileCandidate(
-                            std::move(candidate),
-                            false));
-                        presentationEvents_.push_back(
-                            GameSessionPresentationEvent::MagazineUnloaded);
-                    }
-                    else
-                    {
-                        persistenceMessage_ = receipt.message;
-                    }
-                }
-                else if (const auto *maintenance =
-                             std::get_if<WeaponMaintenanceRaidAction>(
-                                 &*completed))
-                {
-                    ProfileState candidate = profile_;
-                    const WeaponMaintenanceReceipt receipt =
-                        executeWeaponMaintenance(
-                            candidate,
-                            publishedContentRegistry(),
-                            WeaponMaintenanceCommand{
-                                maintenance->kitAssetId,
-                                maintenance->weaponAssetId,
-                                MaintenanceAccess::CarriedOnly,
-                                MaintenanceLocation::Raid},
-                            CommandContext{
-                                profile_.revision,
-                                nextRaidTransaction("weapon-maintenance")});
-                    if (receipt.succeeded)
-                    {
-                        static_cast<void>(commitProfileCandidate(
-                            std::move(candidate), false));
-                        weaponClearGesture_.reset();
-                    }
-                    else
-                    {
-                        persistenceMessage_ = receipt.message;
-                    }
-                }
-                else if (const auto *maintenance =
-                             std::get_if<ArmorMaintenanceRaidAction>(
-                                 &*completed))
-                {
-                    ProfileState candidate = profile_;
-                    const ArmorMaintenanceReceipt receipt =
-                        executeArmorMaintenance(
-                            candidate,
-                            publishedContentRegistry(),
-                            ArmorMaintenanceCommand{
-                                maintenance->kitAssetId,
-                                maintenance->armorAssetId,
-                                MaintenanceAccess::CarriedOnly,
-                                MaintenanceLocation::Raid},
-                            CommandContext{
-                                profile_.revision,
-                                nextRaidTransaction("armor-maintenance")});
-                    if (receipt.succeeded)
-                    {
-                        static_cast<void>(commitProfileCandidate(
-                            std::move(candidate), false));
-                    }
-                    else
-                    {
-                        persistenceMessage_ = receipt.message;
-                    }
-                }
-                else if (const auto *weaponSwitch =
-                             std::get_if<WeaponSwitchRaidAction>(&*completed))
-                {
-                    if (equippedAsset(profile_, weaponSwitch->targetSlot)
-                            .has_value())
-                    {
-                        activeWeaponSlot_ = weaponSwitch->targetSlot;
-                        configuredWeaponAssetId_.reset();
-                        synchronizeActiveAlphaWeapon();
-                        presentationEvents_.push_back(
-                            GameSessionPresentationEvent::WeaponEquipped);
-                    }
-                }
-            }
-        }
-    }
+    advancePlayerAction(input, deltaTime, weaponActionDelta);
+    if (state_ == GameSessionState::SettlementBlocked) return;
 
     synchronizeWeaponLight(); // A completed switch affects observation before this frame can interact.
     if (input.interactJustPressed &&
@@ -4767,6 +4231,7 @@ void GameSession::updateAlphaRaid(
         if (const auto loot = nearbyRaidLoot())
         {
             const auto currentObservation = world_->raidObservationKey();
+            const auto reloadAccess = raidReloadAccess(currentObservation);
             const InventoryReceipt receipt = pickupRaidLoot(
                 profile_,
                 publishedContentRegistry(),
@@ -4774,9 +4239,10 @@ void GameSession::updateAlphaRaid(
                 CommandContext{
                     profile_.revision,
                     nextRaidTransaction("pickup")},
-                &world_->raidObservation(), &currentObservation);
+                &world_->raidObservation(), &currentObservation, &reloadAccess);
             if (receipt.succeeded)
             {
+                std::erase(droppedRaidMagazineIds_, *loot);
                 presentationEvents_.push_back(
                     GameSessionPresentationEvent::LootPickedUp);
             }
@@ -4805,7 +4271,7 @@ bool GameSession::advanceContinuousHealing(
         (nextElapsed / action.durationSeconds) + 0.0001F));
     const int requested = std::min(
         std::max(0, targetHealing - action.healedAmount),
-        100 - world_->player().health());
+        100 - profile_.currentHealth);
     if (requested <= 0)
     {
         return true;
@@ -4814,7 +4280,9 @@ bool GameSession::advanceContinuousHealing(
     if (!action.chargeConsumed)
     {
         ProfileState candidate = profile_;
-        candidate.currentHealth = world_->player().health();
+        candidate.currentHealth = profile_.currentHealth;
+        if(candidate.basePlayerEffects && candidate.basePlayerEffects->medical)
+            candidate.basePlayerEffects->medical->chargeConsumed=true;
         const MedicalUseReceipt consumed = beginContinuousHealing(
             candidate,
             publishedContentRegistry(),
@@ -4842,7 +4310,7 @@ bool GameSession::advanceContinuousHealing(
     }
     candidate.currentHealth = std::min(
         100,
-        world_->player().health() + requested);
+        profile_.currentHealth + requested);
     ++candidate.revision;
     const ProfileValidationResult validation = validateProfileState(
         candidate,
@@ -4855,9 +4323,7 @@ bool GameSession::advanceContinuousHealing(
             : validation.message;
         return false;
     }
-    const int restored = world_->restorePlayerHealth(requested)
-        ? requested
-        : 0;
+    const int restored = !alphaRaidActive_ || world_->restorePlayerHealth(requested) ? requested : 0;
     if (restored != requested)
     {
         persistenceMessage_ = "continuous healing world sync failed";
@@ -4914,13 +4380,14 @@ void GameSession::advanceAlphaMedicalStatus(float deltaTime)
             state_ = GameSessionState::SettlementBlocked;
             return;
         }
-        if (advanced.healthLost > 0)
+        if (advanced.healthLost > 0 && alphaRaidActive_)
         {
             static_cast<void>(world_->damagePlayer(advanced.healthLost));
         }
         if (advanced.screamed)
         {
-            world_->emitPlayerNoise(300.0F);
+            if(alphaRaidActive_)world_->emitPlayerNoise(300.0F);
+            else if(basePlayerWorld_)basePlayerWorld_->emitNoise(playerGameplayContext().playerCenter,300.0F);
         }
     }
 }
@@ -4988,14 +4455,35 @@ void GameSession::applyAlphaIncomingDamage()
     }
 }
 
-bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
+bool GameSession::prepareRaidSettlementCandidate(RaidResultOutcome outcome,ProfileState &candidate)
 {
-    if (developerRange_) { state_ = GameSessionState::BetweenRaids; return true; }
     if (!profile_.pendingRaid.has_value())
     {
         return false;
     }
-    ProfileState candidate = profile_;
+    candidate = profile_;
+    // Extraction resolves held magazines in the SAME durability candidate.
+    // Failed/active-quit loss goes directly through Held -> Retained in the
+    // lifecycle transaction; normal cancellation would wrongly drop assets.
+    if (outcome == RaidResultOutcome::Extracted)
+    {
+        const auto *active = raidActionState_.activeMutable();
+        if (const auto *reload = active ? std::get_if<ReloadRaidAction>(active) : nullptr;
+            reload && reload->nextStage != 0U)
+        {
+            const auto key = world_->raidObservationKey();
+            const auto drop = raidMagazineDrop();
+            const auto cancelled = executeRaidReloadCancel(candidate, publishedContentRegistry(),
+                {reload->plan.binding, reload->plan.newSource, drop, drop},
+                {candidate.revision, reload->plan.binding.actionId + "/cancel"}, raidReloadAccess(key));
+            if (!cancelled.succeeded)
+            {
+                persistenceMessage_ = cancelled.message;
+                state_ = GameSessionState::SettlementBlocked;
+                return false;
+            }
+        }
+    }
     candidate.currentHealth = std::max(1, world_->player().health());
     if (candidate.pendingRaid->outpostRestoration.has_value())
     {
@@ -5023,33 +4511,16 @@ bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
         state_ = GameSessionState::SettlementBlocked;
         return false;
     }
-    if (!commitProfileCandidate(std::move(candidate)))
-    {
-        state_ = GameSessionState::SettlementBlocked;
-        return false;
-    }
-    world_->commitNoiseDecoy({});
-    world_->commitGrenade({});
-    decoyFireSuppressedUntilRelease_=false;
-    raidActionState_.cancel();
-    weaponClearGesture_.reset();
-    raidElapsedSeconds_ = 0.0F;
-    selfRecoveryInteractionSeconds_ = 0.0F;
-    outpostRestorationObjectiveSecured_ = false;
-    baseSiteClearanceObjectiveSecured_ = false;
-    basePerimeterSweepObjectiveSecured_ = false;
-    medicalTickAccumulatorSeconds_ = 0.0F;
-    fireSuppressedUntilRelease_ = false;
-    sprintSuppressedUntilRelease_ = false;
-    sprintFireIntentPending_ = false;
-    sprintFireReadyRemaining_ = 0.0F;
-    activeWeaponSlot_ = EquipmentSlotKind::PrimaryWeapon;
-    configuredWeaponAssetId_.reset();
-    activeRaidRecoveryProfile_.reset();
-    alphaRaidActive_ = false;
-    publishDeferredRaidBasePresentationEvents();
-    state_ = GameSessionState::BetweenRaids;
     return true;
+}
+
+bool GameSession::settleAlphaRaid(RaidResultOutcome outcome)
+{
+    if(developerRange_){state_=GameSessionState::BetweenRaids;return true;}
+    ProfileState candidate;if(!prepareRaidSettlementCandidate(outcome,candidate))return false;
+    if(!commitProfileCandidate(std::move(candidate))){state_=GameSessionState::SettlementBlocked;return false;}
+    auto prepared=std::make_shared<PreparedPlayerTransition>();prepared->kind=PreparedPlayerTransition::Kind::RaidSettlement;
+    completePreparedPlayerTransition(prepared);return true;
 }
 
 RaidIntelligencePurchaseReceipt GameSession::purchaseRaidIntelligence(
@@ -5110,7 +4581,7 @@ GameSession::purchaseRaidInteriorIntelligence(
     return receipt;
 }
 
-bool GameSession::secureOrdinarySurvivorRescue()
+bool GameSession::prepareOrdinarySurvivorRescueCandidate(ProfileState &raidCandidate,ProfileState &recoveryCandidate)
 {
     if (!alphaRaidActive_ || !activeRaidRecoveryProfile_.has_value() ||
         !profile_.pendingRaid.has_value() ||
@@ -5126,8 +4597,8 @@ bool GameSession::secureOrdinarySurvivorRescue()
         rescue.definitionId,
         rescue.ordinaryResidentCount,
         rescue.injuredResidentCount};
-    ProfileState raidCandidate = profile_;
-    ProfileState recoveryCandidate = *activeRaidRecoveryProfile_;
+    raidCandidate = profile_;
+    recoveryCandidate = *activeRaidRecoveryProfile_;
     const OrdinarySurvivorAdmissionReceipt recoveryReceipt =
         executeOrdinarySurvivorAdmission(
             recoveryCandidate,
@@ -5169,39 +4640,46 @@ bool GameSession::secureOrdinarySurvivorRescue()
         return false;
     }
 
-    std::string saveMessage;
-    if (saveRepository_.has_value())
-    {
-        const SaveWriteResult saved = saveRepository_->save(
-            recoveryCandidate,
-            publishedContentRegistry().contentVersion());
-        if (!saved.succeeded)
-        {
-            persistenceMessage_ = saved.message;
-            world_->cancelOrdinarySurvivorRescueInteraction();
-            return false;
-        }
-        saveMessage = saved.message;
-    }
-    activeRaidRecoveryProfile_ = std::move(recoveryCandidate);
-    profile_ = std::move(raidCandidate);
-    persistenceMessage_ = std::move(saveMessage);
-    world_->confirmOrdinarySurvivorRescue();
-    presentationEvents_.push_back(
-        GameSessionPresentationEvent::RescueSecured);
     return true;
+}
+
+bool GameSession::secureOrdinarySurvivorRescue()
+{
+    ProfileState raidCandidate,recoveryCandidate;
+    if(!prepareOrdinarySurvivorRescueCandidate(raidCandidate,recoveryCandidate))return false;
+    if(saveRepository_) {
+        const auto saved=saveRepository_->save(recoveryCandidate,publishedContentRegistry().contentVersion());
+        if(!saved.succeeded){persistenceMessage_=saved.message;world_->cancelOrdinarySurvivorRescueInteraction();return false;}
+        persistenceMessage_=saved.message;
+    }
+    profile_=std::move(raidCandidate);
+    auto prepared=std::make_shared<PreparedPlayerTransition>();prepared->kind=PreparedPlayerTransition::Kind::Rescue;
+    prepared->raidRecoveryProfile=std::move(recoveryCandidate);completePreparedPlayerTransition(prepared);return true;
 }
 
 std::string GameSession::nextRaidTransaction(std::string_view prefix)
 {
-    ++raidCommandSequence_;
-    return std::string{prefix} + ":" +
-        (profile_.pendingRaid.has_value()
-             ? profile_.pendingRaid->raidId
-             : profile_.activeBaseDefense.has_value()
-             ? profile_.activeBaseDefense->eventId
-             : profile_.profileId) + ":" +
-        std::to_string(raidCommandSequence_);
+    const std::string owner = profile_.pendingRaid.has_value()
+        ? profile_.pendingRaid->raidId
+        : profile_.activeBaseDefense.has_value()
+        ? profile_.activeBaseDefense->eventId
+        : profile_.profileId;
+    const std::string stem = std::string{prefix} + ":" + owner + ":";
+    while (raidCommandSequence_ != std::numeric_limits<std::uint64_t>::max())
+    {
+        const std::string transaction = stem + std::to_string(++raidCommandSequence_);
+        if (profile_.committedTransactions.contains(transaction)) continue;
+        if (prefix == "reload-action")
+        {
+            // A reload commits stage children, rather than its parent ID.
+            const std::string family = transaction + "/";
+            const auto child = profile_.committedTransactions.lower_bound(family);
+            if (child != profile_.committedTransactions.end() && child->starts_with(family)) continue;
+        }
+        return transaction;
+    }
+    persistenceMessage_ = "TRANSACTION IDS EXHAUSTED";
+    return {};
 }
 
 void GameSession::synchronizeActiveAlphaWeapon()
@@ -5419,7 +4897,7 @@ WeaponHandlingParameters GameSession::effectiveDeveloperHandling(
 
 std::optional<AssetInstanceId> GameSession::nearbyRaidLoot() const
 {
-    if (!profile_.pendingRaid.has_value())
+    if (!profile_.pendingRaid.has_value() && !developerRange_)
     {
         return std::nullopt;
     }
@@ -5428,7 +4906,7 @@ std::optional<AssetInstanceId> GameSession::nearbyRaidLoot() const
     const Vec2 playerCenter{playerPosition.x + half, playerPosition.y + half};
     std::optional<AssetInstanceId> result;
     float bestDistance = 72.0F * 72.0F;
-    for (const RaidLootSnapshot &loot : profile_.pendingRaid->loot)
+    if(profile_.pendingRaid)for (const RaidLootSnapshot &loot : profile_.pendingRaid->loot)
     {
         if (!raidLootAccessible(loot))
         {
@@ -5448,6 +4926,19 @@ std::optional<AssetInstanceId> GameSession::nearbyRaidLoot() const
             bestDistance = distance;
             result = loot.assetId;
         }
+    }
+    for (auto id : droppedRaidMagazineIds())
+    {
+        const auto *asset = profile_.assets.find(id);
+        std::optional<Vec2> point;
+        if(asset) {
+            if(const auto *drop=std::get_if<RaidDroppedMagazineLocation>(&asset->location))point=drop->position;
+            if(const auto *drop=std::get_if<TrainingDroppedMagazineLocation>(&asset->location))point=drop->position;
+        }
+        if(!point || !world_->raidBoundsObservable({{point->x-12,point->y-12},{24,24}}))continue;
+        const float dx=point->x-playerCenter.x,dy=point->y-playerCenter.y;
+        if (dx * dx + dy * dy <= bestDistance)
+        { bestDistance = dx * dx + dy * dy; result = id; }
     }
     for (const auto &[id, asset] : profile_.assets.records())
     {
@@ -5524,6 +5015,27 @@ bool GameSession::commitProfileCandidate(
     ProfileState candidate,
     bool persist)
 {
+    if(profileUiCommitPending()){persistenceMessage_="WAIT FOR THE ACTIVE SAVE";return false;}
+    if (inventoryPersistencePending())
+    {
+        bool changesInventory = persist || candidate.assets.records().size() != profile_.assets.records().size();
+        if (!changesInventory)
+            for (const auto &[id, asset] : candidate.assets.records())
+            {
+                const auto *before = profile_.assets.find(id);
+                if (!before || before->location != asset.location || before->quantity != asset.quantity ||
+                    before->orientation != asset.orientation) { changesInventory = true; break; }
+            }
+        if (changesInventory)
+        {
+            requestInventoryPersistenceBarrier();
+            updateInventoryPersistence(0);
+            // This candidate predates the confirmation above. A fresh retry
+            // must be built from the confirmed prefix even when it just saved.
+            persistenceMessage_ = "INVENTORY SAVE PENDING | RETRY AFTER CONFIRMATION";
+            return false;
+        }
+    }
     if (baseDefenseActive())
     {
         // Commands join the current coherent Base activity. Only start/end/

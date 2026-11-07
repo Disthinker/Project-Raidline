@@ -325,6 +325,11 @@ BaseGroundReceipt applyDrop(
             "asset does not exist",
             candidate.revision);
     }
+    if(std::holds_alternative<BaseReloadHeldMagazineLocation>(asset->location) ||
+       std::holds_alternative<TrainingHeldMagazineLocation>(asset->location) ||
+       std::holds_alternative<TrainingDroppedMagazineLocation>(asset->location) ||
+       (candidate.baseReloadRecovery && candidate.baseReloadRecovery->weaponAssetId==command.assetId))
+        return failure(DomainErrorCode::IllegalDestination,"resolve weapon action before dropping this asset",candidate.revision);
     const auto *stored = std::get_if<StoredAssetLocation>(&asset->location);
     const bool stashRoot = stored != nullptr &&
         stored->container == ProfileContainerId::stash();

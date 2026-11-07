@@ -2,6 +2,14 @@
 
 #include <cstdint>
 
+enum class MedicalUseEffect
+{
+    RestoreHealth,
+    StopLightBleeding,
+    StopAnyBleeding,
+    SuppressPain
+};
+
 enum class BleedingSeverity
 {
     None,

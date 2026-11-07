@@ -211,6 +211,14 @@ endfunction()
 # Economy live in domain, Base/Raid runtime in simulation, orchestration and
 # persistence in services, and SDL input/rendering in the client.
 add_library(raidline_domain STATIC
+    src/base_corpse_domain.cpp
+    src/base_corpse_domain.h
+    src/player_effects_checkpoint.cpp
+    src/player_effects_checkpoint.h
+    src/weapon_action_types.h
+    src/medical_types.h
+    src/throwable_types.h
+    src/grenade_explosion_plan.h
     src/grenade_domain.cpp
     src/grenade_domain.h
     src/grenade_damage.cpp
@@ -359,6 +367,7 @@ target_link_libraries(
 add_library(raidline::domain ALIAS raidline_domain)
 
 add_library(raidline_simulation STATIC
+    src/base_world_player_effects.cpp
     src/raid_grenade_runtime.cpp
     src/raid_grenade_runtime.h
     src/gameplay_world_grenade.cpp
@@ -433,6 +442,17 @@ target_link_libraries(raidline_simulation PUBLIC raidline::domain)
 add_library(raidline::simulation ALIAS raidline_simulation)
 
 add_library(raidline_services STATIC
+    src/game_session_inventory_checkpoint.cpp
+    src/game_session_ui_persistence.cpp
+    src/profile_ui_persistence.h
+    src/profile_ui_command.cpp
+    src/profile_ui_command.h
+    src/game_session_player_transition.cpp
+    src/player_transition.h
+    src/game_flow_ui_command.h
+    src/profile_inventory_persistence.h
+    src/game_session_player_context.cpp
+    src/game_session_player_actions.cpp
     src/game_session_grenade.cpp
     src/game_session_noise_decoy.cpp
     src/game_session_melee.cpp
@@ -455,6 +475,7 @@ add_library(raidline_services STATIC
     src/game_session.h
     src/save_repository.cpp
     src/save_repository.h
+    src/player_effects_serialization.h
 )
 raidline_configure_library(raidline_services)
 target_link_libraries(
@@ -616,7 +637,9 @@ function(raidline_add_test target source module)
     if(target STREQUAL "BaseDefensePerformanceTest" OR target STREQUAL "BaseDailyCheckpointTest"
        OR target STREQUAL "FortificationRuntimeTest" OR target STREQUAL "RaidLightConeVisibilityTest" OR target STREQUAL "WeaponLightTest"
        OR target STREQUAL "NoiseDecoyTest" OR target STREQUAL "GrenadePerformanceTest"
-       OR target STREQUAL "RunnerInfectedPerformanceTest")
+       OR target STREQUAL "RunnerInfectedPerformanceTest"
+       OR target STREQUAL "WeaponHandlingPerformanceTest"
+       OR target STREQUAL "PlayerInventoryLatencyTest")
         # Timing gates need an isolated CPU/allocator, not competition with
         # the concurrent 128-seed map validation and other test processes.
         gtest_discover_tests(${target} PROPERTIES RUN_SERIAL TRUE)
@@ -998,6 +1021,11 @@ raidline_add_test(
     SaveRepositoryTest
     tests/test_save_repository.cpp
     raidline::services)
+if(MSVC)
+    # Schema60 ownership variants expand this existing large save test beyond
+    # the legacy COFF section limit. Keep all cases and Debug instrumentation.
+    target_compile_options(SaveRepositoryTest PRIVATE /bigobj)
+endif()
 raidline_add_test(
     ChestRigLayoutTest
     tests/test_chest_rig_layout.cpp
@@ -1106,3 +1134,20 @@ raidline_add_test(RunnerInfectedRuntimeTest tests/test_runner_infected_runtime.c
 raidline_add_test(RunnerInfectedUiTest tests/test_runner_infected_ui.cpp raidline::sdl_client)
 raidline_add_test(RunnerInfectedPerformanceTest tests/test_runner_infected_performance.cpp raidline::services)
 raidline_add_test(RunnerInfectedVisibilityEquivalenceTest tests/test_runner_infected_visibility_equivalence.cpp raidline::simulation)
+
+raidline_add_test(RaidWeaponHandlingDomainTest tests/test_raid_weapon_handling_domain.cpp raidline::domain)
+raidline_add_test(WeaponHandlingRuntimeTest tests/test_weapon_handling_runtime.cpp raidline::services)
+raidline_add_test(WeaponHandlingSaveTest tests/test_weapon_handling_save.cpp raidline::services)
+raidline_add_test(WeaponHandlingInputTest tests/test_weapon_handling_input.cpp raidline::sdl_client)
+raidline_add_test(UiMagazineWheelTest tests/test_ui_magazine_wheel.cpp raidline::sdl_client)
+raidline_add_test(WeaponHandlingPerformanceTest tests/test_weapon_handling_performance.cpp raidline::services)
+raidline_add_test(WorldWeaponActivityDomainTest tests/test_world_weapon_activity_domain.cpp raidline::domain)
+raidline_add_test(InventoryUiPersistenceTest tests/test_inventory_ui_persistence.cpp raidline::services)
+raidline_add_test(UiFeedbackLayoutTest tests/test_ui_feedback_layout.cpp raidline::sdl_client)
+raidline_add_test(SaveEnvelopeProofTest tests/test_save_envelope_proof.cpp raidline::services)
+raidline_add_test(PlayerSystemsV3SaveTest tests/test_player_systems_v3_save.cpp raidline::services)
+raidline_add_test(PlayerInventoryLatencyTest tests/test_player_inventory_latency.cpp raidline::sdl_client)
+raidline_add_test(BasePlayerSystemsTest tests/test_base_player_systems.cpp raidline::simulation)
+raidline_add_test(WorldWeaponActivityRuntimeTest tests/test_world_weapon_activity_runtime.cpp raidline::services)
+raidline_add_test(ProfileUiCommandTest tests/test_profile_ui_command.cpp raidline::services)
+raidline_add_test(ProfileUiPersistenceTest tests/test_profile_ui_persistence.cpp raidline::services)

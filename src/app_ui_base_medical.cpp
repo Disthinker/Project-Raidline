@@ -34,6 +34,7 @@ void App::refreshBaseMedicalUi(bool force) {
     ++medicalProjectionGeneration_;
 }
 void App::handleBaseMedicalEvent(const UiBaseMedicalEvent &event) {
+    if(profileUiBusy())return;
     if (gameFlow_.state() != GameFlowState::Base || gameFlow_.activeBaseFacility() != BaseFacilityKind::Medical ||
         inventoryOverlayState_.isOpen() || pauseMenu_.isOpen() || developerWeaponPanelOpen_ || !windowHasInputFocus_) {
         medicalUi_.press.reset(); return;
@@ -89,30 +90,29 @@ void App::handleBaseMedicalEvent(const UiBaseMedicalEvent &event) {
             medicalUi_.tab == Tab::Personal ? p.player.message : p.resident.message);
         return;
     }
-    bool succeeded = false;
-    if (*hit == Control::Main && medicalUi_.tab == Tab::Personal) {
-        const auto receipt = gameSession_.executeBasePaidMedicalService(nextProfileTransactionId("base-paid-medical"));
-        succeeded = receipt.succeeded;
-        feedback(succeeded ? fmt::format("PLAYER FULLY TREATED | PAID {}", receipt.currencyPaid) : receipt.message);
-    } else if (*hit == Control::Main) {
-        const auto receipt = gameSession_.executeStartResidentTreatment(nextProfileTransactionId("resident-treatment"));
-        succeeded = receipt.succeeded;
-        feedback(succeeded ? "RESIDENT TREATMENT STARTED - MATERIALS DEDUCTED ONCE" : receipt.message);
-    } else if (*hit == Control::Staffing) {
-        const bool assigned = p.workforce.medicalWorker.has_value();
-        const auto receipt = assigned ? gameSession_.executeClearBaseWorker(BaseFacilityStaffingKind::Medical, nextProfileTransactionId("clear-medical-worker"))
-            : gameSession_.executeAssignBestBaseWorker(BaseFacilityStaffingKind::Medical, nextProfileTransactionId("assign-medical-worker"));
-        succeeded = receipt.succeeded;
-        feedback(succeeded ? assigned ? "MEDICAL WORKER CLEARED" : "MEDICAL WORKER ASSIGNED" : receipt.message);
-    } else if (*hit == Control::Upgrade && p.upgradeId) {
-        const bool cancel = p.cancelUpgrade;
-        const auto receipt = cancel ? gameSession_.executeCancelBaseConstruction(*p.upgradeId, nextProfileTransactionId("cancel-medical-upgrade"))
-            : gameSession_.executeStartBaseConstruction(*p.upgradeId, nextProfileTransactionId("start-medical-upgrade"));
-        succeeded = receipt.succeeded;
-        feedback(succeeded ? cancel ? "MEDICAL UPGRADE CANCELLED" : "MEDICAL UPGRADE STARTED" : receipt.message);
+    const auto finish=[this,feedback](bool succeeded,std::string message) {
+        feedback(std::move(message));
+        gameAudio_.play(succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);
+        refreshBaseMedicalUi(true);
+    };
+    if (*hit==Control::Main && medicalUi_.tab==Tab::Personal) {
+        submitProfileUi<BaseMedicalServiceReceipt>(BaseMedicalServiceCommand{},nextProfileTransactionId("base-paid-medical"),
+            [finish](const auto &r){finish(r.succeeded,r.succeeded?fmt::format("PLAYER FULLY TREATED | PAID {}",r.currencyPaid):r.message);});
+    } else if(*hit==Control::Main) {
+        submitProfileUi<ResidentTreatmentReceipt>(StartResidentTreatmentCommand{},nextProfileTransactionId("resident-treatment"),
+            [finish](const auto &r){finish(r.succeeded,r.succeeded?"RESIDENT TREATMENT STARTED - MATERIALS DEDUCTED ONCE":r.message);});
+    } else if(*hit==Control::Staffing) {
+        const bool assigned=p.workforce.medicalWorker.has_value();
+        submitProfileUi<BaseWorkforceReceipt>(assigned?ProfileUiCommand{ProfileUiClearWorkerCommand{BaseFacilityStaffingKind::Medical}}:
+            ProfileUiCommand{ProfileUiAssignWorkerCommand{BaseFacilityStaffingKind::Medical}},nextProfileTransactionId("medical-worker"),
+            [finish,assigned](const auto &r){finish(r.succeeded,r.succeeded?(assigned?"MEDICAL WORKER CLEARED":"MEDICAL WORKER ASSIGNED"):r.message);});
+    } else if(*hit==Control::Upgrade && p.upgradeId) {
+        const bool cancel=p.cancelUpgrade;
+        submitProfileUi<BaseConstructionReceipt>(cancel?ProfileUiCommand{CancelBaseConstructionCommand{*p.upgradeId}}:
+            ProfileUiCommand{StartBaseConstructionCommand{*p.upgradeId}},nextProfileTransactionId("medical-upgrade"),
+            [finish,cancel](const auto &r){finish(r.succeeded,r.succeeded?(cancel?"MEDICAL UPGRADE CANCELLED":"MEDICAL UPGRADE STARTED"):r.message);});
     }
-    gameAudio_.play(succeeded ? SoundEventId::UiConfirm : SoundEventId::UiDeny);
-    refreshBaseMedicalUi(true);
+
 }
 
 void App::renderBaseMedicalService() {

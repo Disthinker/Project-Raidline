@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "raid_camera.h"
 #include <algorithm>
 #include <cmath>
@@ -15,6 +16,12 @@ struct PointerContinuityUiTestAccess {
     static void frame(App &a, float deltaTime = 0) {
         a.processEvents(); a.update(deltaTime); a.syncRaidPointerCapture();
         a.pendingRelativeAimMotion_ = {}; a.input_.endFrame();
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+            [&] { return a.profileUiBusy() || bool(a.pendingInventoryBarrierAction_); },
+            [&] {
+                a.processEvents(); a.update(0); a.syncRaidPointerCapture();
+                a.pendingRelativeAimMotion_={}; a.input_.endFrame();
+            }));
     }
     static Vec2 detailsPoint(App &a) {
         const auto r=a.profileContextMenu_->layout.rows.front().bounds;

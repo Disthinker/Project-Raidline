@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "test_temp_directory.h"
 #include "alpha_content_ids.h"
 
@@ -10,7 +11,12 @@
 struct UiFinalContainersTestAccess {
     static auto &flow(App &a) { return a.gameFlow_; }
     static auto &session(App &a) { return a.gameSession_; }
-    static void frame(App &a) { a.windowHasInputFocus_ = true; a.processEvents(); a.update(0); a.input_.endFrame(); }
+    static void settle(App &a) {
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+            [&] { return a.profileUiBusy() || static_cast<bool>(a.pendingInventoryBarrierAction_); },
+            [&] { a.windowHasInputFocus_ = true; a.processEvents(); a.update(0); a.input_.endFrame(); })) << a.gameSession_.persistenceMessage();
+    }
+    static void frame(App &a) { a.windowHasInputFocus_ = true; a.processEvents(); a.update(0); a.input_.endFrame(); settle(a); }
     static void attach(App &a, SDL_Renderer *renderer, float scale) {
         a.renderer_ = renderer; ASSERT_TRUE(a.uiTextRenderer_.initialize(renderer));
         a.uiTextRenderer_.setRasterScale(scale);

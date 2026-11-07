@@ -2,26 +2,14 @@
 #include "item_definition.h"
 #include "raid_space_spatial_index.h"
 #include "combat_target.h"
+#include "throwable_types.h"
 #include <map>
 #include <span>
 
-struct NoiseDecoyLanding {
-    Vec2 origin{}, point{};
-    RaidSpaceDefinitionId space;
-    NoiseDecoyUseDefinition use;
-};
 [[nodiscard]] std::optional<NoiseDecoyLanding> queryNoiseDecoyLanding(Vec2 origin, Vec2 aim,
     const RaidSpaceDefinitionId &, const NoiseDecoyUseDefinition &, const RaidSpaceBlockerIndex &);
 
-struct NoiseDecoySource {
-    std::uint64_t id{};
-    NoiseDecoyLanding landing;
-    double elapsed{};
-    unsigned pulses{1};
-};
-struct NoiseDecoyFlight { NoiseDecoyLanding landing; double elapsed{}; };
 struct NoiseDecoyListener { CombatTargetId id{}; Vec2 center{}, home{}; bool eligible{}; };
-struct NoiseInvestigation { RaidSpaceDefinitionId space; std::uint64_t source{}; Vec2 point{}, home{}; bool returning{}; };
 
 // Raid-only transient facts. No AssetRegistry, player target, SDL, rewards or saves.
 class RaidNoiseDecoyRuntime {
@@ -33,6 +21,8 @@ public:
     void forget(CombatTargetId id) { investigations_.erase(id); }
     void prune(const RaidSpaceDefinitionId &, std::span<const CombatTargetId> alive);
     void clear() noexcept;
+    [[nodiscard]] NoiseDecoyRuntimeCheckpoint checkpoint() const;
+    [[nodiscard]] bool restore(const NoiseDecoyRuntimeCheckpoint &);
     [[nodiscard]] const std::optional<NoiseDecoyFlight> &flight() const noexcept { return flight_; }
     [[nodiscard]] const std::optional<NoiseDecoySource> &source() const noexcept { return source_; }
     [[nodiscard]] const std::map<CombatTargetId, NoiseInvestigation> &investigations() const noexcept { return investigations_; }

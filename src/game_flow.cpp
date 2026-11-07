@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <utility>
+#include <type_traits>
 
 namespace
 {
@@ -48,6 +49,73 @@ std::optional<BaseFacilityKind> facilityKind(
 
 GameFlow::GameFlow() = default;
 
+ProfileUiSubmission GameFlow::requestBaseWorldUiCommand(const BaseWorldUiCommand &command,std::string transactionId)
+{
+    const auto denied=[](const char *message){return ProfileUiSubmission{0,false,false,DomainErrorCode::IllegalDestination,message};};
+    if(state_!=GameFlowState::Base)return denied("Base world is not active");
+    return std::visit([&](const auto &typed)->ProfileUiSubmission {
+        using T=std::decay_t<decltype(typed)>;
+        if constexpr(std::is_same_v<T,BaseUiDropAsset>) {
+            const auto position=typed.worldPosition.value_or(baseGroundAccess().dropPosition);
+            return gameSession_.requestProfileUiCommand(BaseGroundCommand{DropBaseGroundAssetCommand{typed.assetId,typed.quantity,typed.orientation,baseGroundPlacementAccess(position)}},std::move(transactionId));
+        } else if constexpr(std::is_same_v<T,BaseUiPickupAsset>) {
+            if(typed.management && !baseWorld_.canAccessStash())return denied("Base management requires warehouse access");
+            auto access=baseGroundAccess();access.managementAccess=typed.management;
+            return gameSession_.requestProfileUiCommand(BaseGroundCommand{PickupBaseGroundAssetCommand{typed.assetId,std::move(access)}},std::move(transactionId));
+        } else if constexpr(std::is_same_v<T,BaseUiRepositionAsset>) {
+            return gameSession_.requestProfileUiCommand(BaseGroundCommand{RepositionBaseGroundAssetCommand{typed.assetId,typed.orientation,baseGroundPlacementAccess(typed.worldPosition)}},std::move(transactionId));
+        } else if constexpr(std::is_same_v<T,BaseUiInstallFacility>) {
+            return gameSession_.requestProfileUiCommand(baseFacilityInstallCommand(typed.facility,typed.worldPosition),std::move(transactionId));
+        } else if constexpr(std::is_same_v<T,BaseUiRepositionFacility>) {
+            return gameSession_.requestProfileUiCommand(baseFacilityRepositionCommand(typed.facility,typed.worldPosition),std::move(transactionId));
+        } else {
+            if(activeBaseFacility_)return denied("Close the Base facility before founding");
+            return gameSession_.requestProfileUiCommand(ProfileUiEstablishHomeCommand{typed.plotId,RegionalBaseSiteDefinitionId{baseWorld_.siteDefinitionId()},baseGroundAccess().playerCenter},std::move(transactionId));
+        }
+    },command);
+}
+
+ProfileUiSubmission GameFlow::requestDeploy(MapDefinitionId map,RaidIntelligenceLoadout intelligence,
+    std::optional<std::string> selfRecovery,std::optional<RegionalOutpostDefinitionId> restoration,
+    std::optional<RegionalBaseSiteDefinitionId> clearance,std::optional<RegionalBaseSiteDefinitionId> sweep,
+    const RaidDeploymentProgressCallback &progress)
+{
+    if(state_!=GameFlowState::Base || !persistentAlphaMode_)
+        return {0,false,false,DomainErrorCode::IllegalDestination,"Persistent Base deployment is not active"};
+    auto seed=profileStateFingerprint(gameSession_.profile())^0x726169646c696e65ULL;if(!seed)seed=1;
+    return gameSession_.requestDeployAlpha({seed,std::move(map),intelligence,std::move(selfRecovery),
+        std::move(restoration),std::move(clearance),std::move(sweep)},progress);
+}
+
+bool GameFlow::completeDeploy(std::uint64_t requestId)
+{
+    if(state_!=GameFlowState::Base || !gameSession_.profileUiCompletionReady(requestId,ProfileUiCompletionKind::Deploy) || !gameSession_.alphaRaidActive())return false;
+    activeBaseFacility_.reset();baseWorld_.clearSpatialCombatState();gameSession_.bindBasePlayerWorld(nullptr);state_=GameFlowState::Raid;return true;
+}
+
+bool GameFlow::completeReturnToMainMenu(std::uint64_t requestId)
+{
+    if((state_!=GameFlowState::Base && state_!=GameFlowState::Raid) || !gameSession_.profileUiCompletionReady(requestId,ProfileUiCompletionKind::WorldBarrier))return false;
+    activeBaseFacility_.reset();gameSession_.bindBasePlayerWorld(nullptr);state_=GameFlowState::MainMenu;return true;
+}
+
+bool GameFlow::completeReturnToBase(std::uint64_t requestId)
+{
+    if(state_!=GameFlowState::RaidResult || gameSession_.state()!=GameSessionState::BetweenRaids ||
+        !gameSession_.profileUiCompletionReady(requestId,ProfileUiCompletionKind::Command))return false;
+    const bool extracted=gameSession_.profile().lastRaidResult && gameSession_.profile().lastRaidResult->outcome==RaidResultOutcome::Extracted;
+    syncBaseWorldSite();if(extracted)baseWorld_.resetAtRaidGate();else baseWorld_.resetAtMedicalPoint();
+    activeBaseFacility_.reset();state_=GameFlowState::Base;return true;
+}
+
+bool GameFlow::completeProfileUiCommand(const ProfileUiCompletion &completion)
+{
+    if(!completion.succeeded || completion.kind!=ProfileUiCompletionKind::Command ||
+        !gameSession_.profileUiCompletionReady(completion.requestId,completion.kind))return false;
+    if(completion.commandResult && completion.commandResult->facts.synchronizeBaseSite && state_==GameFlowState::Base)syncBaseWorldSite();
+    return true;
+}
+
 GameFlow::GameFlow(
     InventoryGridSize stashSize)
     : gameSession_{stashSize}
@@ -63,6 +131,7 @@ bool GameFlow::startGame() noexcept
 
     state_ = GameFlowState::Base;
     persistentAlphaMode_ = false;
+    syncBaseWorldSite();
     return true;
 }
 
@@ -84,7 +153,7 @@ bool GameFlow::startNewGame(std::string profileId, bool survey)
     baseWorld_.resetCombatForProfileLoad();
     syncBaseWorldSite();
     baseWorld_.resetAtMedicalPoint();
-    if (!gameSession_.restoreBaseDefenseRuntime(baseWorld_)) return false;
+    if (!gameSession_.restoreBaseDefenseRuntime(baseWorld_) || !gameSession_.restoreBasePlayerRuntime(baseWorld_)) return false;
     return true;
 }
 
@@ -103,7 +172,7 @@ bool GameFlow::continueGame()
     baseWorld_.resetCombatForProfileLoad();
     syncBaseWorldSite();
     baseWorld_.resetAtMedicalPoint();
-    if (!gameSession_.restoreBaseDefenseRuntime(baseWorld_)) return false;
+    if (!gameSession_.restoreBaseDefenseRuntime(baseWorld_) || !gameSession_.restoreBasePlayerRuntime(baseWorld_)) return false;
     return true;
 }
 
@@ -146,6 +215,7 @@ bool GameFlow::deploy(
         }
         activeBaseFacility_.reset();
         baseWorld_.clearSpatialCombatState();
+        gameSession_.bindBasePlayerWorld(nullptr);
         state_ = GameFlowState::Raid;
         return true;
     }
@@ -162,6 +232,7 @@ bool GameFlow::deploy(
         firstDeploymentPending_ = false;
         activeBaseFacility_.reset();
         baseWorld_.clearSpatialCombatState();
+        gameSession_.bindBasePlayerWorld(nullptr);
         state_ = GameFlowState::Raid;
         return true;
     }
@@ -172,6 +243,7 @@ bool GameFlow::deploy(
     }
 
     baseWorld_.clearSpatialCombatState();
+    gameSession_.bindBasePlayerWorld(nullptr);
     state_ = GameFlowState::Raid;
     activeBaseFacility_.reset();
     return true;
@@ -407,7 +479,7 @@ InventoryPlan GameFlow::queryBaseGroundContainerInventory(
             "Base ground is not active", gameSession_.profile().revision};
     }
     return ::queryBaseGroundContainerInventory(
-        gameSession_.profile(),
+        gameSession_.profileForInventoryPresentation(),
         publishedContentRegistry(),
         containerAssetId,
         baseGroundAccess(),
@@ -430,6 +502,16 @@ InventoryReceipt GameFlow::executeBaseGroundContainerInventory(
         baseGroundAccess(),
         command,
         std::move(transactionId));
+}
+
+InventoryUiSubmission GameFlow::requestBaseGroundContainerInventory(
+    AssetInstanceId id, const InventoryCommand &command, std::string transactionId)
+{
+    if (state_ != GameFlowState::Base)
+        return {0, false, false, {false, false, DomainErrorCode::IllegalDestination,
+            "Base ground is not active", gameSession_.profile().revision}};
+    return gameSession_.requestBaseGroundContainerInventory(id, baseGroundAccess(),
+        command, std::move(transactionId));
 }
 
 std::optional<BaseGroundAssetProjection>
@@ -627,6 +709,7 @@ void GameFlow::update(
     if (gameSession_.state() ==
         GameSessionState::BetweenRaids)
     {
+        gameSession_.bindBasePlayerWorld(nullptr);
         state_ = GameFlowState::RaidResult;
     }
 }
@@ -668,6 +751,7 @@ bool GameFlow::returnToBase() noexcept
 
 void GameFlow::syncBaseWorldSite()
 {
+    gameSession_.bindBasePlayerWorld(&baseWorld_);
     // Existing queues may complete during combat, but the active event owns
     // its frozen collision geometry until settlement releases the layout.
     if (baseWorld_.baseDefenseActive())
@@ -734,6 +818,7 @@ bool GameFlow::returnToMainMenu() noexcept
     // Continue reloads the pre-Raid save and follows the existing idempotent
     // rollback path; no implicit success/failure settlement occurs here.
     activeBaseFacility_.reset();
+    gameSession_.bindBasePlayerWorld(nullptr);
     state_ = GameFlowState::MainMenu;
     return true;
 }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -26,6 +28,14 @@ struct SaveWriteMetrics
     double serializationMilliseconds{};
     double commitMilliseconds{};
     double totalMilliseconds{};
+    std::size_t fullEnvelopeValidations{};
+    std::size_t cachedEnvelopeProofs{};
+};
+
+struct SaveEnvelopeMetadata
+{
+    std::uint32_t schemaVersion{};
+    std::string contentVersion;
 };
 
 struct SaveLoadResult
@@ -34,6 +44,7 @@ struct SaveLoadResult
     std::optional<ProfileState> profile;
     std::string message;
     bool migratedChestRigLayout{};
+    std::optional<SaveEnvelopeMetadata> sourceEnvelope;
 };
 
 class SaveRepository
@@ -62,6 +73,19 @@ public:
     [[nodiscard]] const std::filesystem::path &backupPath() const noexcept;
 
 private:
+    // Instance-local, single-writer cache. Only exact raw-byte equality reuses
+    // a proof validated against the immutable published content registry.
+    struct VerifiedEnvelope
+    {
+        std::string bytes;
+        std::optional<SaveEnvelopeMetadata> metadata;
+    };
+    [[nodiscard]] std::optional<SaveEnvelopeMetadata> inspectEnvelope(
+        std::string_view bytes, SaveWriteMetrics *metrics = nullptr) const;
+    void rememberEnvelope(std::string_view bytes,
+        std::optional<SaveEnvelopeMetadata> metadata) const;
+    mutable std::array<std::optional<VerifiedEnvelope>, 4> verifiedEnvelopes_;
+    mutable std::size_t nextVerifiedEnvelope_{};
     [[nodiscard]] SaveWriteResult preserveLayoutMigrationSources(
         SaveLoadStatus loadedFrom, std::string_view marker) const;
     std::filesystem::path directory_;
@@ -74,7 +98,7 @@ private:
 [[nodiscard]] std::string serializeProfileEnvelope(
     const ProfileState &profile,
     std::string_view contentVersion,
-    std::uint32_t schemaVersion = 58);
+    std::uint32_t schemaVersion = 60);
 
 [[nodiscard]] SaveLoadResult deserializeProfileEnvelope(
     std::string_view text,

@@ -30,6 +30,15 @@ public:
         Rect bounds,
         std::vector<std::size_t> &output) const;
 
+    // Moving actors only. On success, output contains the original candidate
+    // indices that overlap the closed sweep, in their original order. The
+    // returned count is the original broad-phase count, before filtering.
+    // An unsupported query leaves output untouched for the general path.
+    [[nodiscard]] std::optional<std::size_t> querySmallMovementCandidateIndices(
+        Vec2 sweptMinimum,
+        Vec2 sweptMaximum,
+        std::vector<std::size_t> &output) const;
+
     [[nodiscard]] const Rect &blockerBounds(std::size_t index) const;
     // Read-only batch view, valid while this immutable index remains alive.
     [[nodiscard]] std::span<const Rect> allBlockerBounds() const noexcept { return blockerBounds_; }

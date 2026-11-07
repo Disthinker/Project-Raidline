@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "test_temp_directory.h"
 #include "ui_base_management_presentation.h"
 #include "ui_base_defense_presentation.h"
@@ -17,7 +18,12 @@
 struct UiBaseManagementTestAccess {
     static GameFlow &flow(App &a){return a.gameFlow_;}
     static UiTextRenderer &text(App &a){return a.uiTextRenderer_;}
-    static void frame(App &a){a.processEvents();a.update(0);a.input_.endFrame();}
+    static void settle(App &a) {
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+            [&] { return a.profileUiBusy() || static_cast<bool>(a.pendingInventoryBarrierAction_); },
+            [&] { a.processEvents();a.update(0);a.input_.endFrame(); })) << a.gameSession_.persistenceMessage();
+    }
+    static void frame(App &a) { a.processEvents();a.update(0);a.input_.endFrame(); settle(a); }
     static void attach(App &a,SDL_Renderer *r,float scale){a.renderer_=r;ASSERT_TRUE(a.uiTextRenderer_.initialize(r));a.uiTextRenderer_.setRasterScale(scale);}
     static void detach(App &a){a.uiTextRenderer_.shutdown();a.renderer_=nullptr;}
     static void reset(App &a){
@@ -90,7 +96,7 @@ protected:
         auto p=makeNewAlphaProfile("base-final-isolated",content);p.baseConstruction.materialUnits=100;
         ASSERT_TRUE(validateProfileState(p,content).valid)<<validateProfileState(p,content).message;
         ASSERT_TRUE(SaveRepository(path).save(p,content.contentVersion()).succeeded);
-        app=std::make_unique<App>();A::flow(*app).configurePersistence(path);ASSERT_TRUE(A::flow(*app).continueGame());A::reset(*app);
+        app=std::make_unique<App>();A::flow(*app).configurePersistence(path);ASSERT_TRUE(A::flow(*app).continueGame());A::frame(*app);A::reset(*app);
     }
     void attach(int width=1280,int height=720){
         surface=SDL_CreateSurface(width,height,SDL_PIXELFORMAT_RGBA32);ASSERT_NE(surface,nullptr);
@@ -190,7 +196,8 @@ TEST_F(UiBaseManagementTest,RejectedConstructionAndSaveFailureKeepExactAssetsCur
     A::clickHandler(*app,{400,620});EXPECT_EQ(profileStateFingerprint(profile()),before);
     EXPECT_FALSE(profile().baseConstruction.activeProject);
     ASSERT_TRUE(std::filesystem::remove(path/"profile.tmp.json"));
-    A::clickHandler(*app,{400,620});ASSERT_TRUE(profile().baseConstruction.activeProject);
+    pointer({1119,213},true);pointer({1119,213},false);A::frame(*app);
+    ASSERT_TRUE(profile().baseConstruction.activeProject);
     EXPECT_EQ(profile().baseConstruction.activeProject->definitionId,id);
 }
 

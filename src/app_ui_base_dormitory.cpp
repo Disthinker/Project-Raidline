@@ -40,6 +40,7 @@ void App::refreshBaseDormitoryUi(bool force)
 
 void App::handleBaseDormitoryEvent(const UiDormitoryEvent &event)
 {
+    if(profileUiBusy())return;
     if (gameFlow_.state() != GameFlowState::Base ||
         gameFlow_.activeBaseFacility() != BaseFacilityKind::Dormitory || pauseMenu_.isOpen() ||
         inventoryOverlayState_.isOpen() || developerWeaponPanelOpen_ || !windowHasInputFocus_) {
@@ -69,7 +70,7 @@ void App::handleBaseDormitoryEvent(const UiDormitoryEvent &event)
     const auto press = dormitoryUi_.press;
     dormitoryUi_.press.reset();
     if (!press || !hit || *hit != press->control || press->language != language) return;
-    const auto tr = [&](std::string_view text) { return localizeUiText(language, text); };
+    const auto tr = [language](std::string_view text) { return localizeUiText(language, text); };
     const auto feedback = [&](std::string text) {
         dormitoryFeedback_ = std::move(text);
         uiMessage_ = dormitoryFeedback_;
@@ -113,39 +114,30 @@ void App::handleBaseDormitoryEvent(const UiDormitoryEvent &event)
         gameAudio_.play(SoundEventId::UiDeny);
         return;
     }
-    bool succeeded = false;
-    if (control == Control::StartRest && dormitoryProjection_.restHours) {
-        const auto hours = *dormitoryProjection_.restHours;
-        const auto receipt = gameSession_.executeBaseRest(hours, nextProfileTransactionId("dormitory-rest"));
-        succeeded = receipt.succeeded;
-        feedback(succeeded ? fmt::format("{} {} {} · {} {}", tr("REST COMPLETE"), hours, tr("REST HOURS UNIT"),
-            tr("DAILY SETTLEMENTS"), receipt.dailyCyclesResolved) : tr(receipt.message));
-        if (succeeded) dormitoryUi_.restHours.reset();
-    } else if (control == Control::AutoFill) {
-        const auto before = gameSession_.profile().baseWorkforce;
-        const auto receipt = gameSession_.executeAutoFillBaseWorkers(nextProfileTransactionId("dormitory-autofill"));
-        succeeded = receipt.succeeded;
-        if (succeeded) {
-            const auto &after = gameSession_.profile().baseWorkforce;
-            std::string result = tr("VACANT JOBS FILLED");
-            if (!before.workshopWorker && after.workshopWorker)
-                result += fmt::format(" · {}: {}", tr("WORKSHOP JOB"), tr(baseResidentProfessionName(*after.workshopWorker)));
-            if (!before.medicalWorker && after.medicalWorker)
-                result += fmt::format(" · {}: {}", tr("MEDICAL JOB"), tr(baseResidentProfessionName(*after.medicalWorker)));
-            if (!after.workshopWorker || !after.medicalWorker) result += " · " + tr("SOME JOBS REMAIN VACANT");
-            feedback(std::move(result));
-        } else feedback(tr(receipt.message));
-    } else if (dormitoryProjection_.project &&
-        (control == Control::StartExpansion || control == Control::CancelExpansion)) {
-        const auto id = dormitoryProjection_.project->id;
-        const bool cancel = control == Control::CancelExpansion;
-        const auto receipt = cancel ? gameSession_.executeCancelBaseConstruction(id, nextProfileTransactionId("dormitory-cancel-expansion"))
-            : gameSession_.executeStartBaseConstruction(id, nextProfileTransactionId("dormitory-start-expansion"));
-        succeeded = receipt.succeeded;
-        feedback(tr(succeeded ? cancel ? "CONSTRUCTION CANCELLED | MATERIAL REFUNDED" : "DORMITORY EXPANSION STARTED" : receipt.message));
+    const auto finish=[this,feedback](bool succeeded,std::string message){
+        feedback(std::move(message));gameAudio_.play(succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);refreshBaseDormitoryUi(true);
+    };
+    if(control==Control::StartRest && dormitoryProjection_.restHours) {
+        const auto hours=*dormitoryProjection_.restHours;
+        submitProfileUi<BaseRestReceipt>(BaseRestCommand{hours},nextProfileTransactionId("dormitory-rest"),
+            [this,finish,tr,hours](const auto &r){if(r.succeeded)dormitoryUi_.restHours.reset();
+                finish(r.succeeded,r.succeeded?fmt::format("{} {} {} · {} {}",tr("REST COMPLETE"),hours,tr("REST HOURS UNIT"),tr("DAILY SETTLEMENTS"),r.dailyCyclesResolved):tr(r.message));});
+    } else if(control==Control::AutoFill) {
+        const auto before=gameSession_.profile().baseWorkforce;
+        submitProfileUi<BaseWorkforceReceipt>(ProfileUiAutoFillWorkersCommand{},nextProfileTransactionId("dormitory-autofill"),
+            [this,finish,tr,before](const auto &r){
+                if(!r.succeeded){finish(false,tr(r.message));return;}
+                const auto &after=gameSession_.profile().baseWorkforce;std::string result=tr("VACANT JOBS FILLED");
+                if(!before.workshopWorker && after.workshopWorker)result+=fmt::format(" · {}: {}",tr("WORKSHOP JOB"),tr(baseResidentProfessionName(*after.workshopWorker)));
+                if(!before.medicalWorker && after.medicalWorker)result+=fmt::format(" · {}: {}",tr("MEDICAL JOB"),tr(baseResidentProfessionName(*after.medicalWorker)));
+                if(!after.workshopWorker || !after.medicalWorker)result+=" · "+tr("SOME JOBS REMAIN VACANT");finish(true,std::move(result));
+            });
+    } else if(dormitoryProjection_.project && (control==Control::StartExpansion || control==Control::CancelExpansion)) {
+        const auto id=dormitoryProjection_.project->id;const bool cancel=control==Control::CancelExpansion;
+        submitProfileUi<BaseConstructionReceipt>(cancel?ProfileUiCommand{CancelBaseConstructionCommand{id}}:ProfileUiCommand{StartBaseConstructionCommand{id}},
+            nextProfileTransactionId("dormitory-expansion"),[finish,tr,cancel](const auto &r){finish(r.succeeded,tr(r.succeeded?(cancel?"CONSTRUCTION CANCELLED | MATERIAL REFUNDED":"DORMITORY EXPANSION STARTED"):r.message));});
     }
-    gameAudio_.play(succeeded ? SoundEventId::UiConfirm : SoundEventId::UiDeny);
-    refreshBaseDormitoryUi(true);
+
 }
 
 void App::renderBaseDormitory()

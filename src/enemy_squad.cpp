@@ -236,19 +236,21 @@ EnemySquadCoordinator::decide(
     const auto *const memberData = members.data();
     // All spatial data below belongs to this call. Each valid member enters
     // one cell, ordered by its original input index within that cell.
-    std::vector<CellMember> cellMembers;
-    cellMembers.reserve(members.size());
+    std::vector<CellMember> cellMembers(members.size());
+    auto *const cellMemberSlots = cellMembers.data();
+    std::size_t cellMemberCount{};
     for (std::size_t index{}; index < members.size(); ++index)
     {
         if (!members[index].alive || !isFinite(members[index].position))
         {
             continue;
         }
-        cellMembers.push_back({enemyCell(
-            members[index].position, config_.separationRadius), index});
+        cellMemberSlots[cellMemberCount++] = {enemyCell(
+            members[index].position, config_.separationRadius), index};
     }
-    if (cellMembers.empty())
+    if (cellMemberCount == 0U)
         return directives;
+    cellMembers.resize(cellMemberCount);
     std::sort(cellMembers.begin(), cellMembers.end(),
         [](const CellMember &first, const CellMember &second)
         {
@@ -275,6 +277,7 @@ EnemySquadCoordinator::decide(
     // Resolve each cell's nine neighbors once. Neither buffer grows after
     // this point, so these local ranges remain valid until decide returns.
     const auto *cellsEnd = neighborCells.data() + neighborCells.size();
+    std::size_t neighborCandidateCount{};
     for (auto &cell : neighborCells)
     {
         for (int offsetY{-1}; offsetY <= 1; ++offsetY)
@@ -293,18 +296,23 @@ EnemySquadCoordinator::decide(
                         last = middle;
                 }
                 if (first != cellsEnd && first->cell == key)
+                {
                     cell.adjacent[cell.adjacentCount++] = first->members;
+                    neighborCandidateCount += static_cast<std::size_t>(
+                        first->members.last - first->members.first);
+                }
             }
         }
     }
     // All members in one cell visit exactly the same sorted candidate list.
     // Merge it once for that cell, retaining original input order. Each input
     // member appears in at most nine such lists; nothing survives this call.
-    std::vector<std::size_t> neighborCandidates;
-    neighborCandidates.reserve(cellMembers.size());
+    std::vector<std::size_t> neighborCandidates(neighborCandidateCount);
+    auto *const candidateSlots = neighborCandidates.data();
+    std::size_t nextCandidate{};
     for (auto &cell : neighborCells)
     {
-        cell.candidateBegin = neighborCandidates.size();
+        cell.candidateBegin = nextCandidate;
         auto cursors = cell.adjacent;
         auto *const cursorData = cursors.data();
         std::size_t active = cell.adjacentCount;
@@ -320,9 +328,9 @@ EnemySquadCoordinator::decide(
                 }
             if (++cursorData[selected].first == cursorData[selected].last)
                 cursorData[selected] = cursorData[--active];
-            neighborCandidates.push_back(neighborIndex);
+            candidateSlots[nextCandidate++] = neighborIndex;
         }
-        cell.candidateEnd = neighborCandidates.size();
+        cell.candidateEnd = nextCandidate;
     }
     const auto *const candidateData = neighborCandidates.data();
     for (std::size_t index{0U};

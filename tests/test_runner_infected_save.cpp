@@ -128,7 +128,10 @@ TEST(RunnerInfectedSaveTest, Schema58PersistsNamespacedFrozenValuesAndFingerprin
     const auto profile = deployed();
     ASSERT_TRUE(profile.pendingRaid);
     ASSERT_EQ(profile.pendingRaid->rulesVersion, kRaidRunnerRulesVersion);
-    const auto bytes = serializeProfileEnvelope(profile, content.contentVersion());
+    // Keep this shipped-schema regression explicit when the current writer
+    // advances; its original schema58/content73 assertions remain unchanged.
+    const auto bytes = serializeProfileEnvelope(profile,
+        "raid-runner-infected-content-73", 58);
     const auto json = Json::parse(bytes);
     EXPECT_EQ(json.at("schema_version"), 58U);
     EXPECT_EQ(json.at("content_version"), "raid-runner-infected-content-73");
@@ -217,7 +220,7 @@ TEST(RunnerInfectedSaveTest, NewTypesAndNewRuleCannotBeDowngradedToSchema57)
     EXPECT_FALSE(deserializeProfileEnvelope(checkedEnvelope(json), content).profile);
     json["schema_version"] = 58U;
     EXPECT_FALSE(deserializeProfileEnvelope(checkedEnvelope(json), content).profile);
-    for (const auto version : {59ULL, 4294967354ULL})
+    for (const auto version : {61ULL, 4294967354ULL})
     {
         json = Json::parse(serializeProfileEnvelope(deployed(), content.contentVersion()));
         json["schema_version"] = version;
@@ -327,10 +330,17 @@ TEST(RunnerInfectedSaveTest, OldDefenseCheckpointsRemainEmptyAndCannotAcquireRun
     ASSERT_TRUE(loaded.profile && loaded.profile->activeBaseDefense) << loaded.message;
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
     for (const auto &enemy : loaded.profile->activeBaseDefense->enemies) EXPECT_FALSE(enemy.variant);
-    const auto legacyBytes = serializeProfileEnvelope(profile, oldContent, 57);
+    // The historical Defense fixture predates Base player recovery. Retain
+    // its frozen actors/weapon state, with no schema60-only activity DTOs.
+    auto legacyProfile = profile;
+    legacyProfile.basePlayerEffects.reset();
+    legacyProfile.baseReloadRecovery.reset();
+    legacyProfile.baseCorpses.clear();
+    ASSERT_TRUE(validateProfileState(legacyProfile, content).valid);
+    const auto legacyBytes = serializeProfileEnvelope(legacyProfile, oldContent, 57);
     const auto legacy = deserializeProfileEnvelope(legacyBytes, content);
     ASSERT_TRUE(legacy.profile) << legacy.message;
-    EXPECT_EQ(profileStateFingerprint(*legacy.profile), profileStateFingerprint(profile));
+    EXPECT_EQ(profileStateFingerprint(*legacy.profile), profileStateFingerprint(legacyProfile));
     auto &enemy = json["payload"]["active_base_defense"]["enemies"][0];
     enemy["variant"] = enemyVariantSnapshotJson(runnerEnemyVariantSnapshot());
     enemy["maximumHealth"] = 8; enemy["health"] = 8;

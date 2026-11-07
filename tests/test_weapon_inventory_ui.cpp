@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "ui_localization.h"
 #include <gtest/gtest.h>
 #include <chrono>
@@ -8,7 +9,12 @@
 
 struct WeaponInventoryUiTestAccess {
     static GameFlow &flow(App &a) { return a.gameFlow_; }
-    static void frame(App &a) { a.processEvents(); a.update(0); a.input_.endFrame(); }
+    static void frame(App &a) {
+        a.processEvents(); a.update(0); a.input_.endFrame();
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+            [&] { return a.profileUiBusy() || bool(a.pendingInventoryBarrierAction_); },
+            [&] { a.processEvents(); a.update(0); a.input_.endFrame(); }));
+    }
     static auto menu(App &a) { return a.profileContextMenu_; }
     static auto details(App &a) { return a.profileDetailsAsset_; }
     static bool modifying(App &a) { return a.inventoryWeaponComponentsOpen_; }

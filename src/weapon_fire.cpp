@@ -1,4 +1,5 @@
 #include "weapon_fire.h"
+#include "item_definition.h"
 
 #include <algorithm>
 #include <cmath>
@@ -97,6 +98,74 @@ namespace
         }
         return current + std::copysign(maximumDelta, delta);
     }
+}
+
+WeaponTriggerIntent WeaponTriggerGate::prepare(
+    std::uint64_t weaponId, WeaponFireMode mode, unsigned burstCount,
+    bool held, bool justPressed, bool controlsAvailable) noexcept
+{
+    const bool down = held || justPressed;
+    if ((weaponId_ != 0U && weaponId_ != weaponId) ||
+        (mode_ && *mode_ != mode))
+    {
+        remaining_ = 0U;
+        // A fresh press after switching is legal when the previous trigger
+        // was already released. Explicit B/Set commits impose their separate
+        // same-frame release barrier through cancelUntilRelease().
+        if (triggerWasHeld_) suppressedUntilRelease_ = true;
+    }
+    weaponId_ = weaponId;
+    mode_ = mode;
+    if (!controlsAvailable || weaponId == 0U)
+    {
+        cancelUntilRelease();
+        triggerWasHeld_ = down;
+        if (!down) suppressedUntilRelease_ = false;
+        return {};
+    }
+    if (!down)
+    {
+        triggerWasHeld_ = false;
+        suppressedUntilRelease_ = false;
+        return {mode == WeaponFireMode::ThreeRoundBurst && remaining_ != 0U, false};
+    }
+    if (suppressedUntilRelease_)
+    {
+        triggerWasHeld_ = true;
+        return {};
+    }
+    const bool edge = justPressed || !triggerWasHeld_;
+    triggerWasHeld_ = true;
+    if (mode == WeaponFireMode::SemiAutomatic)
+        return {false, edge};
+    if (mode == WeaponFireMode::ThreeRoundBurst)
+    {
+        if (edge && remaining_ == 0U) remaining_ = burstCount;
+        return {remaining_ != 0U, edge && remaining_ != 0U};
+    }
+    return {true, edge};
+}
+
+void WeaponTriggerGate::acceptedShot() noexcept
+{
+    if (mode_ == WeaponFireMode::ThreeRoundBurst && remaining_ != 0U)
+        --remaining_;
+}
+
+void WeaponTriggerGate::cancelUntilRelease() noexcept
+{
+    remaining_ = 0U;
+    suppressedUntilRelease_ = true;
+}
+
+void WeaponTriggerGate::cancelPending() noexcept
+{
+    remaining_ = 0U;
+}
+
+void WeaponTriggerGate::reset() noexcept
+{
+    *this = WeaponTriggerGate{};
 }
 
 WeaponFireState::WeaponFireState()

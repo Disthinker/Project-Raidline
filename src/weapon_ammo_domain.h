@@ -1,7 +1,9 @@
 #pragma once
 
 #include <optional>
+#include <string_view>
 #include <variant>
+#include <vector>
 
 #include "inventory_domain.h"
 
@@ -42,6 +44,8 @@ struct ChamberWeaponCommand
     AssetInstanceId weaponAssetId{};
 };
 
+enum class EmptyChamberPolicy { ChamberOnTrigger, RequireExplicitChamber };
+
 struct FireWeaponCommand
 {
     AssetInstanceId weaponAssetId{};
@@ -50,6 +54,13 @@ struct FireWeaponCommand
     // on a platform RNG implementation.
     std::uint32_t malfunctionRollBasisPoints{9999U};
     std::uint32_t malfunctionTypeRoll{};
+    EmptyChamberPolicy emptyChamberPolicy{EmptyChamberPolicy::ChamberOnTrigger};
+};
+
+struct SetWeaponFireModeCommand
+{
+    AssetInstanceId weaponAssetId{};
+    WeaponFireMode fireMode{WeaponFireMode::SemiAutomatic};
 };
 
 struct ClearWeaponMalfunctionCommand
@@ -65,7 +76,8 @@ using WeaponAmmoCommand = std::variant<
     UninstallMagazineCommand,
     ChamberWeaponCommand,
     FireWeaponCommand,
-    ClearWeaponMalfunctionCommand>;
+    ClearWeaponMalfunctionCommand,
+    SetWeaponFireModeCommand>;
 
 enum class WeaponAmmoResult
 {
@@ -80,7 +92,9 @@ enum class WeaponAmmoResult
     BlockedByMalfunction,
     Broken,
     MalfunctionCleared,
-    Dry
+    Dry,
+    NeedsChamber,
+    FireModeChanged
 };
 
 struct WeaponAmmoReceipt
@@ -131,3 +145,129 @@ struct WeaponAmmoPlan
 [[nodiscard]] std::size_t magazineRoundCount(
     const ProfileState &profile,
     AssetInstanceId magazineAssetId) noexcept;
+
+[[nodiscard]] std::optional<WeaponFireMode> queryWeaponFireMode(
+    const ProfileState &, const ContentRegistry &, AssetInstanceId) noexcept;
+
+struct RaidReloadBinding
+{
+    std::string raidId;
+    RaidSpaceDefinitionId spaceId;
+    AssetInstanceId weaponAssetId{};
+    std::string actionId;
+    AssetInstanceId newMagazineAssetId{};
+    std::optional<AssetInstanceId> oldMagazineAssetId;
+    std::optional<WeaponActionScope> activity;
+};
+
+struct RaidMagazinePlacement
+{
+    StoredAssetLocation location;
+    ItemOrientation orientation{ItemOrientation::Degrees0};
+};
+
+// Borrowed current-world facts, supplied by the session at the actual commit.
+struct RaidReloadWorldAccess
+{
+    RaidSpaceDefinitionId spaceId;
+    Vec2 playerCenter{};
+    const RaidVisibilityProjection *observation{};
+    const RaidObservationKey *currentObservation{};
+    std::optional<WeaponActionScope> activity;
+    Vec2 worldSize{};
+    bool stashAccessible{};
+};
+
+struct RaidReloadRequest
+{
+    RaidReloadBinding binding;
+    RaidReloadKind kind{RaidReloadKind::Normal};
+    RaidReloadSource source{RaidReloadSource::AutomaticChestRig};
+    bool stashAccessible{};
+};
+
+struct RaidReloadPlan
+{
+    bool canCommit{};
+    DomainErrorCode error{DomainErrorCode::None};
+    std::string message;
+    ProfileRevision revision{};
+    RaidReloadBinding binding;
+    RaidReloadKind kind{RaidReloadKind::Normal};
+    RaidReloadSource source{RaidReloadSource::AutomaticChestRig};
+    RaidMagazinePlacement newSource;
+    std::optional<RaidMagazinePlacement> oldReturn;
+};
+
+struct RaidReloadMagazineChoice
+{
+    AssetInstanceId magazineAssetId{};
+    std::uint32_t roundCount{};
+    bool eligible{};
+    DomainErrorCode error{DomainErrorCode::None};
+};
+
+struct RaidReloadStageCommand
+{
+    RaidReloadBinding binding;
+    RaidReloadStage stage{RaidReloadStage::TakeNew};
+    RaidReloadKind kind{RaidReloadKind::Normal};
+    RaidReloadSource source{RaidReloadSource::AutomaticChestRig};
+    RaidMagazinePlacement newSource;
+    std::optional<RaidMagazinePlacement> oldReturn;
+    std::optional<RaidDroppedMagazineLocation> drop;
+    std::optional<AssetLocation> worldDrop;
+};
+
+struct RaidReloadReceipt
+{
+    bool succeeded{};
+    bool alreadyCommitted{};
+    DomainErrorCode error{DomainErrorCode::None};
+    std::string message;
+    ProfileRevision revision{};
+    std::optional<RaidReloadStage> committedStage;
+    bool magazineRemoved{}, magazineInserted{}, chamberedRound{};
+    std::vector<AssetInstanceId> droppedMagazineAssetIds;
+};
+
+struct RaidReloadCancelCommand
+{
+    RaidReloadBinding binding;
+    RaidMagazinePlacement newSource;
+    std::optional<RaidDroppedMagazineLocation> newFallbackDrop;
+    std::optional<RaidDroppedMagazineLocation> oldFallbackDrop;
+    std::optional<AssetLocation> newWorldFallbackDrop;
+    std::optional<AssetLocation> oldWorldFallbackDrop;
+};
+
+[[nodiscard]] RaidReloadPlan queryRaidReload(
+    const ProfileState &, const ContentRegistry &, const RaidReloadRequest &);
+[[nodiscard]] std::vector<RaidReloadMagazineChoice> queryRaidReloadMagazines(
+    const ProfileState &, const ContentRegistry &, AssetInstanceId);
+[[nodiscard]] InventoryPlan queryRaidReloadStage(
+    const ProfileState &, const ContentRegistry &, const RaidReloadStageCommand &,
+    const RaidReloadWorldAccess &);
+[[nodiscard]] RaidReloadReceipt executeRaidReloadStage(
+    ProfileState &, const ContentRegistry &, const RaidReloadStageCommand &,
+    const CommandContext &, const RaidReloadWorldAccess &);
+[[nodiscard]] InventoryPlan queryRaidReloadCancel(
+    const ProfileState &, const ContentRegistry &, const RaidReloadCancelCommand &,
+    const RaidReloadWorldAccess &);
+[[nodiscard]] RaidReloadReceipt executeRaidReloadCancel(
+    ProfileState &, const ContentRegistry &, const RaidReloadCancelCommand &,
+    const CommandContext &, const RaidReloadWorldAccess &);
+[[nodiscard]] InventoryReceipt pickupDroppedMagazine(
+    ProfileState &, const ContentRegistry &, AssetInstanceId,
+    const CommandContext &, const RaidReloadWorldAccess &);
+[[nodiscard]] ProfileValidationResult resolveRetainedRaidMagazinesInCandidate(
+    ProfileState &, const ContentRegistry &, AssetInstanceId,
+    bool raidCarriedDestination);
+[[nodiscard]] ProfileValidationResult retainRaidReloadMagazinesForLossInCandidate(
+    ProfileState &, const ContentRegistry &, std::string_view raidId);
+[[nodiscard]] ProfileValidationResult validateRaidMagazineLocations(
+    const ProfileState &, const ContentRegistry &);
+[[nodiscard]] ProfileValidationResult validateBaseMagazineRecovery(
+    const ProfileState &, const ContentRegistry &);
+[[nodiscard]] RaidReloadReceipt recoverBaseReloadInCandidate(
+    ProfileState &, const ContentRegistry &, const RaidReloadWorldAccess &);

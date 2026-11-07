@@ -30,6 +30,15 @@ void begin(GameFlow &flow) {
       << flow.gameSession().persistenceMessage();
 }
 
+// Terminal writes are queued by simulation/UI calls. These integration
+// fixtures explicitly await the existing quit/checkpoint durability barrier.
+void abandonAndAwait(GameFlow &flow) {
+  static_cast<void>(flow.gameSession().abandonBaseRealtimeDefense());
+  ASSERT_TRUE(flow.gameSession().checkpointWorldClock())
+      << flow.gameSession().persistenceMessage();
+  ASSERT_FALSE(flow.gameSession().baseDefenseActive());
+}
+
 AssetInstanceId assetFor(const ProfileState &profile,
                          const ItemDefinitionId &definition) {
   const auto found =
@@ -153,6 +162,9 @@ void checkTerminalRecovery(BaseDefenseEndReason reason, bool failFirstWrite) {
   EXPECT_FALSE(resumed.baseWorld().shotFiredLastUpdate());
 
   if (failFirstWrite) {
+    // Wait for the deliberately failed worker write before observing failure;
+    // advancing a simulation frame no longer performs synchronous disk I/O.
+    EXPECT_FALSE(resumed.gameSession().checkpointWorldClock());
     EXPECT_TRUE(resumed.gameSession().baseDefenseActive());
     EXPECT_TRUE(resumed.gameSession().baseDefenseSaveBlocked());
     EXPECT_EQ(resumed.gameSession().profile().revision, previousRevision);
@@ -171,9 +183,10 @@ void checkTerminalRecovery(BaseDefenseEndReason reason, bool failFirstWrite) {
     EXPECT_EQ(stillDurable.profile->activeBaseDefense->eventId, event);
     EXPECT_EQ(assetsJson(*stillDurable.profile), expectedAssets);
     ASSERT_TRUE(std::filesystem::remove(temporaryObstruction));
-    ASSERT_TRUE(resumed.gameSession().retryBaseDefenseSave())
-        << resumed.gameSession().persistenceMessage();
+    static_cast<void>(resumed.gameSession().retryBaseDefenseSave());
   }
+  ASSERT_TRUE(resumed.gameSession().checkpointWorldClock())
+      << resumed.gameSession().persistenceMessage();
 
   EXPECT_FALSE(resumed.gameSession().baseDefenseActive());
   EXPECT_FALSE(resumed.gameSession().baseDefenseSaveBlocked());
@@ -243,6 +256,7 @@ TEST(BaseDefenseSessionTest,
             .succeeded);
     ASSERT_TRUE(session.triggerDeveloperBaseSiegeWarning());
     ASSERT_TRUE(session.startBaseRealtimeDefense(flow.baseWorld()));
+    flow.updateBase({}, 0.0F); // Release the activity-transition trigger latch.
     unsigned shots = 0;
     for (unsigned frame = 0; frame < 3000 && session.baseDefenseActive();
          ++frame) {
@@ -379,6 +393,7 @@ TEST(BaseDefenseSessionTest, SameProcessAndFreshLoadPreserveOwnFlightAndWeaponCo
       InstallMagazineAndChamberCommand{rifle, magazine}, "install").succeeded);
   ASSERT_TRUE(session.triggerDeveloperBaseSiegeWarning());
   ASSERT_TRUE(session.startBaseRealtimeDefense(flow.baseWorld()));
+  flow.updateBase({}, 0.0F); // Release before the separately pressed shot.
   BaseInput fire;
   fire.firePressed = fire.fireJustPressed = true;
   const auto position = flow.baseWorld().playerPosition();
@@ -575,8 +590,8 @@ TEST(BaseDefenseSessionTest,
   const auto firstId = first.gameSession().profile().activeBaseDefense->eventId;
   const auto firstSequence =
       first.gameSession().profile().activeBaseDefense->siegeSequence;
-  ASSERT_TRUE(first.gameSession().abandonBaseRealtimeDefense())
-      << first.gameSession().persistenceMessage();
+  abandonAndAwait(first);
+  ASSERT_FALSE(first.gameSession().baseDefenseActive());
   EXPECT_EQ(first.gameSession().profile().baseSiege.lastResolvedSequence,
             firstSequence);
   const auto firstResult =
@@ -603,8 +618,8 @@ TEST(BaseDefenseSessionTest,
   const auto secondId =
       second.gameSession().profile().activeBaseDefense->eventId;
   EXPECT_NE(firstId, secondId);
-  ASSERT_TRUE(second.gameSession().abandonBaseRealtimeDefense())
-      << second.gameSession().persistenceMessage();
+  abandonAndAwait(second);
+  ASSERT_FALSE(second.gameSession().baseDefenseActive());
   EXPECT_EQ(second.gameSession().profile().baseSiege.lastResolvedSequence,
             secondSequence);
   EXPECT_EQ(second.gameSession().profile().baseSiege.lastOutcome,

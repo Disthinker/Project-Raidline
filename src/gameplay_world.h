@@ -22,6 +22,7 @@
 #include "particle_system.h"
 #include "player.h"
 #include "player_damage_observation.h"
+#include "grenade_explosion_plan.h"
 #include "logical_ballistics.h"
 #include "raid_session.h"
 #include "raid_map_generation.h"
@@ -183,27 +184,14 @@ struct RaidOutdoorPresentationProjection
     std::uint64_t cacheRevision{};
 };
 
-struct GrenadeEnemyDamage
-{
-    CombatTargetId id{};
-    Vec2 position{};
-    int health{};
-    std::optional<EnemyArmorState> armor;
-    CombatDamageResolution damage;
-};
-struct GrenadeExplosionPlan
-{
-    GrenadeExplosion explosion;
-    std::vector<GrenadeEnemyDamage> enemies;
-    std::optional<CombatDamageCommand> playerDamage;
-    Vec2 playerPosition{};
-    int playerHealth{};
-};
-
 class GameplayWorld
 {
     friend struct NoiseDecoyTestAccess;
 public:
+    [[nodiscard]] Vec2 playerWorldSize() const noexcept { return activeWorldSize(); }
+    struct TrainingCorpseDeathFact { CombatTargetId id{}; Vec2 center{},size{}; };
+    [[nodiscard]] const std::vector<TrainingCorpseDeathFact> &trainingCorpseDeaths() const noexcept { return trainingCorpseDeaths_; }
+    void acknowledgeTrainingCorpseDeaths() noexcept { trainingCorpseDeaths_.clear(); }
     GameplayWorld();
     [[nodiscard]] bool resetDeveloperRangeEnemies(const EnemyCombatDefinition &definition,
         std::size_t pad, std::size_t count);
@@ -250,7 +238,9 @@ public:
     void update(
         const GameplayInput &input,
         float deltaTime,
-        const std::function<bool()> &commitGrenade = {});
+        const std::function<bool()> &commitGrenade = {},
+        const std::function<bool()> &beforeSpaceTransition = {},
+        bool portalInteractionRequested = false);
 
     [[nodiscard]]
     const Player &player() const;
@@ -600,6 +590,7 @@ private:
     CombatTargetId nextCombatTargetId_{1};
     EnemyRoster<EnemyAttachedState> enemies_;
     std::map<CombatTargetId, RaidCorpseDeathFact> corpseSources_;
+    std::vector<TrainingCorpseDeathFact> trainingCorpseDeaths_;
     std::vector<RaidCorpseDeathFact> pendingCorpseDeaths_;
     std::size_t initialOutdoorEnemyCount_{};
     std::vector<BallisticBlocker> ballisticBlockers_;
@@ -745,6 +736,7 @@ private:
 
     [[nodiscard]] float worldWidth() const noexcept;
     [[nodiscard]] float worldHeight() const noexcept;
+    friend struct WeaponHandlingTestAccess;
     [[nodiscard]] Vec2 activeWorldSize() const noexcept;
     [[nodiscard]] EnemyRoster<EnemyAttachedState> &activeEnemies() noexcept;
     [[nodiscard]] const EnemyRoster<EnemyAttachedState> &activeEnemies() const noexcept;
@@ -762,7 +754,8 @@ private:
         std::span<const Enemy> enemies);
     [[nodiscard]] std::size_t outdoorAliveEnemyCount() const noexcept;
     [[nodiscard]] bool tryTransitionRaidSpace(
-        const GameplayInput &input) noexcept;
+        const GameplayInput &input,
+        const std::function<bool()> &beforeSpaceTransition);
     void clearSpatialTransientPresentation() noexcept;
 
     void updateHighRiskPressure(float highRiskDeltaTime);

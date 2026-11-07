@@ -43,6 +43,15 @@ void GameSession::finishBaseDailyFrame() {
 bool GameSession::checkpointBaseDaily(bool wait) {
   if (baseDefenseActive() || alphaRaidActive_ || profile_.pendingRaid)
     return false;
+  if (profileUiSaveOwnsWriter()) {
+    if (!wait) return true;
+    if (!baseDailyWriter_) return false;
+    const auto saved = baseDailyWriter_->flush();
+    updateInventoryPersistence(0);
+    return saved.succeeded && !profileUiCommitPending();
+  }
+  if (wait && inventoryPersistencePending())
+    worldClockDirty_ = true;
   if (!worldClockDirty_ && !baseDailyWriter_)
     return true;
   if (wait && !saveRepository_) {
@@ -61,8 +70,16 @@ bool GameSession::checkpointBaseDaily(bool wait) {
       // One coherent copy contains ammunition, injuries, death tombstones
       // and surviving positions. JSON/validation/atomic replacement run
       // only on the worker; it never observes the live Profile or World.
-      static_cast<void>(baseDailyWriter_->request(
-          profile_, publishedContentRegistry().contentVersion()));
+      try {
+        const auto candidate = inventoryCheckpointCandidate(profile_);
+        const auto generation = baseDailyWriter_->request(
+            candidate, publishedContentRegistry().contentVersion());
+        noteInventoryCheckpointRequested(generation, false);
+      } catch (const std::exception &error) {
+        baseDailySaveBlocked_ = true;
+        persistenceMessage_ = error.what();
+        return false;
+      }
     }
     worldClockDirty_ = false; // queued, NOT a claim of durable completion
     worldClockCheckpointElapsedSeconds_ = 0.0F;
@@ -70,6 +87,7 @@ bool GameSession::checkpointBaseDaily(bool wait) {
   }
   if (wait && baseDailyWriter_) {
     const auto saved = baseDailyWriter_->flush();
+    updateInventoryPersistence(0);
     baseDailySaveBlocked_ = !saved.succeeded;
     persistenceMessage_ =
         saved.succeeded ? saved.message : "BASE SAVE PROTECTION PAUSED | RETRY";
@@ -92,8 +110,24 @@ bool GameSession::retryBaseDailySave() {
 }
 
 bool GameSession::drainBaseDailyCheckpoint() {
+  if (baseDailyWriter_ && (alphaRaidActive_ || profile_.pendingRaid)) {
+    // A Raid rescue/settlement may have used this same bounded writer. Drain
+    // that accepted candidate without requesting a forbidden live-Raid save.
+    if (profileUiCommitPending()) return false;
+    const auto saved = baseDailyWriter_->flush();
+    updateInventoryPersistence(0);
+    if (!saved.succeeded) {
+      baseDailySaveBlocked_ = true;
+      persistenceMessage_ = saved.message;
+      return false;
+    }
+    baseDailyWriter_.reset();
+    baseDailyCheckpointElapsed_ = 0.0F;
+    baseDailySaveBlocked_ = false;
+    return true;
+  }
   if (!baseDailyWriter_ &&
-      (!worldClockDirty_ || baseDefenseActive() || alphaRaidActive_))
+      ((!worldClockDirty_ && !inventoryPersistencePending()) || baseDefenseActive() || alphaRaidActive_))
     return true;
   if (!checkpointBaseDaily(true))
     return false;

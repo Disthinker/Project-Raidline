@@ -142,22 +142,28 @@ TEST(HomeFoundingTest,
       ("raidline-founding-" +
        std::to_string(
            std::chrono::steady_clock::now().time_since_epoch().count()));
-  GameFlow flow;
-  flow.configurePersistence(dir);
-  ASSERT_TRUE(flow.startNewGame("flow-found", true));
-  EXPECT_TRUE(flow.baseWorld().surveying());
-  EXPECT_TRUE(flow.baseWorld().canAccessStash());
-  const auto before = profileStateFingerprint(flow.gameSession().profile());
-  for (int i = 0; i < 100; ++i) {
-    flow.updateBase({}, 0.1F);
-    flow.gameSession().advanceBaseWorldClock(1.0F);
+  {
+    GameFlow flow;
+    flow.configurePersistence(dir);
+    ASSERT_TRUE(flow.startNewGame("flow-found", true));
+    EXPECT_TRUE(flow.baseWorld().surveying());
+    EXPECT_TRUE(flow.baseWorld().canAccessStash());
+    // Establish the new body/effect DTO before measuring survey clock inactivity.
+    flow.updateBase({},0);
+    const auto before = profileStateFingerprint(flow.gameSession().profile());
+    for (int i = 0; i < 100; ++i) {
+      flow.updateBase({}, 0.1F);
+      flow.gameSession().advanceBaseWorldClock(1.0F);
+    }
+    EXPECT_EQ(profileStateFingerprint(flow.gameSession().profile()), before);
+  } // Join the checkpoint writer before another flow owns this directory.
+  {
+    GameFlow reload;
+    reload.configurePersistence(dir);
+    ASSERT_TRUE(reload.continueGame());
+    EXPECT_TRUE(reload.baseWorld().surveying());
+    EXPECT_TRUE(reload.baseWorld().perimeterEnemies().empty());
   }
-  EXPECT_EQ(profileStateFingerprint(flow.gameSession().profile()), before);
-  GameFlow reload;
-  reload.configurePersistence(dir);
-  ASSERT_TRUE(reload.continueGame());
-  EXPECT_TRUE(reload.baseWorld().surveying());
-  EXPECT_TRUE(reload.baseWorld().perimeterEnemies().empty());
   std::filesystem::remove_all(dir);
 }
 

@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "test_temp_directory.h"
 #include "alpha_content_ids.h"
 #include "weapon_component_domain.h"
@@ -11,6 +12,7 @@
 #include <SDL3_image/SDL_image.h>
 
 struct UiBaseSupplyTestAccess {
+    static void bindWindow(App &a,SDL_Window *window){a.window_=window;}
     static auto &flow(App &a) { return a.gameFlow_; }
     static auto &session(App &a) { return a.gameSession_; }
     static auto &state(App &a) { return a.supplyUi_; }
@@ -18,7 +20,12 @@ struct UiBaseSupplyTestAccess {
     static void message(App &a, std::string s) { a.uiMessage_=std::move(s); }
     static auto &text(App &a) { return a.uiTextRenderer_; }
     static bool components(App &a) { return a.weaponComponentsOpen_; }
-    static void frame(App &a) { a.processEvents(); a.update(0); a.input_.endFrame(); }
+    static void settle(App &a) {
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+            [&] { return a.profileUiBusy() || static_cast<bool>(a.pendingInventoryBarrierAction_); },
+            [&] { a.processEvents(); a.update(0); a.syncRaidPointerCapture(); a.pendingRelativeAimMotion_={}; a.input_.endFrame(); })) << a.gameSession_.persistenceMessage();
+    }
+    static void frame(App &a) { a.processEvents(); a.update(0); a.syncRaidPointerCapture(); a.pendingRelativeAimMotion_={}; a.input_.endFrame(); settle(a); }
     static void render(App &a) { a.renderBaseSupply(); }
     static void attach(App &a, SDL_Renderer *r, float scale) {
         a.renderer_=r; ASSERT_TRUE(a.uiTextRenderer_.initialize(r)); a.uiTextRenderer_.setRasterScale(scale);
@@ -45,19 +52,22 @@ void key(SDL_Scancode code,bool down) {
 class UiBaseSupplyTest:public testing::Test {
 protected:
     raidline::test::TemporaryDirectory saveDirectory;
-    std::unique_ptr<App> app; SDL_Surface *surface{}; SDL_Renderer *renderer{}; std::filesystem::path path;
+    std::unique_ptr<App> app; SDL_Window *window{}; SDL_Surface *surface{}; SDL_Renderer *renderer{}; std::filesystem::path path;
     const ContentRegistry &content=publishedContentRegistry();
     auto &session() {return A::session(*app);}
     ProfileState &profile() {return const_cast<ProfileState &>(session().profile());}
     void SetUp() override {
-        ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
+        ASSERT_TRUE(SDL_SetHint(SDL_HINT_VIDEO_DRIVER,"dummy"));
+        ASSERT_TRUE(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS));
+        window=SDL_CreateWindow("headless UI capture regression",1280,720,SDL_WINDOW_HIDDEN);
+        ASSERT_NE(window,nullptr);
         ASSERT_NO_THROW(saveDirectory.claim("raidline-supply-ui-",
             testing::UnitTest::GetInstance()->current_test_info()->name()));
         path = saveDirectory.path();
         auto p=makeNewPublishedProfile("supply-ui",content);p.currency=100000;p.tutorial=TutorialProgress::Complete;p.homeFounding.hintsDismissed=true;
         ASSERT_TRUE(SaveRepository(path).save(p,content.contentVersion()).succeeded);
-        app=std::make_unique<App>();A::flow(*app).configurePersistence(path);ASSERT_TRUE(A::flow(*app).continueGame());
-        A::frame(*app);ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Supply));
+        app=std::make_unique<App>();A::bindWindow(*app,window);A::flow(*app).configurePersistence(path);ASSERT_TRUE(A::flow(*app).continueGame());
+        A::frame(*app);ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Supply));A::frame(*app);
         attach(1280,720);
     }
     void attach(int w,int h) {
@@ -67,7 +77,7 @@ protected:
     }
     void detach() {if(app)A::detach(*app);SDL_DestroyRenderer(renderer);SDL_DestroySurface(surface);renderer=nullptr;surface=nullptr;}
     void TearDown() override {
-        detach();app.reset();SDL_Quit();
+        detach();if(app)A::bindWindow(*app,nullptr);SDL_DestroyWindow(window);window=nullptr;app.reset();SDL_Quit();
         ASSERT_NO_THROW(saveDirectory.cleanup());
     }
     void click(SDL_FRect box) {const auto p=center(box);pointer(p,true);pointer(p,false);A::frame(*app);}
@@ -78,8 +88,9 @@ protected:
         const auto list=rows();const auto it=std::find_if(list.begin(),list.end(),[&](const auto &r){return r.key.definitionId==definition && (!id || r.key.instanceId==id);});
         ASSERT_NE(it,list.end());const auto index=static_cast<std::size_t>(it-list.begin());
         const auto page=index/8;
-        while(A::state(*app).currentPage()<page)control(Control::Next);
-        while(A::state(*app).currentPage()>page)control(Control::Previous);
+        for(std::size_t moves=0;A::state(*app).currentPage()!=page && moves<=uiBaseSupplyPageCount(list.size());++moves)
+            control(A::state(*app).currentPage()<page?Control::Next:Control::Previous);
+        ASSERT_EQ(A::state(*app).currentPage(),page);
         click(uiBaseSupplyRowRect(index%8));ASSERT_EQ(A::state(*app).selection,it->key);
     }
     AssetInstanceId create(const ItemDefinitionId &id,std::uint32_t quantity=1) {
@@ -151,12 +162,12 @@ TEST_F(UiBaseSupplyTest, TabsKeepIndependentPagesAndClearSelections) {
     tab(Tab::Purchase);EXPECT_EQ(A::state(*app).currentPage(),1);EXPECT_FALSE(A::state(*app).selection);
 }
 TEST_F(UiBaseSupplyTest, CloseAndReopenResetsPagesAndIgnoresOldRelease) {
-    select(alpha_content::ammunition);const auto before=profileStateFingerprint(profile());
+    select(alpha_content::ammunition);const auto beforeProfile=profile();const auto before=profileStateFingerprint(profile());
     pointer(center(uiBaseSupplyControlRect(Control::Main)),true);A::frame(*app);
     key(SDL_SCANCODE_ESCAPE,true);A::frame(*app);key(SDL_SCANCODE_ESCAPE,false);A::frame(*app);
-    EXPECT_FALSE(A::flow(*app).activeBaseFacility());ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Supply));
+    EXPECT_FALSE(A::flow(*app).activeBaseFacility());ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Supply));A::frame(*app);
     pointer(center(uiBaseSupplyControlRect(Control::Main)),false);A::frame(*app);
-    EXPECT_EQ(A::state(*app).currentPage(),0);EXPECT_FALSE(A::state(*app).selection);EXPECT_EQ(profileStateFingerprint(profile()),before);
+    EXPECT_EQ(A::state(*app).currentPage(),0);EXPECT_FALSE(A::state(*app).selection);EXPECT_EQ(profileStateFingerprint(profile()),before) << raidline::test::describeUiProfileChange(beforeProfile,profile());
 }
 TEST_F(UiBaseSupplyTest, FocusLossDisarmsPurchase) {
     select(alpha_content::ammunition);const auto before=profileStateFingerprint(profile());pointer(center(uiBaseSupplyControlRect(Control::Main)),true);A::frame(*app);

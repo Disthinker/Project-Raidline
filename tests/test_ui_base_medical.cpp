@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "test_temp_directory.h"
 #include "alpha_content_ids.h"
 #include <algorithm>
@@ -9,6 +10,7 @@
 #include <SDL3_image/SDL_image.h>
 
 struct UiBaseMedicalTestAccess {
+    static void bindWindow(App &a,SDL_Window *window){a.window_=window;}
     static auto &flow(App &a) { return a.gameFlow_; }
     static auto &session(App &a) { return a.gameSession_; }
     static auto &state(App &a) { return a.medicalUi_; }
@@ -16,7 +18,12 @@ struct UiBaseMedicalTestAccess {
     static auto &text(App &a) { return a.uiTextRenderer_; }
     static auto &message(App &a) { return a.medicalFeedback_; }
     static auto generation(App &a) { return a.medicalProjectionGeneration_; }
-    static void frame(App &a, float dt = 0) { a.processEvents(); a.update(dt); a.input_.endFrame(); }
+    static void settle(App &a) {
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+            [&] { return a.profileUiBusy() || static_cast<bool>(a.pendingInventoryBarrierAction_); },
+            [&] { a.processEvents(); a.update(0); a.syncRaidPointerCapture(); a.pendingRelativeAimMotion_={}; a.input_.endFrame(); })) << a.gameSession_.persistenceMessage();
+    }
+    static void frame(App &a, float dt = 0) { a.processEvents(); a.update(dt); a.syncRaidPointerCapture(); a.pendingRelativeAimMotion_={}; a.input_.endFrame(); settle(a); }
     static void draw(App &a) { a.renderBaseMedicalService(); }
     static void legacy(App &a, Vec2 p) { a.handleBasePointerClick({{p.x, p.y}}); }
     static void attach(App &a, SDL_Renderer *r, float scale) {
@@ -24,7 +31,7 @@ struct UiBaseMedicalTestAccess {
     }
     static void detach(App &a) { a.uiTextRenderer_.shutdown(); a.renderer_ = nullptr; }
     static void close(App &a) { a.gameFlow_.closeBaseFacility(); a.resetBaseMedicalUi(); }
-    static void directEvent(App &a, UiBaseMedicalEvent e) { a.handleBaseMedicalEvent(e); }
+    static void directEvent(App &a, UiBaseMedicalEvent e) { a.handleBaseMedicalEvent(e);  settle(a); }
     static void pause(App &a) { a.pauseMenu_.open(); }
     static void resume(App &a) { a.pauseMenu_.close(); }
     static void refresh(App &a) { a.refreshBaseMedicalUi(true); a.medicalFeedback_.clear(); }
@@ -47,13 +54,16 @@ void key(SDL_Scancode code) {
 class UiBaseMedicalTest : public testing::Test {
 protected:
     raidline::test::TemporaryDirectory saveDirectory;
-    std::unique_ptr<App> app;
+    std::unique_ptr<App> app; SDL_Window *window{};
     SDL_Surface *surface{}; SDL_Renderer *renderer{};
     std::filesystem::path path;
     const ContentRegistry &content = publishedContentRegistry();
     ProfileState &profile() { return const_cast<ProfileState &>(A::session(*app).profile()); }
     void SetUp() override {
-        ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
+        ASSERT_TRUE(SDL_SetHint(SDL_HINT_VIDEO_DRIVER,"dummy"));
+        ASSERT_TRUE(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS));
+        window=SDL_CreateWindow("headless UI capture regression",1280,720,SDL_WINDOW_HIDDEN);
+        ASSERT_NE(window,nullptr);
         ASSERT_NO_THROW(saveDirectory.claim("raidline-medical-ui-",
             testing::UnitTest::GetInstance()->current_test_info()->name()));
         path = saveDirectory.path();
@@ -63,8 +73,8 @@ protected:
         p.basePopulation.injuredResidents = 1;
         p.basePopulation.injuredByProfession[baseProfessionIndex(BaseResidentProfession::General)] = 1;
         ASSERT_TRUE(SaveRepository(path).save(p, content.contentVersion()).succeeded);
-        app = std::make_unique<App>(); A::flow(*app).configurePersistence(path); ASSERT_TRUE(A::flow(*app).continueGame());
-        A::frame(*app); ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Medical));
+        app = std::make_unique<App>();A::bindWindow(*app,window); A::flow(*app).configurePersistence(path); ASSERT_TRUE(A::flow(*app).continueGame());
+        A::frame(*app); ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Medical));A::frame(*app);
         attach(1280, 720);
     }
     void attach(int width, int height) {
@@ -77,7 +87,7 @@ protected:
         if (app) A::detach(*app); SDL_DestroyRenderer(renderer); SDL_DestroySurface(surface); renderer = nullptr; surface = nullptr;
     }
     void TearDown() override {
-        detach(); app.reset(); SDL_Quit();
+        detach(); if(app)A::bindWindow(*app,nullptr);SDL_DestroyWindow(window);window=nullptr;app.reset(); SDL_Quit();
         ASSERT_NO_THROW(saveDirectory.cleanup());
     }
     void control(Control c) { auto point = center(uiBaseMedicalControlRect(c)); pointer(point, true); pointer(point, false); A::frame(*app); }
@@ -130,7 +140,7 @@ TEST_F(UiBaseMedicalTest, ClosingAndReloadingActiveTreatmentKeepsItsWorldTimeAnd
     supplies(); control(Control::Residents); control(Control::Main); const auto job = *profile().residentMedical.activeTreatment;
     control(Control::Close); ASSERT_FALSE(A::flow(*app).activeBaseFacility());
     ASSERT_TRUE(A::flow(*app).returnToMainMenu()); A::frame(*app);
-    ASSERT_TRUE(A::flow(*app).continueGame()); ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Medical));
+    ASSERT_TRUE(A::flow(*app).continueGame()); ASSERT_TRUE(A::flow(*app).openBaseFacilityForManagement(BaseFacilityKind::Medical));A::frame(*app);
     control(Control::Residents); EXPECT_EQ(profile().residentMedical.activeTreatment->jobId, job.jobId);
     EXPECT_EQ(A::projection(*app).population.remainingMinutes, job.completionWorldMinute - profile().worldClock.elapsedWorldMinutes);
     ASSERT_TRUE(A::session(*app).executeBaseRest(12, "medical-ui-rest").succeeded);
@@ -172,10 +182,10 @@ TEST_F(UiBaseMedicalTest, StaffingAndUpgradeKeepOriginalCommands) {
     control(Control::Upgrade); EXPECT_FALSE(profile().baseConstruction.activeProject);
 }
 TEST_F(UiBaseMedicalTest, EscapeTabWheelAndDragOutCancelUnfinishedPresses) {
-    const auto fp = profileStateFingerprint(profile()); down(); wheel(center(uiBaseMedicalDetailsRect())); up(); EXPECT_EQ(profileStateFingerprint(profile()), fp);
-    down(); SDL_Event e{}; e.type = SDL_EVENT_MOUSE_MOTION; e.motion.x = 20; e.motion.y = 20; ASSERT_TRUE(SDL_PushEvent(&e)); A::frame(*app); up(); EXPECT_EQ(profileStateFingerprint(profile()), fp);
-    down(); control(Control::Residents); up(); EXPECT_EQ(profileStateFingerprint(profile()), fp);
-    control(Control::Personal); down(); key(SDL_SCANCODE_ESCAPE); A::frame(*app); up(); EXPECT_EQ(profileStateFingerprint(profile()), fp);
+    const auto beforeProfile=profile();const auto fp = profileStateFingerprint(profile()); down(); wheel(center(uiBaseMedicalDetailsRect())); up(); EXPECT_EQ(profileStateFingerprint(profile()), fp) << raidline::test::describeUiProfileChange(beforeProfile,profile());
+    down(); SDL_Event e{}; e.type = SDL_EVENT_MOUSE_MOTION; e.motion.x = 20; e.motion.y = 20; ASSERT_TRUE(SDL_PushEvent(&e)); A::frame(*app); up(); EXPECT_EQ(profileStateFingerprint(profile()), fp) << raidline::test::describeUiProfileChange(beforeProfile,profile());
+    down(); control(Control::Residents); up(); EXPECT_EQ(profileStateFingerprint(profile()), fp) << raidline::test::describeUiProfileChange(beforeProfile,profile());
+    control(Control::Personal); down(); key(SDL_SCANCODE_ESCAPE); A::frame(*app); up(); EXPECT_EQ(profileStateFingerprint(profile()), fp) << raidline::test::describeUiProfileChange(beforeProfile,profile());
     EXPECT_FALSE(A::flow(*app).activeBaseFacility());
 }
 TEST_F(UiBaseMedicalTest, FocusLossPauseAndResizeCannotResumeOldPress) {

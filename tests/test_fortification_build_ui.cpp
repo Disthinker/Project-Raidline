@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_app_persistence_wait.h"
 #include "ui_localization.h"
 #include <gtest/gtest.h>
 #include <chrono>
@@ -10,7 +11,9 @@ struct FortificationBuildUiTestAccess {
     static GameFlow &flow(App &a) { return a.gameFlow_; }
     static auto &ui(App &a) { return a.fortificationBuildUi_; }
     static bool open(App &a) { return a.baseConstructionPanelOpen_; }
-    static void frame(App &a) { a.processEvents(); a.update(0); a.input_.endFrame(); }
+    static void frame(App &a) { a.processEvents(); a.update(0); a.input_.endFrame();  ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+       [&] { return a.profileUiBusy() || static_cast<bool>(a.pendingInventoryBarrierAction_); },
+       [&] { a.processEvents(); a.update(0); a.input_.endFrame(); })) << a.gameSession_.persistenceMessage(); }
     static Vec2 focus(App &a, Vec2 world, std::size_t zoom) {
         a.baseConstructionZoomIndex_ = zoom;
         a.baseBuildCamera_.activate(world, a.gameFlow_.baseWorld().worldSize(), a.baseBuildViewportWorldSize());

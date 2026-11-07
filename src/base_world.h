@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -18,6 +19,10 @@
 #include "vec2.h"
 #include "world_shooting_runtime.h"
 #include "world_melee_runtime.h"
+#include "raid_grenade_runtime.h"
+#include "raid_noise_decoy_runtime.h"
+#include "raid_visibility.h"
+#include "grenade_explosion_plan.h"
 
 enum class BaseFacilityKind
 {
@@ -91,7 +96,37 @@ public:
 
     [[nodiscard]] std::optional<BaseFacilityKind> update(
         const BaseInput &input,
-        float deltaTime);
+        float deltaTime,
+        const std::function<bool()> &commitGrenade = {});
+
+    [[nodiscard]] const RaidSpaceDefinitionId &activeSpaceId() const noexcept { return spaceId_; }
+    [[nodiscard]] bool playerControlled() const noexcept { return playerControlRemaining_ > 0; }
+    [[nodiscard]] float playerControlRemaining() const noexcept { return playerControlRemaining_; }
+    [[nodiscard]] float playerImpactSlowRemaining() const noexcept { return playerImpactSlowRemaining_; }
+    void applyPlayerControl(float seconds) noexcept;
+    void applyPlayerImpactSlow(float seconds) noexcept;
+    [[nodiscard]] bool restorePlayerBody(Vec2 position, Vec2 facing, float control, float slow,
+                                         bool preserveWeaponState = false) noexcept;
+    [[nodiscard]] const RaidVisibilityProjection &observation() const;
+    [[nodiscard]] RaidObservationKey observationKey() const;
+    [[nodiscard]] bool boundsObservable(Rect bounds) const;
+    [[nodiscard]] bool enemyObservable(CombatTargetId id) const;
+    void setDaylight(bool day) noexcept;
+    void setWeaponLight(std::uint64_t device, std::uint64_t battery,
+        float angle, float distance, float backgroundRadius) noexcept;
+    [[nodiscard]] float weaponLightBackgroundRadius() const noexcept { return lightBackgroundRadius_; }
+    [[nodiscard]] const std::array<RaidVisibilityProjection, 2> &weaponLightBackgroundObservations() const;
+    [[nodiscard]] const RaidNoiseDecoyRuntime &noiseDecoy() const noexcept { return noiseDecoy_; }
+    [[nodiscard]] const RaidGrenadeRuntime &grenade() const noexcept { return grenade_; }
+    [[nodiscard]] std::optional<NoiseDecoyLanding> previewNoiseDecoy(Vec2, const NoiseDecoyUseDefinition &) const;
+    [[nodiscard]] std::optional<GrenadeLanding> previewGrenade(Vec2, const GrenadeUseDefinition &) const;
+    void commitNoiseDecoy(RaidNoiseDecoyRuntime prepared) noexcept { noiseDecoy_ = std::move(prepared); }
+    void commitGrenade(RaidGrenadeRuntime prepared) noexcept { grenade_ = std::move(prepared); }
+    [[nodiscard]] std::optional<GrenadeExplosionPlan> prepareGrenadeExplosion(int playerHealth) const;
+    [[nodiscard]] bool validatePreparedGrenadeExplosion(const GrenadeExplosionPlan &) const;
+    [[nodiscard]] bool commitPreparedGrenadeExplosion(const GrenadeExplosionPlan &);
+    [[nodiscard]] const std::optional<GrenadeExplosion> &lastGrenadeExplosion() const noexcept { return lastGrenadeExplosion_; }
+    [[nodiscard]] bool grenadeExplodedLastUpdate() const noexcept { return grenadeExplodedLastUpdate_; }
 
     [[nodiscard]] Vec2 playerPosition() const noexcept;
     [[nodiscard]] Vec2 playerSize() const noexcept;
@@ -129,6 +164,7 @@ public:
     { return baseDefense_ ? baseDefense_->damageObservationLastUpdate() : std::nullopt; }
     [[nodiscard]] const std::vector<EnemyRemovalFact> &perimeterRemovalsLastUpdate() const noexcept
     { return perimeterRemovals_; }
+    [[nodiscard]] const std::vector<BaseEnemyDeathFact> &baseEnemyDeathsLastUpdate() const noexcept { return baseEnemyDeaths_; }
     [[nodiscard]] std::optional<BaseDefenseSnapshot> prepareBaseDefenseSnapshot(
         BaseDefenseSnapshot seedInputs, const EnemyCombatDefinition &enemyDefinition) const;
     [[nodiscard]] bool resumeBaseDefense(const BaseDefenseSnapshot &snapshot);
@@ -175,8 +211,10 @@ public:
 
     void resetAtRaidGate() noexcept;
     void resetAtMedicalPoint() noexcept;
+    [[nodiscard]] Vec2 medicalRespawnPosition() const noexcept;
 
 private:
+    friend class GameSession;
     friend struct EnemyLifecycleTestAccess;
     friend struct MeleeTestAccess;
     void rebuildSite(std::string_view siteDefinitionId);
@@ -185,6 +223,28 @@ private:
     std::uint64_t placementGeometryRevision_{};
 
     std::string siteDefinitionId_;
+    RaidSpaceDefinitionId spaceId_;
+    float playerControlRemaining_{}, playerImpactSlowRemaining_{};
+    RaidNoiseDecoyRuntime noiseDecoy_;
+    RaidGrenadeRuntime grenade_;
+    std::optional<GrenadeExplosion> lastGrenadeExplosion_;
+    bool grenadeExplodedLastUpdate_{};
+    float grenadeFlashSeconds_{};
+    bool daylight_{true};
+    std::uint64_t lightDevice_{}, lightBattery_{};
+    float lightAngle_{}, lightDistance_{}, lightBackgroundRadius_{};
+    Vec2 observationDirection_{-1, 0};
+    mutable RaidVisibilityProjection observationCache_;
+    mutable std::array<RaidVisibilityProjection, 2> lightBackgroundCache_;
+    mutable std::vector<std::pair<CombatTargetId, bool>> enemyObservationCache_;
+    [[nodiscard]] EnemyLifecycle &activeActors() noexcept;
+    [[nodiscard]] const EnemyLifecycle &activeActors() const noexcept;
+    void emitNoise(Vec2 source, float radius);
+    void advanceThrowables(float seconds);
+    [[nodiscard]] const RaidSpaceBlockerIndex &playerEffectsGeometry() const;
+    mutable std::optional<RaidSpaceBlockerIndex> playerEffectsIndex_;
+    mutable std::uint64_t playerEffectsGeometryKey_{};
+    mutable RaidVisibilityBoundsQuery observationBounds_;
     std::string plotId_;
     HomeRegionLayout layout_;
     Vec2 playerPosition_{};
@@ -207,6 +267,7 @@ private:
     std::vector<BallisticBlocker> dailyShotBlockers_;
     EnemyRoster<Vec2> perimeterEnemies_;
     std::vector<EnemyRemovalFact> perimeterRemovals_;
+    std::vector<BaseEnemyDeathFact> baseEnemyDeaths_;
     std::optional<std::uint64_t> perimeterCycleIndex_;
     std::optional<PlayerDamageObservation> perimeterDamageObservation_;
     float perimeterDamageProtectionRemainingSeconds_{};

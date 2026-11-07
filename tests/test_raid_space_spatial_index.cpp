@@ -6,6 +6,7 @@
 #include <limits>
 #include <vector>
 
+#include "gameplay_world.h"
 #include "raid_space_query.h"
 #include "raid_space_spatial_index.h"
 #include "raid_visibility.h"
@@ -675,5 +676,137 @@ TEST(RaidSpaceBlockerIndexTest, DirectMergeSingleLargeCellAndInvalidReuseKeepOri
             actual->queryCandidateIndices(query, output);
             EXPECT_EQ(output, direct_merge_reference::candidates(*old, query));
         }
+    }
+}
+
+TEST(RaidSpaceBlockerIndexTest, MovementSweepKeepsClosedEdgesAndOriginalOrder)
+{
+    const float pastEdge = std::nextafter(130.0F, std::numeric_limits<float>::infinity());
+    const std::vector<BallisticBlocker> blockers{
+        {1, {{130, 100}, {5, 25}}},
+        {2, {{63, 63}, {1, 1}}},
+        {3, {{110, 130}, {10, 1}}},
+        {4, {{pastEdge, 100}, {3, 4}}},
+        {5, {{16, 16}, {8, 8}}},
+        {6, {{70, 70}, {3, 3}}},
+        {7, {{100, pastEdge}, {3, 3}}}};
+    const auto index = RaidSpaceBlockerIndex::build({384, 384}, blockers, 64);
+    ASSERT_TRUE(index);
+    std::vector<std::size_t> broad, filtered{999};
+    index->queryCandidateIndices({{64, 64}, {66, 66}}, broad);
+    ASSERT_EQ(broad.size(), 7U);
+    const auto examined = index->querySmallMovementCandidateIndices(
+        {64, 64}, {130, 130}, filtered);
+    ASSERT_TRUE(examined);
+    EXPECT_EQ(*examined, broad.size());
+    EXPECT_EQ(filtered, (std::vector<std::size_t>{0, 1, 2, 5}));
+
+    // The broad window uses min + (max - min). That rounded right edge
+    // reaches the next cell, while the exact original sweep still does not.
+    const std::vector<BallisticBlocker> edgeWall{{1, {{128, 68}, {1, 1}}}};
+    const auto edgeIndex = RaidSpaceBlockerIndex::build({384, 384}, edgeWall, 128);
+    ASSERT_TRUE(edgeIndex);
+    const Vec2 minimum{-16777216.0F, 64};
+    const Vec2 maximum{127, 80};
+    edgeIndex->queryCandidateIndices(
+        {minimum, {maximum.x - minimum.x, maximum.y - minimum.y}}, broad);
+    ASSERT_EQ(broad, (std::vector<std::size_t>{0}));
+    const auto edgeExamined = edgeIndex->querySmallMovementCandidateIndices(
+        minimum, maximum, filtered);
+    ASSERT_TRUE(edgeExamined);
+    EXPECT_EQ(*edgeExamined, broad.size());
+    EXPECT_TRUE(filtered.empty());
+
+    const auto emptyExamined = edgeIndex->querySmallMovementCandidateIndices(
+        {280, 280}, {300, 300}, filtered);
+    ASSERT_TRUE(emptyExamined);
+    EXPECT_EQ(*emptyExamined, 0U);
+    EXPECT_TRUE(filtered.empty());
+}
+
+TEST(RaidSpaceBlockerIndexTest, MovementSweepKeepsExistingRangeAndCandidateLimits)
+{
+    for (const auto &[cellCount, blockerCount] :
+        {std::pair{1U, 256U}, std::pair{1U, 257U},
+         std::pair{8U, 256U}, std::pair{9U, 9U}})
+    {
+        SCOPED_TRACE(::testing::Message() << "cells=" << cellCount
+            << " blockers=" << blockerCount);
+        std::vector<BallisticBlocker> blockers;
+        std::vector<std::size_t> expected;
+        for (std::size_t n = 0; n < blockerCount; ++n)
+        {
+            const auto cell = cellCount - 1U - n % cellCount;
+            const float y = n % 2 == 0 ? 12.0F : 18.0F;
+            blockers.push_back({n + 1, {{static_cast<float>(cell) * 32 + 12, y}, {1, 1}}});
+            if (n % 2 == 0)
+            {
+                expected.push_back(n);
+            }
+        }
+        const auto index = RaidSpaceBlockerIndex::build({384, 96}, blockers, 32);
+        ASSERT_TRUE(index);
+        const Vec2 minimum{0, 12}, maximum{static_cast<float>(cellCount) * 32 - 1, 13};
+        std::vector<std::size_t> broad, filtered{999};
+        index->queryCandidateIndices(
+            {minimum, {maximum.x - minimum.x, maximum.y - minimum.y}}, broad);
+        ASSERT_EQ(broad.size(), blockerCount);
+        const auto examined = index->querySmallMovementCandidateIndices(minimum, maximum, filtered);
+        if (cellCount <= 8 && blockerCount <= 256)
+        {
+            ASSERT_TRUE(examined);
+            EXPECT_EQ(*examined, broad.size());
+            EXPECT_EQ(filtered, expected);
+        }
+        else
+        {
+            EXPECT_FALSE(examined);
+            EXPECT_EQ(filtered, (std::vector<std::size_t>{999}));
+        }
+
+        const float nan = std::numeric_limits<float>::quiet_NaN();
+        const float infinity = std::numeric_limits<float>::infinity();
+        const float largest = std::numeric_limits<float>::max();
+        const auto previous = filtered;
+        EXPECT_FALSE(index->querySmallMovementCandidateIndices({nan, 0}, {16, 16}, filtered));
+        EXPECT_FALSE(index->querySmallMovementCandidateIndices({0, 0}, {infinity, 16}, filtered));
+        EXPECT_FALSE(index->querySmallMovementCandidateIndices({4, 0}, {3, 16}, filtered));
+        EXPECT_FALSE(index->querySmallMovementCandidateIndices({-largest, 0}, {largest, 16}, filtered));
+        EXPECT_EQ(filtered, previous);
+    }
+}
+
+TEST(RaidSpaceBlockerIndexTest, PlayerSweepKeepsAxisOrderAndBroadWorkInSmallAndOverflowQueries)
+{
+    for (std::size_t distractors : {3U, 256U})
+    {
+        SCOPED_TRACE(::testing::Message() << "distractors=" << distractors);
+        RaidWorldConfig config;
+        config.worldSize = {384, 384};
+        config.playerSpawn = {80, 80};
+        config.extractionPoint = {{300, 300}, {30, 30}};
+        config.ballisticBlockers = {
+            {1, {{128, 80}, {4, 40}}},
+            {2, {{90, 130}, {44, 5}}}};
+        for (std::size_t n = 0; n < distractors; ++n)
+        {
+            config.ballisticBlockers.push_back({n + 3,
+                {{16.0F + static_cast<float>(n % 16), 16.0F + static_cast<float>(n / 16)},
+                 {0.5F, 0.5F}}});
+        }
+        GameplayWorld world{config};
+        world.update(GameplayInput{}, 0.0F);
+        EXPECT_EQ(world.player().position().x, 80.0F);
+        EXPECT_EQ(world.player().position().y, 80.0F);
+        EXPECT_EQ(world.simulationWorkloadLastUpdate().movementBlockersExamined,
+            config.ballisticBlockers.size());
+
+        GameplayInput move;
+        move.moveRight = move.moveDown = true;
+        world.update(move, 0.2F);
+        EXPECT_EQ(world.player().position().x, 96.0F);
+        EXPECT_EQ(world.player().position().y, 98.0F);
+        EXPECT_EQ(world.simulationWorkloadLastUpdate().movementBlockersExamined,
+            config.ballisticBlockers.size());
     }
 }

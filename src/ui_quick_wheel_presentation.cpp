@@ -1,6 +1,7 @@
 #include "ui_quick_wheel_presentation.h"
 #include "noise_decoy_domain.h"
 #include "grenade_domain.h"
+#include "weapon_ammo_domain.h"
 
 #include <algorithm>
 #include <cmath>
@@ -22,7 +23,14 @@ bool inWornRig(const ProfileState &p,const ContentRegistry &c,const AssetRecord 
         (d.noiseDecoyUse.has_value() || d.grenadeUse.has_value()) && a.quantity>0;
 }
 }
-std::vector<AssetInstanceId> quickWheelCandidates(const ProfileState &p,const ContentRegistry &c,UiQuickWheelKind kind) {
+std::vector<AssetInstanceId> quickWheelCandidates(const ProfileState &p,const ContentRegistry &c,UiQuickWheelKind kind,
+    std::optional<AssetInstanceId> weaponId) {
+    if(kind==UiQuickWheelKind::Magazine) {
+        std::vector<AssetInstanceId> result;
+        if(weaponId)for(const auto &choice:queryRaidReloadMagazines(p,c,*weaponId))
+            result.push_back(choice.magazineAssetId);
+        return result;
+    }
     std::map<ItemDefinitionId,AssetInstanceId> groups;
     for(const auto &[id,a]:p.assets.records())if(inWornRig(p,c,a,kind)) {
         auto [it,inserted]=groups.emplace(a.definitionId,id);
@@ -52,14 +60,33 @@ Vec2 moveQuickWheelPointer(Vec2 offset,Vec2 delta) noexcept {
 }
 std::vector<UiQuickWheelEntry> projectUiQuickWheel(
     const ProfileState &profile,const ContentRegistry &content,
-    const std::vector<AssetInstanceId> &ids,UiQuickWheelKind kind) {
+    const std::vector<AssetInstanceId> &ids,UiQuickWheelKind kind,
+    std::optional<AssetInstanceId> weaponId) {
     std::vector<UiQuickWheelEntry> result;
     std::set<ItemDefinitionId> seen;
+    const auto magazines=kind==UiQuickWheelKind::Magazine && weaponId ?
+        queryRaidReloadMagazines(profile,content,*weaponId):std::vector<RaidReloadMagazineChoice>{};
     for(const auto id:ids) {
         UiQuickWheelEntry entry{id,"ITEM NO LONGER AVAILABLE","","ITEM STATE CHANGED",false};
         if(const auto *asset=profile.assets.find(id)) {
-            if(!seen.insert(asset->definitionId).second)continue;
+            if(kind!=UiQuickWheelKind::Magazine && !seen.insert(asset->definitionId).second)continue;
             entry.definitionId=asset->definitionId;entry.name=content.item(asset->definitionId).displayName;
+            if(kind==UiQuickWheelKind::Magazine) {
+                const auto choice=std::find_if(magazines.begin(),magazines.end(),
+                    [id](const auto &value){return value.magazineAssetId==id;});
+                entry.quantity=1;
+                entry.remainingUses=magazineRoundCount(profile,id);
+                if(!asset->magazineRounds.empty())
+                    entry.mixedAmmunition=std::any_of(asset->magazineRounds.begin(),asset->magazineRounds.end(),
+                        [&](const auto &round){return round.definitionId!=asset->magazineRounds.front().definitionId;});
+                entry.usable=choice!=magazines.end() && choice->eligible;
+                const auto &definition=content.item(asset->definitionId);
+                entry.count=fmt::format("{} / {}",entry.remainingUses,
+                    definition.magazineCapacity);
+                entry.status=entry.usable?"READY TO RELOAD":"MAGAZINE INVENTORY CHANGED";
+                result.push_back(std::move(entry));
+                continue;
+            }
             for(const auto &[otherId,other]:profile.assets.records())
                 if(other.definitionId==asset->definitionId && inWornRig(profile,content,other,kind)) {
                     entry.quantity+=other.quantity;entry.remainingUses+=other.remainingCharges;
@@ -84,16 +111,17 @@ std::vector<UiQuickWheelEntry> projectUiQuickWheel(
 }
 bool UiQuickWheelProjection::refresh(
     const ProfileState &profile, const ContentRegistry &content,
-    const std::vector<AssetInstanceId> &ids, UiQuickWheelKind kind) {
+    const std::vector<AssetInstanceId> &ids, UiQuickWheelKind kind,
+    std::optional<AssetInstanceId> weaponId) {
     // These are precisely the mutable inputs of the existing medical query.
     // Countdown milliseconds do not change applicability and need no reprojection.
     if (valid_ && profileId_ == profile.profileId && revision_ == profile.revision &&
         health_ == profile.currentHealth && bleeding_ == profile.medicalStatus.bleeding &&
-        kind_ == kind && ids_ == ids) return false;
-    entries = projectUiQuickWheel(profile, content, ids, kind);
+        kind_ == kind && ids_ == ids && weaponId_ == weaponId) return false;
+    entries = projectUiQuickWheel(profile, content, ids, kind, weaponId);
     valid_ = true; profileId_ = profile.profileId; revision_ = profile.revision;
     health_ = profile.currentHealth; bleeding_ = profile.medicalStatus.bleeding;
-    kind_ = kind; ids_ = ids; ++generation;
+    kind_ = kind; ids_ = ids; weaponId_ = weaponId; ++generation;
     return true;
 }
 

@@ -253,3 +253,63 @@ IncomingDamageReceipt executeIncomingDamageInSimulation(ProfileState &profile,
     participants.receipt.revision = profile.revision;
     return participants.receipt;
 }
+
+IncomingDamageReceipt executeIncomingDamageForHomePerimeterCandidate(
+    ProfileState &privateCandidate, const ContentRegistry &content,
+    const IncomingDamageCommand &command, const CommandContext &context,
+    const RegionalBaseSiteDefinitionId &site)
+{
+    if (context.transactionId.empty())
+    {
+        return failure(DomainErrorCode::InvalidTransaction, "transaction ID must not be empty",
+                       privateCandidate.revision);
+    }
+    if (site.value().empty() || privateCandidate.pendingRaid ||
+        privateCandidate.activeBaseDefense || !privateCandidate.homePerimeter.activeOuting ||
+        privateCandidate.homePerimeter.activeOuting->baseSiteDefinitionId != site)
+    {
+        return failure(DomainErrorCode::IllegalDestination,
+                       "incoming perimeter damage requires the real site's active Base outing",
+                       privateCandidate.revision);
+    }
+    const auto validation = validateProfileState(privateCandidate, content);
+    if (!validation.valid)
+    {
+        return failure(DomainErrorCode::InvalidProfile, validation.message,
+                       privateCandidate.revision);
+    }
+    if (privateCandidate.committedTransactions.contains(context.transactionId))
+    {
+        return {true, true, DomainErrorCode::None, {}, privateCandidate.revision};
+    }
+    if (context.expectedRevision != privateCandidate.revision)
+    {
+        return failure(DomainErrorCode::StaleRevision, "profile revision is stale",
+                       privateCandidate.revision);
+    }
+    if (privateCandidate.revision == std::numeric_limits<ProfileRevision>::max())
+    {
+        return failure(DomainErrorCode::RevisionOverflow, "profile revision cannot advance",
+                       privateCandidate.revision);
+    }
+
+    DamageParticipants participants = inspect(privateCandidate, content, command);
+    if (!participants.receipt.succeeded)
+    {
+        return participants.receipt;
+    }
+    if (!validMedicalStatus(participants.medicalAfter))
+    {
+        return failure(DomainErrorCode::InvalidProfile,
+                       "incoming damage participant state is invalid", privateCandidate.revision);
+    }
+
+    // The service owns this private candidate and must close a lethal result
+    // with completeHomePerimeterOuting before its final full validation/save.
+    // Allocate first so a failed allocation cannot partially apply damage.
+    privateCandidate.committedTransactions.insert(context.transactionId);
+    commitDamageParticipants(privateCandidate, participants);
+    ++privateCandidate.revision;
+    participants.receipt.revision = privateCandidate.revision;
+    return participants.receipt;
+}

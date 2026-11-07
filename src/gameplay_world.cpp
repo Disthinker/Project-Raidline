@@ -129,34 +129,58 @@ namespace
         const float maximumY = std::max(
             currentPosition.y + actorSize.y,
             requestedPosition.y + actorSize.y);
-        blockerIndex.queryCandidateIndices(
-            Rect{
-                Vec2{minimumX, minimumY},
-                Vec2{maximumX - minimumX, maximumY - minimumY}},
-            queryScratch);
+        const bool stationary = currentPosition.x == requestedPosition.x &&
+            currentPosition.y == requestedPosition.y;
+        const auto finitePosition = [](Vec2 position)
+        {
+            return std::isfinite(position.x) && std::isfinite(position.y);
+        };
+        std::optional<std::size_t> broadCount;
+        if (!stationary && finitePosition(currentPosition) &&
+            finitePosition(requestedPosition) && finitePosition(actorSize) &&
+            actorSize.x > 0.0F && actorSize.y > 0.0F)
+        {
+            broadCount = blockerIndex.querySmallMovementCandidateIndices(
+                {minimumX, minimumY}, {maximumX, maximumY}, queryScratch);
+        }
+        if (!broadCount.has_value())
+        {
+            blockerIndex.queryCandidateIndices(
+                Rect{
+                    Vec2{minimumX, minimumY},
+                    Vec2{maximumX - minimumX, maximumY - minimumY}},
+                queryScratch);
+        }
         if (blockersExamined != nullptr)
         {
-            *blockersExamined += queryScratch.size();
+            *blockersExamined += broadCount.has_value() ? *broadCount : queryScratch.size();
         }
 
-        if(currentPosition.x==requestedPosition.x && currentPosition.y==requestedPosition.y)
+        if (stationary)
             return requestedPosition;
-        // Keep the original broad-phase work count and original wall order.
-        // Both axis solvers only clamp within this complete swept box, so a
-        // strictly disjoint wall cannot affect either result (including slides).
-        const auto candidates=queryScratch.size();
-        auto *const indices=queryScratch.data();
-        const auto allBounds=blockerIndex.allBlockerBounds();
-        const auto *const bounds=allBounds.data();
-        [[maybe_unused]] const auto boundCount=allBounds.size();
-        std::size_t kept{};
-        for(std::size_t i=0;i<candidates;++i) {
-            const auto id=indices[i];assert(id<boundCount);const auto &wall=bounds[id];
-            if(wall.position.x+wall.size.x<minimumX || wall.position.x>maximumX ||
-               wall.position.y+wall.size.y<minimumY || wall.position.y>maximumY)continue;
-            indices[kept++]=id;
+        const auto allBounds = blockerIndex.allBlockerBounds();
+        const auto *const bounds = allBounds.data();
+        if (!broadCount.has_value())
+        {
+            // General queries still use the original stable sweep filter.
+            const auto candidates = queryScratch.size();
+            auto *const indices = queryScratch.data();
+            [[maybe_unused]] const auto boundCount = allBounds.size();
+            std::size_t kept{};
+            for (std::size_t i = 0; i < candidates; ++i)
+            {
+                const auto id = indices[i];
+                assert(id < boundCount);
+                const auto &wall = bounds[id];
+                if (wall.position.x + wall.size.x < minimumX || wall.position.x > maximumX ||
+                    wall.position.y + wall.size.y < minimumY || wall.position.y > maximumY)
+                {
+                    continue;
+                }
+                indices[kept++] = id;
+            }
+            queryScratch.resize(kept);
         }
-        queryScratch.resize(kept);
 
         Rect resolvedBounds{currentPosition, actorSize};
         float resolvedX = requestedPosition.x;
@@ -300,8 +324,8 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
     }
     worldSize_ = config.worldSize;
     lightConeObservationEnabled_ = config.lightConeObservationEnabled;
-    noiseDecoyEnabled_ = config.noiseDecoyEnabled && !config.developerRange;
-    grenadeEnabled_ = config.grenadeEnabled && !config.developerRange;
+    noiseDecoyEnabled_ = config.noiseDecoyEnabled;
+    grenadeEnabled_ = config.grenadeEnabled;
     alphaRaidWorld_ = true;
     deferPlayerDamageResolution_ = config.deferPlayerDamageResolution;
     ballisticBlockers_ = std::move(config.ballisticBlockers);
@@ -1073,7 +1097,9 @@ void GameplayWorld::tryPickupOne()
 void GameplayWorld::update(
     const GameplayInput &input,
     float deltaTime,
-    const std::function<bool()> &commitGrenade)
+    const std::function<bool()> &commitGrenade,
+    const std::function<bool()> &beforeSpaceTransition,
+    bool portalInteractionRequested)
 {
     spaceTransitionedLastUpdate_ = false;
     grenadeExplodedLastUpdate_=false;
@@ -1120,7 +1146,14 @@ void GameplayWorld::update(
     {
         tacticalMap_.revealAround(explorationCenter);
     }
-    spaceTransitionedLastUpdate_ = tryTransitionRaidSpace(input);
+    if (portalInteractionRequested)
+    {
+        GameplayInput portalInput = input;
+        portalInput.interactJustPressed = true;
+        spaceTransitionedLastUpdate_ = tryTransitionRaidSpace(portalInput, beforeSpaceTransition);
+    }
+    else
+        spaceTransitionedLastUpdate_ = tryTransitionRaidSpace(input, beforeSpaceTransition);
 
     const Vec2 centerAfterMovement = playerCenter(player_);
     GameplayInput aimInput = input;
@@ -1272,13 +1305,16 @@ void GameplayWorld::update(
 
     struct EnemyNavigationIntent
     {
+        Rect boundsBeforeMovement{};
+        EnemyNavigationRuntime *navigation{};
         bool targetVisible{};
         bool refreshRequired{};
         bool allowUnawareNavigation{};
         std::optional<Vec2> reachableGoal;
     };
-    std::vector<EnemyNavigationIntent> navigationIntents(
-        activeEnemySet.size());
+    const auto enemyCount = activeEnemySet.size();
+    std::vector<EnemyNavigationIntent> navigationIntents(enemyCount);
+    auto *const intents = navigationIntents.data();
     for (std::size_t step{0U};
          step < enemySubsteps;
          ++step)
@@ -1291,22 +1327,30 @@ void GameplayWorld::update(
         }
         const Vec2 playerPosition =
             playerCenter(player_);
+        const Vec2 worldSize = activeWorldSize();
         std::vector<EnemySquadMemberSnapshot> enemySnapshots;
-        enemySnapshots.reserve(activeEnemySet.size());
+        enemySnapshots.reserve(enemyCount);
+        auto *nextIntent = intents;
         for (const Enemy &enemy : activeEnemySet)
         {
+            auto &intent = *nextIntent++;
+            intent = EnemyNavigationIntent{};
+            intent.boundsBeforeMovement = enemy.bounds();
+            const auto &bounds = intent.boundsBeforeMovement;
             enemySnapshots.push_back(
                 EnemySquadMemberSnapshot{
-                    enemyCenter(enemy),
+                    {bounds.position.x + bounds.size.x / 2.0F,
+                     bounds.position.y + bounds.size.y / 2.0F},
                     !enemy.isDead(),
                     enemy.awarenessState(),
                     enemy.attackPhase(),
                     enemy.hasAttackOpportunity(playerPosition)});
         }
 
+        const auto *const snapshots = enemySnapshots.data();
         EnemySquadDecisionMetrics squadMetrics;
         const std::vector<EnemyTacticalDirective> directives =
-            activeEnemies().squad().decide(
+            activeEnemySet.squad().decide(
                 enemySnapshots,
                 playerPosition,
                 &squadMetrics);
@@ -1327,26 +1371,27 @@ void GameplayWorld::update(
 
         std::size_t refreshRequiredCount{};
         for (std::size_t enemyIndex{};
-             enemyIndex < activeEnemySet.size();
+             enemyIndex < enemyCount;
              ++enemyIndex)
         {
-            EnemyNavigationIntent &intent = navigationIntents[enemyIndex];
-            intent = EnemyNavigationIntent{};
+            EnemyNavigationIntent &intent = intents[enemyIndex];
+            const auto &snapshot = snapshots[enemyIndex];
             Enemy &enemy = activeEnemySet[enemyIndex];
-            auto &attachedState = activeEnemySet.state(enemy.combatTargetId());
+            const auto targetId = enemy.combatTargetId();
+            auto &attachedState = activeEnemySet.state(targetId);
             EnemyNavigationRuntime &navigation =
                 attachedState.navigation;
             EnemyEncounterRuntime &encounter =
                 attachedState.encounter;
-            if (enemy.isDead())
+            if (!snapshot.alive)
             {
                 navigation = EnemyNavigationRuntime{};
                 continue;
             }
 
-            const Vec2 enemyPosition = enemyCenter(enemy);
-            const bool hasNoiseInvestigation=noiseDecoy_.investigations().contains(enemy.combatTargetId()) ||
-                grenadeInvestigations_.contains(enemy.combatTargetId());
+            const Vec2 enemyPosition = snapshot.position;
+            const bool hasNoiseInvestigation=noiseDecoy_.investigations().contains(targetId) ||
+                grenadeInvestigations_.contains(targetId);
             const bool investigatingNoise=(noiseDecoyEnabled_ || grenadeEnabled_) && hasNoiseInvestigation;
             const bool outsideAcquisition=distanceSquared(enemyPosition,playerPosition) >
                 enemy.acquireTargetDistance()*enemy.acquireTargetDistance();
@@ -1356,16 +1401,16 @@ void GameplayWorld::update(
             // pursuit keep their accepted visibility/lose-distance policy.
             const bool existingRouteNeedsSight=!investigatingNoise &&
                 (enemy.lastKnownTargetPosition().has_value() ||
-                 (enemy.awarenessState()==EnemyAwarenessState::Unaware &&
+                 (snapshot.awareness==EnemyAwarenessState::Unaware &&
                   ((encounter.kind==RaidEncounterKind::Patrol && !encounter.patrolPoints.empty()) ||
                    (encounter.kind==RaidEncounterKind::Guard && distanceSquared(enemyPosition,encounter.home)>64.0F*64.0F))));
             const bool skipNoiseSight=(noiseDecoyEnabled_ || grenadeEnabled_) && !existingRouteNeedsSight && outsideAcquisition &&
-                (enemy.awarenessState()==EnemyAwarenessState::Unaware ||
-                 (investigatingNoise && enemy.awarenessState()==EnemyAwarenessState::Searching)) &&
-                enemy.attackPhase()==EnemyAttackPhase::Idle;
+                (snapshot.awareness==EnemyAwarenessState::Unaware ||
+                 (investigatingNoise && snapshot.awareness==EnemyAwarenessState::Searching)) &&
+                snapshot.attackPhase==EnemyAttackPhase::Idle;
             intent.targetVisible = !skipNoiseSight && hasLineOfSight(enemyPosition,playerPosition);
             if (encounter.kind == RaidEncounterKind::Ambush &&
-                enemy.awarenessState() == EnemyAwarenessState::Unaware &&
+                snapshot.awareness == EnemyAwarenessState::Unaware &&
                 distanceSquared(enemyPosition, playerPosition) >
                     encounter.ambushActivationDistance *
                         encounter.ambushActivationDistance)
@@ -1373,7 +1418,7 @@ void GameplayWorld::update(
                 intent.targetVisible = false;
             }
             std::optional<Vec2> passiveGoal;
-            if (enemy.awarenessState() == EnemyAwarenessState::Unaware &&
+            if (snapshot.awareness == EnemyAwarenessState::Unaware &&
                 !hasNoiseInvestigation)
             {
                 if (encounter.kind == RaidEncounterKind::Patrol &&
@@ -1400,7 +1445,7 @@ void GameplayWorld::update(
                 }
             }
             const bool visibleTargetIsRelevant = intent.targetVisible &&
-                (enemy.awarenessState() != EnemyAwarenessState::Unaware ||
+                (snapshot.awareness != EnemyAwarenessState::Unaware ||
                  distanceSquared(enemyPosition, playerPosition) <=
                      enemy.acquireTargetDistance() *
                          enemy.acquireTargetDistance());
@@ -1420,10 +1465,12 @@ void GameplayWorld::update(
                 continue;
             }
 
-            const Vec2 worldSize = activeWorldSize();
             const Vec2 halfEnemySize{
-                enemy.size().x * 0.5F,
-                enemy.size().y * 0.5F};
+                intent.boundsBeforeMovement.size.x * 0.5F,
+                intent.boundsBeforeMovement.size.y * 0.5F};
+            // The roster is fixed until all enemy substeps complete. Consume
+            // this stable-ID lookup in the execution pass of this substep.
+            intent.navigation = &navigation;
             intent.reachableGoal = Vec2{
                 std::clamp(
                     navigationGoal->x,
@@ -1443,7 +1490,7 @@ void GameplayWorld::update(
             const bool perceptionChanged = navigation.initialized &&
                 navigation.targetVisible != intent.targetVisible;
             intent.refreshRequired =
-                enemy.attackPhase() == EnemyAttackPhase::Idle &&
+                snapshot.attackPhase == EnemyAttackPhase::Idle &&
                 (!navigation.initialized || goalMoved || perceptionChanged ||
                  navigation.refreshRemainingSeconds <= 0.0F);
             refreshRequiredCount += intent.refreshRequired ? 1U : 0U;
@@ -1451,7 +1498,7 @@ void GameplayWorld::update(
 
         std::size_t &scheduleCursor = activeNavigationScheduleCursor();
         const auto refreshSelection = selectNavigationRefresh(
-            activeEnemySet.view(), scheduleCursor, activeEnemySet.size(),
+            activeEnemySet.view(), scheduleCursor, enemyCount,
             [&](std::size_t candidate) { return navigationIntents[candidate].refreshRequired; });
         scheduleCursor = activeEnemySet.empty() ? 0U : refreshSelection.nextCursor;
         const std::size_t selectedRefreshCount = refreshSelection.target ? 1U : 0U;
@@ -1459,24 +1506,20 @@ void GameplayWorld::update(
             refreshRequiredCount - selectedRefreshCount;
 
         for (std::size_t enemyIndex{0U};
-             enemyIndex < activeEnemySet.size();
+             enemyIndex < enemyCount;
              ++enemyIndex)
         {
             Enemy &enemy = activeEnemySet[enemyIndex];
-            const EnemyAwarenessState awarenessBefore =
-                enemy.awarenessState();
-            const Vec2 enemyPositionBeforeMovement = enemy.position();
-            const Vec2 enemyPosition = enemyCenter(enemy);
-            const EnemyNavigationIntent &intent =
-                navigationIntents[enemyIndex];
-            if (enemy.isDead())
+            const auto &snapshot = snapshots[enemyIndex];
+            EnemyNavigationIntent &intent = intents[enemyIndex];
+            if (!snapshot.alive)
             {
                 static_cast<void>(enemy.updateTowardsTarget(
                     playerPosition,
                     directives[enemyIndex],
                     enemyStepTime,
-                    worldWidth(),
-                    worldHeight(),
+                    worldSize.x,
+                    worldSize.y,
                     false,
                     std::nullopt));
                 continue;
@@ -1485,23 +1528,23 @@ void GameplayWorld::update(
             std::optional<Vec2> navigationTarget;
             if (intent.reachableGoal.has_value())
             {
-                EnemyNavigationRuntime &navigation =
-                    activeEnemySet.state(activeEnemySet[enemyIndex].combatTargetId()).navigation;
+                EnemyNavigationRuntime &navigation = *intent.navigation;
+                intent.navigation = nullptr;
                 if (refreshSelection.target == enemy.combatTargetId())
                 {
                     ++navigationQueriesLastUpdate_;
                     ++simulationWorkloadLastUpdate_.navigationQueries;
                     RaidSpaceNavigationField *navigationField =
-                        activeNavigationField(enemy.size());
+                        activeNavigationField(intent.boundsBeforeMovement.size);
                     navigation.waypoint = navigationField == nullptr
                         ? std::nullopt
                         : navigationField->nextWaypoint(
-                              enemyPosition,
+                              snapshot.position,
                               *intent.reachableGoal,
                               enemy.navigationGoalTolerance(intent.targetVisible));
                     if (!navigation.waypoint.has_value())
                     {
-                        navigation.waypoint = enemyPosition;
+                        navigation.waypoint = snapshot.position;
                     }
                     navigation.goal = *intent.reachableGoal;
                     navigation.targetVisible = intent.targetVisible;
@@ -1518,20 +1561,20 @@ void GameplayWorld::update(
                     playerPosition,
                     directives[enemyIndex],
                     enemyStepTime,
-                    worldWidth(),
-                    worldHeight(),
+                    worldSize.x,
+                    worldSize.y,
                     intent.targetVisible,
                     navigationTarget,
                     intent.allowUnawareNavigation));
             const Vec2 resolvedEnemyPosition = resolveMovementAgainstBlockers(
-                enemyPositionBeforeMovement,
-                enemy.size(),
+                intent.boundsBeforeMovement.position,
+                intent.boundsBeforeMovement.size,
                 enemy.position(),
                 activeStaticBlockers,
                 blockerQueryScratch_,
                 &simulationWorkloadLastUpdate_.movementBlockersExamined);
             static_cast<void>(enemy.setPosition(resolvedEnemyPosition));
-            if (awarenessBefore != EnemyAwarenessState::Alerted &&
+            if (snapshot.awareness != EnemyAwarenessState::Alerted &&
                 enemy.awarenessState() == EnemyAwarenessState::Alerted)
             {
                 ++enemiesAlertedLastUpdate_;
@@ -3217,7 +3260,8 @@ std::size_t GameplayWorld::outdoorAliveEnemyCount() const noexcept
 }
 
 bool GameplayWorld::tryTransitionRaidSpace(
-    const GameplayInput &input) noexcept
+    const GameplayInput &input,
+    const std::function<bool()> &beforeSpaceTransition)
 {
     if (grenade_.active() || !input.interactJustPressed || input.inventoryOpen ||
         player_.isControlled() || !raidSession_.isActive())
@@ -3233,6 +3277,7 @@ bool GameplayWorld::tryTransitionRaidSpace(
             return false;
         }
         const Vec2 returnPosition = interior.exteriorReturn;
+        if (beforeSpaceTransition && !beforeSpaceTransition()) return false;
         activeInteriorIndex_.reset();
         static_cast<void>(player_.setPosition(returnPosition));
     }
@@ -3246,6 +3291,7 @@ bool GameplayWorld::tryTransitionRaidSpace(
         {
             return false;
         }
+        if (beforeSpaceTransition && !beforeSpaceTransition()) return false;
         activeInteriorIndex_ = static_cast<std::size_t>(
             std::distance(interiors_.begin(), interior));
         static_cast<void>(player_.setPosition(interior->interiorSpawn));
@@ -3506,6 +3552,7 @@ bool GameplayWorld::resetDeveloperRangeEnemies(const EnemyCombatDefinition &defi
     }
     enemyObservationCache_.clear();
     enemies_ = std::move(candidate);
+    trainingCorpseDeaths_.clear();
     enemyObservationIndexReady_ = false;
     nextCombatTargetId_ = nextId;
     initialOutdoorEnemyCount_ = enemies_.size();
@@ -3521,6 +3568,7 @@ void GameplayWorld::consumeEnemyRemovals(std::span<const EnemyRemovalFact> death
         noiseDecoy_.forget(death.id);
         grenadeInvestigations_.erase(death.id);
         if (death.reason!=EnemyRemovalReason::Death) continue;
+        if(developerRange_)trainingCorpseDeaths_.push_back({death.id,{death.position.x+25.0F,death.position.y+25.0F},{50,50}});
         score_+=kScorePerEnemy;
         const auto source=corpseSources_.find(death.id);
         if(source==corpseSources_.end())continue;

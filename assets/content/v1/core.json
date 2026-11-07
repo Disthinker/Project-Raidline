@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-runner-infected-content-73",
+  "content_version": "raid-weapon-handling-content-74",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -768,7 +768,7 @@
           {"type": "stovepipe", "weight": 100}
         ]
       },
-      "weapon_use": {
+      "weapon_use": {"supported_fire_modes": ["semi_automatic"], "default_fire_mode": "semi_automatic", "burst_shot_count": 0,
         "automatic_fire": false,
         "shot_interval_seconds": 0.25,
         "recoil_control": 55,
@@ -810,7 +810,7 @@
           {"type": "stovepipe", "weight": 100}
         ]
       },
-      "weapon_use": {
+      "weapon_use": {"supported_fire_modes": ["semi_automatic", "three_round_burst", "automatic"], "default_fire_mode": "automatic", "burst_shot_count": 3,
         "automatic_fire": true,
         "shot_interval_seconds": 0.12,
         "recoil_control": 42,
@@ -1026,7 +1026,7 @@
       "compatible_ammunition": "item.ammunition.5_45x39_standard",
       "compatible_magazine": "item.magazine.5_45x39_30",
       "weapon_condition": {"maximum_durability_centi": 10000, "wear_per_successful_shot_centi": 9, "reliability_multiplier_basis_points": 9300, "malfunctions": [{"type": "stovepipe", "weight": 100}]},
-      "weapon_use": {"automatic_fire": true, "shot_interval_seconds": 0.10, "recoil_control": 60, "stability": 53, "handling_speed": 78, "ergonomics": 82, "accuracy": 62, "base_damage": 4, "effective_range": 620.0, "maximum_range": 880.0, "logical_ballistic_speed": 7600.0}
+      "weapon_use": {"supported_fire_modes": ["semi_automatic", "automatic"], "default_fire_mode": "automatic", "burst_shot_count": 0, "automatic_fire": true, "shot_interval_seconds": 0.10, "recoil_control": 60, "stability": 53, "handling_speed": 78, "ergonomics": 82, "accuracy": 62, "base_damage": 4, "effective_range": 620.0, "maximum_range": 880.0, "logical_ballistic_speed": 7600.0}
     },
     {
       "id": "item.weapon.rifle_5_45_service",
@@ -1044,7 +1044,7 @@
       "compatible_ammunition": "item.ammunition.5_45x39_standard",
       "compatible_magazine": "item.magazine.5_45x39_30",
       "weapon_condition": {"maximum_durability_centi": 10000, "wear_per_successful_shot_centi": 8, "reliability_multiplier_basis_points": 8800, "malfunctions": [{"type": "stovepipe", "weight": 100}]},
-      "weapon_use": {"automatic_fire": true, "shot_interval_seconds": 0.11, "recoil_control": 68, "stability": 72, "handling_speed": 56, "ergonomics": 70, "accuracy": 78, "base_damage": 5, "effective_range": 820.0, "maximum_range": 1120.0, "logical_ballistic_speed": 8400.0}
+      "weapon_use": {"supported_fire_modes": ["semi_automatic", "automatic"], "default_fire_mode": "automatic", "burst_shot_count": 0, "automatic_fire": true, "shot_interval_seconds": 0.11, "recoil_control": 68, "stability": 72, "handling_speed": 56, "ergonomics": 70, "accuracy": 78, "base_damage": 5, "effective_range": 820.0, "maximum_range": 1120.0, "logical_ballistic_speed": 8400.0}
     },
     {
       "id": "item.weapon.dmr_7_62x51_service",
@@ -1062,7 +1062,7 @@
       "compatible_ammunition": "item.ammunition.7_62x51_standard",
       "compatible_magazine": "item.magazine.7_62x51_20",
       "weapon_condition": {"maximum_durability_centi": 10000, "wear_per_successful_shot_centi": 12, "reliability_multiplier_basis_points": 10000, "malfunctions": [{"type": "stovepipe", "weight": 100}]},
-      "weapon_use": {"automatic_fire": false, "shot_interval_seconds": 0.28, "recoil_control": 43, "stability": 80, "handling_speed": 38, "ergonomics": 58, "accuracy": 91, "base_damage": 8, "effective_range": 1080.0, "maximum_range": 1400.0, "logical_ballistic_speed": 9200.0}
+      "weapon_use": {"supported_fire_modes": ["semi_automatic"], "default_fire_mode": "semi_automatic", "burst_shot_count": 0, "automatic_fire": false, "shot_interval_seconds": 0.28, "recoil_control": 43, "stability": 80, "handling_speed": 38, "ergonomics": 58, "accuracy": 91, "base_damage": 8, "effective_range": 1080.0, "maximum_range": 1400.0, "logical_ballistic_speed": 9200.0}
     },
     {
       "id": "item.weapon.lmg_7_62x51_service",
@@ -1080,7 +1080,7 @@
       "compatible_ammunition": "item.ammunition.7_62x51_standard",
       "compatible_magazine": "item.magazine.7_62x51_100_box",
       "weapon_condition": {"maximum_durability_centi": 10000, "wear_per_successful_shot_centi": 14, "reliability_multiplier_basis_points": 11000, "malfunctions": [{"type": "stovepipe", "weight": 100}]},
-      "weapon_use": {"automatic_fire": true, "shot_interval_seconds": 0.085, "recoil_control": 48, "stability": 76, "handling_speed": 20, "ergonomics": 36, "accuracy": 68, "base_damage": 7, "effective_range": 920.0, "maximum_range": 1260.0, "logical_ballistic_speed": 9000.0}
+      "weapon_use": {"supported_fire_modes": ["automatic"], "default_fire_mode": "automatic", "burst_shot_count": 0, "automatic_fire": true, "shot_interval_seconds": 0.085, "recoil_control": 48, "stability": 76, "handling_speed": 20, "ergonomics": 36, "accuracy": 68, "base_damage": 7, "effective_range": 920.0, "maximum_range": 1260.0, "logical_ballistic_speed": 9000.0}
     },
     {
       "id": "item.container.chest_rig_small",

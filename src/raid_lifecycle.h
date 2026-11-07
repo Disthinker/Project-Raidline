@@ -5,6 +5,8 @@
 
 #include "inventory_domain.h"
 
+struct RaidReloadWorldAccess;
+
 enum class RaidLifecycleError
 {
     None,
@@ -142,4 +144,5 @@ struct RaidTravelPreview
     AssetInstanceId assetId,
     const CommandContext &context,
     const RaidVisibilityProjection *observation = nullptr,
-    const RaidObservationKey *currentObservation = nullptr);
+    const RaidObservationKey *currentObservation = nullptr,
+    const RaidReloadWorldAccess *reloadAccess = nullptr);

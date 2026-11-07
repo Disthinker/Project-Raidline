@@ -92,6 +92,7 @@ void App::updateRegionalOperationsUi() {
 }
 
 void App::handleRegionalOperationsEvent(const UiRegionalOperationsEvent &event) {
+    if(profileUiBusy())return;
     // These are input-priority boundaries for existing modal screens, not
     // extra domain eligibility rules for outpost staffing or establishment.
     if (gameFlow_.state() != GameFlowState::Base ||
@@ -111,9 +112,9 @@ void App::handleRegionalOperationsEvent(const UiRegionalOperationsEvent &event) 
     auto &state = regionalUi_;
     const auto &projection = regionalProjection_;
     const auto tr = [&](std::string_view value) { return localizeUiText(uiTextRenderer_.language(), value); };
-    const auto feedback = [&](std::string value) {
+    const auto feedback = [this](std::string value) {
         regionalFeedback_ = std::move(value);
-        state.feedbackScroll = 0;
+        regionalUi_.feedbackScroll = 0;
         uiMessage_ = regionalFeedback_;
     };
     const auto clearConfirmation = [&] {
@@ -232,34 +233,24 @@ void App::handleRegionalOperationsEvent(const UiRegionalOperationsEvent &event) 
         return;
     }
     clearConfirmation();
-    bool succeeded{};
-    std::string message;
-    if (control == C::Establish) {
-        const auto receipt = gameSession_.executeEstablishRegionalOutpost(outpostId,
-            nextProfileTransactionId("establish-outpost"));
-        succeeded = receipt.succeeded;
-        message = succeeded ? "REGIONAL OUTPOST ESTABLISHED" : receipt.message;
-    } else if (control == C::Assign || control == C::Recall) {
-        const bool assign = control == C::Assign;
-        const auto receipt = gameSession_.executeRegionalOutpostStaffing(outpostId, assign,
-            nextProfileTransactionId(assign ? "assign-outpost-garrison" : "clear-outpost-garrison"));
-        succeeded = receipt.succeeded;
-        message = succeeded ? assign ? "OUTPOST GARRISON ASSIGNED | SHORTCUTS ONLINE" :
-            "OUTPOST GARRISON RETURNED | SHORTCUTS OFFLINE" : receipt.message;
-    } else if (control == C::Migrate) {
-        const auto receipt = gameSession_.executeBaseMigration(siteId,
-            nextProfileTransactionId("migrate-main-base"));
-        succeeded = receipt.succeeded;
-        message = succeeded ? "MAIN BASE MIGRATION COMPLETE | OLD BASE IS AN OUTPOST" : receipt.message;
-    } else if (control == C::RepairFeature) {
-        const auto receipt = gameSession_.executeBaseSiteFeatureRepair(siteId,
-            nextProfileTransactionId("repair-base-site-feature"));
-        succeeded = receipt.succeeded;
-        message = succeeded ? "BASE SITE FEATURE REPAIRED | OPERATIONAL WHILE THIS IS THE MAIN BASE" : receipt.message;
-    } else return;
-    feedback(std::move(message));
-    gameAudio_.play(succeeded ? SoundEventId::UiConfirm : SoundEventId::UiDeny);
-    refreshRegionalOperationsUi(true);
+    const auto finish=[this,feedback](bool succeeded,std::string message){
+        feedback(std::move(message));gameAudio_.play(succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);refreshRegionalOperationsUi(true);
+    };
+    if(control==C::Establish) {
+        submitProfileUi<RegionalOutpostReceipt>(EstablishRegionalOutpostCommand{outpostId},nextProfileTransactionId("establish-outpost"),
+            [finish](const auto &r){finish(r.succeeded,r.succeeded?"REGIONAL OUTPOST ESTABLISHED":r.message);});
+    } else if(control==C::Assign || control==C::Recall) {
+        const bool assign=control==C::Assign;
+        submitProfileUi<RegionalOutpostStaffingReceipt>(RegionalOutpostStaffingCommand{outpostId,assign},nextProfileTransactionId(assign?"assign-outpost-garrison":"clear-outpost-garrison"),
+            [finish,assign](const auto &r){finish(r.succeeded,r.succeeded?(assign?"OUTPOST GARRISON ASSIGNED | SHORTCUTS ONLINE":"OUTPOST GARRISON RETURNED | SHORTCUTS OFFLINE"):r.message);});
+    } else if(control==C::Migrate) {
+        submitProfileUi<BaseMigrationReceipt>(BaseMigrationCommand{siteId},nextProfileTransactionId("migrate-main-base"),
+            [finish](const auto &r){finish(r.succeeded,r.succeeded?"MAIN BASE MIGRATION COMPLETE | OLD BASE IS AN OUTPOST":r.message);});
+    } else if(control==C::RepairFeature) {
+        submitProfileUi<BaseSiteFeatureRepairReceipt>(BaseSiteFeatureRepairCommand{siteId},nextProfileTransactionId("repair-base-site-feature"),
+            [finish](const auto &r){finish(r.succeeded,r.succeeded?"BASE SITE FEATURE REPAIRED | OPERATIONAL WHILE THIS IS THE MAIN BASE":r.message);});
+    }
+
 }
 
 void App::renderRegionalOperations() {

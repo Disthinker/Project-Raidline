@@ -172,6 +172,7 @@ void BaseWorld::configureSite(
 void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
 {
     siteDefinitionId_ = siteDefinitionId;
+    spaceId_ = RaidSpaceDefinitionId{"base_space." + siteDefinitionId_};
     groundBlockers_.clear();
     configuredFortifications_.reset();
     dailyFortifications_ = {};
@@ -269,6 +270,8 @@ void BaseWorld::rebuildCollisionIndex()
 
 void BaseWorld::refreshDailyShotBlockers()
 {
+    ++placementGeometryRevision_;
+    playerEffectsIndex_.reset();
     dailyShotBlockers_ = movementBlockers_;
     for (const auto &f : dailyFortifications_.snapshots())
         if (f.durability)
@@ -313,11 +316,28 @@ std::span<const FortificationSnapshot> BaseWorld::fortifications() const noexcep
 }
 
 std::optional<BaseFacilityKind> BaseWorld::update(
-    const BaseInput &input,
-    float deltaTime)
+    const BaseInput &rawInput,
+    float deltaTime,
+    const std::function<bool()> &commitGrenade)
 {
+    BaseInput input = rawInput;
     if (baseDefense_ && std::isfinite(deltaTime)) deltaTime=std::clamp(deltaTime,0.0F,0.1F);
+    const bool wasControlled = playerControlled();
+    float movementTime = deltaTime;
+    if (std::isfinite(deltaTime) && deltaTime > 0) {
+        const float slowed = std::min(deltaTime, playerImpactSlowRemaining_);
+        movementTime = slowed * .28F + deltaTime - slowed;
+        playerImpactSlowRemaining_ = std::max(0.0F, playerImpactSlowRemaining_ - deltaTime);
+        if (playerImpactSlowRemaining_ <= .00001F) playerImpactSlowRemaining_ = 0;
+        playerControlRemaining_ = std::max(0.0F, playerControlRemaining_ - deltaTime);
+    }
+    if (wasControlled) {
+        input.moveUp = input.moveDown = input.moveLeft = input.moveRight = false;
+        input.firePressed = input.fireJustPressed = input.meleeJustPressed = input.interactJustPressed = false;
+    }
     perimeterDamageObservation_.reset();
+    perimeterRemovals_.clear();
+    baseEnemyDeaths_.clear();
     perimeterDamageProtectionRemainingSeconds_ = std::max(
         0.0F,
         perimeterDamageProtectionRemainingSeconds_ -
@@ -354,7 +374,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                 playerMovementAnimator_.reset();
             }
             playerMovementAnimator_.update(deltaTime);
-            const float speed = (input.sprint ? 280.0F : 180.0F) *
+            const float speed = (input.sprint ? 360.0F : 240.0F) *
                 std::clamp(input.movementSpeedMultiplier, 0.0F, 1.0F);
             const float maximumY = walkableBounds_.position.y +
                 walkableBounds_.size.y - playerSize_.y;
@@ -362,11 +382,11 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                 walkableBounds_.size.x - playerSize_.x;
 
             const float desiredX = std::clamp(
-                playerPosition_.x + direction.x * speed * deltaTime,
+                playerPosition_.x + direction.x * speed * movementTime,
                 walkableBounds_.position.x,
                 maximumPlayerX);
             const float desiredYForQuery = std::clamp(
-                playerPosition_.y + direction.y * speed * deltaTime,
+                playerPosition_.y + direction.y * speed * movementTime,
                 walkableBounds_.position.y,
                 maximumY);
             const Rect queryBounds{
@@ -390,7 +410,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                     {beforeMovement, playerSize_}, playerPosition_.x, f.footprint);
 
             const float desiredY = std::clamp(
-                playerPosition_.y + direction.y * speed * deltaTime,
+                playerPosition_.y + direction.y * speed * movementTime,
                 walkableBounds_.position.y,
                 maximumY);
             playerPosition_.y = resolveVerticalMovement(
@@ -446,9 +466,16 @@ std::optional<BaseFacilityKind> BaseWorld::update(
         shooting_.reanchor(
             playerCenter, playerFacingDirection_, layout_.worldSize);
     }
+    if (!input.freezeObservationDirection) observationDirection_ = playerFacingDirection_;
     if (baseDefense_) {
         baseDefense_->advance(input,deltaTime,playerPosition_,playerSize_,
-            playerIsMoving_,shooting_,movementBlockers_,&melee_);
+            playerIsMoving_,shooting_,movementBlockers_,&melee_, &noiseDecoy_, spaceId_, [&] {
+                advanceThrowables(deltaTime);
+                return !grenade_.pendingExplosion() || (commitGrenade && commitGrenade());
+            });
+        applyPlayerControl(baseDefense_->controlLastUpdate());
+        if (baseDefense_->damageLastUpdate() > 0) applyPlayerImpactSlow(.18F);
+        baseEnemyDeaths_.insert(baseEnemyDeaths_.end(), baseDefense_->deathsLastUpdate().begin(), baseDefense_->deathsLastUpdate().end());
         return input.interactJustPressed ? interactableFacility() : std::nullopt;
     }
     // Combat order matches Raid: movement/contact first, shots/removal second.
@@ -480,18 +507,26 @@ std::optional<BaseFacilityKind> BaseWorld::update(
         EnemyTacticalDirective directive;
         directive.role = EnemyTacticalRole::Engage;
         directive.canStartAttack = playerExposed;
-        const std::optional<Vec2> navigationTarget = playerExposed
+        std::optional<Vec2> navigationTarget = playerExposed
             ? std::nullopt
             : std::optional<Vec2>{perimeterEnemies_.state(enemy.combatTargetId())};
+        std::optional<Vec2> investigation;
+        if (targetVisible || enemy.awarenessState() == EnemyAwarenessState::Alerted || enemy.attackPhase() != EnemyAttackPhase::Idle)
+            noiseDecoy_.forget(enemy.combatTargetId());
+        else investigation = noiseDecoy_.investigationGoal(enemy.combatTargetId(), spaceId_, enemyCenter);
+        if (!investigation && !targetVisible && enemy.awarenessState() == EnemyAwarenessState::Searching &&
+            enemy.attackPhase() == EnemyAttackPhase::Idle && enemy.searchTimeRemaining() > 0)
+            investigation = enemy.lastKnownTargetPosition();
+        if (investigation) { navigationTarget = investigation; directive.canStartAttack = false; }
         static_cast<void>(enemy.updateTowardsTarget(
-            playerExposed ? playerCenter : perimeterEnemies_.state(enemy.combatTargetId()),
+            investigation.value_or(playerExposed ? playerCenter : perimeterEnemies_.state(enemy.combatTargetId())),
             directive,
             deltaTime,
             layout_.worldSize.x,
             layout_.worldSize.y,
             targetVisible,
             navigationTarget,
-            !playerExposed));
+            !playerExposed || investigation.has_value()));
 
         Vec2 resolved = enemy.position();
         const Rect queryBounds{
@@ -529,14 +564,20 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                     dailyFortifications_.lineOfSight(
                     {p.x + enemy.size().x * 0.5F, p.y + enemy.size().y * 0.5F}, playerCenter);
             });
-        if (contact.damage) perimeterDamageObservation_ = contact.damage;
+        if (contact.damage) { perimeterDamageObservation_ = contact.damage; applyPlayerImpactSlow(.18F); }
+        applyPlayerControl(contact.controlDuration);
     }
 
-    perimeterRemovals_ = shooting_.advanceShots(
+    advanceThrowables(deltaTime);
+    if (grenade_.pendingExplosion() && (!commitGrenade || !commitGrenade())) return {};
+    const auto shotSizes = captureBaseEnemySizes(perimeterEnemies_);
+    const auto shotRemovals = shooting_.advanceShots(
         input, deltaTime, playerCenter,
-        std::max(playerSize_.x, playerSize_.y), playerIsMoving_, false,
+        std::max(playerSize_.x, playerSize_.y), playerIsMoving_, wasControlled || playerControlled(),
         layout_.worldSize, perimeterEnemies_, dailyShotBlockers_).removals;
-    melee_.prepare(input.meleeJustPressed,input.inventoryOpen,
+    perimeterRemovals_.insert(perimeterRemovals_.end(), shotRemovals.begin(), shotRemovals.end());
+    appendBaseEnemyDeaths(baseEnemyDeaths_, shotRemovals, shotSizes);
+    melee_.prepare(input.meleeJustPressed,input.inventoryOpen || wasControlled || playerControlled(),
         playerCenter,shooting_.aimDirection(),
         perimeterEnemies_,[&](Vec2 a,Vec2 b){return movementBlockerIndex_->hasLineOfSight(a,b) && dailyFortifications_.lineOfSight(a,b);});
     // Only accepted shots alert survivors. Awareness changes now; movement
@@ -759,11 +800,16 @@ void BaseWorld::clearSpatialCombatState() noexcept
 {
     shooting_.clearSpatialTransientPresentation();
     perimeterRemovals_.clear();
+    baseEnemyDeaths_.clear();
     perimeterDamageObservation_.reset();
+    observationCache_ = {}; lightBackgroundCache_ = {};
 }
 
 void BaseWorld::resetCombatForProfileLoad() noexcept
 {
+    noiseDecoy_.clear(); grenade_.clear(); lastGrenadeExplosion_.reset();
+    grenadeExplodedLastUpdate_ = false; grenadeFlashSeconds_ = 0;
+    playerControlRemaining_ = playerImpactSlowRemaining_ = 0;
     clearBaseDefense();
     configuredFortifications_.reset();
     dailyFortifications_ = {};
@@ -1092,9 +1138,7 @@ void BaseWorld::resetAtRaidGate() noexcept
 void BaseWorld::resetAtMedicalPoint() noexcept
 {
     clearSpatialCombatState();
-    const Vec2 origin = layout_.baseParcel.position;
-    playerPosition_ = Vec2{origin.x + 780.0F, origin.y + 900.0F};
-    if (surveying()) playerPosition_ = {origin.x + 140, origin.y + 150};
+    playerPosition_ = medicalRespawnPosition();
     playerIsMoving_ = false;
     playerMovementAnimator_.reset();
     shooting_.reanchor(
@@ -1102,6 +1146,13 @@ void BaseWorld::resetAtMedicalPoint() noexcept
          playerPosition_.y + playerSize_.y * 0.5F},
         playerFacingDirection_,
         layout_.worldSize);
+}
+
+Vec2 BaseWorld::medicalRespawnPosition() const noexcept
+{
+    const auto origin = layout_.baseParcel.position;
+    return surveying() ? Vec2{origin.x + 140, origin.y + 150}
+                       : Vec2{origin.x + 780, origin.y + 900};
 }
 
 const char *baseFacilityName(BaseFacilityKind kind) noexcept
@@ -1130,8 +1181,15 @@ const char *baseFacilityName(BaseFacilityKind kind) noexcept
 
 bool BaseWorld::commitPreparedMelee()
 {
-    if(baseDefense_) return baseDefense_->commitPreparedMelee(melee_);
+    if(baseDefense_) {
+        const auto before = baseDefense_->deathsLastUpdate().size();
+        if (!baseDefense_->commitPreparedMelee(melee_)) return false;
+        baseEnemyDeaths_.insert(baseEnemyDeaths_.end(), baseDefense_->deathsLastUpdate().begin() + before, baseDefense_->deathsLastUpdate().end());
+        return true;
+    }
+    const auto sizes = captureBaseEnemySizes(perimeterEnemies_);
     if(!melee_.commitPrepared(perimeterEnemies_))return false;
+    appendBaseEnemyDeaths(baseEnemyDeaths_, melee_.removals(), sizes);
     perimeterRemovals_.insert(perimeterRemovals_.end(),melee_.removals().begin(),melee_.removals().end());
     return true;
 }

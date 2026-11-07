@@ -39,6 +39,10 @@
 
 namespace
 {
+    SoundEventId weaponShotSound(const std::optional<DeveloperWeaponTuningSnapshot> &tuning) {
+        // Immutable original model timbre, independent of the instance selector.
+        return tuning && tuning->weaponUse.automaticFire ? SoundEventId::WeaponRifleFire : SoundEventId::WeaponPistolFire;
+    }
     const char *lightStateLabel(const WeaponLightProjection &light);
     constexpr int kWindowWidth{1280};
     constexpr int kWindowHeight{720};
@@ -1810,67 +1814,19 @@ bool App::initialize()
 }
 
 // 把输入状态翻译成 gameplay 输入
-GameplayInput App::makeGameplayInput() const
+GameplayInput App::makeGameplayControls() const
 {
     GameplayInput input{};
-
-    input.moveUp =
-        input_.isActionPressed(
-            GameAction::MoveUp);
-
-    input.moveDown =
-        input_.isActionPressed(
-            GameAction::MoveDown);
-
-    input.moveLeft =
-        input_.isActionPressed(
-            GameAction::MoveLeft);
-
-    input.moveRight =
-        input_.isActionPressed(
-            GameAction::MoveRight);
-
+    input.moveUp=input_.isActionPressed(GameAction::MoveUp);
+    input.moveDown=input_.isActionPressed(GameAction::MoveDown);
+    input.moveLeft=input_.isActionPressed(GameAction::MoveLeft);
+    input.moveRight=input_.isActionPressed(GameAction::MoveRight);
     input.sprint = input_.isShiftPressed();
-
-    input.fireJustPressed =
-        input_.wasActionJustPressed(
-            GameAction::Fire) ||
-        input_.wasPrimaryPointerJustPressed();
-
-    input.firePressed =
-        input_.isActionPressed(
-            GameAction::Fire) ||
-        input_.isPrimaryPointerPressed();
-
+    input.fireJustPressed=input_.wasActionJustPressed(GameAction::Fire) || input_.wasPrimaryPointerJustPressed();
+    input.firePressed=input_.isActionPressed(GameAction::Fire) || input_.isPrimaryPointerPressed();
+    input.firePhysicallyPressed=input_.isActionPressed(GameAction::Fire) || input_.isPrimaryPointerPhysicallyPressed();
     input.aimDownSights = input_.isSecondaryPointerPressed();
     input.developerInfiniteAmmo = developerInfiniteAmmoEnabled_;
-
-    const Vec2 aimCamera = raidWorldCameraOffset();
-    const auto &aimPointer = worldAimPointerAnchor_.has_value()
-        ? worldAimPointerAnchor_ : pointerWorldPosition_;
-    if (aimPointer.has_value())
-    {
-        input.aimWorldPosition = raidScreenToWorld(
-            *aimPointer, aimCamera);
-    }
-    input.aimViewport = Rect{
-        aimCamera,
-        {static_cast<float>(kWindowWidth),
-         static_cast<float>(kWindowHeight)}};
-    input.aimWorldBounds = raidReticleWorldBounds(
-        aimCamera, input.aimViewport->size);
-
-    if (relativeMouseModeActive_ && shouldCaptureWorldPointer())
-    {
-        input.aimMotionDelta = pendingRelativeAimMotion_;
-    }
-    else if (gameFlow_.isRaidScreen())
-    {
-        // Modal UI freezes aim. It must not feed restored absolute cursor
-        // coordinates back into the relative aiming simulation.
-        input.aimMotionDelta = Vec2{};
-    }
-
     input.interactJustPressed =
         input_.wasActionJustPressed(
             GameAction::Interact);
@@ -1879,6 +1835,9 @@ GameplayInput App::makeGameplayInput() const
 
     input.reloadJustPressed =
         input_.wasActionJustPressed(GameAction::Reload);
+    input.reloadGestureJustPressed=std::any_of(input_.reloadTransitions().begin(),
+        input_.reloadTransitions().end(),[](const auto &edge){return edge.pressed;});
+    input.cycleFireModeJustPressed=input_.wasActionJustPressed(GameAction::CycleFireMode);
     input.healJustPressed =
         input_.wasActionJustPressed(GameAction::Heal);
     input.lightJustPressed = input_.wasActionJustPressed(GameAction::WeaponLight);
@@ -1901,24 +1860,22 @@ GameplayInput App::makeGameplayInput() const
     return input;
 }
 
+GameplayInput App::makeGameplayInput() const
+{
+    GameplayInput input=makeGameplayControls();
+    const Vec2 aimCamera=raidWorldCameraOffset();
+    const auto &aimPointer=worldAimPointerAnchor_.has_value()?worldAimPointerAnchor_:pointerWorldPosition_;
+    if(aimPointer)input.aimWorldPosition=raidScreenToWorld(*aimPointer,aimCamera);
+    input.aimViewport=Rect{aimCamera,{static_cast<float>(kWindowWidth),static_cast<float>(kWindowHeight)}};
+    input.aimWorldBounds=raidReticleWorldBounds(aimCamera,input.aimViewport->size);
+    if(relativeMouseModeActive_ && shouldCaptureWorldPointer())input.aimMotionDelta=pendingRelativeAimMotion_;
+    else if(gameFlow_.isRaidScreen())input.aimMotionDelta=Vec2{};
+    return input;
+}
+
 GameplayInput App::makeBaseGameplayInput() const
 {
-    GameplayInput input{};
-    input.meleeJustPressed=input_.wasActionJustPressed(GameAction::QuickMelee);
-    input.meleePressed=input_.isActionPressed(GameAction::QuickMelee);
-    input.moveUp = input_.isActionPressed(GameAction::MoveUp);
-    input.moveDown = input_.isActionPressed(GameAction::MoveDown);
-    input.moveLeft = input_.isActionPressed(GameAction::MoveLeft);
-    input.moveRight = input_.isActionPressed(GameAction::MoveRight);
-    input.sprint = input_.isShiftPressed();
-    input.fireJustPressed =
-        input_.wasActionJustPressed(GameAction::Fire) ||
-        input_.wasPrimaryPointerJustPressed();
-    input.firePressed =
-        input_.isActionPressed(GameAction::Fire) ||
-        input_.isPrimaryPointerPressed();
-    input.aimDownSights = input_.isSecondaryPointerPressed();
-    input.developerInfiniteAmmo = developerInfiniteAmmoEnabled_;
+    GameplayInput input=makeGameplayControls();
 
     const Vec2 aimCamera = baseWorldCameraOffset();
     const auto &aimPointer = worldAimPointerAnchor_.has_value()
@@ -1940,15 +1897,6 @@ GameplayInput App::makeBaseGameplayInput() const
     }
     input.aimMotionDelta = relativeMouseModeActive_ && shouldCaptureWorldPointer()
         ? pendingRelativeAimMotion_ : Vec2{};
-    input.interactJustPressed =
-        input_.wasActionJustPressed(GameAction::Interact);
-    input.interactPressed = input_.isActionPressed(GameAction::Interact);
-    if (input_.wasActionJustPressed(GameAction::SelectWeapon1))
-        input.weaponSlotJustPressed = EquipmentSlotKind::PrimaryWeapon;
-    else if (input_.wasActionJustPressed(GameAction::SelectWeapon2))
-        input.weaponSlotJustPressed = EquipmentSlotKind::SecondaryWeapon;
-    else if (input_.wasActionJustPressed(GameAction::SelectWeapon3))
-        input.weaponSlotJustPressed = EquipmentSlotKind::Sidearm;
     return input;
 }
 
@@ -1975,10 +1923,19 @@ bool App::handleScreenConfirm()
     case GameFlowState::Raid:
         break;
     case GameFlowState::RaidResult:
-        transitioned = gameFlow_.returnToBase();
-        uiMessage_ = transitioned
-            ? "TAB: CHECK YOUR ITEMS | PREPARE YOUR NEXT RAID"
-            : "hint acknowledgement save failed";
+        if (failedProfileUiContinuation_)
+        {
+            static_cast<void>(retryPendingProfileUi());
+            break;
+        }
+        trackProfileUiSubmission(gameSession_.requestProfileUiCommand(ProfileUiHintsCommand{true},nextProfileTransactionId("finish-first-raid")),
+            [this](const ProfileUiCompletion &completion) {
+                if(!completion.succeeded){uiMessage_=completion.message;return;}
+                if(gameFlow_.completeReturnToBase(completion.requestId)) {
+                    closeInventory();pendingInventoryUiEvents_.clear();
+                    uiMessage_="TAB: CHECK YOUR ITEMS | PREPARE YOUR NEXT RAID";
+                } else uiMessage_="CHANGES SAVED | REOPEN THE PAGE";
+            });
         break;
     }
 
@@ -1996,6 +1953,9 @@ bool App::tryDeployFromBase(
     std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId,
     std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId)
 {
+    if(gameSession_.inventoryPersistencePending() && deferInventoryBarrier([this,outpostRestorationId,baseSiteClearanceId,basePerimeterSweepId] {
+        static_cast<void>(tryDeployFromBase(outpostRestorationId,baseSiteClearanceId,basePerimeterSweepId));
+    }))return false;
     const ContentRegistry &content = publishedContentRegistry();
     const ProfileState &profile = gameSession_.profile();
     const bool unsafe = !weaponSupply(false).anyWeaponCanFire;
@@ -2041,7 +2001,7 @@ bool App::tryDeployFromBase(
             targetMap,
             {0.02F, RaidDeploymentProgressStage::Validating});
     }
-    if (!gameFlow_.deploy(
+    const auto submission=gameFlow_.requestDeploy(
             targetMap.id,
             regionalMission
                 ? RaidIntelligenceLoadout{}
@@ -2059,25 +2019,16 @@ bool App::tryDeployFromBase(
                       {
                           renderRaidLoadingScreen(targetMap, progress);
                       }}
-                : RaidDeploymentProgressCallback{}))
-    {
-        uiMessage_ = gameSession_.persistenceMessage().empty()
-            ? "DEPLOYMENT IS NOT AVAILABLE"
-            : gameSession_.persistenceMessage();
-        return false;
-    }
-    deploymentWarningArmed_ = false;
-    lostRaidRecordsOpen_ = false;
-    regionalOperationsOpen_ = false;
-    resetRegionalOperationsUi();
-    resetLostRecoveryUi();
-    selectedRaidSelfRecoveryRecordId_.reset();
-    selectedRaidIntelligence_ = {};
-    developerMapFogEnabled_ = true;
-    developerInfiniteAmmoEnabled_ = false;
-    developerCrisisRevealEnabled_ = false;
-    uiMessage_.clear();
-    return true;
+                : RaidDeploymentProgressCallback{});
+    trackProfileUiSubmission(submission,[this](const ProfileUiCompletion &completion) {
+        if(!completion.succeeded){uiMessage_=completion.message;return;}
+        if(!gameFlow_.completeDeploy(completion.requestId)){uiMessage_="CHANGES SAVED | REOPEN THE PAGE";return;}
+        deploymentWarningArmed_=false;lostRaidRecordsOpen_=false;regionalOperationsOpen_=false;
+        resetRegionalOperationsUi();resetLostRecoveryUi();selectedRaidSelfRecoveryRecordId_.reset();selectedRaidIntelligence_={};
+        developerMapFogEnabled_=true;developerInfiniteAmmoEnabled_=false;developerCrisisRevealEnabled_=false;
+        closeInventory();pendingInventoryUiEvents_.clear();uiMessage_.clear();
+    });
+    return false;
 }
 
 void App::openRegionalConstruction(bool reserve)
@@ -2218,19 +2169,12 @@ void App::handleRaidIntelligenceSelection(
         map.id, category);
     if (owned == 0U)
     {
-        const RaidIntelligencePurchaseReceipt receipt =
-            gameSession_.purchaseRaidIntelligence(
-                RaidIntelligencePurchaseCommand{map.id, category},
-                nextProfileTransactionId("raid-intelligence"));
-        if (!receipt.succeeded)
-        {
-            uiMessage_ = receipt.message.empty()
-                ? "INTELLIGENCE PURCHASE BLOCKED"
-                : receipt.message;
-            return;
-        }
-        selectedRaidIntelligence_.set(category, true);
-        uiMessage_ = "INTELLIGENCE PURCHASED AND SELECTED";
+        submitProfileUi<RaidIntelligencePurchaseReceipt>(
+            RaidIntelligencePurchaseCommand{map.id,category},nextProfileTransactionId("raid-intelligence"),
+            [this,category](const auto &receipt) {
+                if(!receipt.succeeded){uiMessage_=receipt.message.empty()?"INTELLIGENCE PURCHASE BLOCKED":receipt.message;return;}
+                selectedRaidIntelligence_.set(category,true);uiMessage_="INTELLIGENCE PURCHASED AND SELECTED";
+            });
         return;
     }
     const bool selected = selectedRaidIntelligence_.has(category);
@@ -2248,15 +2192,12 @@ void App::handleRaidInteriorIntelligencePurchase(
         uiMessage_ = "INTERIOR LAYOUT PERMANENTLY KNOWN";
         return;
     }
-    const RaidInteriorIntelligencePurchaseReceipt receipt =
-        gameSession_.purchaseRaidInteriorIntelligence(
-            RaidInteriorIntelligencePurchaseCommand{interiorId},
-            nextProfileTransactionId("raid-interior-intelligence"));
-    uiMessage_ = receipt.succeeded
-        ? "INTERIOR LAYOUT INTELLIGENCE PURCHASED"
-        : receipt.message.empty()
-            ? "INTERIOR INTELLIGENCE PURCHASE BLOCKED"
-            : receipt.message;
+    submitProfileUi<RaidInteriorIntelligencePurchaseReceipt>(
+        RaidInteriorIntelligencePurchaseCommand{interiorId},nextProfileTransactionId("raid-interior-intelligence"),
+        [this](const auto &receipt) {
+            uiMessage_=receipt.succeeded?"INTERIOR LAYOUT INTELLIGENCE PURCHASED":
+                receipt.message.empty()?"INTERIOR INTELLIGENCE PURCHASE BLOCKED":receipt.message;
+        });
 }
 
 SDL_FRect App::mainMenuButton(std::size_t index) const noexcept
@@ -2344,6 +2285,8 @@ void App::handlePauseMenuCommand(PauseMenuCommand command)
         return;
     }
 
+    if(command==PauseMenuCommand::AbandonBaseDefense &&
+       deferInventoryBarrier([this,command]{handlePauseMenuCommand(command);}))return;
     switch (command)
     {
     case PauseMenuCommand::Continue:
@@ -2355,50 +2298,36 @@ void App::handlePauseMenuCommand(PauseMenuCommand command)
         pauseMenu_.showSettings();
         break;
     case PauseMenuCommand::MainMenu:
-        if (gameFlow_.state() == GameFlowState::Base &&
-            !gameSession_.checkpointWorldClock())
-        {
-            uiMessage_ = "WORLD CLOCK SAVE FAILED: " +
-                gameSession_.persistenceMessage();
-            break;
-        }
-        closeInventory();
-        medicalWheelOpen_ = false;
-        medicalWheelOptions_.clear();
-        developerWeaponPanelOpen_ = false;
-        baseConstructionPanelOpen_ = false; resetBaseFinalDetailsUi();
-        basePlacementState_.reset();
-        baseFixedFacilityPlacementState_.reset();
-        deactivateBaseBuildCamera();
-        selectedBasePlacedAssetId_.reset();
-        selectedBaseFixedFacility_.reset();
-        clearProfileItemContext();
-        if (gameFlow_.returnToMainMenu())
-        {
-            pauseMenu_.close();
-            uiMessage_ = gameSession_.hasSavedProfile()
-                ? "RETURNED TO MAIN MENU"
-                : "RETURNED TO MAIN MENU - NO PERSISTENT PROFILE";
-        }
+        if(gameSession_.developerRangeActive())static_cast<void>(gameFlow_.leaveDeveloperRange());
+        trackProfileUiSubmission(gameSession_.requestWorldDurabilityBarrier(),[this](const ProfileUiCompletion &completion) {
+            if(!completion.succeeded){uiMessage_=completion.message;return;}
+            if(!gameFlow_.completeReturnToMainMenu(completion.requestId)){uiMessage_="CHANGES SAVED | REOPEN THE PAGE";return;}
+            closeInventory();medicalWheelOpen_=false;medicalWheelOptions_.clear();cancelMagazineWheel();cancelThrowableUi();
+            developerWeaponPanelOpen_=false;baseConstructionPanelOpen_=false;resetBaseFinalDetailsUi();
+            basePlacementState_.reset();baseFixedFacilityPlacementState_.reset();deactivateBaseBuildCamera();
+            selectedBasePlacedAssetId_.reset();selectedBaseFixedFacility_.reset();clearProfileItemContext();pauseMenu_.close();
+            uiMessage_=gameSession_.hasSavedProfile()?"RETURNED TO MAIN MENU":"RETURNED TO MAIN MENU - NO PERSISTENT PROFILE";
+        });
         break;
     case PauseMenuCommand::ExitDesktop:
-        if (gameFlow_.state() == GameFlowState::Base &&
-            !gameSession_.checkpointWorldClock())
-        {
-            uiMessage_ = "WORLD CLOCK SAVE FAILED: " +
-                gameSession_.persistenceMessage();
-            break;
-        }
-        running_ = false;
+        requestQuitAfterInventory();
         break;
     case PauseMenuCommand::ToggleLanguage:
         break;
     case PauseMenuCommand::AbandonBaseDefense:
         if (!baseDefenseAbandonArmed_) baseDefenseAbandonArmed_ = true;
-        else if (gameSession_.abandonBaseRealtimeDefense())
+        else
         {
-            baseDefenseAbandonArmed_ = false;
-            pauseMenu_.close();
+            if(gameSession_.abandonBaseRealtimeDefense()) {
+                baseDefenseAbandonArmed_ = false;
+                pauseMenu_.close();
+            } else if(gameSession_.baseDefenseActive() &&
+                      !gameSession_.baseDefenseCheckpointStatus().failed &&
+                      !gameSession_.baseDefenseSaveBlocked()) {
+                static_cast<void>(deferInventoryBarrier([this] {
+                    baseDefenseAbandonArmed_=false;pauseMenu_.close();
+                }));
+            }
         }
         uiMessage_ = gameSession_.persistenceMessage();
         break;
@@ -2407,6 +2336,9 @@ void App::handlePauseMenuCommand(PauseMenuCommand command)
 
 void App::handleMainMenuCommand(MainMenuCommand command)
 {
+    if(command==MainMenuCommand::Continue || command==MainMenuCommand::NewGame) {
+        failedHomeHintsProfileId_.clear();failedProfileUiContinuation_={};
+    }
     if (settingsOpen_)
     {
         if (command == MainMenuCommand::ToggleLanguage)
@@ -2560,10 +2492,10 @@ SDL_FRect App::loadoutArchetypeButton(std::size_t index) const noexcept
         34.0F};
 }
 
-void App::closeInventory() noexcept
+void App::closeInventory()
 {
-    // Tab / browsing Esc closes the inventory and clears all pointer state,
-    // hover state, and transient pointer selection.
+    // A close request immediately discards old pointer targets and selections.
+    // The visible page still waits for its durable confirmation below.
     inventoryWeaponComponentsOpen_ = false;
     resetWeaponComponentsUi();
     profileDetailsAsset_.reset(); itemDetailsInteraction_ = {}; deviceBatteryDrag_.reset();
@@ -2572,11 +2504,18 @@ void App::closeInventory() noexcept
     profilePresentation_ = {};
     clearProfileItemContext();
     profileAssetSelection_.reset();
+    input_.suppressPrimaryPointerUntilRelease();
+
+    const auto status=gameSession_.baseDefenseActive()?gameSession_.baseDefenseCheckpointStatus():gameSession_.baseDailyCheckpointStatus();
+    const bool failedBrowsingExit=gameFlow_.state()==GameFlowState::Base && !gameSession_.inventoryPersistencePending() &&
+        (status.failed || gameSession_.baseDailySaveBlocked() || gameSession_.baseDefenseSaveBlocked());
+    if(!failedBrowsingExit && inventoryOverlayState_.isOpen() && deferInventoryBarrier([this]{closeInventory();}))return;
+    // These IDs retain the external page's rendering identity while waiting;
+    // clearing them early would switch a ground-container view to the Stash.
     openedBaseGroundContainerId_.reset();
     openedRaidSceneContainerId_.reset();
 
     inventoryOverlayState_.close();
-    input_.suppressPrimaryPointerUntilRelease();
 }
 
 void App::handleInventoryCancel()
@@ -2705,34 +2644,16 @@ void App::updateBase(float deltaTime)
             const bool installing =
                 baseFixedFacilityPlacementState_->mode ==
                 BaseFixedFacilityPlacementState::Mode::Install;
-            const BaseFacilityLayoutReceipt receipt = installing
-                ? gameFlow_.installBaseFacilityAt(
-                      facility,
-                      worldPosition,
-                      nextProfileTransactionId(
-                          "base-core-facility-install"))
-                : gameFlow_.repositionBaseFacilityAt(
-                      facility,
-                      worldPosition,
-                      nextProfileTransactionId(
-                          "base-core-facility-move"));
-            uiMessage_ = receipt.succeeded
-                ? installing
-                    ? "BASE FACILITY INSTALLED"
-                    : "BASE FACILITY REPOSITIONED"
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::InventoryMoveOrPlace
-                : SoundEventId::UiDeny);
-            if (receipt.succeeded)
-            {
-                const bool reopenPanel =
-                    baseFixedFacilityPlacementState_->returnToBuildPanel;
-                baseFixedFacilityPlacementState_.reset();
-                baseConstructionPanelOpen_ = reopenPanel;
-                if (!reopenPanel)
-                    deactivateBaseBuildCamera();
-            }
+            const bool reopenPanel=baseFixedFacilityPlacementState_->returnToBuildPanel;
+            const BaseWorldUiCommand command=installing?BaseWorldUiCommand{BaseUiInstallFacility{facility,worldPosition}}:
+                BaseWorldUiCommand{BaseUiRepositionFacility{facility,worldPosition}};
+            trackProfileUiResult<BaseFacilityLayoutReceipt>(gameFlow_.requestBaseWorldUiCommand(command,nextProfileTransactionId("base-core-facility-placement")),
+                [this,installing,reopenPanel](const auto &receipt){
+                    uiMessage_=receipt.succeeded?(installing?"BASE FACILITY INSTALLED":"BASE FACILITY REPOSITIONED"):receipt.message;
+                    gameAudio_.play(receipt.succeeded?SoundEventId::InventoryMoveOrPlace:SoundEventId::UiDeny);
+                    if(receipt.succeeded){baseFixedFacilityPlacementState_.reset();baseConstructionPanelOpen_=reopenPanel;
+                        if(!reopenPanel)deactivateBaseBuildCamera();}
+                });
             break;
         }
         pendingBaseClicks_.clear();
@@ -2783,35 +2704,16 @@ void App::updateBase(float deltaTime)
                 {click.position.x, click.position.y});
             const bool reposition = basePlacementState_->mode ==
                 BasePlacementState::Mode::Reposition;
-            const BaseGroundReceipt receipt = reposition
-                ? gameFlow_.repositionBaseGroundAssetAt(
-                      basePlacementState_->assetId,
-                      basePlacementState_->orientation,
-                      worldPosition,
-                      nextProfileTransactionId("base-facility-reposition"))
-                : gameFlow_.dropBaseGroundAssetAt(
-                      basePlacementState_->assetId,
-                      basePlacementState_->quantity,
-                      basePlacementState_->orientation,
-                      worldPosition,
-                      nextProfileTransactionId("base-facility-place"));
-            uiMessage_ = receipt.succeeded
-                ? reposition
-                    ? "BASE FACILITY REPOSITIONED"
-                    : "BASE FACILITY PLACED"
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::InventoryMoveOrPlace
-                : SoundEventId::UiDeny);
-            if (receipt.succeeded)
-            {
-                const bool reopenPanel =
-                    basePlacementState_->returnToBuildPanel;
-                basePlacementState_.reset();
-                baseConstructionPanelOpen_ = reopenPanel;
-                if (!reopenPanel)
-                    deactivateBaseBuildCamera();
-            }
+            const auto placement=*basePlacementState_;
+            const BaseWorldUiCommand command=reposition?BaseWorldUiCommand{BaseUiRepositionAsset{placement.assetId,placement.orientation,worldPosition}}:
+                BaseWorldUiCommand{BaseUiDropAsset{placement.assetId,placement.quantity,placement.orientation,worldPosition}};
+            trackProfileUiResult<BaseGroundReceipt>(gameFlow_.requestBaseWorldUiCommand(command,nextProfileTransactionId("base-facility-placement")),
+                [this,reposition,reopenPanel=placement.returnToBuildPanel](const auto &receipt){
+                    uiMessage_=receipt.succeeded?(reposition?"BASE FACILITY REPOSITIONED":"BASE FACILITY PLACED"):receipt.message;
+                    gameAudio_.play(receipt.succeeded?SoundEventId::InventoryMoveOrPlace:SoundEventId::UiDeny);
+                    if(receipt.succeeded){basePlacementState_.reset();baseConstructionPanelOpen_=reopenPanel;
+                        if(!reopenPanel)deactivateBaseBuildCamera();}
+                });
             break;
         }
         pendingBaseClicks_.clear();
@@ -2899,6 +2801,7 @@ void App::updateBase(float deltaTime)
             inventoryInput.inventoryOpen = true;
             inventoryInput.fireJustPressed = inventoryInput.firePressed = false;
             inventoryInput.interactJustPressed = inventoryInput.interactPressed = false;
+            if(profileUiBusy())return;
             gameFlow_.updateBase(inventoryInput, deltaTime);
             consumePresentationAudioEvents();
         }
@@ -2911,6 +2814,7 @@ void App::updateBase(float deltaTime)
         {
             BaseInput modalInput;
             modalInput.inventoryOpen = true;
+            if(profileUiBusy())return;
             gameFlow_.updateBase(modalInput, deltaTime);
             consumePresentationAudioEvents();
         }
@@ -3035,32 +2939,43 @@ void App::updateBase(float deltaTime)
             }
             else
             {
-                const BaseGroundReceipt receipt =
-                    gameFlow_.pickupBaseGroundAsset(
-                        nearest->assetId,
-                        nextProfileTransactionId("base-ground-pickup"));
-                uiMessage_ = receipt.succeeded
-                    ? "BASE GROUND ITEM PICKED UP"
-                    : receipt.message;
-                gameAudio_.play(receipt.succeeded
-                    ? SoundEventId::InventoryPickup
-                    : SoundEventId::UiDeny);
+                trackProfileUiResult<BaseGroundReceipt>(gameFlow_.requestBaseWorldUiCommand(BaseUiPickupAsset{nearest->assetId,false},
+                    nextProfileTransactionId("base-ground-pickup")),[this](const auto &receipt){
+                        uiMessage_=receipt.succeeded?"BASE GROUND ITEM PICKED UP":receipt.message;
+                        gameAudio_.play(receipt.succeeded?SoundEventId::InventoryPickup:SoundEventId::UiDeny);
+                    });
             }
             input.interactJustPressed = false;
             input.interactPressed = false;
         }
+        else if(const auto corpse=gameSession_.nearbyBaseCorpse())
+        {
+            const auto inspection=gameSession_.queryBaseCorpseInspection(corpse->corpseId);
+            uiMessage_=inspection.canCommit?"CORPSE EMPTY":inspection.message;
+            input.interactJustPressed=input.interactPressed=false;
+        }
     }
+    updatePlayerActionInput(input);
+    input.freezeObservationDirection=input.freezeObservationDirection || medicalWheelOpen_ ||
+        throwableWheelOpen_ || magazineWheelOpen_ || inventoryOverlayState_.isOpen();
+    const auto actionMessageBefore=gameSession_.persistenceMessage();
+    if(profileUiBusy())return;
     gameFlow_.updateBase(input, deltaTime);
+    if((input.cycleFireModeJustPressed || !input.raidReloadIntents.empty() ||
+        input.lightJustPressed || input.lightJustReleased || input.weaponSlotJustPressed) &&
+       gameSession_.persistenceMessage()!=actionMessageBefore && !gameSession_.persistenceMessage().empty())
+        uiMessage_=gameSession_.persistenceMessage();
     consumePresentationAudioEvents();
     const BaseWorld &baseWorld = gameFlow_.baseWorld();
+    for(unsigned pulse=0;pulse<baseWorld.noiseDecoy().pulsesLastUpdate();++pulse)
+        gameAudio_.play(SoundEventId::NoiseDecoyPulse);
+    if(baseWorld.grenadeExplodedLastUpdate())gameAudio_.play(SoundEventId::ImpactObstacle);
     if (baseWorld.shotFiredLastUpdate())
     {
         const auto tuning = gameSession_.developerWeaponTuning();
         const auto &acoustics = baseWorld.shotAcousticsLastUpdate();
         gameAudio_.play(
-            tuning.has_value() && tuning->weaponUse.automaticFire
-                ? SoundEventId::WeaponRifleFire
-                : SoundEventId::WeaponPistolFire, acoustics.fireGain);
+            weaponShotSound(tuning), acoustics.fireGain);
         gameAudio_.play(SoundEventId::WeaponFireTailOutdoor,
                         acoustics.outdoorTailGain);
     }
@@ -3140,21 +3055,8 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             }
             return;
         }
-        const InventoryReceipt receipt =
-            gameSession_.executeProfileInventory(
-                InventoryEquipCommand{
-                    profileAssetSelection_->instanceId,
-                    slot},
-                nextProfileTransactionId("equip"));
-        uiMessage_ = receipt.succeeded ? "EQUIPMENT UPDATED" : receipt.message;
-        gameAudio_.play(
-            receipt.succeeded
-                ? SoundEventId::InventoryEquip
-                : SoundEventId::UiDeny);
-        if (receipt.succeeded)
-        {
-            profileAssetSelection_.reset();
-        }
+        if(submitInventoryUi(InventoryEquipCommand{profileAssetSelection_->instanceId,slot},
+            nextProfileTransactionId("equip"),false,"EQUIPMENT UPDATED",SoundEventId::InventoryEquip))profileAssetSelection_.reset();
         return;
     }
 
@@ -3178,13 +3080,7 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                 uiMessage_ = "WEAPON ALREADY CHAMBERED";
                 return;
             }
-            const WeaponAmmoReceipt receipt =
-                gameSession_.executeProfileWeaponAmmo(
-                    ChamberWeaponCommand{weapon->second},
-                    nextProfileTransactionId("base-chamber"));
-            uiMessage_ = receipt.result == WeaponAmmoResult::Chambered
-                ? "WEAPON CHAMBERED"
-                : receipt.message.empty() ? "NO ROUND AVAILABLE" : receipt.message;
+            executeProfileContextAction(weapon->second,false);
             return;
         }
         if (!profileAssetSelection_.has_value())
@@ -3227,29 +3123,14 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                 uiMessage_ = "NO COMPATIBLE STASH AMMUNITION";
                 return;
             }
-            const WeaponAmmoReceipt receipt =
-                gameSession_.executeProfileWeaponAmmo(
-                    LoadMagazineCommand{
-                        selected->instanceId,
-                        ammunition->instanceId,
-                        0},
-                    nextProfileTransactionId("base-load"));
-            uiMessage_ = receipt.succeeded
-                ? "MAGAZINE FILLED"
-                : receipt.message;
+            if(gameSession_.startAlphaLoadMagazine(ammunition->instanceId,selectedId,0)) {
+                uiMessage_="MAGAZINE PACKING STARTED";closeInventory();
+            } else uiMessage_="AMMUNITION CANNOT BE LOADED";
             return;
         }
         if (actionIndex == 1)
         {
-            const WeaponAmmoReceipt receipt =
-                gameSession_.executeProfileWeaponAmmo(
-                    UnloadMagazineCommand{
-                        selected->instanceId,
-                        ProfileContainerId::stash()},
-                    nextProfileTransactionId("base-unload"));
-            uiMessage_ = receipt.succeeded
-                ? "MAGAZINE UNLOADED TO STASH"
-                : receipt.message;
+            executeProfileContextAction(selectedId,false);
             return;
         }
         if (actionIndex == 2)
@@ -3273,32 +3154,14 @@ void App::handleBasePointerClick(const BasePointerClick &click)
                 uiMessage_ = "NO COMPATIBLE EQUIPPED WEAPON";
                 return;
             }
-            const WeaponAmmoReceipt receipt =
-                gameSession_.executeProfileWeaponAmmo(
-                    InstallMagazineCommand{
-                        *weapon,
-                        selected->instanceId},
-                    nextProfileTransactionId("base-install"));
-            uiMessage_ = receipt.succeeded
-                ? "MAGAZINE INSTALLED"
-                : receipt.message;
-            if (receipt.succeeded)
-            {
-                profileAssetSelection_.reset();
-            }
+            if(gameSession_.startAlphaReload(*weapon,selectedId)) {
+                uiMessage_="RELOAD STARTED (2 SEC)";profileAssetSelection_.reset();closeInventory();
+            } else uiMessage_="MAGAZINE CANNOT BE INSTALLED";
             return;
         }
 
-        const HealReceipt receipt = gameSession_.executeBaseHeal(
-            selectedId,
-            nextProfileTransactionId("base-heal"));
-        uiMessage_ = receipt.succeeded
-            ? fmt::format("HEALED {} HP", receipt.healedAmount)
-            : receipt.message;
-        if (gameSession_.profile().assets.find(selectedId) == nullptr)
-        {
-            profileAssetSelection_.reset();
-        }
+        executeProfileContextAction(selectedId,false);
+        profileAssetSelection_.reset();
         return;
     }
 
@@ -3356,19 +3219,9 @@ void App::handleBasePointerClick(const BasePointerClick &click)
             return;
         }
 
-        const InventoryReceipt receipt =
-            gameSession_.executeProfileInventory(
-                InventoryMoveCommand{
-                    profileAssetSelection_->instanceId,
-                    profileAssetSelection_->quantity,
-                    StoredAssetLocation{view.container, cell},
-                    profileAssetSelection_->orientation},
-                nextProfileTransactionId("move"));
-        uiMessage_ = receipt.succeeded ? "INVENTORY UPDATED" : receipt.message;
-        if (receipt.succeeded)
-        {
-            profileAssetSelection_.reset();
-        }
+        if(submitInventoryUi(InventoryMoveCommand{profileAssetSelection_->instanceId,profileAssetSelection_->quantity,
+            StoredAssetLocation{view.container,cell},profileAssetSelection_->orientation},nextProfileTransactionId("move"),
+            false,"INVENTORY UPDATED",SoundEventId::InventoryMoveOrPlace))profileAssetSelection_.reset();
         return;
     }
 
@@ -3525,7 +3378,7 @@ void App::handleProfileInventoryUiEvent(
     const bool includeStash = !inRaid &&
         inventoryOverlayState_.showsExternalContainer() &&
         !externalContainerId.has_value();
-    const ProfileState &profile = gameSession_.profile();
+    const ProfileState &profile = gameSession_.profileForInventoryPresentation();
     if (handleProfilePresentationEvent(event, includeStash,
                                        externalContainerId))
         return;
@@ -3635,7 +3488,7 @@ void App::handleProfileInventoryUiEvent(
                                              asset.orientation},
                                             StoredCellTarget{location}},
                                            true);
-                        if (gameSession_.profile().revision != revision)
+                        if (gameSession_.profileForInventoryPresentation().revision != revision)
                             describeProfileInventoryDestination(id, location);
                         return;
                     }
@@ -3695,12 +3548,12 @@ void App::handleProfileInventoryUiEvent(
             }
             if (allowed)
             {
-                const auto revisionBefore = gameSession_.profile().revision;
+                const auto revisionBefore = gameSession_.profileForInventoryPresentation().revision;
                 const auto targetLocation =
                     std::get<StoredCellTarget>(request.target).location;
                 const auto movedId = request.source.instanceId;
                 executeProfileDrop(request, inRaid);
-                if (gameSession_.profile().revision != revisionBefore)
+                if (gameSession_.profileForInventoryPresentation().revision != revisionBefore)
                     describeProfileInventoryDestination(movedId,
                                                         targetLocation);
                 return;
@@ -3780,17 +3633,12 @@ void App::handleProfileInventoryUiEvent(
         pointer.type == InventoryPointerEventType::LeftButtonDown &&
         contains(profileGroundContainerPickupRect(), pointer.position))
     {
-        const BaseGroundReceipt receipt = gameFlow_.pickupBaseGroundAsset(
-            *externalContainerId,
-            nextProfileTransactionId("base-ground-container-pickup"));
-        uiMessage_ = receipt.succeeded
-            ? "BASE GROUND CONTAINER PICKED UP"
-            : receipt.message;
-        gameAudio_.play(receipt.succeeded
-            ? SoundEventId::InventoryPickup
-            : SoundEventId::UiDeny);
-        if (receipt.succeeded)
-            closeInventory();
+        trackProfileUiResult<BaseGroundReceipt>(gameFlow_.requestBaseWorldUiCommand(BaseUiPickupAsset{*externalContainerId,false},
+            nextProfileTransactionId("base-ground-container-pickup")),[this](const auto &receipt){
+                uiMessage_=receipt.succeeded?"BASE GROUND CONTAINER PICKED UP":receipt.message;
+                gameAudio_.play(receipt.succeeded?SoundEventId::InventoryPickup:SoundEventId::UiDeny);
+                if(receipt.succeeded)closeInventory();
+            });
         return;
     }
     const GridPosition grabOffset =
@@ -3856,7 +3704,7 @@ void App::handleProfileRightClick(MousePosition position, bool inRaid)
         inventoryOverlayState_.showsExternalContainer() &&
         !externalContainerId.has_value();
     const auto hit =
-        profileAssetHitAt(gameSession_.profile(), position, includeStash,
+        profileAssetHitAt(gameSession_.profileForInventoryPresentation(), position, includeStash,
                           externalContainerId, &profilePresentation_);
     if (!hit.has_value() || hit->asset == nullptr)
     {
@@ -3877,10 +3725,15 @@ void App::handleProfileRightClick(MousePosition position, bool inRaid)
             return;
         }
     }
-    const auto actions = projectUiItemActions(gameSession_.profile(),
-        publishedContentRegistry(), hit->asset->instanceId, inRaid);
+    const auto actions = projectUiItemActions(gameSession_.profileForInventoryPresentation(),
+        publishedContentRegistry(), hit->asset->instanceId, inRaid,
+        gameSession_.playerGameplayContext().available?MedicalAccess::CarriedOnly:MedicalAccess::AnyOwned);
     if (actions.empty())
     {
+        if(gameSession_.playerGameplayContext().available &&
+           publishedContentRegistry().item(hit->asset->definitionId).category==ItemCategory::Medical &&
+           !assetIsCarried(gameSession_.profileForInventoryPresentation(),hit->asset->instanceId))
+            uiMessage_="MOVE MEDICAL TO CARRIED INVENTORY FIRST";
         clearProfileItemContext();
         return;
     }
@@ -3889,9 +3742,9 @@ void App::handleProfileRightClick(MousePosition position, bool inRaid)
     ProfileContextMenu menu;
     menu.instanceId = hit->asset->instanceId;
     menu.position = position;
-    menu.source = {hit->asset->instanceId, gameSession_.profile().revision,
+    menu.source = {hit->asset->instanceId, gameSession_.profileForInventoryPresentation().revision,
                    hit->asset->location, 0, hit->asset->orientation};
-    menu.profileId = gameSession_.profile().profileId;
+    menu.profileId = gameSession_.profileForInventoryPresentation().profileId;
     menu.inRaid = inRaid;
     menu.language = uiTextRenderer_.language();
     menu.actions = actions;
@@ -3902,9 +3755,159 @@ void App::handleProfileRightClick(MousePosition position, bool inRaid)
     profileContextMenu_ = std::move(menu);
 }
 
+bool App::submitInventoryUi(const InventoryCommand &command, std::string transactionId,
+    bool inRaid, std::string successMessage, SoundEventId sound)
+{
+    InventoryUiSubmission submission;
+    if(inRaid) {
+        submission.receipt=openedRaidSceneContainerId_
+            ? gameSession_.executeRaidSceneContainerInventory(*openedRaidSceneContainerId_,command,std::move(transactionId))
+            : gameSession_.executeProfileInventory(command,std::move(transactionId));
+        submission.accepted=submission.receipt.succeeded;
+    } else submission=openedBaseGroundContainerId_
+        ? gameFlow_.requestBaseGroundContainerInventory(*openedBaseGroundContainerId_,command,std::move(transactionId))
+        : gameSession_.requestProfileInventory(command,std::move(transactionId));
+    if(!submission.accepted) {
+        uiMessage_=submission.receipt.message;gameAudio_.play(SoundEventId::UiDeny);return false;
+    }
+    if(submission.pending) {
+        pendingInventoryUiFeedback_.insert_or_assign(submission.requestId,
+            PendingInventoryUiFeedback{std::move(successMessage),sound});
+        uiMessage_="SAVING INVENTORY";
+    } else {
+        uiMessage_=std::move(successMessage);gameAudio_.play(sound);
+    }
+    return true;
+}
+
+bool App::deferInventoryBarrier(std::function<void()> action)
+{
+    if(gameFlow_.state()!=GameFlowState::Base)return false;
+    if(gameSession_.inventoryPersistenceBarrierReady())return false;
+    const auto status=gameSession_.baseDefenseActive()?gameSession_.baseDefenseCheckpointStatus():gameSession_.baseDailyCheckpointStatus();
+    if(status.failed || gameSession_.baseDailySaveBlocked() || gameSession_.baseDefenseSaveBlocked()) {
+        uiMessage_=gameSession_.persistenceMessage().empty()?"Save protection is waiting for retry":gameSession_.persistenceMessage();
+        return true;
+    }
+    if(!pendingInventoryBarrierAction_) {
+        gameSession_.requestInventoryPersistenceBarrier();
+        if(gameSession_.inventoryPersistenceBarrierReady())return false;
+        pendingInventoryBarrierAction_=std::move(action);
+    }
+    gameSession_.cancelPlayerControlIntent();
+    uiMessage_="SAVING INVENTORY";
+    return true;
+}
+
+void App::updateInventoryUiPersistence(float deltaTime)
+{
+    gameSession_.updateInventoryPersistence(deltaTime);
+    consumeProfileUiCompletions();
+    for(const auto &completion:gameSession_.takeInventoryUiCompletions()) {
+        const auto found=pendingInventoryUiFeedback_.find(completion.requestId);
+        if(!completion.succeeded) {
+            uiMessage_=completion.message;gameAudio_.play(SoundEventId::UiDeny);
+            pendingInventoryBarrierAction_={};
+            profileInventoryInteraction_.reset();clearProfileItemContext();
+            profileAssetSelection_.reset();profilePresentation_.locateAsset.reset();
+        } else if(found!=pendingInventoryUiFeedback_.end()) {
+            uiMessage_=found->second.message;gameAudio_.play(found->second.sound);
+        }
+        if(found!=pendingInventoryUiFeedback_.end())pendingInventoryUiFeedback_.erase(found);
+    }
+    if(pendingInventoryBarrierAction_) {
+        const auto status=gameSession_.baseDefenseActive()?gameSession_.baseDefenseCheckpointStatus():gameSession_.baseDailyCheckpointStatus();
+        if(status.failed || gameSession_.baseDailySaveBlocked() || gameSession_.baseDefenseSaveBlocked()) {
+            pendingInventoryBarrierAction_={};
+            uiMessage_=gameSession_.persistenceMessage().empty()?"Save protection is waiting for retry":gameSession_.persistenceMessage();
+        }
+    }
+    if(pendingInventoryBarrierAction_ && gameSession_.inventoryPersistenceBarrierReady()) {
+        auto action=std::move(pendingInventoryBarrierAction_);pendingInventoryBarrierAction_={};action();
+    }
+}
+
+bool App::trackProfileUiSubmission(const ProfileUiSubmission &submission,ProfileUiContinuation continuation)
+{
+    failedHomeHintsProfileId_.clear();
+    if(!submission.accepted) {
+        ProfileUiCompletion rejected;rejected.message=submission.message;
+        continuation(rejected);return false;
+    }
+    profileUiContinuations_.insert_or_assign(submission.requestId,std::move(continuation));
+    uiMessage_="SAVING CHANGES";
+    gameSession_.cancelPlayerControlIntent();
+    return true;
+}
+
+void App::consumeProfileUiCompletions()
+{
+    for(const auto &completion:gameSession_.takeProfileUiCompletions()) {
+        const auto found=profileUiContinuations_.find(completion.requestId);
+        if(found==profileUiContinuations_.end()) {
+            // Runtime-owned settlement/rescue operations have no UI callback.
+            // Their failures still need the same visible recovery route.
+            if(!completion.succeeded)uiMessage_=completion.message;
+            continue;
+        }
+        auto continuation=std::move(found->second);profileUiContinuations_.erase(found);
+        if(completion.succeeded && completion.kind==ProfileUiCompletionKind::Command &&
+           !gameFlow_.completeProfileUiCommand(completion)) {
+            uiMessage_="CHANGES SAVED | REOPEN THE PAGE";continue;
+        }
+        if(!completion.succeeded)failedProfileUiContinuation_=continuation;
+        else failedProfileUiContinuation_={};
+        continuation(completion);
+        if(!completion.succeeded)quitAfterProfileUi_=false;
+    }
+    if(quitAfterProfileUi_ && !profileUiBusy()){quitAfterProfileUi_=false;requestQuitAfterInventory();}
+}
+
+bool App::retryPendingProfileUi()
+{
+    if(gameSession_.baseDefenseNeedsCheckpointReload()) {
+        // Invalid simulation is recovered from the last durable checkpoint;
+        // it must never become the candidate of an ordinary writer retry.
+        const bool restored=gameSession_.retryBaseDefenseSave();
+        uiMessage_=gameSession_.persistenceMessage();
+        if(restored)failedProfileUiContinuation_={};
+        return true;
+    }
+    const auto submission=gameSession_.retryProfileUiCommit();
+    if(submission.accepted) {
+        auto continuation=std::move(failedProfileUiContinuation_);failedProfileUiContinuation_={};
+        if(!continuation)continuation=[this](const ProfileUiCompletion &completion) {
+            uiMessage_=completion.succeeded?"PROFILE SAVE CONFIRMED":completion.message;
+        };
+        return trackProfileUiSubmission(submission,std::move(continuation));
+    }
+    uiMessage_=submission.message;return true;
+}
+
+void App::requestQuitAfterInventory()
+{
+    if(profileUiBusy()){quitAfterProfileUi_=true;return;}
+    if(pendingInventoryBarrierAction_) {
+        pendingInventoryBarrierAction_=[this]{requestQuitAfterInventory();};return;
+    }
+    if(gameFlow_.state()==GameFlowState::MainMenu){running_=false;return;}
+    if(gameSession_.developerRangeActive())static_cast<void>(gameFlow_.leaveDeveloperRange());
+    trackProfileUiSubmission(gameSession_.requestWorldDurabilityBarrier(),[this](const ProfileUiCompletion &completion) {
+        if(completion.succeeded)running_=false;else uiMessage_=completion.message;
+    });
+}
+
 void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
 {
-    const ProfileState &profile = gameSession_.profile();
+    const bool inventoryMove=std::holds_alternative<EquipmentSlotTarget>(request.target) ||
+        (std::holds_alternative<StoredCellTarget>(request.target) &&
+         !std::holds_alternative<InstalledMagazineLocation>(request.source.location));
+    if(!inventoryMove && deferInventoryBarrier([this,request,inRaid] {
+        auto current=request;
+        current.source.expectedRevision=gameSession_.profileForInventoryPresentation().revision;
+        executeProfileDrop(current,inRaid);
+    }))return;
+    const ProfileState &profile = gameSession_.profileForInventoryPresentation();
     if (inRaid && raidSceneContainerRoot(profile, request.source.instanceId) &&
         !std::holds_alternative<StoredCellTarget>(request.target) && !std::holds_alternative<EquipmentSlotTarget>(request.target))
     {
@@ -3944,17 +3947,10 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                     }
                     const auto installed = std::get<InstalledMagazineLocation>(
                         request.source.location);
-                    const WeaponAmmoReceipt receipt =
-                        gameSession_.executeProfileWeaponAmmo(
-                            UninstallMagazineCommand{
-                                installed.weaponAssetId,
-                                target.location,
-                                request.source.orientation},
-                            nextProfileTransactionId(
-                                inRaid ? "raid-uninstall" : "base-uninstall"));
-                    uiMessage_ = receipt.succeeded
-                        ? "MAGAZINE UNINSTALLED"
-                        : receipt.message;
+                    submitWeaponAmmoUi(UninstallMagazineCommand{installed.weaponAssetId,target.location,request.source.orientation},
+                        nextProfileTransactionId(inRaid?"raid-uninstall":"base-uninstall"),[this](const auto &receipt) {
+                            uiMessage_=receipt.succeeded?"MAGAZINE UNINSTALLED":receipt.message;
+                        });
                     return;
                 }
                 const InventoryCommand command = InventoryMoveCommand{
@@ -3964,24 +3960,8 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                     request.source.orientation};
                 const std::string transactionId = nextProfileTransactionId(
                     inRaid ? "raid-move" : "base-move");
-                const InventoryReceipt receipt =
-                    inRaid && openedRaidSceneContainerId_
-                        ? gameSession_.executeRaidSceneContainerInventory(*openedRaidSceneContainerId_, command, transactionId)
-                        : !inRaid && openedBaseGroundContainerId_.has_value()
-                        ? gameFlow_.executeBaseGroundContainerInventory(
-                              *openedBaseGroundContainerId_,
-                              command,
-                              transactionId)
-                        : gameSession_.executeProfileInventory(
-                              command,
-                              transactionId);
-                uiMessage_ = receipt.succeeded
-                    ? "INVENTORY UPDATED"
-                    : receipt.message;
-                gameAudio_.play(
-                    receipt.succeeded
-                        ? SoundEventId::InventoryMoveOrPlace
-                        : SoundEventId::UiDeny);
+                submitInventoryUi(command, transactionId, inRaid,
+                    "INVENTORY UPDATED", SoundEventId::InventoryMoveOrPlace);
             }
             else if constexpr (std::is_same_v<Target, EquipmentSlotTarget>)
             {
@@ -3990,28 +3970,12 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                     target.slot};
                 const std::string transactionId = nextProfileTransactionId(
                     inRaid ? "raid-equip" : "base-equip");
-                const InventoryReceipt receipt =
-                    inRaid && openedRaidSceneContainerId_
-                        ? gameSession_.executeRaidSceneContainerInventory(*openedRaidSceneContainerId_, command, transactionId)
-                        : !inRaid && openedBaseGroundContainerId_.has_value()
-                        ? gameFlow_.executeBaseGroundContainerInventory(
-                              *openedBaseGroundContainerId_,
-                              command,
-                              transactionId)
-                        : gameSession_.executeProfileInventory(
-                              command,
-                              transactionId);
-                uiMessage_ = receipt.succeeded
-                    ? "EQUIPMENT UPDATED"
-                    : receipt.message;
-                gameAudio_.play(
-                    receipt.succeeded
-                        ? SoundEventId::InventoryEquip
-                        : SoundEventId::UiDeny);
+                submitInventoryUi(command, transactionId, inRaid,
+                    "EQUIPMENT UPDATED", SoundEventId::InventoryEquip);
             }
             else if constexpr (std::is_same_v<Target, MagazineLoadTarget>)
             {
-                if (inRaid)
+                if (gameSession_.playerGameplayContext().available)
                 {
                     if (gameSession_.startAlphaLoadMagazine(
                             request.source.instanceId,
@@ -4028,20 +3992,12 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                     }
                     return;
                 }
-                const WeaponAmmoReceipt receipt =
-                    gameSession_.executeProfileWeaponAmmo(
-                        LoadMagazineCommand{
-                            target.magazineAssetId,
-                            request.source.instanceId,
-                            request.source.quantity},
-                        nextProfileTransactionId("base-load"));
-                uiMessage_ = receipt.succeeded
-                    ? "MAGAZINE LOADED"
-                    : receipt.message;
+                submitWeaponAmmoUi(LoadMagazineCommand{target.magazineAssetId,request.source.instanceId,request.source.quantity},
+                    nextProfileTransactionId("base-load"),[this](const auto &receipt){uiMessage_=receipt.succeeded?"MAGAZINE LOADED":receipt.message;});
             }
             else if constexpr (std::is_same_v<Target, WeaponInstallTarget>)
             {
-                if (inRaid)
+                if (gameSession_.playerGameplayContext().available)
                 {
                     if (gameSession_.startAlphaReload(
                             target.weaponAssetId,
@@ -4057,20 +4013,13 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                     }
                     return;
                 }
-                const WeaponAmmoReceipt receipt =
-                    gameSession_.executeProfileWeaponAmmo(
-                        InstallMagazineAndChamberCommand{
-                            target.weaponAssetId,
-                            request.source.instanceId},
-                        nextProfileTransactionId("base-install"));
-                uiMessage_ = receipt.succeeded
-                    ? "MAGAZINE INSTALLED"
-                    : receipt.message;
+                submitWeaponAmmoUi(InstallMagazineCommand{target.weaponAssetId,request.source.instanceId},
+                    nextProfileTransactionId("base-install"),[this](const auto &receipt){uiMessage_=receipt.succeeded?"MAGAZINE INSTALLED":receipt.message;});
             }
             else if constexpr (
                 std::is_same_v<Target, WeaponMaintenanceTarget>)
             {
-                if (inRaid)
+                if (gameSession_.playerGameplayContext().available)
                 {
                     if (gameSession_.startAlphaWeaponMaintenance(
                             request.source.instanceId,
@@ -4085,22 +4034,15 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                     }
                     return;
                 }
-                const WeaponMaintenanceReceipt receipt =
-                    gameSession_.executeBaseWeaponMaintenance(
-                        request.source.instanceId,
-                        target.weaponAssetId,
-                        nextProfileTransactionId("base-weapon-maintenance"));
-                uiMessage_ = receipt.succeeded
-                    ? fmt::format(
-                          "WEAPON RESTORED {:.2f}",
-                          static_cast<float>(
-                              receipt.restoredDurabilityCenti) / 100.0F)
-                    : receipt.message;
+                submitProfileUi<WeaponMaintenanceReceipt>(WeaponMaintenanceCommand{request.source.instanceId,target.weaponAssetId},
+                    nextProfileTransactionId("base-weapon-maintenance"),[this](const auto &receipt) {
+                        uiMessage_=receipt.succeeded?fmt::format("WEAPON RESTORED {:.2f}",receipt.restoredDurabilityCenti/100.0F):receipt.message;
+                    });
             }
             else if constexpr (
                 std::is_same_v<Target, ArmorMaintenanceTarget>)
             {
-                if (inRaid)
+                if (gameSession_.playerGameplayContext().available)
                 {
                     if (gameSession_.startAlphaArmorMaintenance(
                             request.source.instanceId,
@@ -4115,17 +4057,10 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                     }
                     return;
                 }
-                const ArmorMaintenanceReceipt receipt =
-                    gameSession_.executeBaseArmorMaintenance(
-                        request.source.instanceId,
-                        target.armorAssetId,
-                        nextProfileTransactionId("base-armor-maintenance"));
-                uiMessage_ = receipt.succeeded
-                    ? fmt::format(
-                          "ARMOR RESTORED {} | MAX {}",
-                          receipt.restoredDurability,
-                          receipt.currentMaximumAfter)
-                    : receipt.message;
+                submitProfileUi<ArmorMaintenanceReceipt>(ArmorMaintenanceCommand{request.source.instanceId,target.armorAssetId},
+                    nextProfileTransactionId("base-armor-maintenance"),[this](const auto &receipt) {
+                        uiMessage_=receipt.succeeded?fmt::format("ARMOR RESTORED {} | MAX {}",receipt.restoredDurability,receipt.currentMaximumAfter):receipt.message;
+                    });
             }
             else
             {
@@ -4153,18 +4088,12 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
                         false);
                     return;
                 }
-                const BaseGroundReceipt receipt =
-                    gameFlow_.dropBaseGroundAsset(
-                        request.source.instanceId,
-                        request.source.quantity,
-                        request.source.orientation,
-                        nextProfileTransactionId("base-ground-drop"));
-                uiMessage_ = receipt.succeeded
-                    ? "ITEM PLACED ON BASE GROUND"
-                    : receipt.message;
-                gameAudio_.play(receipt.succeeded
-                    ? SoundEventId::InventoryMoveOrPlace
-                    : SoundEventId::UiDeny);
+                trackProfileUiResult<BaseGroundReceipt>(gameFlow_.requestBaseWorldUiCommand(
+                    BaseUiDropAsset{request.source.instanceId,request.source.quantity,request.source.orientation,std::nullopt},
+                    nextProfileTransactionId("base-ground-drop")),[this](const auto &receipt){
+                        uiMessage_=receipt.succeeded?"ITEM PLACED ON BASE GROUND":receipt.message;
+                        gameAudio_.play(receipt.succeeded?SoundEventId::InventoryMoveOrPlace:SoundEventId::UiDeny);
+                    });
             }
         },
         request.target);
@@ -4172,6 +4101,7 @@ void App::executeProfileDrop(const ProfileDropRequest &request, bool inRaid)
 
 void App::executeProfileContextAction(AssetInstanceId id, bool inRaid)
 {
+    if(deferInventoryBarrier([this,id,inRaid]{executeProfileContextAction(id,inRaid);}))return;
     const AssetRecord *asset = gameSession_.profile().assets.find(id);
     if (asset == nullptr)
     {
@@ -4180,7 +4110,7 @@ void App::executeProfileContextAction(AssetInstanceId id, bool inRaid)
     }
     const ItemCategory category = publishedContentRegistry()
         .item(asset->definitionId).category;
-    if (inRaid)
+    if (gameSession_.playerGameplayContext().available)
     {
         if (category == ItemCategory::Magazine)
         {
@@ -4194,17 +4124,21 @@ void App::executeProfileContextAction(AssetInstanceId id, bool inRaid)
                 uiMessage_ = "MAGAZINE EMPTY OR NO CARRIED SPACE";
             }
         }
-        else if (category == ItemCategory::Medical &&
-            gameSession_.startAlphaMedical(id))
+        else if (category == ItemCategory::Weapon)
         {
-            const MedicalUsePlan plan = queryMedicalUse(
-                gameSession_.profile(),
-                publishedContentRegistry(),
-                id,
-                MedicalAccess::CarriedOnly);
-            uiMessage_ = fmt::format(
-                "MEDICAL ACTION STARTED ({:.1f} SEC)",
-                static_cast<float>(plan.durationMs) / 1000.0F);
+            if (gameSession_.startAlphaChamber(id))
+            {
+                uiMessage_ = "CHAMBERING";
+                closeInventory();
+            }
+            else
+            {
+                uiMessage_ = "WEAPON CANNOT BE CHAMBERED";
+            }
+        }
+        else if (category == ItemCategory::Medical && gameSession_.startAlphaMedical(id))
+        {
+            uiMessage_ = "MEDICAL ACTION STARTED";
             closeInventory();
         }
         else
@@ -4213,32 +4147,15 @@ void App::executeProfileContextAction(AssetInstanceId id, bool inRaid)
         }
         return;
     }
-    if (category == ItemCategory::Magazine)
-    {
-        const WeaponAmmoReceipt receipt = gameSession_.executeProfileWeaponAmmo(
-            UnloadMagazineCommand{id, ProfileContainerId::stash()},
-            nextProfileTransactionId("base-unload"));
-        uiMessage_ = receipt.succeeded ? "MAGAZINE UNLOADED" : receipt.message;
-        return;
-    }
-    if (category == ItemCategory::Medical)
-    {
-        const MedicalUseReceipt receipt = gameSession_.executeBaseMedical(
-            id, nextProfileTransactionId("base-medical"));
-        uiMessage_ = receipt.succeeded
-            ? receipt.healedAmount > 0
-                ? fmt::format("HEALED {} HP", receipt.healedAmount)
-                : "MEDICAL EFFECT APPLIED"
-            : receipt.message;
-        return;
-    }
-    if (category == ItemCategory::Weapon)
-    {
-        const WeaponAmmoReceipt receipt = gameSession_.executeProfileWeaponAmmo(
-            ChamberWeaponCommand{id},
-            nextProfileTransactionId("base-chamber"));
-        uiMessage_ = receipt.succeeded ? "WEAPON CHAMBERED" : receipt.message;
-    }
+    if(category==ItemCategory::Magazine)
+        submitWeaponAmmoUi(UnloadMagazineCommand{id,ProfileContainerId::stash()},nextProfileTransactionId("base-unload"),
+            [this](const auto &receipt){uiMessage_=receipt.succeeded?"MAGAZINE UNLOADED":receipt.message;});
+    else if(category==ItemCategory::Medical)
+        submitProfileUi<MedicalUseReceipt>(ProfileUiBaseMedicalCommand{id},nextProfileTransactionId("base-medical"),
+            [this](const auto &receipt){uiMessage_=receipt.succeeded?(receipt.healedAmount>0?fmt::format("HEALED {} HP",receipt.healedAmount):"MEDICAL EFFECT APPLIED"):receipt.message;});
+    else if(category==ItemCategory::Weapon)
+        submitWeaponAmmoUi(ChamberWeaponCommand{id},nextProfileTransactionId("base-chamber"),
+            [this](const auto &receipt){uiMessage_=receipt.succeeded?"WEAPON CHAMBERED":receipt.message;});
 }
 
 InventoryGridLayout
@@ -4785,14 +4702,14 @@ void App::processEvents()
         if (event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
             medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear(); allocationUi_.press.reset(); pendingAllocationEvents_.clear();
         }
-        if((medicalWheelOpen_ || throwableWheelOpen_) && event.type==SDL_EVENT_MOUSE_WHEEL) {
-            const auto count=medicalWheelOpen_?medicalWheelOptions_.size():throwableWheelOptions_.size();
+        if((medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_) && event.type==SDL_EVENT_MOUSE_WHEEL) {
+            const auto count=medicalWheelOpen_?medicalWheelOptions_.size():magazineWheelOpen_?magazineWheelOptions_.size():throwableWheelOptions_.size();
             const int pages=static_cast<int>(std::max<std::size_t>(1,(count+7)/8));
             const float direction=event.wheel.direction==SDL_MOUSEWHEEL_FLIPPED?-1.0F:1.0F;
             const int delta=event.wheel.y*direction>0?-1:event.wheel.y*direction<0?1:0;
             quickWheelPage_=static_cast<std::size_t>(std::clamp(static_cast<int>(quickWheelPage_)+delta,0,pages-1));
             const auto selected=quickWheelPage_*8+quickWheelSector(wheelPointerOffset_).value_or(0);
-            if(medicalWheelOpen_)medicalWheelSelectedIndex_=selected;else throwableWheelSelected_=selected;
+            if(medicalWheelOpen_)medicalWheelSelectedIndex_=selected;else if(magazineWheelOpen_)magazineWheelSelectedIndex_=selected;else throwableWheelSelected_=selected;
             continue;
         }
 
@@ -4805,6 +4722,7 @@ void App::processEvents()
         {
             if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
             {
+                gameSession_.cancelPlayerControlIntent();
                 windowHasInputFocus_ = false;
                 homeFoundingPrompt_.reset();
                 static_cast<void>(
@@ -4824,6 +4742,7 @@ void App::processEvents()
             clearProfileItemContext();
             medicalWheelOpen_ = false;
             medicalWheelOptions_.clear();
+            cancelMagazineWheel();
             developerWeaponPanelOpen_ = false;
             developerWeaponPanelBlocksGameplayThisFrame_ = true;
             baseConstructionPanelOpen_ = false; resetBaseFinalDetailsUi();
@@ -4842,7 +4761,7 @@ void App::processEvents()
         if (event.type == SDL_EVENT_MOUSE_MOTION)
         {
             Vec2 motion{event.motion.xrel, event.motion.yrel};
-            if(medicalWheelOpen_ || throwableWheelOpen_)
+            if(medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_)
             {
                 wheelPointerOffset_=moveQuickWheelPointer(wheelPointerOffset_,motion);
             }
@@ -4883,7 +4802,7 @@ void App::processEvents()
                 !inventoryOverlayState_.isOpen() &&
                 !pauseMenu_.isOpen() &&
                 !developerWeaponPanelOpen_ &&
-                !medicalWheelOpen_ && !throwableWheelOpen_ &&
+                !medicalWheelOpen_ && !throwableWheelOpen_ && !magazineWheelOpen_ &&
                 !baseConstructionPanelOpen_ &&
                 !basePlacementState_.has_value() &&
                 !baseFixedFacilityPlacementState_.has_value() &&
@@ -4905,16 +4824,13 @@ void App::processEvents()
 
         if (event.type == SDL_EVENT_QUIT)
         {
-            if (gameFlow_.state() != GameFlowState::Base ||
-                gameSession_.checkpointWorldClock())
-            {
-                running_ = false;
-            }
-            else
-            {
-                uiMessage_ = "WORLD CLOCK SAVE FAILED: " +
-                    gameSession_.persistenceMessage();
-            }
+            requestQuitAfterInventory();
+            continue;
+        }
+        if((pendingInventoryBarrierAction_ || profileUiBusy()) &&
+           (event.type==SDL_EVENT_KEY_DOWN || event.type==SDL_EVENT_MOUSE_BUTTON_DOWN ||
+            event.type==SDL_EVENT_MOUSE_BUTTON_UP || event.type==SDL_EVENT_MOUSE_WHEEL)) {
+            input_.suppressPrimaryPointerUntilRelease();continue;
         }
 
         if (baseConstructionPanelOpen_ && baseFinalDetailsOpen_ && !baseFacilityContextMenu_ &&
@@ -4965,10 +4881,12 @@ void App::processEvents()
                 (click && contains(SDL_FRect{660,405,240,42}, MousePosition{event.button.x,event.button.y}));
             if (confirm)
             {
-                uiMessage_ = gameFlow_.establishHome(*homeFoundingPrompt_)
-                    ? "MAIN BASE ESTABLISHED - YOUR ITEMS ARE UNCHANGED"
-                    : gameSession_.persistenceMessage();
-                homeFoundingPrompt_.reset();
+                const auto submission=gameFlow_.requestBaseWorldUiCommand(
+                    BaseUiEstablishHome{*homeFoundingPrompt_},nextProfileTransactionId("establish-home"));
+                trackProfileUiResult<HomeFoundingReceipt>(submission,[this](const auto &receipt) {
+                    uiMessage_=receipt.succeeded?"MAIN BASE ESTABLISHED - YOUR ITEMS ARE UNCHANGED":receipt.message;
+                    if(receipt.succeeded)homeFoundingPrompt_.reset();
+                });
             }
             else if (cancel) homeFoundingPrompt_.reset();
             input_.suppressPrimaryPointerUntilRelease();
@@ -4983,8 +4901,21 @@ void App::processEvents()
             // A Raid-local display choice is never a save of the active Raid.
             if (gameFlow_.state() == GameFlowState::Raid)
                 firstRaidHintsHiddenForRun_ = true;
-            else if (!gameSession_.dismissHomeHints())
-                uiMessage_ = gameSession_.persistenceMessage();
+            else if (!failedHomeHintsProfileId_.empty() &&
+                     failedHomeHintsProfileId_==gameSession_.profile().profileId &&
+                     failedProfileUiContinuation_ && gameSession_.profileUiCommitPending())
+                static_cast<void>(retryPendingProfileUi());
+            else {
+                const auto profileId=gameSession_.profile().profileId;
+                trackProfileUiSubmission(gameSession_.requestProfileUiCommand(ProfileUiHintsCommand{false},nextProfileTransactionId("dismiss-home-hints")),
+                    [this,profileId](const ProfileUiCompletion &completion) {
+                        if(!completion.succeeded) {
+                            uiMessage_=completion.message;
+                            if(completion.requestId && gameSession_.profile().profileId==profileId)
+                                failedHomeHintsProfileId_=profileId;
+                        } else {failedHomeHintsProfileId_.clear();uiMessage_.clear();}
+                    });
+            }
             continue;
         }
         if (gameFlow_.state() == GameFlowState::Base &&
@@ -5148,6 +5079,11 @@ void App::processEvents()
             }
         }
 
+        if (raidSaveProtectionVisible() && !pauseMenu_.isOpen() &&
+            event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT)
+        {
+            if(handleRaidSaveProtectionClick({event.button.x,event.button.y}))continue;
+        }
         if (gameFlow_.state() == GameFlowState::Base &&
             (gameSession_.baseDefenseSaveBlocked() || gameSession_.baseDailySaveBlocked() || baseDefenseResultVisible_) &&
             !pauseMenu_.isOpen() && event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
@@ -5186,6 +5122,7 @@ void App::processEvents()
             continue;
 
         if (gameFlow_.state() == GameFlowState::Base &&
+            gameSession_.playerGameplayContext().coreBuildAvailable &&
             !pauseMenu_.isOpen() &&
             event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
             event.key.scancode == SDL_SCANCODE_B)
@@ -5604,25 +5541,16 @@ void App::handleDeveloperPanelClick(MousePosition position)
     switch (action->kind)
     {
     case DeveloperPanelActionKind::EnterTestRange:
-        if (gameSession_.developerRangeActive())
-        {
-            static_cast<void>(gameFlow_.leaveDeveloperRange());
-            developerRangePanelOpen_ = false;
-            developerWeaponPanelOpen_ = false;
-        }
-        else if (gameFlow_.enterDeveloperRange())
-        {
-            closeInventory();
-            tacticalMapOpen_ = false;
-            medicalWheelOpen_ = false;
-            developerWeaponPanelOpen_ = false;
-            developerRangePanelOpen_ = true;
-            developerRangeSelection_ = {};
-            savedRangeDeveloperSettings_ = std::array{developerInfiniteAmmoEnabled_, developerMapFogEnabled_, developerCrisisRevealEnabled_};
-            developerInfiniteAmmoEnabled_ = false;
-            uiMessage_ = "RANGE: SELECT EQUIPMENT, THEN GRANT KIT";
-        }
-        else uiMessage_ = "RANGE REQUIRES AN IDLE BASE";
+        if(gameSession_.developerRangeActive()) {
+            static_cast<void>(gameFlow_.leaveDeveloperRange());developerRangePanelOpen_=false;developerWeaponPanelOpen_=false;
+        } else trackProfileUiSubmission(gameSession_.requestWorldDurabilityBarrier(),[this](const ProfileUiCompletion &completion) {
+            if(!completion.succeeded){uiMessage_=completion.message;return;}
+            if(!gameFlow_.completeEnterDeveloperRange(completion.requestId)){uiMessage_="RANGE REQUIRES AN IDLE BASE";return;}
+            closeInventory();tacticalMapOpen_=false;medicalWheelOpen_=false;developerWeaponPanelOpen_=false;
+            developerRangePanelOpen_=true;developerRangeSelection_={};
+            savedRangeDeveloperSettings_=std::array{developerInfiniteAmmoEnabled_,developerMapFogEnabled_,developerCrisisRevealEnabled_};
+            developerInfiniteAmmoEnabled_=false;uiMessage_="RANGE: SELECT EQUIPMENT, THEN GRANT KIT";
+        });
         break;
     case DeveloperPanelActionKind::ToggleMapFog:
         developerMapFogEnabled_ = !developerMapFogEnabled_;
@@ -5703,6 +5631,24 @@ void App::handleDeveloperPanelClick(MousePosition position)
 void App::update(float deltaTime)
 {
     uiClockSeconds_+=std::max(0.0F,deltaTime);
+    updateInventoryUiPersistence(deltaTime);
+    if(!failedHomeHintsProfileId_.empty() &&
+       (failedHomeHintsProfileId_!=gameSession_.profile().profileId || !gameSession_.profileUiCommitPending())) {
+        failedHomeHintsProfileId_.clear();failedProfileUiContinuation_={};
+    }
+    if(pendingInventoryBarrierAction_ || profileUiBusy()) {
+        gameSession_.cancelPlayerControlIntent();
+        pendingBaseClicks_.clear();pendingBaseRightClicks_.clear();pendingInventoryUiEvents_.clear();
+        return;
+    }
+    if((gameFlow_.state()!=GameFlowState::Raid && gameFlow_.state()!=GameFlowState::Base) || pauseMenu_.isOpen() ||
+       developerWeaponPanelOpen_ || developerRangePanelOpen_ || !windowHasInputFocus_)cancelMagazineWheel();
+    if(pauseMenu_.isOpen() || !windowHasInputFocus_ || developerWeaponPanelOpen_ || developerRangePanelOpen_ ||
+       developerWeaponPanelBlocksGameplayThisFrame_ || medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_ || selectedThrowable_ ||
+       inventoryOverlayState_.isOpen() || tacticalMapOpen_ || baseConstructionPanelOpen_ ||
+       basePlacementState_ || baseFixedFacilityPlacementState_ || gameFlow_.activeBaseFacility() ||
+       baseSiegeWarningVisible() || baseDefenseResultVisible_ || gameSession_.baseDailySaveBlocked() || gameSession_.baseDefenseSaveBlocked())
+        gameSession_.cancelPlayerControlIntent();
     updateBasePresentation(deltaTime);
     if (gameFlow_.state() == GameFlowState::RaidResult &&
         (pauseMenu_.isOpen() || developerWeaponPanelOpen_ ||
@@ -5879,13 +5825,14 @@ void App::update(float deltaTime)
         inventoryOverlayState_.isOpen() ||
         basePlacementState_.has_value() ||
         baseFixedFacilityPlacementState_.has_value() ||
-        medicalWheelOpen_ || throwableWheelOpen_ || selectedThrowable_.has_value() ||
+        medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_ || selectedThrowable_.has_value() ||
         tacticalMapOpen_ ||
         developerWeaponPanelBlocksGameplayThisFrame_ ||
         (gameFlow_.state() == GameFlowState::Base &&
          gameFlow_.activeBaseFacility().has_value());
     if (pauseEligible && escapePressed && !existingModalHandlesEscape)
     {
+        gameSession_.cancelPlayerControlIntent();
         pauseMenu_.open();
         gameSession_.cancelWeaponLightInput();
         gameSession_.cancelRaidCredentialInteraction();
@@ -6106,55 +6053,11 @@ void App::update(float deltaTime)
             gameSession_.world().weaponAimWorldPosition();
         gameplayInput.aimMotionDelta = Vec2{};
     }
-    if (gameSession_.world().isAlphaRaidWorld() &&
-        gameSession_.world().raidSession().isActive() &&
-        !inventoryOverlayState_.isOpen() &&
-        !tacticalMapOpen_ &&
-        !developerWeaponPanelOpen_)
-    {
-        if (!throwableWheelOpen_ && !selectedThrowable_ && !gameSession_.world().noiseDecoy().flight() &&
-            !gameSession_.world().grenade().flight() &&
-            input_.wasActionJustPressed(GameAction::Heal) &&
-            !gameSession_.raidActionState().active().has_value())
-        {
-            openMedicalWheel();
-            gameplayInput.healJustPressed = false;
-            gameplayInput.weaponSlotJustPressed.reset();
-        }
-        if (medicalWheelOpen_)
-        {
-            updateMedicalWheelSelection();
-            gameplayInput.aimMotionDelta={};
-            input_.suppressPrimaryPointerUntilRelease();
-            gameplayInput.fireJustPressed = false;
-            gameplayInput.firePressed = false;
-            gameplayInput.reloadJustPressed = false;
-            gameplayInput.interactJustPressed = false;
-            gameplayInput.interactPressed = false;
-            gameplayInput.healJustPressed = false;
-            if (input_.wasActionJustPressed(GameAction::InventoryCancel))
-            {
-                medicalWheelOpen_ = false;
-                medicalWheelOptions_.clear();
-                gameplayInput.quitRaidJustPressed = false;
-                uiMessage_ = "MEDICAL SELECTION CANCELLED";
-            }
-            else if (input_.wasActionJustReleased(GameAction::Heal))
-            {
-                commitMedicalWheelSelection();
-            }
-        }
-    }
-    else
-    {
-        medicalWheelOpen_ = false;
-        medicalWheelOptions_.clear();
-    }
+    updatePlayerActionInput(gameplayInput);
     if (inputDecision.controlAction != InventoryFrameControlAction::None)
     {
         gameplayInput.quitRaidJustPressed = false;
     }
-    updateThrowableInput(gameplayInput);
     if (gameplayInput.interactJustPressed && !inventoryOverlayState_.isOpen() && !tacticalMapOpen_ &&
         !medicalWheelOpen_ && !developerWeaponPanelOpen_ && !developerWeaponPanelBlocksGameplayThisFrame_ &&
         inputDecision.controlAction == InventoryFrameControlAction::None)
@@ -6174,6 +6077,12 @@ void App::update(float deltaTime)
             const auto *root = gameSession_.profile().assets.find(*container);
             uiMessage_ = root && std::holds_alternative<RaidCorpseContainerAssetLocation>(root->location)
                 ? "CORPSE OPENED | WORLD CONTINUES" : "SCENE CONTAINER OPENED | WORLD CONTINUES";
+        }
+        else if(const auto corpse=gameSession_.nearbyBaseCorpse())
+        {
+            const auto inspection=gameSession_.queryBaseCorpseInspection(corpse->corpseId);
+            uiMessage_=inspection.canCommit?"CORPSE EMPTY":inspection.message;
+            gameplayInput.interactJustPressed=gameplayInput.interactPressed=false;
         }
     }
     const InventoryContainerInteractionDecision
@@ -6202,11 +6111,16 @@ void App::update(float deltaTime)
     }
 
     gameplayInput.freezeObservationDirection = inventoryOverlayState_.isOpen() ||
-        tacticalMapOpen_ || medicalWheelOpen_ || throwableWheelOpen_ || developerWeaponPanelOpen_ ||
+        tacticalMapOpen_ || medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_ || developerWeaponPanelOpen_ ||
         developerWeaponPanelBlocksGameplayThisFrame_ || !windowHasInputFocus_;
+    const auto actionMessageBefore=gameSession_.persistenceMessage();
     gameFlow_.update(
         gameplayInput,
         deltaTime);
+    if((gameplayInput.cycleFireModeJustPressed || !gameplayInput.raidReloadIntents.empty() ||
+        gameplayInput.lightJustPressed || gameplayInput.lightJustReleased || gameplayInput.weaponSlotJustPressed) &&
+       gameSession_.persistenceMessage()!=actionMessageBefore && !gameSession_.persistenceMessage().empty())
+        uiMessage_=gameSession_.persistenceMessage();
     if (gameFlow_.state() == GameFlowState::RaidResult &&
         gameSession_.world().isAlphaRaidWorld())
     {
@@ -6239,9 +6153,7 @@ void App::update(float deltaTime)
         const auto tuning = gameSession_.developerWeaponTuning();
         const auto &acoustics = gameSession_.world().shotAcousticsLastUpdate();
         gameAudio_.play(
-            tuning.has_value() && tuning->weaponUse.automaticFire
-                ? SoundEventId::WeaponRifleFire
-                : SoundEventId::WeaponPistolFire, acoustics.fireGain);
+            weaponShotSound(tuning), acoustics.fireGain);
         gameAudio_.play(SoundEventId::WeaponFireTailOutdoor,
                         acoustics.outdoorTailGain);
     }
@@ -6333,12 +6245,12 @@ void App::consumePresentationAudioEvents()
         case GameSessionPresentationEvent::WeaponChambered:
             gameAudio_.play(SoundEventId::WeaponChamber);
             break;
+        case GameSessionPresentationEvent::WeaponMagazineRemoved:
+            gameAudio_.play(SoundEventId::WeaponMagazineOut);break;
+        case GameSessionPresentationEvent::WeaponMagazineInserted:
+            gameAudio_.play(SoundEventId::WeaponMagazineIn);break;
         case GameSessionPresentationEvent::ReloadStarted:
-            gameAudio_.play(SoundEventId::WeaponMagazineOut);
-            break;
         case GameSessionPresentationEvent::ReloadCompleted:
-            gameAudio_.play(SoundEventId::WeaponMagazineIn);
-            gameAudio_.play(SoundEventId::WeaponChamber);
             break;
         case GameSessionPresentationEvent::MagazineLoaded:
             gameAudio_.play(SoundEventId::InventoryMoveOrPlace);
@@ -6435,7 +6347,6 @@ void App::pushBaseOperationNotice(
         });
     if (matching != baseOperationNotices_.end())
     {
-        matching->remainingSeconds = kBaseOperationNoticeLifetimeSeconds;
         return;
     }
     if (baseOperationNotices_.size() >= 4U)
@@ -6457,7 +6368,7 @@ bool App::hasBaseOperationNotice(BaseFacilityKind facility) const noexcept
 void App::renderDebugText()
 {
     if(inventoryOverlayState_.isOpen() || tacticalMapOpen_ || medicalWheelOpen_ ||
-       throwableWheelOpen_ || developerWeaponPanelOpen_ || developerRangePanelOpen_ || pauseMenu_.isOpen())return;
+       throwableWheelOpen_ || magazineWheelOpen_ || developerWeaponPanelOpen_ || developerRangePanelOpen_ || pauseMenu_.isOpen())return;
     const auto &world=gameSession_.world();
     const auto &profile=gameSession_.profile();
     const auto &player=world.player();
@@ -6501,10 +6412,13 @@ void App::renderDebugText()
     if(world.isAlphaRaidWorld()){
         if(const auto id=gameSession_.activeAlphaWeapon())if(const auto *a=profile.assets.find(*id)){
             p.weapon=compactUiItemName(publishedContentRegistry().item(a->definitionId),uiTextRenderer_.language());
+            if(const auto mode=gameSession_.weaponFireMode(*id))p.weapon+=" · "+std::string(uiWeaponFireModeName(*mode,uiTextRenderer_.language()));
             const auto magazine=installedMagazine(profile,*id);
             p.ammunition=fmt::format("{} {} + {}   ·   R {}",tr("弹药","AMMO"),magazine?magazineRoundCount(profile,*magazine):0U,a->chamberedRound?1:0,tr("换弹","RELOAD"));
             if(a->weaponMalfunction!=WeaponMalfunctionType::None)p.condition=tr("卡弹 · 移动鼠标排障","MALFUNCTION · SWEEP MOUSE TO CLEAR");
             else if(!a->currentDurability)p.condition=tr("枪械损坏 · 需要维修","WEAPON BROKEN · REPAIR REQUIRED");
+            else if(!a->chamberedRound && magazine && magazineRoundCount(profile,*magazine)>0)
+                p.condition=tr("空膛 · R上膛","EMPTY CHAMBER · R TO CHAMBER");
         }
         for(std::size_t i=0;i<kWeaponEquipmentSlots.size();++i){
             const auto slot=kWeaponEquipmentSlots[i];std::string name=tr("空","EMPTY");
@@ -6518,16 +6432,7 @@ void App::renderDebugText()
         if(player.isControlled())p.medical+=fmt::format(" {} {:.1f}s",tr("受控","CONTROLLED"),player.controlRemaining());
         if(player.isImpactSlowed())p.medical+=fmt::format(" {} {:.1f}s",tr("踉跄","STAGGER"),player.impactSlowRemaining());
         if(const auto &action=gameSession_.raidActionState().active();action){
-            const char *name=std::visit([](const auto &a){using T=std::decay_t<decltype(a)>;
-                if constexpr(std::is_same_v<T,ReloadRaidAction>)return "RELOADING";
-                if constexpr(std::is_same_v<T,LoadMagazineRaidAction>)return "PACKING MAGAZINE";
-                if constexpr(std::is_same_v<T,UnloadMagazineRaidAction>)return "UNLOADING MAGAZINE";
-                if constexpr(std::is_same_v<T,WeaponMaintenanceRaidAction>)return "MAINTAINING WEAPON";
-                if constexpr(std::is_same_v<T,ArmorMaintenanceRaidAction>)return "REPAIRING ARMOR";
-                if constexpr(std::is_same_v<T,WeaponSwitchRaidAction>)return "SWITCHING WEAPON";
-                if constexpr(std::is_same_v<T,MedicalRaidAction>){switch(a.effect){case MedicalUseEffect::StopLightBleeding:return "BANDAGING";case MedicalUseEffect::StopAnyBleeding:return "APPLYING TOURNIQUET";case MedicalUseEffect::SuppressPain:return "TAKING PAINKILLER";default:return "HEALING";}}
-                if constexpr(std::is_same_v<T,ExtractRaidAction>)return "EXTRACTING";
-                return "HEALING";},*action);
+            const auto name=uiPlayerActionLabel(*action);
             p.actionActive=true;p.actionFraction=gameSession_.raidActionState().progress();p.action=fmt::format("{} {:.0f}%",name,p.actionFraction*100);
         }
     }
@@ -6539,7 +6444,7 @@ void App::renderDebugText()
     const auto light=gameSession_.activeWeaponLight();
     if(light.binding.deviceAssetId)p.light=fmt::format("{} · {}% · U",lightStateLabel(light),light.capacityMs?static_cast<std::uint64_t>(light.remainingMs)*100/light.capacityMs:0);
     else if(gameSession_.persistenceMessage()=="ONLY WEAPON LIGHT | TAP U" || gameSession_.persistenceMessage()=="NO ACTIVE WEAPON LIGHT")p.light=gameSession_.persistenceMessage();
-    p.feedback=uiMessage_;
+    p.feedback=raidSaveProtectionVisible()?std::string_view{}:visibleFeedbackMessage();
     renderUiRaidHud(renderer_,uiTextRenderer_,p);
     const RaidSession &raidSession=raid;
     if (raidSession.isTerminal() &&
@@ -8786,7 +8691,7 @@ bool App::shouldCaptureWorldPointer() const noexcept
         !gameFlow_.activeBaseFacility().has_value() &&
         !gameSession_.baseDefenseSaveBlocked() && !gameSession_.baseDailySaveBlocked() && !baseDefenseResultVisible_ &&
         !baseSiegeWarningVisible() && !siegeWarningBlocksGameplayThisFrame_;
-    const bool raidWorldActive = gameFlow_.isRaidScreen() &&
+    const bool raidWorldActive = gameFlow_.isRaidScreen() && !raidSaveProtectionVisible() &&
         gameSession_.world().raidSession().isActive();
     return shouldCaptureRaidPointer(
         RaidPointerCaptureContext{
@@ -8796,7 +8701,7 @@ bool App::shouldCaptureWorldPointer() const noexcept
                 basePlacementState_.has_value() ||
                 baseFixedFacilityPlacementState_.has_value() ||
                 baseConstructionPanelOpen_ || homeFoundingPrompt_.has_value(),
-            medicalWheelOpen_ || throwableWheelOpen_,
+            medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_,
             developerWeaponPanelOpen_ || developerRangePanelOpen_,
             pauseMenu_.isOpen(),
             tacticalMapOpen_,
@@ -8805,7 +8710,7 @@ bool App::shouldCaptureWorldPointer() const noexcept
 
 void App::syncRaidPointerCapture() noexcept
 {
-    const bool wheel=(medicalWheelOpen_ || throwableWheelOpen_) && windowHasInputFocus_ &&
+    const bool wheel=(medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_) && windowHasInputFocus_ &&
         !inventoryOverlayState_.isOpen() && !pauseMenu_.isOpen() && !tacticalMapOpen_;
     if(wheelPointerCaptureActive_!=wheel) {
         wheelPointerCaptureActive_=wheel;pendingRelativeAimMotion_={};
@@ -8865,7 +8770,7 @@ void App::renderAimCrosshair()
         basePlacementState_.has_value() ||
         baseFixedFacilityPlacementState_.has_value() ||
         baseConstructionPanelOpen_ ||
-        medicalWheelOpen_ || throwableWheelOpen_ ||
+        medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_ ||
         tacticalMapOpen_ ||
         developerWeaponPanelOpen_ ||
         developerRangePanelOpen_ ||
@@ -8976,6 +8881,190 @@ void App::openMedicalWheel()
     medicalWheelOptions_=quickWheelCandidates(gameSession_.profile(),publishedContentRegistry(),UiQuickWheelKind::Medical);
     medicalWheelSelectedIndex_=0;quickWheelPage_=0;wheelPointerOffset_={};
     pendingRelativeAimMotion_={};medicalWheelOpen_=true;uiMessage_.clear();
+}
+
+void App::cancelMagazineWheel()
+{
+    if(magazineWheelOpen_)magazineFireSuppressedUntilRelease_=input_.isActionPressed(GameAction::Fire);
+    magazineWheelOpen_=false;magazineWheelOptions_.clear();magazineWheelWeapon_.reset();
+    reloadGesture_.cancel(input_.isActionPressed(GameAction::Reload));
+    reloadGestureWeapon_.reset();
+}
+
+void App::openMagazineWheel(AssetInstanceId weapon)
+{
+    if(gameSession_.playerGameplayContext().activeWeapon!=weapon)return;
+    magazineWheelWeapon_=weapon;
+    magazineWheelOptions_=quickWheelCandidates(gameSession_.profile(),publishedContentRegistry(),
+        UiQuickWheelKind::Magazine,weapon);
+    magazineWheelSelectedIndex_=0;quickWheelPage_=0;wheelPointerOffset_={};
+    if(const auto preferred=selectRaidReloadMagazine(gameSession_.profile(),publishedContentRegistry(),weapon)) {
+        const auto at=std::find(magazineWheelOptions_.begin(),magazineWheelOptions_.end(),*preferred);
+        if(at!=magazineWheelOptions_.end())magazineWheelSelectedIndex_=static_cast<std::size_t>(at-magazineWheelOptions_.begin());
+        quickWheelPage_=magazineWheelSelectedIndex_/8;
+    }
+    pendingRelativeAimMotion_={};magazineWheelOpen_=true;
+    magazineFireSuppressedUntilRelease_=true;uiMessage_.clear();
+}
+
+void App::updatePlayerActionInput(GameplayInput &gameplayInput)
+{
+    gameplayInput.healJustPressed=false;
+    if(gameFlow_.state()==GameFlowState::Base && gameSession_.playerGameplayContext().coreBuildAvailable)
+        gameplayInput.cycleFireModeJustPressed=false;
+    updateRaidReloadInput(gameplayInput);
+    const auto context=gameSession_.playerGameplayContext();
+    if (context.available && windowHasInputFocus_ &&
+        !pauseMenu_.isOpen() && !baseConstructionPanelOpen_ &&
+        !basePlacementState_ && !baseFixedFacilityPlacementState_ && !gameFlow_.activeBaseFacility() &&
+        !inventoryOverlayState_.isOpen() &&
+        !tacticalMapOpen_ &&
+        !developerWeaponPanelOpen_)
+    {
+        if (!throwableWheelOpen_ && !magazineWheelOpen_ && !selectedThrowable_ &&
+            input_.wasActionJustPressed(GameAction::Heal) &&
+            !gameSession_.playerActionState().active().has_value())
+        {
+            openMedicalWheel();
+            gameplayInput.healJustPressed = false;
+            gameplayInput.weaponSlotJustPressed.reset();
+        }
+        if (medicalWheelOpen_)
+        {
+            updateMedicalWheelSelection();
+            gameplayInput.aimMotionDelta={};
+            input_.suppressPrimaryPointerUntilRelease();
+            gameplayInput.fireJustPressed = false;
+            gameplayInput.firePressed = false;
+            gameplayInput.reloadJustPressed = false;
+            gameplayInput.interactJustPressed = false;
+            gameplayInput.interactPressed = false;
+            gameplayInput.healJustPressed = false;
+            if (input_.wasActionJustPressed(GameAction::InventoryCancel))
+            {
+                medicalWheelOpen_ = false;
+                medicalWheelOptions_.clear();
+                gameplayInput.quitRaidJustPressed = false;
+                uiMessage_ = "MEDICAL SELECTION CANCELLED";
+            }
+            else if (input_.wasActionJustReleased(GameAction::Heal))
+            {
+                commitMedicalWheelSelection();
+            }
+        }
+    }
+    else
+    {
+        medicalWheelOpen_ = false;
+        medicalWheelOptions_.clear();
+    }
+    updateThrowableInput(gameplayInput);
+    if(gameplayInput.throwableModal || medicalWheelOpen_ || inventoryOverlayState_.isOpen() || tacticalMapOpen_) {
+        gameSession_.cancelPlayerControlIntent();
+        gameplayInput.cycleFireModeJustPressed=false;gameplayInput.raidReloadIntents.clear();
+        gameplayInput.reloadGestureJustPressed=false;
+    }
+}
+
+void App::updateRaidReloadInput(GameplayInput &input)
+{
+    // All weapon activities consume the R edges through this one gesture.
+    // Never let the old press shortcut start a reload alongside a long hold.
+    input.reloadJustPressed=false;
+    bool wheelThisFrame=magazineWheelOpen_;
+    const auto suppressWheelInput=[&] {
+        input.fireJustPressed=input.firePressed=false;input.interactJustPressed=input.interactPressed=false;
+        input.reloadJustPressed=input.healJustPressed=input.meleeJustPressed=input.meleePressed=false;
+        input.sprint=false;input.cycleFireModeJustPressed=false;input.weaponSlotJustPressed.reset();
+        input.aimMotionDelta=Vec2{};input.quitRaidJustPressed=false;
+        input_.suppressPrimaryPointerUntilRelease();
+    };
+    if(magazineFireSuppressedUntilRelease_) {
+        if(input_.isActionPressed(GameAction::Fire) || input_.isPrimaryPointerPressed())
+            input.fireJustPressed=input.firePressed=false;
+        else magazineFireSuppressedUntilRelease_=false;
+    }
+    const auto context=gameSession_.playerGameplayContext();
+    const bool available=context.available && windowHasInputFocus_ &&
+        !inventoryOverlayState_.isOpen() && !tacticalMapOpen_ && !pauseMenu_.isOpen() &&
+        !developerWeaponPanelOpen_ && !developerRangePanelOpen_ &&
+        !developerWeaponPanelBlocksGameplayThisFrame_ && !medicalWheelOpen_ &&
+        !throwableWheelOpen_ && !selectedThrowable_ && !baseConstructionPanelOpen_ &&
+        !basePlacementState_ && !baseFixedFacilityPlacementState_ && !gameFlow_.activeBaseFacility();
+    const auto weapon=context.activeWeapon;
+    if(!available || !weapon) {
+        cancelMagazineWheel();input.cycleFireModeJustPressed=false;input.reloadGestureJustPressed=false;
+        return;
+    }
+    if(reloadGestureWeapon_ && reloadGestureWeapon_!=weapon)cancelMagazineWheel();
+    if(input.weaponSlotJustPressed || input.meleeJustPressed || input.sprint ||
+        context.controlled) {
+        cancelMagazineWheel();return;
+    }
+    if(magazineWheelOpen_)
+        if(const auto sector=quickWheelSector(wheelPointerOffset_))magazineWheelSelectedIndex_=quickWheelPage_*8+*sector;
+    double now=static_cast<double>(SDL_GetTicksNS())/1e9;
+    for(const auto &edge:input_.reloadTransitions())now=std::max(now,edge.timeSeconds);
+    const bool cancelRequested=input_.wasActionJustPressed(GameAction::InventoryCancel) ||
+        input_.wasSecondaryPointerJustPressed();
+    const auto emit=[&](const std::vector<RaidReloadGestureEvent> &events) {
+        for(const auto &event:events) {
+            if(event.kind==RaidReloadGestureKind::OpenWheel) {
+                wheelThisFrame=true;
+                if(cancelRequested) {cancelMagazineWheel();continue;}
+                openMagazineWheel(*weapon);
+                continue;
+            }
+            RaidReloadIntent intent;
+            intent.expectedWeaponId=reloadGestureWeapon_.value_or(0);
+            intent.ageSeconds=static_cast<float>(std::max(0.0,now-event.timeSeconds));
+            intent.gestureId=event.gestureId;
+            intent.doubleTapSeconds=event.doubleTapSeconds;
+            if(event.kind==RaidReloadGestureKind::Selected) {
+                if(magazineWheelOpen_ && magazineWheelSelectedIndex_<magazineWheelOptions_.size()) {
+                    intent.kind=RaidReloadInputKind::Selected;
+                    intent.magazineId=magazineWheelOptions_[magazineWheelSelectedIndex_];
+                } else {
+                    magazineWheelOpen_=false;magazineWheelOptions_.clear();magazineWheelWeapon_.reset();
+                    magazineFireSuppressedUntilRelease_=input_.isActionPressed(GameAction::Fire);
+                    continue;
+                }
+                magazineWheelOpen_=false;magazineWheelOptions_.clear();magazineWheelWeapon_.reset();
+                magazineFireSuppressedUntilRelease_=input_.isActionPressed(GameAction::Fire);
+            } else {
+                intent.kind=event.kind==RaidReloadGestureKind::Automatic ?
+                    RaidReloadInputKind::Automatic:RaidReloadInputKind::UpgradeEmergency;
+                if(event.kind==RaidReloadGestureKind::Automatic && magazineWheelOpen_) {
+                    magazineWheelOpen_=false;magazineWheelOptions_.clear();magazineWheelWeapon_.reset();
+                }
+            }
+            if(input.raidReloadIntents.size()<2)input.raidReloadIntents.push_back(intent);
+        }
+    };
+    const bool cancel=magazineWheelOpen_ && cancelRequested;
+    if(cancel) {
+        cancelMagazineWheel();input_.suppressPrimaryPointerUntilRelease();
+        input.quitRaidJustPressed=false;input.cycleFireModeJustPressed=false;
+        uiMessage_="MAGAZINE SELECTION CANCELLED";
+        suppressWheelInput();
+        return;
+    }
+    const auto &active=gameSession_.playerActionState().active();
+    const bool unrelated=active && !std::holds_alternative<ReloadRaidAction>(*active) &&
+        !std::holds_alternative<ChamberRaidAction>(*active);
+    for(const auto &edge:input_.reloadTransitions()) {
+        if(edge.pressed) {
+            if(unrelated)reloadGesture_.cancel(false);
+            reloadGestureWeapon_=weapon;
+            emit(reloadGesture_.press(edge.timeSeconds,active.has_value() || !input.raidReloadIntents.empty()));
+        } else emit(reloadGesture_.release(edge.timeSeconds));
+    }
+    emit(reloadGesture_.advance(now));
+    if(wheelThisFrame) {
+        gameSession_.cancelPlayerControlIntent();
+        if(const auto sector=quickWheelSector(wheelPointerOffset_))magazineWheelSelectedIndex_=quickWheelPage_*8+*sector;
+        suppressWheelInput();
+    }
 }
 
 void App::updateMedicalWheelSelection()
@@ -9593,6 +9682,15 @@ void App::renderPauseMenu() { if(pauseMenu_.isOpen()) renderFoundationMenu(true)
 void App::renderBaseWorld()
 {
     const BaseWorld &world = gameFlow_.baseWorld();
+    SDL_Texture *sceneTarget=SDL_GetRenderTarget(renderer_);
+    const bool observationLayer=!baseConstructionPanelOpen_ && !basePlacementState_ &&
+        !baseFixedFacilityPlacementState_ && ensureIndoorObservationTargets() &&
+        SDL_SetRenderTarget(renderer_,indoorInformationLayer_.get());
+    if(observationLayer) {
+        SDL_SetRenderViewport(renderer_,nullptr);SDL_SetRenderScale(renderer_,1,1);
+        SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_NONE);
+        SDL_SetRenderDrawColor(renderer_,15,21,21,255);SDL_RenderClear(renderer_);
+    }
     const Vec2 camera = baseWorldCameraOffset();
     const Vec2 shakePixels = raidWorldScreenShakePixels();
     const Vec2 worldSize = world.worldSize();
@@ -9844,6 +9942,8 @@ void App::renderBaseWorld()
     for (const BaseGroundAssetProjection &ground :
          gameFlow_.baseGroundAssets())
     {
+        if(!baseConstructionPanelOpen_ && !basePlacementState_ && !baseFixedFacilityPlacementState_ &&
+           !world.boundsObservable({{ground.position.x-24,ground.position.y-24},{48,48}}))continue;
         if (ground.position.x < camera.x - 96.0F ||
             ground.position.y < camera.y - 96.0F ||
             ground.position.x > camera.x + kWindowWidth / zoom + 96.0F ||
@@ -9892,8 +9992,11 @@ void App::renderBaseWorld()
     renderBaseDefenseWorld();
     renderBaseFortificationPreview();
 
+    renderEmptyPlayerCorpses();
+
     for (const Enemy &enemy : world.baseDefenseActive() ? world.baseDefenseEnemies() : world.perimeterEnemies())
     {
+        if(!baseConstructionPanelOpen_ && !world.enemyObservable(enemy.combatTargetId()))continue;
         const Rect enemyBounds = enemy.bounds();
         if (enemyBounds.position.x < camera.x - 96.0F ||
             enemyBounds.position.y < camera.y - 96.0F ||
@@ -9945,6 +10048,38 @@ void App::renderBaseWorld()
     renderShotPresentations();
     renderShotFeedbackPresentations();
     renderParticles();
+    renderNoiseDecoyWorld();
+
+    if(observationLayer) {
+        SDL_SetRenderTarget(renderer_,sceneTarget);
+        SDL_SetRenderViewport(renderer_,nullptr);SDL_SetRenderScale(renderer_,1,1);
+        SDL_SetTextureColorMod(indoorInformationLayer_.get(),62,62,62);
+        SDL_RenderTexture(renderer_,indoorInformationLayer_.get(),nullptr,nullptr);
+        SDL_SetTextureColorMod(indoorInformationLayer_.get(),255,255,255);
+        const Rect visible{camera,{static_cast<float>(kWindowWidth),static_cast<float>(kWindowHeight)}};
+        const auto paintVisibility=[&](const RaidVisibilityProjection &view, bool background) {
+            if(!view.valid)return;
+            std::vector<SDL_Vertex> vertices;
+            for(std::size_t i=0;i<view.boundary.size();++i) {
+                const auto polygon=clipRaidVisibilityTriangle(view.observer,view.boundary[i],
+                    view.boundary[(i+1)%view.boundary.size()],visible);
+                for(std::size_t j=1;j+1<polygon.size();++j)
+                    for(const auto point:{polygon[0],polygon[j],polygon[j+1]}) {
+                        const SDL_FPoint screen{point.x-camera.x,point.y-camera.y};
+                        const float shade=background?.32F:1.0F;
+                        vertices.push_back({screen,{shade,shade,shade,1},
+                            {screen.x/kWindowWidth,screen.y/kWindowHeight}});
+                    }
+            }
+            if(!vertices.empty())SDL_RenderGeometry(renderer_,indoorInformationLayer_.get(),
+                vertices.data(),static_cast<int>(vertices.size()),nullptr,0);
+        };
+        for(const auto &near:world.weaponLightBackgroundObservations())paintVisibility(near,true);
+        paintVisibility(world.observation(),false);
+        SDL_SetRenderViewport(renderer_,&worldViewport);
+        renderPlayerAvatar(playerPosition,playerSize,world.playerFacingDirection(),
+            world.playerIsMoving(),world.playerAnimationFrame());
+    }
 
     static_cast<void>(SDL_SetRenderViewport(renderer_, nullptr));
     static_cast<void>(SDL_SetRenderScale(renderer_, 1.0F, 1.0F));
@@ -9973,7 +10108,7 @@ void App::renderBaseWorld()
     if (!prompt.empty())
     {
         SDL_SetRenderDrawColor(renderer_, 222, 231, 226, 255);
-        uiTextRenderer_.renderBox(renderer_, {450,678,380,22}, prompt,
+        uiTextRenderer_.renderBox(renderer_, baseBottomHudLayout().interaction, prompt,
             {13, UiTextAlign::Center, 1});
     }
 
@@ -10155,23 +10290,14 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
                 }
                 const bool cancelling = project.action ==
                     BaseConstructionCatalogAction::Cancel;
-                const BaseConstructionReceipt receipt = cancelling
-                    ? gameSession_.executeCancelBaseConstruction(
-                        project.definitionId,
-                        nextProfileTransactionId(
-                            "base-build-cancel-project"))
-                    : gameSession_.executeStartBaseConstruction(
-                        project.definitionId,
-                        nextProfileTransactionId(
-                            "base-build-start-project"));
-                uiMessage_ = receipt.succeeded
-                    ? cancelling
-                        ? "CONSTRUCTION PROJECT CANCELLED | MATERIAL REFUNDED"
-                        : "CONSTRUCTION PROJECT STARTED"
-                    : receipt.message;
-                gameAudio_.play(receipt.succeeded
-                    ? SoundEventId::UiConfirm
-                    : SoundEventId::UiDeny);
+                const ProfileUiCommand command=cancelling
+                    ?ProfileUiCommand{CancelBaseConstructionCommand{project.definitionId}}
+                    :ProfileUiCommand{StartBaseConstructionCommand{project.definitionId}};
+                submitProfileUi<BaseConstructionReceipt>(command,nextProfileTransactionId("base-build-project"),
+                    [this,cancelling](const auto &receipt) {
+                        uiMessage_=receipt.succeeded?(cancelling?"CONSTRUCTION PROJECT CANCELLED | MATERIAL REFUNDED":"CONSTRUCTION PROJECT STARTED"):receipt.message;
+                        gameAudio_.play(receipt.succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);
+                    });
                 return;
             }
         }
@@ -10233,22 +10359,13 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
                 if (baseConstructionPage_ ==
                     BaseConstructionPage::Purchase)
                 {
-                    const auto receipt =
-                        gameSession_.purchaseBasePlaceable(
-                            definition.definitionId,
-                            nextProfileTransactionId(
-                                "base-build-purchase"));
-                    if (!receipt.succeeded)
-                    {
-                        uiMessage_ = receipt.message;
-                        gameAudio_.play(SoundEventId::UiDeny);
-                        return;
-                    }
-                    gameAudio_.play(SoundEventId::UiConfirm);
-                    startBasePlacement(
-                        receipt.assetId,
-                        BasePlacementState::Mode::PlaceOwned,
-                        true);
+                    submitProfileUi<ProfileUiPlaceablePurchaseReceipt>(
+                        ProfileUiPlaceablePurchaseCommand{definition.definitionId},nextProfileTransactionId("base-build-purchase"),
+                        [this](const auto &receipt) {
+                            if(!receipt.succeeded){uiMessage_=receipt.message;gameAudio_.play(SoundEventId::UiDeny);return;}
+                            gameAudio_.play(SoundEventId::UiConfirm);
+                            startBasePlacement(receipt.assetId,BasePlacementState::Mode::PlaceOwned,true);
+                        });
                     return;
                 }
                 startBasePlacement(
@@ -10386,119 +10503,43 @@ bool App::handleBaseFacilityInspectorClick(MousePosition position)
                 return true;
             }
 
-            bool succeeded{};
-            std::string message;
-            switch (action.kind)
-            {
-            case BaseFacilityQuickActionKind::OpenFunction:
-                openBaseFixedFacility(projection.kind);
-                return true;
+            const auto finish=[this,kind=action.kind](const auto &receipt) {
+                const char *success="BASE FACILITY UPDATED";
+                switch(kind) {
+                case BaseFacilityQuickActionKind::AssignBestWorker:success="BASE FACILITY WORKER ASSIGNED";break;
+                case BaseFacilityQuickActionKind::ClearWorker:success="BASE FACILITY WORKER CLEARED";break;
+                case BaseFacilityQuickActionKind::StartUpgrade:success="BASE FACILITY UPGRADE STARTED";break;
+                case BaseFacilityQuickActionKind::CancelUpgrade:success="BASE FACILITY UPGRADE CANCELLED";break;
+                case BaseFacilityQuickActionKind::CollectManufacturing:success="MANUFACTURED ITEM COLLECTED";break;
+                case BaseFacilityQuickActionKind::CancelManufacturing:success="MANUFACTURING CANCELLED | INPUTS RETURNED";break;
+                case BaseFacilityQuickActionKind::StartResidentTreatment:success="RESIDENT TREATMENT STARTED";break;
+                case BaseFacilityQuickActionKind::AutoFillWorkers:success="BASE FACILITY WORKERS AUTO-FILLED";break;
+                default:break;
+                }
+                uiMessage_=receipt.succeeded?success:receipt.message;
+                gameAudio_.play(receipt.succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);
+            };
+            const auto tx=nextProfileTransactionId("base-inspector-action");
+            switch(action.kind) {
+            case BaseFacilityQuickActionKind::OpenFunction:openBaseFixedFacility(projection.kind);return true;
             case BaseFacilityQuickActionKind::AssignBestWorker:
-            case BaseFacilityQuickActionKind::ClearWorker:
-            {
-                const BaseFacilityStaffingKind facility =
-                    projection.kind == BaseFacilityKind::Workshop
-                    ? BaseFacilityStaffingKind::Workshop
-                    : BaseFacilityStaffingKind::Medical;
-                const BaseWorkforceReceipt receipt =
-                    action.kind ==
-                        BaseFacilityQuickActionKind::AssignBestWorker
-                    ? gameSession_.executeAssignBestBaseWorker(
-                        facility,
-                        nextProfileTransactionId(
-                            "base-inspector-assign-worker"))
-                    : gameSession_.executeClearBaseWorker(
-                        facility,
-                        nextProfileTransactionId(
-                            "base-inspector-clear-worker"));
-                succeeded = receipt.succeeded;
-                message = receipt.succeeded
-                    ? action.kind ==
-                            BaseFacilityQuickActionKind::AssignBestWorker
-                        ? "BASE FACILITY WORKER ASSIGNED"
-                        : "BASE FACILITY WORKER CLEARED"
-                    : receipt.message;
-                break;
+            case BaseFacilityQuickActionKind::ClearWorker: {
+                const auto facility=projection.kind==BaseFacilityKind::Workshop?BaseFacilityStaffingKind::Workshop:BaseFacilityStaffingKind::Medical;
+                const ProfileUiCommand command=action.kind==BaseFacilityQuickActionKind::AssignBestWorker
+                    ?ProfileUiCommand{ProfileUiAssignWorkerCommand{facility}}:ProfileUiCommand{ProfileUiClearWorkerCommand{facility}};
+                submitProfileUi<BaseWorkforceReceipt>(command,tx,finish);break;
             }
             case BaseFacilityQuickActionKind::StartUpgrade:
             case BaseFacilityQuickActionKind::CancelUpgrade:
-            {
-                if (!action.constructionProjectId.has_value())
-                {
-                    message = "BASE FACILITY UPGRADE IS NOT AVAILABLE";
-                    break;
-                }
-                const BaseConstructionReceipt receipt =
-                    action.kind == BaseFacilityQuickActionKind::StartUpgrade
-                    ? gameSession_.executeStartBaseConstruction(
-                        *action.constructionProjectId,
-                        nextProfileTransactionId(
-                            "base-inspector-start-upgrade"))
-                    : gameSession_.executeCancelBaseConstruction(
-                        *action.constructionProjectId,
-                        nextProfileTransactionId(
-                            "base-inspector-cancel-upgrade"));
-                succeeded = receipt.succeeded;
-                message = receipt.succeeded
-                    ? action.kind == BaseFacilityQuickActionKind::StartUpgrade
-                        ? "BASE FACILITY UPGRADE STARTED"
-                        : "BASE FACILITY UPGRADE CANCELLED"
-                    : receipt.message;
-                break;
+                if(!action.constructionProjectId){uiMessage_="BASE FACILITY UPGRADE IS NOT AVAILABLE";break;}
+                submitProfileUi<BaseConstructionReceipt>(action.kind==BaseFacilityQuickActionKind::StartUpgrade
+                    ?ProfileUiCommand{StartBaseConstructionCommand{*action.constructionProjectId}}
+                    :ProfileUiCommand{CancelBaseConstructionCommand{*action.constructionProjectId}},tx,finish);break;
+            case BaseFacilityQuickActionKind::CollectManufacturing:submitProfileUi<BaseManufacturingReceipt>(ProfileUiCollectManufacturingCommand{},tx,finish);break;
+            case BaseFacilityQuickActionKind::CancelManufacturing:submitProfileUi<BaseManufacturingReceipt>(ProfileUiCancelManufacturingCommand{},tx,finish);break;
+            case BaseFacilityQuickActionKind::StartResidentTreatment:submitProfileUi<ResidentTreatmentReceipt>(StartResidentTreatmentCommand{},tx,finish);break;
+            case BaseFacilityQuickActionKind::AutoFillWorkers:submitProfileUi<BaseWorkforceReceipt>(ProfileUiAutoFillWorkersCommand{},tx,finish);break;
             }
-            case BaseFacilityQuickActionKind::CollectManufacturing:
-            {
-                const BaseManufacturingReceipt receipt =
-                    gameSession_.executeCollectBaseManufacturing(
-                        nextProfileTransactionId(
-                            "base-inspector-collect-output"));
-                succeeded = receipt.succeeded;
-                message = receipt.succeeded
-                    ? "MANUFACTURED ITEM COLLECTED"
-                    : receipt.message;
-                break;
-            }
-            case BaseFacilityQuickActionKind::CancelManufacturing:
-            {
-                const BaseManufacturingReceipt receipt =
-                    gameSession_.executeCancelBaseManufacturing(
-                        nextProfileTransactionId(
-                            "base-inspector-cancel-production"));
-                succeeded = receipt.succeeded;
-                message = receipt.succeeded
-                    ? "MANUFACTURING CANCELLED | INPUTS RETURNED"
-                    : receipt.message;
-                break;
-            }
-            case BaseFacilityQuickActionKind::StartResidentTreatment:
-            {
-                const ResidentTreatmentReceipt receipt =
-                    gameSession_.executeStartResidentTreatment(
-                        nextProfileTransactionId(
-                            "base-inspector-resident-treatment"));
-                succeeded = receipt.succeeded;
-                message = receipt.succeeded
-                    ? "RESIDENT TREATMENT STARTED"
-                    : receipt.message;
-                break;
-            }
-            case BaseFacilityQuickActionKind::AutoFillWorkers:
-            {
-                const BaseWorkforceReceipt receipt =
-                    gameSession_.executeAutoFillBaseWorkers(
-                        nextProfileTransactionId(
-                            "base-inspector-auto-fill-workers"));
-                succeeded = receipt.succeeded;
-                message = receipt.succeeded
-                    ? "BASE FACILITY WORKERS AUTO-FILLED"
-                    : receipt.message;
-                break;
-            }
-            }
-            uiMessage_ = std::move(message);
-            gameAudio_.play(succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
             return true;
         }
         if (movableCoreFacility(projection.kind) &&
@@ -10533,18 +10574,13 @@ bool App::handleBaseFacilityInspectorClick(MousePosition position)
     }
     if (contains(basePlacedFacilityInspectorButton(2U, 3U), position))
     {
-        const BaseGroundReceipt receipt =
-            gameFlow_.pickupBaseGroundAssetForManagement(
-                assetId,
-                nextProfileTransactionId("base-build-inspector-pickup"));
-        uiMessage_ = receipt.succeeded
-            ? "BASE FACILITY RETURNED TO STASH"
-            : receipt.message;
-        gameAudio_.play(receipt.succeeded
-            ? SoundEventId::InventoryPickup
-            : SoundEventId::UiDeny);
-        if (receipt.succeeded)
-            selectedBasePlacedAssetId_.reset();
+        const auto submission=gameFlow_.requestBaseWorldUiCommand(
+            BaseUiPickupAsset{assetId,true},nextProfileTransactionId("base-build-inspector-pickup"));
+        trackProfileUiResult<BaseGroundReceipt>(submission,[this](const auto &receipt) {
+            uiMessage_=receipt.succeeded?"BASE FACILITY RETURNED TO STASH":receipt.message;
+            gameAudio_.play(receipt.succeeded?SoundEventId::InventoryPickup:SoundEventId::UiDeny);
+            if(receipt.succeeded) {selectedBasePlacedAssetId_.reset();}
+        });
         return true;
     }
     return true;
@@ -10683,41 +10719,16 @@ void App::handleBaseFacilityContextMenuClick(MousePosition position)
                 return;
             }
 
-            BaseWorkforceReceipt receipt;
-            if (action.kind == BaseFacilityQuickActionKind::AutoFillWorkers)
-            {
-                receipt = gameSession_.executeAutoFillBaseWorkers(
-                    nextProfileTransactionId(
-                        "base-workforce-station-auto-fill"));
-            }
-            else
-            {
-                const BaseFacilityStaffingKind facility =
-                    *menu.fixedFacility == BaseFacilityKind::Workshop
-                    ? BaseFacilityStaffingKind::Workshop
-                    : BaseFacilityStaffingKind::Medical;
-                receipt = action.kind ==
-                        BaseFacilityQuickActionKind::AssignBestWorker
-                    ? gameSession_.executeAssignBestBaseWorker(
-                          facility,
-                          nextProfileTransactionId(
-                              "base-workforce-station-assign"))
-                    : gameSession_.executeClearBaseWorker(
-                          facility,
-                          nextProfileTransactionId(
-                              "base-workforce-station-clear"));
-            }
-            uiMessage_ = receipt.succeeded
-                ? action.kind == BaseFacilityQuickActionKind::AutoFillWorkers
-                    ? "BASE FACILITY WORKERS AUTO-FILLED"
-                    : action.kind ==
-                            BaseFacilityQuickActionKind::AssignBestWorker
-                        ? "BASE FACILITY WORKER ASSIGNED"
-                        : "BASE FACILITY WORKER CLEARED"
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
+            const auto facility=*menu.fixedFacility==BaseFacilityKind::Workshop?BaseFacilityStaffingKind::Workshop:BaseFacilityStaffingKind::Medical;
+            const ProfileUiCommand command=action.kind==BaseFacilityQuickActionKind::AutoFillWorkers
+                ?ProfileUiCommand{ProfileUiAutoFillWorkersCommand{}}:action.kind==BaseFacilityQuickActionKind::AssignBestWorker
+                ?ProfileUiCommand{ProfileUiAssignWorkerCommand{facility}}:ProfileUiCommand{ProfileUiClearWorkerCommand{facility}};
+            submitProfileUi<BaseWorkforceReceipt>(command,nextProfileTransactionId("base-workforce-station"),
+                [this,kind=action.kind](const auto &receipt) {
+                    uiMessage_=receipt.succeeded?(kind==BaseFacilityQuickActionKind::AutoFillWorkers?"BASE FACILITY WORKERS AUTO-FILLED":
+                        kind==BaseFacilityQuickActionKind::AssignBestWorker?"BASE FACILITY WORKER ASSIGNED":"BASE FACILITY WORKER CLEARED"):receipt.message;
+                    gameAudio_.play(receipt.succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);
+                });
             baseFacilityContextMenu_.reset();
             return;
         }
@@ -10764,16 +10775,11 @@ void App::handleBaseFacilityContextMenuClick(MousePosition position)
                 openBaseFixedFacility(BaseFacilityKind::Dormitory);
                 return;
             }
-            const BaseWorkforceReceipt receipt =
-                gameSession_.executeAutoFillBaseWorkers(
-                    nextProfileTransactionId(
-                        "base-resident-area-auto-fill"));
-            uiMessage_ = receipt.succeeded
-                ? "BASE FACILITY WORKERS AUTO-FILLED"
-                : receipt.message;
-            gameAudio_.play(receipt.succeeded
-                ? SoundEventId::UiConfirm
-                : SoundEventId::UiDeny);
+            submitProfileUi<BaseWorkforceReceipt>(ProfileUiAutoFillWorkersCommand{},nextProfileTransactionId("base-resident-area-auto-fill"),
+                [this](const auto &receipt) {
+                    uiMessage_=receipt.succeeded?"BASE FACILITY WORKERS AUTO-FILLED":receipt.message;
+                    gameAudio_.play(receipt.succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);
+                });
             baseFacilityContextMenu_.reset();
             return;
         }
@@ -10823,21 +10829,13 @@ void App::handleBaseFacilityContextMenuClick(MousePosition position)
             baseFacilityContextMenuRow(menu.position, 2U, rowCount),
             position))
     {
-        const BaseGroundReceipt receipt =
-            gameFlow_.pickupBaseGroundAssetForManagement(
-                *menu.assetId,
-                nextProfileTransactionId("base-build-pickup"));
-        uiMessage_ = receipt.succeeded
-            ? "BASE FACILITY RETURNED TO STASH"
-            : receipt.message;
-        gameAudio_.play(receipt.succeeded
-            ? SoundEventId::InventoryPickup
-            : SoundEventId::UiDeny);
-        if (receipt.succeeded)
-        {
-            selectedBasePlacedAssetId_.reset();
-            selectedBaseFixedFacility_.reset();
-        }
+        const auto submission=gameFlow_.requestBaseWorldUiCommand(
+            BaseUiPickupAsset{*menu.assetId,true},nextProfileTransactionId("base-build-pickup"));
+        trackProfileUiResult<BaseGroundReceipt>(submission,[this](const auto &receipt) {
+            uiMessage_=receipt.succeeded?"BASE FACILITY RETURNED TO STASH":receipt.message;
+            gameAudio_.play(receipt.succeeded?SoundEventId::InventoryPickup:SoundEventId::UiDeny);
+            if(receipt.succeeded) {selectedBasePlacedAssetId_.reset();selectedBaseFixedFacility_.reset();}
+        });
         baseFacilityContextMenu_.reset();
         return;
     }
@@ -11606,7 +11604,7 @@ void App::renderProfileGrid(
     float cellSize,
     const char *label)
 {
-    const ProfileState &profile = gameSession_.profile();
+    const ProfileState &profile = gameSession_.profileForInventoryPresentation();
     InventoryGridSize size{};
     try
     {
@@ -11636,9 +11634,9 @@ void App::renderProfileGrid(
     SDL_RenderFillRect(renderer_, &grid);
     SDL_SetRenderDrawColor(
         renderer_,
-        pendingReturns ? 156 : 86,
-        pendingReturns ? 132 : 102,
-        pendingReturns ? 62 : 108,
+        pendingReturns ? 102 : 48,
+        pendingReturns ? 88 : 65,
+        pendingReturns ? 50 : 68,
         255);
     for (int column = 0; column <= size.width; ++column)
     {
@@ -11700,6 +11698,12 @@ void App::renderProfileGrid(
             }
         }
     }
+    if(container.kind==ProfileContainerKind::Stash) {
+        constexpr int rowsPerPage=8;
+        for(int row=0;row<size.height;row+=rowsPerPage)
+            uiFinalInventoryFrame(renderer_,{x,y+row*cellSize,grid.w,std::min(rowsPerPage,size.height-row)*cellSize},pendingReturns);
+    } else uiFinalInventoryFrame(renderer_,grid,pendingReturns);
+
 }
 
 void App::renderProfileDragFeedback(
@@ -11713,7 +11717,7 @@ void App::renderProfileDragFeedback(
     {
         return;
     }
-    const ProfileState &profile = gameSession_.profile();
+    const ProfileState &profile = gameSession_.profileForInventoryPresentation();
     const AssetRecord *asset = profile.assets.find(source->instanceId);
     if (asset == nullptr)
     {
@@ -12036,7 +12040,7 @@ void App::renderMedicalWheel()
 {
     if (!medicalWheelOpen_)
     {
-        if (!throwableWheelOpen_) {quickWheelEmphasis_ = {};quickWheelVisualIndex_=static_cast<std::size_t>(-1);}
+        if (!throwableWheelOpen_ && !magazineWheelOpen_) {quickWheelEmphasis_ = {};quickWheelVisualIndex_=static_cast<std::size_t>(-1);}
         return;
     }
     renderQuickWheel(UiQuickWheelKind::Medical, medicalWheelOptions_, medicalWheelSelectedIndex_);
@@ -12320,7 +12324,7 @@ void App::renderProfileInventory(
 {
     if(inventoryWeaponComponentsOpen_ && (!inRaid || gameSession_.developerRangeAtConsole())) {renderWeaponComponents();return;}
     if(profileDetailsAsset_) {renderProfileWeaponDetails();return;}
-    const auto &profile=gameSession_.profile();
+    const auto &profile=gameSession_.profileForInventoryPresentation();
     const bool right=includeStash || externalContainerId.has_value();
     SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_BLEND);
     const SDL_FRect panel{20,54,right?1240.0F:780.0F,646};
@@ -12407,6 +12411,7 @@ void App::renderBaseStorage()
 
 void App::renderAlphaRaidLoot()
 {
+    renderEmptyPlayerCorpses();
     const ProfileState &profile = gameSession_.profile();
     if (!profile.pendingRaid.has_value())
     {
@@ -12505,6 +12510,15 @@ void App::renderAlphaRaidLoot()
         SDL_SetRenderDrawColor(renderer_,160,154,86,255); SDL_RenderFillRect(renderer_,&cell);
         SDL_SetRenderDrawColor(renderer_,230,224,168,255); SDL_RenderRect(renderer_,&cell);
         renderWorldLabel(cell.x-12,cell.y-24,"USED BATTERY | F");
+    }
+    for(const auto id:gameSession_.droppedRaidMagazineIds()) {
+        const auto *asset=profile.assets.find(id);
+        const auto *drop=asset?std::get_if<RaidDroppedMagazineLocation>(&asset->location):nullptr;
+        if(!drop || !gameSession_.world().raidBoundsObservable({{drop->position.x-9,drop->position.y-12},{18,24}}))continue;
+        const SDL_FRect body{drop->position.x-5,drop->position.y-10,10,20};
+        SDL_SetRenderDrawColor(renderer_,102,115,106,255);SDL_RenderFillRect(renderer_,&body);
+        SDL_SetRenderDrawColor(renderer_,208,222,204,255);SDL_RenderRect(renderer_,&body);
+        renderWorldLabel(body.x-16,body.y-22,"MAGAZINE | F");
     }
     for (const RaidLootSnapshot &loot : profile.pendingRaid->loot)
     {
@@ -12705,12 +12719,30 @@ void App::renderBaseKitchenWater()
 
 void App::renderBase()
 {
+    bool wheelBackdrop=medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_;
+    if(wheelBackdrop && !quickWheelBackdrop_.begin(renderer_)) {
+        medicalWheelOpen_=false;medicalWheelOptions_.clear();cancelThrowableUi();cancelMagazineWheel();
+        uiMessage_="QUICK WHEEL BACKDROP UNAVAILABLE";wheelBackdrop=false;
+    }
     renderBaseWorld();
+    if(wheelBackdrop) {
+        if(quickWheelBackdrop_.compose()) {
+            renderMedicalWheel();
+            if(throwableWheelOpen_)renderQuickWheel(UiQuickWheelKind::Throwable,throwableWheelOptions_,throwableWheelSelected_);
+            if(magazineWheelOpen_)renderQuickWheel(UiQuickWheelKind::Magazine,magazineWheelOptions_,magazineWheelSelectedIndex_);
+        } else {
+            medicalWheelOpen_=false;medicalWheelOptions_.clear();cancelThrowableUi();cancelMagazineWheel();
+            uiMessage_="QUICK WHEEL BACKDROP UNAVAILABLE";
+        }
+        return;
+    }
     if (!baseConstructionPanelOpen_ && !basePlacementState_.has_value() &&
         !baseFixedFacilityPlacementState_.has_value())
         renderAimCrosshair();
 
     renderBaseDailyHud();
+    renderBasePlayerActionHud();
+    renderBaseFeedback();
     renderBaseSiegeQueuedNotice();
 
     std::string goal;
@@ -13651,9 +13683,9 @@ bool App::renderIndoorInformationLayer(const SDL_Rect &worldViewport)
 
 void App::renderRaidScreen()
 {
-    bool wheelBackdrop=medicalWheelOpen_ || throwableWheelOpen_;
+    bool wheelBackdrop=medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_;
     if(wheelBackdrop && !quickWheelBackdrop_.begin(renderer_)) {
-        medicalWheelOpen_=false;medicalWheelOptions_.clear();cancelThrowableUi();
+        medicalWheelOpen_=false;medicalWheelOptions_.clear();cancelThrowableUi();cancelMagazineWheel();
         uiMessage_="QUICK WHEEL BACKDROP UNAVAILABLE";wheelBackdrop=false;
         SDL_LogError(SDL_LOG_CATEGORY_RENDER,"Quick wheel backdrop: %s",SDL_GetError());
     }
@@ -13728,11 +13760,12 @@ void App::renderRaidScreen()
     }
     if(wheelBackdrop) {
         if(!quickWheelBackdrop_.compose()) {
-            medicalWheelOpen_=false;medicalWheelOptions_.clear();cancelThrowableUi();
+            medicalWheelOpen_=false;medicalWheelOptions_.clear();cancelThrowableUi();cancelMagazineWheel();
             uiMessage_="QUICK WHEEL BACKDROP UNAVAILABLE";
             SDL_LogError(SDL_LOG_CATEGORY_RENDER,"Quick wheel filter: %s",SDL_GetError());
         } else {
             renderMedicalWheel();
+            if(magazineWheelOpen_)renderQuickWheel(UiQuickWheelKind::Magazine,magazineWheelOptions_,magazineWheelSelectedIndex_);
             if(throwableWheelOpen_)renderQuickWheel(UiQuickWheelKind::Throwable,throwableWheelOptions_,throwableWheelSelected_);
         }
         return;
@@ -13761,6 +13794,7 @@ void App::render()
 {
     int outputWidth=1280,outputHeight=720;
     SDL_GetRenderOutputSize(renderer_,&outputWidth,&outputHeight);
+    if(window_)SDL_SetFloatProperty(SDL_GetRendererProperties(renderer_),"raidline.ui.display-scale",SDL_GetWindowDisplayScale(window_));
     uiTextRenderer_.setRasterScale(std::min(outputWidth/1280.0F,outputHeight/720.0F));
     syncRaidPointerCapture();
 
@@ -13802,7 +13836,8 @@ void App::render()
         break;
     }
 
-    if(!medicalWheelOpen_ && !throwableWheelOpen_) {
+    if(raidSaveProtectionVisible())renderBaseDefenseHud();
+    if(!medicalWheelOpen_ && !throwableWheelOpen_ && !magazineWheelOpen_) {
     renderFirstRaidHints();
     renderPauseMenu();
     renderDeveloperPerformanceOverlay();
@@ -13957,7 +13992,7 @@ void App::handleWeaponLightDetailsPointer(const InventoryPointerEvent &event, bo
         deviceBatteryDrag_.reset();
         return;
     }
-    const auto &profile = gameSession_.profile();
+    const auto &profile = gameSession_.profileForInventoryPresentation();
     const auto *asset = profile.assets.find(*profileDetailsAsset_);
     if (!asset) {
         profileDetailsAsset_.reset();
@@ -14014,26 +14049,33 @@ void App::handleWeaponLightDetailsPointer(const InventoryPointerEvent &event, bo
         else ++deviceBatteryPage_;
         itemDetailsInteraction_ = {};
     } else if (operation == UiItemDetailsControl::RemoveBattery) {
-        const auto receipt = gameSession_.changeDeviceBattery({light.deviceAssetId, 0}, nextProfileTransactionId("remove-battery"));
-        uiMessage_ = receipt.succeeded ? "BATTERY CHANGE COMPLETE" : receipt.message;
+        changeInventoryBattery({light.deviceAssetId,0});
         itemDetailsInteraction_ = {};
     } else if (source && light.deviceAssetId &&
                uiContains(uiItemDetailsBatterySlot(), {event.position.x, event.position.y})) {
         if (!profileDragSourceMatches(profile, *source)) {
             uiMessage_ = "BATTERY SOURCE CHANGED";
         } else {
-            const auto receipt = gameSession_.changeDeviceBattery({light.deviceAssetId, source->instanceId}, nextProfileTransactionId("replace-battery"));
-            uiMessage_ = receipt.succeeded ? "BATTERY CHANGE COMPLETE" : receipt.message;
+            changeInventoryBattery({light.deviceAssetId,source->instanceId});
         }
         itemDetailsInteraction_ = {};
     }
     input_.suppressPrimaryPointerUntilRelease();
 }
 
+void App::changeInventoryBattery(DeviceBatteryCommand command)
+{
+    if(deferInventoryBarrier([this,command]{changeInventoryBattery(command);}))return;
+    const auto finish=[this](const InventoryReceipt &receipt){uiMessage_=receipt.succeeded?"BATTERY CHANGE COMPLETE":receipt.message;};
+    if(gameSession_.alphaRaidActive() || gameSession_.developerRangeActive())
+        finish(gameSession_.changeDeviceBattery(command,nextProfileTransactionId("device-battery")));
+    else submitProfileUi<InventoryReceipt>(command,nextProfileTransactionId("device-battery"),finish);
+}
+
 void App::renderProfileWeaponDetails()
 {
     if (!profileDetailsAsset_) return;
-    const auto &profile = gameSession_.profile();
+    const auto &profile = gameSession_.profileForInventoryPresentation();
     const auto &content = publishedContentRegistry();
     const auto model = projectUiItemDetails(profile, content, *profileDetailsAsset_, uiTextRenderer_.language());
     if (!model) {
@@ -14128,7 +14170,7 @@ SDL_FRect inventoryReturnViewRect() { return {1080, 94, 104, 26}; }
 void App::locateProfileInventoryAsset(AssetInstanceId id, bool includeStash,
                                       std::optional<AssetInstanceId> external)
 {
-    const auto &profile = gameSession_.profile();
+    const auto &profile = gameSession_.profileForInventoryPresentation();
     const auto *asset = profile.assets.find(id);
     if (!asset)
         return;
@@ -14177,7 +14219,7 @@ void App::locateProfileInventoryAsset(AssetInstanceId id, bool includeStash,
 void App::describeProfileInventoryDestination(AssetInstanceId id,
                                               StoredAssetLocation location)
 {
-    const auto &profile = gameSession_.profile();
+    const auto &profile = gameSession_.profileForInventoryPresentation();
     const auto *asset = profile.assets.find(id);
     if (asset)
     {
@@ -14224,7 +14266,7 @@ bool App::handleProfilePresentationEvent(
     const InventoryUiEvent &event, bool includeStash,
     std::optional<AssetInstanceId> external)
 {
-    const auto &profile = gameSession_.profile();
+    const auto &profile = gameSession_.profileForInventoryPresentation();
     const auto *pointer = std::get_if<InventoryPointerEvent>(&event);
     const auto *navigation = std::get_if<InventoryNavigationEvent>(&event);
     if (pointer)
@@ -14402,20 +14444,20 @@ void App::updateProfilePresentationHover(float deltaTime)
     const auto external =
         raid ? openedRaidSceneContainerId_ : openedBaseGroundContainerId_;
     if (!raid && !external && inventoryOverlayState_.showsExternalContainer() &&
-        !assetsInContainer(gameSession_.profile(),
+        !assetsInContainer(gameSession_.profileForInventoryPresentation(),
                            ProfileContainerId::baseIntake())
              .empty() &&
         contains(inventoryReturnsRect(), profilePresentationPointer_))
         tab = 3;
     if (!raid && !external && inventoryOverlayState_.showsExternalContainer() &&
-        !assetsInContainer(gameSession_.profile(),
+        !assetsInContainer(gameSession_.profileForInventoryPresentation(),
                            ProfileContainerId::legacyOverflow())
              .empty() &&
         contains(inventoryLegacyOverflowRect(), profilePresentationPointer_))
         tab = 5;
     if (external &&
         contains(SDL_FRect{1004, 64, 136, 24}, profilePresentationPointer_))
-        if (const auto *owner = gameSession_.profile().assets.find(*external);
+        if (const auto *owner = gameSession_.profileForInventoryPresentation().assets.find(*external);
             owner && publishedContentRegistry()
                              .item(owner->definitionId)
                              .containerCompartments.size() > 1)
@@ -14452,7 +14494,7 @@ void App::updateProfilePresentationHover(float deltaTime)
         }
         else if (external)
         {
-            const auto *owner = gameSession_.profile().assets.find(*external);
+            const auto *owner = gameSession_.profileForInventoryPresentation().assets.find(*external);
             const auto count = publishedContentRegistry()
                                    .item(owner->definitionId)
                                    .containerCompartments.size();
@@ -14471,7 +14513,7 @@ void App::updateProfilePresentationHover(float deltaTime)
 void App::renderProfileInventoryToolbar(bool includeStash, bool inRaid,
                                         std::optional<AssetInstanceId> external)
 {
-    const auto &profile = gameSession_.profile();
+    const auto &profile = gameSession_.profileForInventoryPresentation();
     if (includeStash && !inRaid &&
         !assetsInContainer(profile, ProfileContainerId::baseIntake()).empty())
         renderFoundationButton(
@@ -14597,12 +14639,12 @@ void App::clearProfileItemContext() noexcept {
 bool App::profileContextMenuValid(bool inRaid) const {
     if (!profileContextMenu_) return false;
     const auto &menu = *profileContextMenu_;
-    const auto *asset = gameSession_.profile().assets.find(menu.instanceId);
+    const auto *asset = gameSession_.profileForInventoryPresentation().assets.find(menu.instanceId);
     return menu.inRaid == inRaid &&
         asset && asset->orientation == menu.source.orientation &&
-        menu.profileId == gameSession_.profile().profileId &&
+        menu.profileId == gameSession_.profileForInventoryPresentation().profileId &&
         menu.language == uiTextRenderer_.language() &&
-        profileDragSourceMatches(gameSession_.profile(), menu.source) &&
+        profileDragSourceMatches(gameSession_.profileForInventoryPresentation(), menu.source) &&
         windowHasInputFocus_ && uiPointerInside_;
 }
 void App::handleProfileContextMenuPointer(const InventoryPointerEvent &event,
@@ -14641,10 +14683,11 @@ void App::handleProfileContextMenuClick(MousePosition position, bool inRaid) {
     const auto sourcePoint = profileContextMenu_->position;
     const auto external = inRaid ? openedRaidSceneContainerId_ : openedBaseGroundContainerId_;
     const bool stash = !inRaid && inventoryOverlayState_.showsExternalContainer() && !external;
-    const auto hit = profileAssetHitAt(gameSession_.profile(), sourcePoint, stash,
+    const auto hit = profileAssetHitAt(gameSession_.profileForInventoryPresentation(), sourcePoint, stash,
                                      external, &profilePresentation_);
-    const auto actions = projectUiItemActions(gameSession_.profile(),
-        publishedContentRegistry(), id, inRaid);
+    const auto actions = projectUiItemActions(gameSession_.profileForInventoryPresentation(),
+        publishedContentRegistry(), id, inRaid,
+        gameSession_.playerGameplayContext().available?MedicalAccess::CarriedOnly:MedicalAccess::AnyOwned);
     const bool stillAvailable = hit && hit->asset && hit->asset->instanceId == id &&
         std::any_of(actions.begin(), actions.end(),
             [&](const auto &entry) { return entry.id == *chosen; });
@@ -14661,11 +14704,15 @@ void App::handleProfileContextMenuClick(MousePosition position, bool inRaid) {
         profileDetailsAsset_ = id;
         return;
     case UiItemAction::ModifyWeapon: {
-        const auto &profile = gameSession_.profile();
+        const auto &profile = gameSession_.profileForInventoryPresentation();
         if ((inRaid && !gameSession_.developerRangeAtConsole()) ||
             profile.pendingRaid || profile.activeBaseDefense) {
             uiMessage_ = "MODIFICATION REQUIRES BASE"; return;
         }
+        if(deferInventoryBarrier([this,id]{
+            if(openWeaponComponentsUi(id))inventoryWeaponComponentsOpen_=true;
+            else uiMessage_="UNSUPPORTED WEAPON PLATFORM";
+        }))return;
         if (!openWeaponComponentsUi(id)) { uiMessage_ = "UNSUPPORTED WEAPON PLATFORM"; return; }
         inventoryWeaponComponentsOpen_ = true;
         return;
@@ -14675,7 +14722,28 @@ void App::handleProfileContextMenuClick(MousePosition position, bool inRaid) {
     case UiItemAction::ChamberRound:
         executeProfileContextAction(id, inRaid);
         return;
+    case UiItemAction::CycleFireMode:
+        cycleProfileFireMode(id);
+        return;
     }
+}
+
+void App::cycleProfileFireMode(AssetInstanceId id) {
+        if(deferInventoryBarrier([this,id]{cycleProfileFireMode(id);}))return;
+        const auto mode=gameSession_.weaponFireMode(id);
+        const auto *asset=gameSession_.profile().assets.find(id);
+        if(!mode || !asset)return;
+        const auto &definition=publishedContentRegistry().item(asset->definitionId);
+        if(!definition.weaponUse || definition.weaponUse->supportedFireModes.size()<2)return;
+        const auto &modes=definition.weaponUse->supportedFireModes;
+        const auto at=std::find(modes.begin(),modes.end(),*mode);
+        if(at==modes.end())return;
+        const auto next=std::next(at)==modes.end()?modes.front():*std::next(at);
+        submitWeaponAmmoUi(SetWeaponFireModeCommand{id,next},nextProfileTransactionId("fire-mode"),[this,next](const auto &receipt) {
+            uiMessage_=receipt.succeeded?
+                std::string(uiTextRenderer_.language()==UiLanguage::SimplifiedChinese?"射击模式：":"FIRE MODE: ")+
+                    std::string(uiWeaponFireModeName(next,uiTextRenderer_.language())):receipt.message;
+        });
 }
 
 void App::updateProfileItemContext(float seconds) {
@@ -14698,7 +14766,7 @@ void App::updateProfileItemContext(float seconds) {
     }
     if (profileInventoryInteraction_.pointerGestureActive() || profileMenuReleaseGuard_ ||
         !pointerWorldPosition_) { clearProfileItemHover(); return; }
-    const auto &profile = gameSession_.profile();
+    const auto &profile = gameSession_.profileForInventoryPresentation();
     const auto external = raid ? openedRaidSceneContainerId_ : openedBaseGroundContainerId_;
     const bool stash = !raid && inventoryOverlayState_.showsExternalContainer() && !external;
     const bool contextChanged = !profileItemView_ ||
@@ -14742,8 +14810,8 @@ void App::updateProfileItemContext(float seconds) {
 void App::renderProfileItemCard(bool includeStash, bool inRaid) {
     if (!renderer_ || !profileItemHover_.visible() || profileContextMenu_ ||
         !profileItemHoverSource_ ||
-        !profileDragSourceMatches(gameSession_.profile(), *profileItemHoverSource_)) return;
-    const auto &profile = gameSession_.profile();
+        !profileDragSourceMatches(gameSession_.profileForInventoryPresentation(), *profileItemHoverSource_)) return;
+    const auto &profile = gameSession_.profileForInventoryPresentation();
     const auto *asset = profile.assets.find(profileItemHover_.instanceId);
     if (!asset) return;
     if (!profileItemCardValid_ || profileItemCardRevision_ != profile.revision ||
@@ -14824,7 +14892,7 @@ void App::handleProfileDetailsNavigation(const InventoryNavigationEvent &event)
     itemDetailsInteraction_.held = false;
     deviceBatteryDrag_.reset();
     if (!profileDetailsAsset_) return;
-    const auto model = projectUiItemDetails(gameSession_.profile(), publishedContentRegistry(),
+    const auto model = projectUiItemDetails(gameSession_.profileForInventoryPresentation(), publishedContentRegistry(),
         *profileDetailsAsset_, uiTextRenderer_.language());
     if (!model || !uiContains(uiItemDetailsFeedback(model->kind), {event.position.x, event.position.y})) return;
     itemDetailsInteraction_.feedbackScroll = std::clamp(itemDetailsInteraction_.feedbackScroll + event.pageDelta * 3,

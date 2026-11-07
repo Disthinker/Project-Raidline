@@ -6,6 +6,7 @@
 
 #include "base_world.h"
 #include "game_session.h"
+#include "game_flow_ui_command.h"
 
 enum class GameFlowState
 {
@@ -35,6 +36,19 @@ public:
     [[nodiscard]] bool startNewGame(std::string profileId, bool survey = false);
     [[nodiscard]] bool establishHome(std::string_view plotId);
     [[nodiscard]] bool continueGame();
+    [[nodiscard]] ProfileUiSubmission requestBaseWorldUiCommand(const BaseWorldUiCommand &, std::string transactionId);
+    [[nodiscard]] ProfileUiSubmission requestDeploy(
+        MapDefinitionId mapDefinitionId, RaidIntelligenceLoadout intelligence = {},
+        std::optional<std::string> selfRecoveryRecordId = std::nullopt,
+        std::optional<RegionalOutpostDefinitionId> outpostRestorationId = std::nullopt,
+        std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId = std::nullopt,
+        std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId = std::nullopt,
+        const RaidDeploymentProgressCallback &progress = {});
+    [[nodiscard]] bool completeDeploy(std::uint64_t requestId);
+    [[nodiscard]] bool completeReturnToMainMenu(std::uint64_t requestId);
+    [[nodiscard]] bool completeReturnToBase(std::uint64_t requestId);
+    [[nodiscard]] bool completeEnterDeveloperRange(std::uint64_t requestId);
+    [[nodiscard]] bool completeProfileUiCommand(const ProfileUiCompletion &);
 
     [[nodiscard]]
     bool deploy(
@@ -102,6 +116,8 @@ public:
         AssetInstanceId containerAssetId,
         const InventoryCommand &command,
         std::string transactionId);
+    [[nodiscard]] InventoryUiSubmission requestBaseGroundContainerInventory(
+        AssetInstanceId, const InventoryCommand &, std::string);
     [[nodiscard]] std::optional<BaseGroundAssetProjection>
     nearestBaseGroundAsset() const noexcept;
     [[nodiscard]] BaseGroundReceipt pickupBaseGroundAsset(

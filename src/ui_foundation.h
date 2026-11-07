@@ -39,10 +39,37 @@ using UiMeasureText = std::function<float(std::string_view)>;
 [[nodiscard]] float uiHoverAmount(float elapsedSeconds) noexcept;
 
 class UiTextRenderer;
+// Compact feedback uses dp only at this boundary. All returned rectangles and
+// font sizes are logical units consumed by the existing SDL presentation.
+struct UiFeedbackViewport {
+    float width{1280}, height{720};
+    float pixelsPerLogicalUnit{1}, pixelsPerDp{1};
+};
+// Per-frame client projection, also usable by a headless renderer. It stores
+// the same display scale supplied by SDL, never a persisted player setting.
+inline constexpr const char *kUiDisplayScaleProperty="raidline.ui.display-scale";
+struct UiCompactFeedbackLayout {
+    SDL_FRect panel{}, text{};
+    int fontSize{13}, maximumLines{2};
+};
+[[nodiscard]] UiFeedbackViewport uiFeedbackViewport(SDL_Renderer *) noexcept;
+[[nodiscard]] UiCompactFeedbackLayout layoutUiCompactFeedback(
+    UiFeedbackViewport, Vec2 anchor, bool bottomAnchored,
+    std::string_view localizedText,
+    const std::function<float(std::string_view, int)> &measure);
+[[nodiscard]] UiCompactFeedbackLayout layoutUiCompactFeedback(
+    SDL_Renderer *, UiTextRenderer &, std::string_view message,
+    Vec2 anchor, bool bottomAnchored = true);
+void uiFinalCompactFeedback(SDL_Renderer *, UiTextRenderer &,
+    const UiCompactFeedbackLayout &, std::string_view message,
+    bool warning = false, float *lineOffset = nullptr, Uint8 alpha = 255);
+// Draw only the real physical region edges. The caller's clip suppresses
+// offscreen edges instead of inventing a border at the scroll viewport.
+void uiFinalInventoryFrame(SDL_Renderer *, const SDL_FRect &, bool returns = false);
 // Small client paint helpers shared by the remaining legacy surfaces. They do
 // not own input, domain state or a separate layout coordinate system.
 void uiFinalPanel(SDL_Renderer *renderer, const SDL_FRect &bounds,
-                  bool warning = false);
+                  bool warning = false, Uint8 alpha = 255);
 void uiFinalText(SDL_Renderer *renderer, UiTextRenderer &text,
                  const SDL_FRect &bounds, std::string_view label,
                  int size = 14, int maximumLines = 1,
@@ -62,4 +89,5 @@ void uiFinalWorldLabel(SDL_Renderer *renderer, UiTextRenderer &text, float x,
                        const SDL_FRect &avatarBounds = {},
                        const SDL_FRect &visibleWorld = {});
 void uiFinalScrollableText(SDL_Renderer *, UiTextRenderer &, const SDL_FRect &,
-                           std::string_view, float &lineOffset, int size = 14);
+                           std::string_view, float &lineOffset, int size = 14,
+                           int hintSize = 0);

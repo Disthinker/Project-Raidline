@@ -6,6 +6,37 @@
 #include "stable_random.h"
 #include "vec2.h"
 
+enum class WeaponFireMode;
+
+struct WeaponTriggerIntent
+{
+    bool pressed{};
+    bool justPressed{};
+};
+
+// Input-sequence policy only. The Profile remains the mode authority and the
+// existing WeaponFireState remains the cadence/spread/random authority.
+// Restoring an activity intentionally does not restore a held trigger.
+class WeaponTriggerGate
+{
+public:
+    [[nodiscard]] WeaponTriggerIntent prepare(
+        std::uint64_t weaponId, WeaponFireMode mode, unsigned burstCount,
+        bool held, bool justPressed, bool controlsAvailable) noexcept;
+    void acceptedShot() noexcept;
+    void cancelPending() noexcept;
+    void cancelUntilRelease() noexcept;
+    void reset() noexcept;
+    [[nodiscard]] unsigned remainingBurstShots() const noexcept { return remaining_; }
+
+private:
+    std::uint64_t weaponId_{};
+    std::optional<WeaponFireMode> mode_;
+    unsigned remaining_{};
+    bool suppressedUntilRelease_{};
+    bool triggerWasHeld_{};
+};
+
 struct WeaponFireConfig
 {
     float shotInterval{0.12F};

@@ -1,5 +1,6 @@
 #include "app.h"
 #include "test_temp_directory.h"
+#include "ui_app_persistence_wait.h"
 #include "alpha_content_ids.h"
 #include "base_facility_layout_domain.h"
 #include "base_manufacturing_domain.h"
@@ -37,7 +38,12 @@ struct UiRegionalOperationsTestAccess {
     static void refresh(App &a) { a.refreshRegionalOperationsUi(true); }
     static void reset(App &a) { a.resetRegionalOperationsUi(); }
     static void draw(App &a) { a.renderRegionalOperations(); }
-    static void frame(App &a) { a.processEvents(); a.update(0); a.input_.endFrame(); }
+    static void frame(App &a) {
+        a.processEvents(); a.update(0); a.input_.endFrame();
+        ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
+            [&] { return a.profileUiBusy() || bool(a.pendingInventoryBarrierAction_); },
+            [&] { a.processEvents(); a.update(0); a.input_.endFrame(); }));
+    }
     static void legacy(App &a, Vec2 p) { a.handleBasePointerClick({{p.x, p.y}}); }
     static void pause(App &a) { a.pauseMenu_.open(); }
     static void resume(App &a) { a.pauseMenu_.close(); }
@@ -138,8 +144,10 @@ protected:
         ASSERT_NE(it, rows.end());
         const auto index = static_cast<std::size_t>(it - rows.begin());
         const auto page = index / uiRegionalOperationsPageSize();
-        while (A::state(*app).listPage < page) control(C::Next);
-        while (A::state(*app).listPage > page) control(C::Previous);
+        const auto attempts=uiRegionalOperationsPageCount(rows.size())+1;
+        for(std::size_t step=0;step<attempts && A::state(*app).listPage!=page;++step)
+            control(A::state(*app).listPage<page?C::Next:C::Previous);
+        ASSERT_EQ(A::state(*app).listPage,page);
         click(center(uiRegionalOperationsRowRect(index % uiRegionalOperationsPageSize())));
         ASSERT_EQ(A::projection(*app).selectedOutpostId, id);
     }
@@ -150,8 +158,10 @@ protected:
         ASSERT_NE(it, rows.end());
         const auto index = static_cast<std::size_t>(it - rows.begin());
         const auto page = index / uiRegionalOperationsPageSize();
-        while (A::state(*app).listPage < page) control(C::Next);
-        while (A::state(*app).listPage > page) control(C::Previous);
+        const auto attempts=uiRegionalOperationsPageCount(rows.size())+1;
+        for(std::size_t step=0;step<attempts && A::state(*app).listPage!=page;++step)
+            control(A::state(*app).listPage<page?C::Next:C::Previous);
+        ASSERT_EQ(A::state(*app).listPage,page);
         click(center(uiRegionalOperationsRowRect(index % uiRegionalOperationsPageSize())));
         ASSERT_EQ(A::projection(*app).selectedSiteId, id);
     }

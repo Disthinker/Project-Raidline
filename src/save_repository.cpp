@@ -1,4 +1,5 @@
 #include "save_repository.h"
+#include "player_effects_serialization.h"
 #include "chest_rig_layout_migration.h"
 #include "alpha_content_ids.h"
 #include "base_fortification_serialization.h"
@@ -30,6 +31,60 @@
 namespace
 {
 using Json = nlohmann::json;
+
+constexpr std::string_view kWeaponHandlingContentVersion{
+    "raid-weapon-handling-content-74"};
+
+AssetInstanceId parseWeaponHandlingAssetId(const Json &value)
+{
+    if (!value.is_number_unsigned() || value.get<AssetInstanceId>() == 0U)
+        throw std::invalid_argument{"weapon handling parent must be a nonzero uint64 integer"};
+    return value.get<AssetInstanceId>();
+}
+
+bool runnerCompatibleContent(std::string_view version) noexcept
+{
+    return version == "raid-runner-infected-content-73" ||
+        version == kWeaponHandlingContentVersion;
+}
+
+std::string_view fireModeName(WeaponFireMode mode)
+{
+    switch (mode)
+    {
+    case WeaponFireMode::SemiAutomatic: return "semi_automatic";
+    case WeaponFireMode::ThreeRoundBurst: return "three_round_burst";
+    case WeaponFireMode::Automatic: return "automatic";
+    }
+    throw std::invalid_argument{"invalid weapon fire mode"};
+}
+
+WeaponFireMode parseFireMode(const Json &value)
+{
+    const auto name = value.get<std::string>();
+    if (name == "semi_automatic") return WeaponFireMode::SemiAutomatic;
+    if (name == "three_round_burst") return WeaponFireMode::ThreeRoundBurst;
+    if (name == "automatic") return WeaponFireMode::Automatic;
+    throw std::invalid_argument{"unknown weapon fire mode"};
+}
+
+std::string_view reloadRoleName(RaidReloadMagazineRole role)
+{
+    switch (role)
+    {
+    case RaidReloadMagazineRole::NewMagazine: return "new_magazine";
+    case RaidReloadMagazineRole::OldMagazine: return "old_magazine";
+    }
+    throw std::invalid_argument{"invalid reload magazine role"};
+}
+
+RaidReloadMagazineRole parseReloadRole(const Json &value)
+{
+    const auto role = value.get<std::string>();
+    if (role == "new_magazine") return RaidReloadMagazineRole::NewMagazine;
+    if (role == "old_magazine") return RaidReloadMagazineRole::OldMagazine;
+    throw std::invalid_argument{"unknown reload magazine role"};
+}
 
 Json baseDefenseValueForSchema(const BaseDefenseSnapshot &snapshot, std::uint32_t schemaVersion)
 {
@@ -1051,6 +1106,43 @@ Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersi
                 {"type", "installed_magazine"},
                 {"weapon_asset_id", installed->weaponAssetId}};
         }
+        else if (const auto *held = std::get_if<BaseReloadHeldMagazineLocation>(&asset.location))
+        {
+            if (schemaVersion < 60)
+                throw std::invalid_argument{"Base held magazines require schema 60"};
+            location = {{"type", "base_reload_held_magazine"},
+                {"activity", raidline::save60::scope(held->activity)},
+                {"weapon_asset_id", held->weaponAssetId}, {"action_id", held->actionId},
+                {"role", reloadRoleName(held->role)}};
+        }
+        else if (std::holds_alternative<TrainingHeldMagazineLocation>(asset.location) ||
+                 std::holds_alternative<TrainingDroppedMagazineLocation>(asset.location))
+            throw std::invalid_argument{"isolated Training assets cannot be saved"};
+        else if (const auto *held = std::get_if<RaidReloadHeldMagazineLocation>(&asset.location))
+        {
+            if (schemaVersion < 59)
+                throw std::invalid_argument{"reload held magazines require schema 59"};
+            location = {{"type", "raid_reload_held_magazine"},
+                {"raid_id", held->raidId}, {"space_id", held->spaceId.value()},
+                {"weapon_asset_id", held->weaponAssetId}, {"action_id", held->actionId},
+                {"role", reloadRoleName(held->role)}};
+        }
+        else if (const auto *drop = std::get_if<RaidDroppedMagazineLocation>(&asset.location))
+        {
+            if (schemaVersion < 59)
+                throw std::invalid_argument{"dropped magazines require schema 59"};
+            location = {{"type", "raid_dropped_magazine"},
+                {"raid_id", drop->raidId}, {"space_id", drop->spaceId.value()},
+                {"position", {{"x", drop->position.x}, {"y", drop->position.y}}}};
+        }
+        else if (const auto *retained = std::get_if<RetainedRaidMagazineLocation>(&asset.location))
+        {
+            if (schemaVersion < 59)
+                throw std::invalid_argument{"retained magazines require schema 59"};
+            location = {{"type", "retained_raid_magazine"},
+                {"weapon_asset_id", retained->weaponAssetId},
+                {"role", reloadRoleName(retained->role)}};
+        }
         else if (const auto *drop = std::get_if<RaidDroppedBatteryLocation>(&asset.location))
         {
             if (schemaVersion < 53) throw std::invalid_argument("dropped batteries require schema 53");
@@ -1158,6 +1250,20 @@ Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersi
             {"orientation", orientationName(asset.orientation)},
             {"remaining_charges", asset.remainingCharges},
             {"location", std::move(location)}};
+        if (schemaVersion >= 59)
+        {
+            value["fire_mode"] = asset.fireMode
+                ? Json(std::string{fireModeName(*asset.fireMode)}) : Json(nullptr);
+        }
+        else if (asset.fireMode)
+        {
+            // The explicit legacy writer may represent only the old default.
+            // A chosen mode must never disappear in a schema downgrade.
+            const auto &definition = publishedContentRegistry().item(asset.definitionId);
+            if (!definition.weaponUse ||
+                *asset.fireMode != definition.weaponUse->defaultFireMode)
+                throw std::invalid_argument{"selected fire mode requires schema 59"};
+        }
         if (asset.reliefBatchId.has_value())
         {
             value["relief_batch_id"] = *asset.reliefBatchId;
@@ -1206,6 +1312,29 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
             asset.instanceId = value.at("instance_id").get<AssetInstanceId>();
             asset.definitionId = ItemDefinitionId{
                 value.at("definition_id").get<std::string>()};
+            const auto &definition = content.item(asset.definitionId);
+            if (schemaVersion >= 59)
+            {
+                const auto &mode = value.at("fire_mode");
+                if (definition.weaponUse)
+                {
+                    if (mode.is_null())
+                        throw std::invalid_argument{"weapon is missing its fire mode"};
+                    asset.fireMode = parseFireMode(mode);
+                    const auto &allowed = definition.weaponUse->supportedFireModes;
+                    if (std::find(allowed.begin(), allowed.end(), *asset.fireMode) == allowed.end())
+                        throw std::invalid_argument{"weapon does not support its fire mode"};
+                }
+                else if (!mode.is_null())
+                    throw std::invalid_argument{"non-weapon has a fire mode"};
+            }
+            else
+            {
+                if (value.contains("fire_mode"))
+                    throw std::invalid_argument{"legacy asset contains a weapon fire mode"};
+                if (definition.weaponUse)
+                    asset.fireMode = definition.weaponUse->defaultFireMode;
+            }
             if (schemaVersion < 54 && content.item(asset.definitionId).meleeUse)
                 return {SaveLoadStatus::Failed, std::nullopt, "melee equipment requires schema 54"};
             if (schemaVersion < 53 && (content.item(asset.definitionId).battery || content.item(asset.definitionId).weaponLight || value.contains("device_state")))
@@ -1355,6 +1484,28 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
                 asset.location = InstalledMagazineLocation{
                     location.at("weapon_asset_id").get<AssetInstanceId>()};
             }
+            else if (schemaVersion >= 60 && locationType == "base_reload_held_magazine")
+                asset.location = BaseReloadHeldMagazineLocation{
+                    raidline::save60::parseScope(location.at("activity")),
+                    raidline::save60::integer(location.at("weapon_asset_id"), true),
+                    raidline::save60::text(location.at("action_id")),
+                    parseReloadRole(location.at("role"))};
+            else if (schemaVersion >= 59 && locationType == "raid_reload_held_magazine")
+                asset.location = RaidReloadHeldMagazineLocation{
+                    location.at("raid_id").get<std::string>(),
+                    RaidSpaceDefinitionId{location.at("space_id").get<std::string>()},
+                    parseWeaponHandlingAssetId(location.at("weapon_asset_id")),
+                    location.at("action_id").get<std::string>(),
+                    parseReloadRole(location.at("role"))};
+            else if (schemaVersion >= 59 && locationType == "raid_dropped_magazine")
+                asset.location = RaidDroppedMagazineLocation{
+                    location.at("raid_id").get<std::string>(),
+                    RaidSpaceDefinitionId{location.at("space_id").get<std::string>()},
+                    parseVector(location.at("position"))};
+            else if (schemaVersion >= 59 && locationType == "retained_raid_magazine")
+                asset.location = RetainedRaidMagazineLocation{
+                    parseWeaponHandlingAssetId(location.at("weapon_asset_id")),
+                    parseReloadRole(location.at("role"))};
             else if (schemaVersion >= 53 && locationType == "raid_dropped_battery")
                 asset.location = RaidDroppedBatteryLocation{location.at("raid_id").get<std::string>(),
                     RaidSpaceDefinitionId{location.at("space_id").get<std::string>()}, {location.at("x").get<float>(), location.at("y").get<float>()}};
@@ -2745,6 +2896,7 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             payload["last_raid_result"]["wish_return"] = std::move(summary);
         }
     }
+    raidline::save60::writePlayerState(payload, profile, schemaVersion);
     return payload;
 }
 
@@ -2808,8 +2960,8 @@ std::string serializeProfileEnvelope(
     std::uint32_t schemaVersion)
 {
     if (profile.pendingRaid && profile.pendingRaid->rulesVersion == kRaidRunnerRulesVersion &&
-        contentVersion != "raid-runner-infected-content-73")
-        throw std::invalid_argument{"runner Raid requires content 73"};
+        !runnerCompatibleContent(contentVersion))
+        throw std::invalid_argument{"runner Raid requires compatible content 73 or 74"};
     if (schemaVersion != 1 && schemaVersion != 2 &&
         schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 &&
         schemaVersion != 6 && schemaVersion != 7 && schemaVersion != 8 &&
@@ -2825,7 +2977,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -2842,13 +2994,12 @@ std::string serializeProfileEnvelope(
     return envelope.dump(2);
 }
 
-SaveLoadResult deserializeProfileEnvelope(
-    std::string_view text,
+static SaveLoadResult deserializeParsedProfileEnvelope(
+    const Json &envelope,
     const ContentRegistry &content)
 {
     try
     {
-        const Json envelope = Json::parse(text.begin(), text.end());
         if (!envelope.is_object() || !envelope.at("schema_version").is_number_unsigned() ||
             envelope.at("schema_version").get<std::uint64_t>() > std::numeric_limits<std::uint32_t>::max() ||
             !envelope.at("content_version").is_string())
@@ -3003,7 +3154,8 @@ SaveLoadResult deserializeProfileEnvelope(
             (schemaVersion >= 57 && contentVersion == "raid-credential-extraction-content-69") ||
             (schemaVersion >= 57 && contentVersion == "base-field-medical-supplies-content-70") ||
             (schemaVersion >= 57 && contentVersion == "weapon-suppressor-acoustics-content-71") ||
-            (schemaVersion >= 57 && contentVersion == "raid-fragmentation-grenade-content-72");
+            (schemaVersion >= 57 && contentVersion == "raid-fragmentation-grenade-content-72") ||
+            (schemaVersion >= 58 && contentVersion == "raid-runner-infected-content-73");
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -3025,7 +3177,7 @@ SaveLoadResult deserializeProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-               schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58) ||
+               schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3773,8 +3925,8 @@ SaveLoadResult deserializeProfileEnvelope(
             raid.settlementId = value.at("settlement_id").get<std::string>();
             raid.rulesVersion = value.at("rules_version").get<std::string>();
             if (raid.rulesVersion == kRaidRunnerRulesVersion &&
-                (schemaVersion < 58 || contentVersion != "raid-runner-infected-content-73"))
-                return {SaveLoadStatus::Failed, std::nullopt, "runner Raid requires schema 58 and content 73"};
+                (schemaVersion < 58 || !runnerCompatibleContent(contentVersion)))
+                return {SaveLoadStatus::Failed, std::nullopt, "runner Raid requires schema 58+ and compatible content 73 or 74"};
             raid.mapDefinitionId = MapDefinitionId{
                 value.at("map_definition_id").get<std::string>()};
             raid.seed = value.at("seed").get<std::uint64_t>();
@@ -4776,6 +4928,7 @@ SaveLoadResult deserializeProfileEnvelope(
                     value.at("contribution").get<std::uint64_t>(), value.at("expired").get<bool>()};
             }
         }
+        raidline::save60::parsePlayerState(payload, profile, schemaVersion);
         const ProfileValidationResult validation =
             validateProfileState(profile, content);
         if (!validation.valid)
@@ -4791,6 +4944,50 @@ SaveLoadResult deserializeProfileEnvelope(
     {
         return {SaveLoadStatus::Failed, std::nullopt, error.what()};
     }
+}
+
+SaveLoadResult deserializeProfileEnvelope(
+    std::string_view text, const ContentRegistry &content)
+{
+    try
+    {
+        const Json envelope = Json::parse(text.begin(), text.end());
+        auto result = deserializeParsedProfileEnvelope(envelope, content);
+        if (result.profile)
+            result.sourceEnvelope = SaveEnvelopeMetadata{
+                envelope.at("schema_version").get<std::uint32_t>(),
+                envelope.at("content_version").get<std::string>()};
+        return result;
+    }
+    catch (const std::exception &error)
+    {
+        return {SaveLoadStatus::Failed, std::nullopt, error.what()};
+    }
+}
+
+void SaveRepository::rememberEnvelope(std::string_view bytes,
+    std::optional<SaveEnvelopeMetadata> metadata) const
+{
+    for (auto &known : verifiedEnvelopes_)
+        if (known && known->bytes == bytes) { known->metadata = std::move(metadata); return; }
+    verifiedEnvelopes_[nextVerifiedEnvelope_++ % verifiedEnvelopes_.size()] =
+        VerifiedEnvelope{std::string{bytes}, std::move(metadata)};
+}
+
+std::optional<SaveEnvelopeMetadata> SaveRepository::inspectEnvelope(
+    std::string_view bytes, SaveWriteMetrics *metrics) const
+{
+    for (const auto &known : verifiedEnvelopes_)
+        if (known && known->bytes == bytes)
+        {
+            if (metrics) ++metrics->cachedEnvelopeProofs;
+            return known->metadata;
+        }
+    if (metrics) ++metrics->fullEnvelopeValidations;
+    const auto loaded = deserializeProfileEnvelope(bytes, publishedContentRegistry());
+    const auto metadata = loaded.profile ? loaded.sourceEnvelope : std::nullopt;
+    rememberEnvelope(bytes, metadata);
+    return metadata;
 }
 
 SaveRepository::SaveRepository(std::filesystem::path directory)
@@ -4869,35 +5066,70 @@ SaveWriteResult SaveRepository::save(
         metrics->serializationMilliseconds = std::chrono::duration<double, std::milli>{
             Clock::now() - serializationStartedAt}.count();
     }
+    // Validate the produced envelope once before disk I/O. An exact read-back
+    // proves the disk contains these already validated bytes; no second parse.
+    if (!inspectEnvelope(text, metrics))
+        return {false, "candidate save failed envelope validation"};
     if (!writeText(temporaryPath_, text))
-    {
         return {false, "temporary save could not be written"};
-    }
     const auto readBack = readText(temporaryPath_);
-    if (!readBack.has_value() ||
-        !deserializeProfileEnvelope(*readBack, publishedContentRegistry())
-             .profile.has_value())
+    if (!readBack || *readBack != text)
     {
         std::filesystem::remove(temporaryPath_, error);
         return {false, "temporary save failed read-back validation"};
     }
-
-    const bool validPrimary =
-        isValidEnvelope(primaryPath_, publishedContentRegistry());
-    const bool validBackup =
-        isValidEnvelope(backupPath_, publishedContentRegistry());
+    const auto primaryBytes = readText(primaryPath_);
+    const auto backupBytes = readText(backupPath_);
+    const auto primaryMetadata = primaryBytes ? inspectEnvelope(*primaryBytes, metrics) : std::nullopt;
+    const auto backupMetadata = backupBytes ? inspectEnvelope(*backupBytes, metrics) : std::nullopt;
+    const bool validPrimary = primaryMetadata.has_value();
+    const bool validBackup = backupMetadata.has_value();
+    const auto sourceMetadata = [&](const std::filesystem::path &path)
+        -> const std::optional<SaveEnvelopeMetadata> &
+    { return path == primaryPath_ ? primaryMetadata : backupMetadata; };
+    const auto isPrePlayerSystemsSource = [&](const std::filesystem::path &path, bool valid)
+    {
+        if (!valid || contentVersion != kWeaponHandlingContentVersion) return false;
+        const auto &source = sourceMetadata(path);
+        return source && (source->schemaVersion < 60U || source->contentVersion != contentVersion);
+    };
+    if (isPrePlayerSystemsSource(primaryPath_, validPrimary) ||
+        isPrePlayerSystemsSource(backupPath_, validBackup))
+    {
+        const auto preserved = preserveLayoutMigrationSources(
+            validPrimary ? SaveLoadStatus::LoadedPrimary : SaveLoadStatus::RecoveredBackup,
+            "player-systems-feedback-v3");
+        if (!preserved.succeeded)
+        {
+            std::filesystem::remove(temporaryPath_, error);
+            return {false, preserved.message};
+        }
+    }
+    const auto isPreWeaponHandlingSource = [&](const std::filesystem::path &path, bool valid)
+    {
+        if (!valid || contentVersion != kWeaponHandlingContentVersion) return false;
+        const auto &source = sourceMetadata(path);
+        return source && (source->schemaVersion < 59U || source->contentVersion != contentVersion);
+    };
+    if (isPreWeaponHandlingSource(primaryPath_, validPrimary) ||
+        isPreWeaponHandlingSource(backupPath_, validBackup))
+    {
+        // Archive both actual sources before backup rotation or pending-Raid
+        // mirroring. Later play must never overwrite the immutable upgrade copy.
+        const auto preserved = preserveLayoutMigrationSources(
+            validPrimary ? SaveLoadStatus::LoadedPrimary : SaveLoadStatus::RecoveredBackup,
+            "raid-weapon-handling-stage-v1");
+        if (!preserved.succeeded)
+        {
+            std::filesystem::remove(temporaryPath_, error);
+            return {false, preserved.message};
+        }
+    }
     const auto isPreRunnerSource = [&](const std::filesystem::path &path, bool valid)
     {
-        if (!valid || contentVersion != "raid-runner-infected-content-73") return false;
-        const auto bytes = readText(path);
-        if (!bytes) return false;
-        try
-        {
-            const auto envelope = Json::parse(*bytes);
-            return envelope.at("schema_version").get<std::uint32_t>() < 58U ||
-                envelope.at("content_version").get<std::string>() != contentVersion;
-        }
-        catch (...) { return false; }
+        if (!valid || !runnerCompatibleContent(contentVersion)) return false;
+        const auto &source = sourceMetadata(path);
+        return source && (source->schemaVersion < 58U || !runnerCompatibleContent(source->contentVersion));
     };
     if (isPreRunnerSource(primaryPath_, validPrimary) || isPreRunnerSource(backupPath_, validBackup))
     {
@@ -4912,19 +5144,10 @@ SaveWriteResult SaveRepository::save(
             return {false, preserved.message};
         }
     }
-    const auto isLegacySource = [](const std::filesystem::path &path, bool valid)
+    const auto isLegacySource = [&](const std::filesystem::path &path, bool valid)
     {
-        if (!valid) return false;
-        const auto bytes = readText(path);
-        if (!bytes) return false;
-        try
-        {
-            return Json::parse(*bytes).at("schema_version").get<std::uint32_t>() < 57U;
-        }
-        catch (...)
-        {
-            return false;
-        }
+        const auto &source = sourceMetadata(path);
+        return valid && source && source->schemaVersion < 57U;
     };
     if (isLegacySource(primaryPath_, validPrimary) || isLegacySource(backupPath_, validBackup))
     {
@@ -4945,20 +5168,17 @@ SaveWriteResult SaveRepository::save(
         if (!valid || (contentVersion != "base-field-medical-supplies-content-70" &&
                        contentVersion != "weapon-suppressor-acoustics-content-71" &&
                        contentVersion != "raid-fragmentation-grenade-content-72" &&
-                       contentVersion != "raid-runner-infected-content-73"))
+                       contentVersion != "raid-runner-infected-content-73" &&
+                       contentVersion != kWeaponHandlingContentVersion))
             return false;
-        const auto bytes = readText(path);
-        if (!bytes) return false;
-        try
+        const auto &source = sourceMetadata(path);
+        if (!source) return false;
         {
-            const auto sourceContent = Json::parse(*bytes).at("content_version").get<std::string>();
+            const auto &sourceContent = source->contentVersion;
             return sourceContent != contentVersion && sourceContent != "base-field-medical-supplies-content-70" &&
                 sourceContent != "weapon-suppressor-acoustics-content-71" &&
-                sourceContent != "raid-fragmentation-grenade-content-72";
-        }
-        catch (...)
-        {
-            return false;
+                sourceContent != "raid-fragmentation-grenade-content-72" &&
+                sourceContent != "raid-runner-infected-content-73";
         }
     };
     if (isPreFieldMedicalContentSource(primaryPath_, validPrimary) ||
@@ -4981,19 +5201,16 @@ SaveWriteResult SaveRepository::save(
     {
         if (!valid || (contentVersion != "weapon-suppressor-acoustics-content-71" &&
                        contentVersion != "raid-fragmentation-grenade-content-72" &&
-                       contentVersion != "raid-runner-infected-content-73"))
+                       contentVersion != "raid-runner-infected-content-73" &&
+                       contentVersion != kWeaponHandlingContentVersion))
             return false;
-        const auto bytes = readText(path);
-        if (!bytes) return false;
-        try
+        const auto &source = sourceMetadata(path);
+        if (!source) return false;
         {
-            const auto sourceContent = Json::parse(*bytes).at("content_version").get<std::string>();
+            const auto &sourceContent = source->contentVersion;
             return sourceContent != contentVersion && sourceContent != "weapon-suppressor-acoustics-content-71" &&
-                sourceContent != "raid-fragmentation-grenade-content-72";
-        }
-        catch (...)
-        {
-            return false;
+                sourceContent != "raid-fragmentation-grenade-content-72" &&
+                sourceContent != "raid-runner-infected-content-73";
         }
     };
     if (isPreSuppressorContentSource(primaryPath_, validPrimary) ||
@@ -5014,18 +5231,15 @@ SaveWriteResult SaveRepository::save(
     const auto isPreGrenadeContentSource = [&](const std::filesystem::path &path, bool valid)
     {
         if (!valid || (contentVersion != "raid-fragmentation-grenade-content-72" &&
-                       contentVersion != "raid-runner-infected-content-73"))
+                       contentVersion != "raid-runner-infected-content-73" &&
+                       contentVersion != kWeaponHandlingContentVersion))
             return false;
-        const auto bytes = readText(path);
-        if (!bytes) return false;
-        try
+        const auto &source = sourceMetadata(path);
+        if (!source) return false;
         {
-            const auto sourceContent = Json::parse(*bytes).at("content_version").get<std::string>();
-            return sourceContent != contentVersion && sourceContent != "raid-fragmentation-grenade-content-72";
-        }
-        catch (...)
-        {
-            return false;
+            const auto &sourceContent = source->contentVersion;
+            return sourceContent != contentVersion && sourceContent != "raid-fragmentation-grenade-content-72" &&
+                sourceContent != "raid-runner-infected-content-73";
         }
     };
     if (isPreGrenadeContentSource(primaryPath_, validPrimary) ||
@@ -5053,9 +5267,7 @@ SaveWriteResult SaveRepository::save(
             backupTemporaryPath_,
             std::filesystem::copy_options::overwrite_existing,
             error);
-        if (error || !isValidEnvelope(
-                         backupTemporaryPath_,
-                         publishedContentRegistry()))
+        if (error || readText(backupTemporaryPath_) != std::optional<std::string>{text})
         {
             std::filesystem::remove(temporaryPath_, error);
             std::filesystem::remove(backupTemporaryPath_, error);
@@ -5070,9 +5282,7 @@ SaveWriteResult SaveRepository::save(
             backupTemporaryPath_,
             std::filesystem::copy_options::overwrite_existing,
             error);
-        if (error || !isValidEnvelope(
-                         backupTemporaryPath_,
-                         publishedContentRegistry()))
+        if (error || readText(backupTemporaryPath_) != std::optional<std::string>{*primaryBytes})
         {
             std::filesystem::remove(temporaryPath_, error);
             std::filesystem::remove(backupTemporaryPath_, error);
@@ -5093,9 +5303,7 @@ SaveWriteResult SaveRepository::save(
             backupTemporaryPath_,
             std::filesystem::copy_options::overwrite_existing,
             error);
-        if (error || !isValidEnvelope(
-                         backupTemporaryPath_,
-                         publishedContentRegistry()))
+        if (error || readText(backupTemporaryPath_) != std::optional<std::string>{text})
         {
             std::filesystem::remove(temporaryPath_, error);
             std::filesystem::remove(backupTemporaryPath_, error);
@@ -5181,6 +5389,7 @@ SaveLoadResult SaveRepository::load(const ContentRegistry &content) const
         if (result.profile.has_value())
         {
             result.status = SaveLoadStatus::LoadedPrimary;
+            if (&content == &publishedContentRegistry()) rememberEnvelope(*primaryText, result.sourceEnvelope);
             return result;
         }
     }
@@ -5192,6 +5401,7 @@ SaveLoadResult SaveRepository::load(const ContentRegistry &content) const
         if (result.profile.has_value())
         {
             result.status = SaveLoadStatus::RecoveredBackup;
+            if (&content == &publishedContentRegistry()) rememberEnvelope(*backupText, result.sourceEnvelope);
             result.message = "primary save was invalid; recovered safe backup";
             return result;
         }

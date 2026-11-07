@@ -34,11 +34,18 @@ void GameSession::prepareMeleeInput(GameplayInput &input,float seconds,float rec
         const bool cancelOnly=std::visit([](const auto &a){using A=std::decay_t<decltype(a)>;
             return std::is_same_v<A,MedicalRaidAction> || std::is_same_v<A,HealRaidAction> ||
                 std::is_same_v<A,WeaponMaintenanceRaidAction> || std::is_same_v<A,ArmorMaintenanceRaidAction>;},*raidActionState_.active());
-        raidActionState_.cancel();
+        if (!cancelActiveRaidAction())
+        {
+            state_ = GameSessionState::SettlementBlocked;
+            input.meleeJustPressed = false;
+            meleeSuppressedUntilRelease_ = true;
+            return;
+        }
         if(cancelOnly){input.meleeJustPressed=false;meleeSuppressedUntilRelease_=true;}
     }
     if(requested || recovering)
     {
+        cancelPlayerControlIntent();
         fireSuppressedUntilRelease_=fireSuppressedUntilRelease_ || input.firePressed || input.fireJustPressed;
         sprintSuppressedUntilRelease_=sprintSuppressedUntilRelease_ || input.sprint;
         input.firePressed=input.fireJustPressed=input.sprint=false;
@@ -87,9 +94,9 @@ bool GameSession::commitPlayerMelee(GameplayWorld &world,bool allow)
     const bool ok=commitMeleeWear(profile_,world,allow,persistenceMessage_,changed);
     return ok;
 }
-bool GameSession::commitPlayerMelee(BaseWorld &world,bool allow)
+bool GameSession::commitPlayerMelee(BaseWorld &world,bool allow,ProfileState *privateCandidate)
 {
     bool changed{};
-    const bool ok=commitMeleeWear(profile_,world,allow,persistenceMessage_,changed);
+    const bool ok=commitMeleeWear(privateCandidate?*privateCandidate:profile_,world,allow,persistenceMessage_,changed);
     worldClockDirty_=worldClockDirty_ || changed;return ok;
 }

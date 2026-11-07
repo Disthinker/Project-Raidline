@@ -7,7 +7,8 @@ void App::renderQuickWheel(UiQuickWheelKind kind,
                           const std::vector<AssetInstanceId> &ids,
                           std::size_t selected) {
   if(!renderer_)return;
-  quickWheelProjection_.refresh(gameSession_.profile(),publishedContentRegistry(),ids,kind);
+  quickWheelProjection_.refresh(gameSession_.profile(),publishedContentRegistry(),ids,kind,
+      kind==UiQuickWheelKind::Magazine?magazineWheelWeapon_:std::nullopt);
   const auto language=uiTextRenderer_.language();
   if(quickWheelLayoutGeneration_!=quickWheelProjection_.generation || quickWheelLayout_.selected!=selected ||
      quickWheelLayout_.page!=quickWheelPage_ || quickWheelLayoutLanguage_!=language) {
@@ -57,7 +58,8 @@ void App::renderQuickWheel(UiQuickWheelKind kind,
     image.w*=zoom;image.h*=zoom;
     if(const auto *asset=gameSession_.profile().assets.find(entry.instanceId))renderProfileAsset(*asset,image,56,entry.usable?255:150,false,true,false);
     SDL_SetRenderDrawColor(renderer_,entry.usable?224:150,entry.usable?236:155,entry.usable?229:156,255);
-    const auto count=kind==UiQuickWheelKind::Medical?fmt::format("×{} · {}{}",entry.quantity,entry.remainingUses,language==UiLanguage::SimplifiedChinese?"次":" uses"):
+    const auto count=kind==UiQuickWheelKind::Magazine ? entry.count+(entry.mixedAmmunition?(language==UiLanguage::SimplifiedChinese?" 混":" MIX"):"") :
+        kind==UiQuickWheelKind::Medical?fmt::format("×{} · {}{}",entry.quantity,entry.remainingUses,language==UiLanguage::SimplifiedChinese?"次":" uses"):
         fmt::format("×{}",entry.quantity);
     uiTextRenderer_.renderBox(renderer_,{image.x-27,image.y+image.h+2,image.w+54,18},count,{12,UiTextAlign::Center,1});
     if(!entry.usable) {SDL_SetRenderDrawColor(renderer_,219,154,122,255);SDL_RenderPoint(renderer_,image.x+image.w+5,image.y+4);}
@@ -248,7 +250,7 @@ void App::renderFoundationSettings(bool paused) {
   uiTextRenderer_.renderBox(renderer_, {320, 160, 640, 28},
                             "WASD MOVE  SHIFT SPRINT  E INTERACT", {16});
   uiTextRenderer_.renderBox(renderer_, {320, 190, 640, 28},
-                            "LMB FIRE | RMB AIM | R RELOAD | V MELEE", {16});
+                            "LMB FIRE | RMB AIM | R RELOAD | V MELEE | B RAID MODE", {16});
   uiTextRenderer_.renderBox(
       renderer_, {320, 220, 640, 28},
       "TAB INVENTORY | M MAP | 4 THROWABLES | 5 MED | U LIGHT", {16});

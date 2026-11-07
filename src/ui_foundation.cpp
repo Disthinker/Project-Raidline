@@ -5,15 +5,110 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 
-void uiFinalPanel(SDL_Renderer *renderer, const SDL_FRect &bounds, bool warning) {
+UiFeedbackViewport uiFeedbackViewport(SDL_Renderer *renderer) noexcept {
+  UiFeedbackViewport result;
+  if (!renderer) return result;
+  int logicalWidth{}, logicalHeight{}, outputWidth{}, outputHeight{};
+  SDL_RendererLogicalPresentation mode{};
+  if (SDL_GetRenderLogicalPresentation(renderer, &logicalWidth, &logicalHeight, &mode) &&
+      logicalWidth > 0 && logicalHeight > 0) {
+    result.width = static_cast<float>(logicalWidth);
+    result.height = static_cast<float>(logicalHeight);
+  }
+  if (SDL_GetRenderOutputSize(renderer, &outputWidth, &outputHeight) &&
+      outputWidth > 0 && outputHeight > 0)
+    result.pixelsPerLogicalUnit = std::min(outputWidth / result.width, outputHeight / result.height);
+  if (auto *window = SDL_GetRenderWindow(renderer)) {
+    const float scale = SDL_GetWindowDisplayScale(window);
+    if (std::isfinite(scale) && scale > 0) result.pixelsPerDp = scale;
+  }
+  const auto projected=SDL_GetFloatProperty(SDL_GetRendererProperties(renderer),kUiDisplayScaleProperty,0);
+  if(std::isfinite(projected) && projected>0)result.pixelsPerDp=projected;
+  return result;
+}
+
+UiCompactFeedbackLayout layoutUiCompactFeedback(
+    UiFeedbackViewport viewport, Vec2 anchor, bool bottomAnchored,
+    std::string_view localized,
+    const std::function<float(std::string_view, int)> &measure) {
+  const auto positive = [](float value, float fallback) {
+    return std::isfinite(value) && value > 0 ? value : fallback;
+  };
+  const float width = positive(viewport.width, 1280), height = positive(viewport.height, 720);
+  const float dp = positive(viewport.pixelsPerDp, 1) /
+                   positive(viewport.pixelsPerLogicalUnit, 1);
+  const float margin = std::min({16 * dp, width * .04F, height * .04F});
+  const float maximumWidth = std::min((width - 2 * margin) * .30F, 440 * dp);
+  const float maximumHeight = std::min((height - 2 * margin) * .15F, 96 * dp);
+  UiCompactFeedbackLayout layout;
+  layout.fontSize = std::clamp(static_cast<int>(std::lround(13 * dp)), 1, 64);
+  const float lineHeight = std::ceil(layout.fontSize * 1.4F);
+  // A long error needs a body row plus its disclosure hint inside the same
+  // cap. At high DPI reduce padding before discarding that second row.
+  const float padding = std::min({8 * dp, height * .02F,
+      std::max(0.0F, (maximumHeight - 2 * lineHeight - 1) * .5F)});
+  layout.maximumLines = std::clamp(static_cast<int>((maximumHeight - 2 * padding + .001F) / lineHeight), 1, 2);
+  const float textLimit = std::max(1.0F, maximumWidth - 2 * padding);
+  const auto measured = [&](std::string_view value) { return measure ? measure(value, layout.fontSize) : 0.0F; };
+  const auto lines = wrapUiText(localized, textLimit, layout.maximumLines, measured);
+  float textWidth = 1;
+  for (const auto &line : lines) textWidth = std::max(textWidth, line.width);
+  const float panelWidth = std::min(maximumWidth, textWidth + 2 * padding);
+  const float requiredTextHeight = lineHeight * std::max(std::size_t{1}, lines.size());
+  const float panelHeight = std::min(maximumHeight, requiredTextHeight + 2 * padding);
+  const float desiredX = std::isfinite(anchor.x) ? anchor.x : margin;
+  const float desiredY = std::isfinite(anchor.y) ? anchor.y : height - margin;
+  layout.panel = {std::clamp(desiredX, margin, std::max(margin, width - margin - panelWidth)),
+      std::clamp(desiredY - (bottomAnchored ? panelHeight : 0), margin,
+                 std::max(margin, height - margin - panelHeight)), panelWidth, panelHeight};
+  const float availableTextHeight = std::max(1.0F, panelHeight - 2 * padding);
+  // Fractional dp padding can subtract to 13.999999 for a complete 14px row.
+  // Preserve the exact integral row extent without enlarging the card caps.
+  const float textHeight = requiredTextHeight <= availableTextHeight + .001F
+      ? requiredTextHeight : availableTextHeight;
+  layout.text = {layout.panel.x + padding, layout.panel.y + padding,
+      std::max(1.0F, panelWidth - 2 * padding), textHeight};
+  return layout;
+}
+
+UiCompactFeedbackLayout layoutUiCompactFeedback(
+    SDL_Renderer *renderer, UiTextRenderer &text, std::string_view message,
+    Vec2 anchor, bool bottomAnchored) {
+  return layoutUiCompactFeedback(uiFeedbackViewport(renderer), anchor, bottomAnchored,
+      localizeUiText(text.language(), message), [&](auto value, int size) { return text.measure(value, size); });
+}
+
+void uiFinalCompactFeedback(SDL_Renderer *renderer, UiTextRenderer &text,
+    const UiCompactFeedbackLayout &layout, std::string_view message,
+    bool warning, float *lineOffset, Uint8 alpha) {
+  if (message.empty()) return;
+  // Feedback owns its entire reserved footprint even over a world label.
+  uiFinalPanel(renderer, layout.panel, warning, alpha);
+  if (lineOffset) uiFinalScrollableText(renderer, text, layout.text, message, *lineOffset, layout.fontSize, layout.fontSize);
+  else uiFinalText(renderer, text, layout.text, message, layout.fontSize,
+                   layout.maximumLines, {222, 231, 226, alpha});
+}
+
+void uiFinalInventoryFrame(SDL_Renderer *renderer, const SDL_FRect &bounds, bool returns) {
+  if (!renderer || bounds.w < 4 || bounds.h < 4) return;
+  Uint8 r{}, g{}, b{}, a{}; SDL_GetRenderDrawColor(renderer, &r, &g, &b, &a);
+  const SDL_FRect outer{bounds.x + .5F, bounds.y + .5F, bounds.w - 1.5F, bounds.h - 1.5F};
+  SDL_SetRenderDrawColor(renderer, returns ? 192 : 133, returns ? 162 : 162, returns ? 94 : 154, 255);
+  SDL_RenderRect(renderer, &outer);
+  const SDL_FRect inner{bounds.x + 1.5F, bounds.y + 1.5F, bounds.w - 3.5F, bounds.h - 3.5F};
+  SDL_SetRenderDrawColor(renderer, 8, 15, 18, 255); SDL_RenderRect(renderer, &inner);
+  SDL_SetRenderDrawColor(renderer, r, g, b, a);
+}
+
+void uiFinalPanel(SDL_Renderer *renderer, const SDL_FRect &bounds, bool warning, Uint8 alpha) {
   if (!renderer || bounds.w <= 0 || bounds.h <= 0) return;
   SDL_BlendMode previous{};
   SDL_GetRenderDrawBlendMode(renderer, &previous);
   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-  SDL_SetRenderDrawColor(renderer, 21, 29, 31, 244);
+  SDL_SetRenderDrawColor(renderer, 21, 29, 31, static_cast<Uint8>(244U*alpha/255U));
   SDL_RenderFillRect(renderer, &bounds);
   SDL_SetRenderDrawColor(renderer, warning ? 199 : 77, warning ? 137 : 112,
-                         warning ? 101 : 108, 255);
+                         warning ? 101 : 108, alpha);
   SDL_RenderRect(renderer, &bounds);
   const SDL_FRect accent{bounds.x, bounds.y, 3, bounds.h};
   SDL_RenderFillRect(renderer, &accent);
@@ -105,13 +200,13 @@ void uiFinalWorldLabel(SDL_Renderer *renderer, UiTextRenderer &text, float x,
 
 void uiFinalScrollableText(SDL_Renderer *renderer, UiTextRenderer &text,
                            const SDL_FRect &bounds, std::string_view label,
-                           float &lineOffset, int size) {
+                           float &lineOffset, int size, int requestedHintSize) {
   if (!renderer || bounds.w <= 16 || bounds.h < size * 1.4F) return;
   const auto localized = localizeUiText(text.language(), label);
   const auto lines = wrapUiText(localized, bounds.w - 10, 0,
       [&](auto value) { return text.measure(value, size); });
   const float height = std::ceil(size * 1.4F);
-  const auto fitting = static_cast<std::size_t>(std::max(1.0F, std::floor(bounds.h / height)));
+  const auto fitting = static_cast<std::size_t>(std::max(1.0F, std::floor((bounds.h + .001F) / height)));
   const bool scroll = lines.size() > fitting;
   const std::size_t visible = scroll ? std::max(std::size_t{1}, fitting - 1) : fitting;
   const std::size_t maximum = lines.size() > visible ? lines.size() - visible : 0;
@@ -123,8 +218,10 @@ void uiFinalScrollableText(SDL_Renderer *renderer, UiTextRenderer &text,
   if (scroll) {
     const auto hint = text.language() == UiLanguage::SimplifiedChinese
         ? "滚轮查看完整信息" : "SCROLL FOR FULL MESSAGE";
-    uiFinalText(renderer, text, {bounds.x, bounds.y + bounds.h - 14, bounds.w - 10, 14},
-        hint, 10, 1, {154, 191, 179, 255});
+    const int hintSize = requestedHintSize > 0 ? requestedHintSize : std::clamp(size - 2, 1, 10);
+    const float hintHeight = std::ceil(hintSize * 1.4F);
+    uiFinalText(renderer, text, {bounds.x, bounds.y + bounds.h - hintHeight, bounds.w - 10, hintHeight},
+        hint, hintSize, 1, {154, 191, 179, 255});
     SDL_SetRenderDrawColor(renderer, 113, 191, 179, 255);
     const float trackHeight = std::max(12.0F, bounds.h - 16);
     const float thumbHeight = std::max(8.0F, trackHeight * visible / lines.size());

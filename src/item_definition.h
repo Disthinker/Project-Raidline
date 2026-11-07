@@ -168,6 +168,8 @@ struct WeaponAcousticsDefinition
         const WeaponAcousticsDefinition &) = default;
 };
 
+enum class WeaponFireMode { SemiAutomatic, ThreeRoundBurst, Automatic };
+
 struct WeaponUseDefinition
 {
     bool automaticFire{};
@@ -182,6 +184,11 @@ struct WeaponUseDefinition
     float maximumRange{};
     float logicalBallisticSpeed{};
     WeaponAcousticsDefinition acoustics;
+    // automaticFire is a legacy immutable sound-family hint only. Trigger
+    // behavior uses the selected mode on the actual weapon instance.
+    std::vector<WeaponFireMode> supportedFireModes;
+    WeaponFireMode defaultFireMode{WeaponFireMode::SemiAutomatic};
+    std::uint32_t burstShotCount{};
 
     friend bool operator==(
         const WeaponUseDefinition &,

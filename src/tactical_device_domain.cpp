@@ -11,14 +11,16 @@ InventoryReceipt failure(const ProfileState &p, DomainErrorCode code, const char
 { return {false, false, code, message, p.revision}; }
 
 std::optional<StoredAssetLocation> returnLocation(const ProfileState &p, const ContentRegistry &c,
-                                                const AssetRecord &battery, bool raid,
+                                                const AssetRecord &battery, bool carriedOnly,
                                                 std::optional<StoredAssetLocation> preferred = {})
 {
     const auto &d = c.item(battery.definitionId);
     if (preferred && preferred->container.kind != ProfileContainerKind::LegacyOverflow &&
+        (!carriedOnly || (preferred->container.kind == ProfileContainerKind::AssetCompartment &&
+                         assetIsCarried(p, preferred->container.ownerAssetId))) &&
         !assetIsLegacyOverflowAsset(p, preferred->container.ownerAssetId) &&
         profilePlacementFits(p, c, preferred->container, preferred->origin, d, battery.orientation, battery.instanceId)) return preferred;
-    if (!raid)
+    if (!carriedOnly)
     {
         const auto fit = findFirstProfileFit(p, c, ProfileContainerId::stash(), d, battery.orientation, battery.instanceId);
         if (fit) return StoredAssetLocation{ProfileContainerId::stash(), *fit};
@@ -44,10 +46,20 @@ std::optional<StoredAssetLocation> returnLocation(const ProfileState &p, const C
 InventoryReceipt prepareBattery(ProfileState &p, const ContentRegistry &c, DeviceBatteryCommand cmd, const DeviceBatteryAccess &access)
 {
     if (!validateProfileState(p, c).valid) return failure(p, DomainErrorCode::InvalidProfile, "INVALID DEVICE PROFILE");
+    bool realRaid=access.raid;
+    bool carriedOnly=access.raid;
+    if(access.activity)
+    {
+        if(!weaponActionScopeMatches(p,*access.activity))
+            return failure(p,DomainErrorCode::IllegalDestination,"BATTERY ACTIVITY CHANGED");
+        realRaid=access.activity->activity==WeaponActionActivity::Raid;
+        carriedOnly=access.activity->activity!=WeaponActionActivity::BaseDaily || !access.stashAccessible;
+    }
+    else if(access.raid ? !p.pendingRaid : (p.pendingRaid || p.activeBaseDefense))
+        return failure(p,DomainErrorCode::IllegalDestination,"SELECT AN ACCESSIBLE LIGHT");
     const auto *device = p.assets.find(cmd.deviceAssetId);
     if (!device || !c.item(device->definitionId).weaponLight || !device->deviceState ||
-        (access.raid ? (!p.pendingRaid || !assetIsCarried(p, cmd.deviceAssetId)) :
-                      (p.pendingRaid || p.activeBaseDefense || !assetIsBaseAccessible(p, cmd.deviceAssetId))))
+        (carriedOnly ? !assetIsCarried(p, cmd.deviceAssetId) : !assetIsBaseAccessible(p, cmd.deviceAssetId)))
         return failure(p, DomainErrorCode::IllegalDestination, "SELECT AN ACCESSIBLE LIGHT");
     AssetInstanceId outgoing{};
     for (const auto &[id, a] : p.assets.records())
@@ -58,7 +70,7 @@ InventoryReceipt prepareBattery(ProfileState &p, const ContentRegistry &c, Devic
         const auto *incoming = p.assets.find(cmd.batteryAssetId);
         const auto *loc = incoming ? std::get_if<StoredAssetLocation>(&incoming->location) : nullptr;
         if (!incoming || !loc || !c.item(incoming->definitionId).battery || incoming->remainingCharges == 0 ||
-            (access.raid ? !assetIsCarried(p, cmd.batteryAssetId) : !assetIsBaseAccessible(p, cmd.batteryAssetId)))
+            (carriedOnly ? !assetIsCarried(p, cmd.batteryAssetId) : !assetIsBaseAccessible(p, cmd.batteryAssetId)))
             return failure(p, DomainErrorCode::IllegalDestination, "SELECT A STORED BATTERY");
         preferred = *loc;
         if (incoming->quantity > 1)
@@ -73,9 +85,9 @@ InventoryReceipt prepareBattery(ProfileState &p, const ContentRegistry &c, Devic
     if (outgoing)
     {
         auto *old = p.assets.findMutable(outgoing);
-        const auto destination = returnLocation(p, c, *old, access.raid, preferred);
+        const auto destination = returnLocation(p, c, *old, carriedOnly, preferred);
         if (destination) old->location = *destination;
-        else if (access.raid && access.overflow && p.pendingRaid && access.overflow->raidId == p.pendingRaid->raidId)
+        else if (realRaid && access.overflow && p.pendingRaid && access.overflow->raidId == p.pendingRaid->raidId)
             old->location = *access.overflow;
         else return failure(p, DomainErrorCode::Capacity, "SPACE REQUIRED FOR REMOVED BATTERY");
     }
