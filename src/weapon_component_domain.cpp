@@ -21,6 +21,9 @@ ProfileValidationResult validateWeaponComponents(const ProfileState &profile, co
                 definition.weaponComponent->weaponDefinitionId != weapon->definitionId ||
                 !slots.emplace(weapon->instanceId, definition.weaponComponent->slot).second)
                 return {false, "invalid installed weapon component"};
+            if (definition.weaponComponent->slot == WeaponComponentSlot::Optic &&
+                !content.item(weapon->definitionId).weaponUse->providesOpticMount)
+                return {false, "OPTIC MOUNT REQUIRED"};
             if (profile.recoveryTask && recoveryTaskForAsset(profile, id) &&
                 profile.recoveryTask->recoveredAssetIds.contains(id) !=
                     profile.recoveryTask->recoveredAssetIds.contains(weapon->instanceId))
@@ -61,6 +64,8 @@ WeaponUseDefinition effectiveWeaponUse(const ProfileState &profile, const Conten
         ergonomics += component.ergonomics;
         accuracy += component.accuracy;
         range += component.effectiveRange;
+        if (component.slot == WeaponComponentSlot::Optic)
+            result.optic = component.optic;
         result.acoustics.noiseRadiusMultiplier *= component.acoustics.noiseRadiusMultiplier;
         result.acoustics.fireGain *= component.acoustics.fireGain;
         result.acoustics.outdoorTailGain *= component.acoustics.outdoorTailGain;
@@ -94,8 +99,13 @@ WeaponComponentPlan prepare(ProfileState &candidate, const ContentRegistry &cont
     for (const auto &definition : content.items())
         platform |= definition.weaponComponent && definition.weaponComponent->weaponDefinitionId == weapon->definitionId;
     if (!platform) return reject(DomainErrorCode::IncompatibleEquipment, "UNSUPPORTED WEAPON PLATFORM");
-    if (command.slot != WeaponComponentSlot::Barrel && command.slot != WeaponComponentSlot::Handguard && command.slot != WeaponComponentSlot::Grip && command.slot != WeaponComponentSlot::Light && command.slot != WeaponComponentSlot::Muzzle)
+    if (command.slot != WeaponComponentSlot::Barrel && command.slot != WeaponComponentSlot::Handguard &&
+        command.slot != WeaponComponentSlot::Grip && command.slot != WeaponComponentSlot::Light &&
+        command.slot != WeaponComponentSlot::Muzzle && command.slot != WeaponComponentSlot::Optic)
         return reject(DomainErrorCode::IncompatibleEquipment, "INVALID COMPONENT SLOT");
+    if (command.slot == WeaponComponentSlot::Optic &&
+        !content.item(weapon->definitionId).weaponUse->providesOpticMount)
+        return reject(DomainErrorCode::IncompatibleEquipment, "OPTIC MOUNT REQUIRED");
     if (command.componentAssetId)
     {
         const auto *component = candidate.assets.find(command.componentAssetId);

@@ -246,6 +246,102 @@ TEST(WeaponComponentsTest, PublishedLootCanBeExtractedInstalledAndRolledBackWith
                 EXPECT_FALSE(content().item(entry.itemDefinitionId).weaponComponent);
 }
 
+TEST(WeaponComponentsTest, OpticSupplyAndInstallUseTheReceiverWithoutFreeGrants)
+{
+    const auto &registry = content();
+    const ItemDefinitionId low{"item.component.optic_1_5x_5_45"};
+    auto profile = makeNewPublishedProfile("optic-supply", registry);
+    ASSERT_NE(find(profile, rifle), 0U);
+    EXPECT_EQ(find(profile, low), 0U);
+    EXPECT_EQ(find(profile, kFixedRaidOpticId), 0U);
+    auto ordinary = makeNewAlphaProfile("optic-grant", registry);
+    ASSERT_TRUE(grantDeveloperWarehouseCatalog(ordinary, registry).succeeded);
+    EXPECT_EQ(find(ordinary, low), 0U);
+    EXPECT_EQ(find(ordinary, kFixedRaidOpticId), 0U);
+
+    profile.currency = 300U;
+    const auto before = profileStateFingerprint(profile);
+    EXPECT_FALSE(executeEconomy(profile, registry, PurchaseCommand{kFixedRaidOpticId},
+        {profile.revision, "no-high-supply"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+    const auto buy = executeEconomy(profile, registry, PurchaseCommand{low},
+        {profile.revision, "buy-optic"});
+    ASSERT_TRUE(buy.succeeded);
+    EXPECT_EQ(buy.currencyDelta, -120);
+    EXPECT_EQ(profile.currency, 180U);
+    const auto optic = find(profile, low);
+    ASSERT_NE(optic, 0U);
+    const auto bought = profileStateFingerprint(profile);
+    EXPECT_FALSE(executeEconomy(profile, registry, RecycleCommand{optic},
+        {profile.revision, "no-optic-recycle"}).succeeded);
+    EXPECT_FALSE(executeWeaponComponentChange(profile, registry,
+        {find(profile, ItemDefinitionId{"item.weapon.rifle_basic"}), WeaponComponentSlot::Optic, optic},
+        {profile.revision, "wrong-rifle"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), bought);
+
+    const auto weapon = find(profile, rifle);
+    auto expected = effectiveWeaponUse(profile, registry, weapon);
+    EXPECT_EQ(expected.optic, WeaponOpticMode::None);
+    EXPECT_TRUE(expected.providesOpticMount);
+    ASSERT_TRUE(install(profile, low, "optic-no-handguard").succeeded);
+    expected.optic = WeaponOpticMode::Low;
+    EXPECT_EQ(effectiveWeaponUse(profile, registry, weapon), expected);
+    EXPECT_EQ(std::get<InstalledWeaponComponentLocation>(profile.assets.find(optic)->location).weaponAssetId, weapon);
+}
+
+TEST(WeaponComponentsTest, FixedOpticSurvivesExtractionSwapSaveAndCapacityRejection)
+{
+    const auto &registry = content();
+    const ItemDefinitionId low{"item.component.optic_1_5x_5_45"};
+    auto profile = makeNewPublishedProfile("optic-extract", registry);
+    profile.currency = 300U;
+    ASSERT_TRUE(executeEconomy(profile, registry, PurchaseCommand{low},
+        {profile.revision, "buy-low"}).succeeded);
+    const auto lowInstance = find(profile, low);
+    const auto weapon = find(profile, rifle);
+    ASSERT_TRUE(install(profile, low, "install-low").succeeded);
+    const auto backpack = find(profile, ItemDefinitionId{"item.container.backpack_small"});
+    ASSERT_TRUE(executeInventory(profile, registry, InventoryEquipCommand{backpack, EquipmentSlotKind::Backpack},
+        {profile.revision, "equip-backpack"}).succeeded);
+    const auto deployed = executeDeploy(profile, registry,
+        {"optic-raid", "optic-extract", 7712201U, MapDefinitionId{"map.raid.frontier_exchange"}},
+        {profile.revision, "optic-deploy"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    const auto highInstance = find(profile, kFixedRaidOpticId);
+    ASSERT_NE(highInstance, 0U);
+    const auto pickedUp = pickupObservedRaidLoot(profile, registry, highInstance, {profile.revision, "pick-optic"});
+    ASSERT_TRUE(pickedUp.succeeded) << pickedUp.message;
+    ASSERT_TRUE(settlePendingRaid(profile, registry, "optic-extract", RaidResultOutcome::Extracted).succeeded);
+    const auto highWater = profile.assets.nextAssetId();
+    const auto equipped = executeWeaponComponentChange(profile, registry,
+        {weapon, WeaponComponentSlot::Optic, highInstance}, {profile.revision, "install-recovered-high"});
+    ASSERT_TRUE(equipped.succeeded) << equipped.message;
+    EXPECT_EQ(profile.assets.nextAssetId(), highWater);
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(profile.assets.find(lowInstance)->location));
+
+    auto loaded = deserializeProfileEnvelope(serializeProfileEnvelope(profile, registry.contentVersion()), registry);
+    ASSERT_TRUE(loaded.profile) << loaded.message;
+    auto &restored = *loaded.profile;
+    EXPECT_EQ(profileStateFingerprint(restored), profileStateFingerprint(profile));
+    EXPECT_EQ(effectiveWeaponUse(restored, registry, weapon).optic, WeaponOpticMode::High);
+    EXPECT_EQ(std::get<InstalledWeaponComponentLocation>(restored.assets.find(highInstance)->location).weaponAssetId, weapon);
+
+    auto full = restored;
+    const auto &filler = registry.item(low);
+    while (const auto position = findFirstProfileFit(full, registry, ProfileContainerId::stash(), filler, ItemOrientation::Degrees0))
+        static_cast<void>(full.assets.create(filler, StoredAssetLocation{ProfileContainerId::stash(), *position}));
+    const auto before = profileStateFingerprint(full);
+    const WeaponComponentCommand remove{weapon, WeaponComponentSlot::Optic, 0};
+    const auto rejected = executeWeaponComponentChange(full, registry, remove, {full.revision, "full-remove"});
+    EXPECT_EQ(rejected.error, DomainErrorCode::Capacity);
+    EXPECT_EQ(profileStateFingerprint(full), before);
+
+    ASSERT_TRUE(executeWeaponComponentChange(restored, registry, remove, {restored.revision, "remove-high"}).succeeded);
+    EXPECT_EQ(effectiveWeaponUse(restored, registry, weapon).optic, WeaponOpticMode::None);
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(restored.assets.find(highInstance)->location));
+    EXPECT_EQ(restored.assets.nextAssetId(), highWater);
+}
+
 TEST(WeaponComponentsTest, ReplacingSameSlotReturnsOldIdentityWithoutStackingModifiers)
 {
     auto profile = modified();

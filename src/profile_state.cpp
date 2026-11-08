@@ -1,6 +1,7 @@
 #include "base_corpse_domain.h"
 #include "weapon_ammo_domain.h"
 #include "raid_corpse_search.h"
+#include "raid_lifecycle.h"
 #include "chest_rig_layout_migration.h"
 #include "tactical_device_domain.h"
 #include "weapon_component_domain.h"
@@ -294,7 +295,9 @@ std::size_t populatePublishedWarehouseCatalog(
         }
         // Tactical equipment is purchased, never an automatic catalog grant.
         if (!definition.weaponLight && !definition.battery && !definition.meleeUse && !definition.noiseDecoyUse && !definition.grenadeUse &&
-            !(definition.weaponComponent && definition.weaponComponent->slot == WeaponComponentSlot::Muzzle))
+            !(definition.weaponComponent &&
+              (definition.weaponComponent->slot == WeaponComponentSlot::Muzzle ||
+               definition.weaponComponent->slot == WeaponComponentSlot::Optic)))
             definitions.push_back(&definition);
     }
     std::stable_sort(
@@ -4368,6 +4371,7 @@ ProfileValidationResult validateProfileState(
             {
                 return {false, "pending Raid Loot ownership is invalid"};
             }
+            bool fixedResourceOptic = false;
             if (highRiskCrisisRules && loot.requiresHighRisk &&
                 raid.highRiskCrisis.has_value())
             {
@@ -4399,22 +4403,31 @@ ProfileValidationResult validateProfileState(
                     });
                 if (point == raid.spatialLayout.resourcePoints.end())
                     return {false, "pending Raid Loot resource point is invalid"};
-                const LootTableDefinition &table = content.lootTable(
-                    point->lootTableId);
-                const auto entry = std::find_if(
-                    table.entries.begin(), table.entries.end(),
-                    [&](const LootContentEntry &value)
-                    { return value.itemDefinitionId == loot.definitionId; });
-                if (entry == table.entries.end() ||
-                    loot.quantity < entry->minimumQuantity ||
-                    loot.quantity > entry->maximumQuantity)
-                    return {false, "pending Raid Loot table result is invalid"};
+                fixedResourceOptic = loot.definitionId == kFixedRaidOpticId &&
+                    loot.quantity == 1U && hasFixedRaidResourceOptic(
+                        content, raid, *point, loot.resourcePointSlotIndex);
+                if (!fixedResourceOptic)
+                {
+                    const LootTableDefinition &table = content.lootTable(
+                        point->lootTableId);
+                    const auto entry = std::find_if(
+                        table.entries.begin(), table.entries.end(),
+                        [&](const LootContentEntry &value)
+                        { return value.itemDefinitionId == loot.definitionId; });
+                    if (entry == table.entries.end() ||
+                        loot.quantity < entry->minimumQuantity ||
+                        loot.quantity > entry->maximumQuantity)
+                        return {false, "pending Raid Loot table result is invalid"};
+                }
             }
             else if (!loot.resourcePointInstanceId.empty() ||
                      loot.resourcePointSlotIndex != 0U)
             {
                 return {false, "legacy Raid Loot has resource point metadata"};
             }
+            if (loot.definitionId == kFixedRaidOpticId &&
+                !fixedResourceOptic && recoveryRoot == nullptr)
+                return {false, "pending Raid optic is outside its fixed loot slot"};
         }
         for (AssetInstanceId groundAssetId : groundAssetIds)
         {

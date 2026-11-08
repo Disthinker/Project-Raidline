@@ -15,6 +15,18 @@
 #include "raid_intelligence_types.h"
 #include "vec2.h"
 
+inline constexpr std::string_view kWeaponHandlingContentVersion{
+    "raid-weapon-handling-content-74"};
+inline constexpr std::string_view kOpticsContentVersion{
+    "raid-optics-loot-gunsmith-content-75"};
+inline const ItemDefinitionId kFixedRaidOpticId{"item.component.optic_4x_5_45"};
+
+[[nodiscard]] inline bool runnerCompatibleContent(std::string_view version) noexcept
+{
+    return version == "raid-runner-infected-content-73" ||
+        version == kWeaponHandlingContentVersion || version == kOpticsContentVersion;
+}
+
 class ContentRegistryError : public std::runtime_error
 {
 public:

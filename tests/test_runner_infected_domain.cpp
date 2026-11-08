@@ -8,6 +8,7 @@
 #include "alpha_content_ids.h"
 #include "raid_corpse_search.h"
 #include "raid_lifecycle.h"
+#include "raid_optics_legacy_fixture.h"
 
 namespace
 {
@@ -53,7 +54,7 @@ std::size_t firstRunner(const PendingRaidSnapshot &raid)
 TEST(RunnerInfectedDomainTest, PublishedContentDefinesAnIsolatedAmbushReplacement)
 {
     const auto &content = publishedContentRegistry();
-    EXPECT_EQ(content.contentVersion(), "raid-weapon-handling-content-74");
+    EXPECT_EQ(content.contentVersion(), kOpticsContentVersion);
     const auto &definition = content.enemyCombatDefinition(
         EnemyCombatDefinitionId{"enemy.infected.runner"});
     EXPECT_EQ(definition.maximumHealth, 8);
@@ -140,7 +141,8 @@ TEST(RunnerInfectedDomainTest, ReplacementPreservesAllOriginalRandomStreamsAsset
     auto legacyJson = Json::parse(publishedContentJson());
     legacyJson["content_version"] = "raid-fragmentation-grenade-content-72";
     const auto legacyContent = ContentRegistry::fromJson(legacyJson.dump());
-    const auto &content = publishedContentRegistry();
+    // Isolate the runner replacement from the later fixed optics reward.
+    const auto content = contentBeforeOptics();
     for (std::uint64_t seed = 1U; seed <= 8U; ++seed)
     {
         SCOPED_TRACE(seed);

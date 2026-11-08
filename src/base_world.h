@@ -206,6 +206,17 @@ public:
     weaponAccuracyProjection() const noexcept;
     [[nodiscard]] Vec2 weaponAimWorldPosition() const noexcept;
     [[nodiscard]] Vec2 weaponAimDirection() const noexcept;
+    [[nodiscard]] WeaponOpticMode configuredWeaponOptic() const noexcept { return shooting_.configuredWeaponOptic(); }
+    [[nodiscard]] WeaponOpticMode activeWeaponOptic() const noexcept
+    {
+        const auto optic = shooting_.activeWeaponOptic();
+        return optic != WeaponOpticMode::None && playerControlled() ? WeaponOpticMode::None : optic;
+    }
+    [[nodiscard]] const std::optional<WeaponOpticViewProjection> &weaponOpticView() const noexcept
+    { return shooting_.weaponOpticView(); }
+    [[nodiscard]] bool willOpenHighOptic(const GameplayInput &input, float deltaTime) const noexcept;
+    void cancelWeaponOptic() noexcept { shooting_.cancelWeaponOptic(); }
+    void clearWeaponOptic() noexcept { shooting_.clearWeaponOptic(); }
     [[nodiscard]] Vec2 normalizedShotScreenShakeOffset() const noexcept;
     void discardUncommittedShot() noexcept;
 

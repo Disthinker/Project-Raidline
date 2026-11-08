@@ -5,6 +5,7 @@
 #include "raid_lifecycle.h"
 #include "raid_credential_legacy_fixture.h"
 #include "raid_runner_legacy_fixture.h"
+#include "raid_optics_legacy_fixture.h"
 #include "save_repository.h"
 #include <gtest/gtest.h>
 #include <algorithm>
@@ -70,11 +71,13 @@ protected:
 };
 TEST_F(RaidCorpseSearchTest, ThreeOrdinaryFrozenOriginsHaveOneOwnerAcrossSeeds)
 {
+    const auto preOptics = contentBeforeOptics();
+    const auto historicalContent = contentBeforeRunner();
     for (auto seed : {1U,2U,7U,9917U})
     {
-        auto a=makeNewAlphaProfile("same",content), b=a;
-        ASSERT_TRUE(executeDeploy(a,content,{"r","s",seed,MapDefinitionId{"map.raid.frontier_exchange"}},{a.revision,"d"}).succeeded);
-        ASSERT_TRUE(executeDeploy(b,content,{"r","s",seed,MapDefinitionId{"map.raid.frontier_exchange"}},{b.revision,"d"}).succeeded);
+        auto a=makeNewAlphaProfile("same",preOptics), b=a;
+        ASSERT_TRUE(executeDeploy(a,preOptics,{"r","s",seed,MapDefinitionId{"map.raid.frontier_exchange"}},{a.revision,"d"}).succeeded);
+        ASSERT_TRUE(executeDeploy(b,preOptics,{"r","s",seed,MapDefinitionId{"map.raid.frontier_exchange"}},{b.revision,"d"}).succeeded);
         EXPECT_EQ(a.pendingRaid->loot,b.pendingRaid->loot); EXPECT_EQ(a.pendingRaid->enemies,b.pendingRaid->enemies);
         EXPECT_EQ(corpses(a).size(),3U); std::size_t origins{};
         for (const auto &loot:a.pendingRaid->loot) if (loot.corpseContainerAssetId)
@@ -86,7 +89,6 @@ TEST_F(RaidCorpseSearchTest, ThreeOrdinaryFrozenOriginsHaveOneOwnerAcrossSeeds)
         }
         EXPECT_EQ(origins,3U); const auto rolls=a.pendingRaid->loot;
         EXPECT_EQ(a.pendingRaid->rulesVersion,kRaidRunnerRulesVersion);
-        const auto historicalContent=contentBeforeRunner();
         auto historical=makeNewAlphaProfile("same",historicalContent);
         ASSERT_TRUE(executeDeploy(historical,historicalContent,{"r","s",seed,MapDefinitionId{"map.raid.frontier_exchange"}},{historical.revision,"d"}).succeeded);
         EXPECT_EQ(historical.pendingRaid->loot,rolls);

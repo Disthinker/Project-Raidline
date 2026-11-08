@@ -292,6 +292,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
         simulationInput.interactPressed=simulationInput.interactJustPressed=false;
     }
     preparePlayerCombatInput(simulationInput,input,deltaTime,weaponHandling);
+    gateOpticInteraction(input, simulationInput, deltaTime);
     preparePlayerLightInput(input,deltaTime);
 
     std::optional<FireWeaponCommand> pendingFireCommand;
@@ -2081,10 +2082,10 @@ bool GameSession::adjustDeveloperWeaponTuning(
 
     if (activeRaid)
     {
+        auto use = entry.weaponUse;
+        use.optic = effectiveWeaponUse(profile_, publishedContentRegistry(), asset->instanceId).optic;
         world_->configureWeaponFire(
-            entry.weaponUse,
-            effectiveDeveloperHandling(entry),
-            true);
+            use, effectiveDeveloperHandling(entry), true);
         configuredWeaponAssetId_ = *weapon;
         configuredBaseWeaponAssetId_.reset();
     }
@@ -3961,6 +3962,7 @@ void GameSession::updateAlphaRaid(
     }
 
     preparePlayerCombatInput(simulationInput,input,deltaTime,weaponHandling);
+    gateOpticInteraction(input, simulationInput, deltaTime);
 
     std::optional<FireWeaponCommand> pendingFireCommand;
     std::optional<std::string> pendingFireTransaction;
@@ -4702,10 +4704,12 @@ void GameSession::synchronizeActiveAlphaWeapon()
     }
     if (configuredWeaponAssetId_ == active)
     {
+        if (!active) world_->clearWeaponOptic();
         return;
     }
     configuredWeaponAssetId_ = active;
     weaponClearGesture_.reset();
+    world_->clearWeaponOptic();
     if (!active.has_value())
     {
         return;
@@ -4726,10 +4730,10 @@ void GameSession::synchronizeActiveAlphaWeapon()
             {
                 const DeveloperWeaponOverride &entry =
                     developerWeaponOverrides_[*index];
+                auto use = entry.weaponUse;
+                use.optic = effectiveWeaponUse(profile_, publishedContentRegistry(), asset->instanceId).optic;
                 world_->configureWeaponFire(
-                    entry.weaponUse,
-                    effectiveDeveloperHandling(entry),
-                    false);
+                    use, effectiveDeveloperHandling(entry), false);
             }
             else
             {
@@ -4763,10 +4767,12 @@ void GameSession::synchronizeActiveBaseWeapon(BaseWorld &baseWorld)
     }
     if (configuredBaseWeaponAssetId_ == active)
     {
+        if (!active) baseWorld.clearWeaponOptic();
         return;
     }
     configuredBaseWeaponAssetId_ = active;
     weaponClearGesture_.reset();
+    baseWorld.clearWeaponOptic();
     if (!active.has_value())
     {
         return;
@@ -4790,10 +4796,10 @@ void GameSession::synchronizeActiveBaseWeapon(BaseWorld &baseWorld)
         {
             const DeveloperWeaponOverride &entry =
                 developerWeaponOverrides_[*index];
+            auto use = entry.weaponUse;
+            use.optic = effectiveWeaponUse(profile_, publishedContentRegistry(), asset->instanceId).optic;
             baseWorld.configureWeaponFire(
-                entry.weaponUse,
-                effectiveDeveloperHandling(entry),
-                false);
+                use, effectiveDeveloperHandling(entry), false);
         }
         else
         {

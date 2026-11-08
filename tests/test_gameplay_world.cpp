@@ -4602,3 +4602,412 @@ TEST(GameplayWorldRaidTest, ConditionalExtractionConsumesServiceEligibility)
     world.update(eligible, 0.25F);
     EXPECT_EQ(world.raidSession().state(), RaidSessionState::Extracted);
 }
+
+TEST(GameplayWorldTest, OpticalViewRetainsCoverAndNightDistanceOnAnOtherwiseUnmaskedMap)
+{
+    RaidWorldConfig config;
+    config.worldSize = {3200, 1800};
+    config.playerSpawn = {400, 800};
+    config.extractionPoint = {{2900, 1500}, {100, 100}};
+    config.ballisticBlockers = {{1, {{700, 800}, {16, 50}}}};
+    GameplayWorld world{config};
+    ASSERT_FALSE(world.lightConeObservationEnabled());
+    auto weapon = *itemDefinition(ItemId::Rifle).weaponUse;
+    weapon.optic = WeaponOpticMode::High;
+    world.configureWeaponFire(weapon);
+
+    GameplayInput aim;
+    aim.aimWorldPosition = {1400, 816};
+    world.update(aim, 0.0F);
+    ASSERT_EQ(world.activeWeaponOptic(), WeaponOpticMode::None);
+    aim.aimDownSights = true;
+    world.update(aim, 0.5F);
+    ASSERT_EQ(world.activeWeaponOptic(), WeaponOpticMode::High);
+    ASSERT_TRUE(world.lightConeObservationEnabled());
+    const auto &day = world.raidObservation();
+    EXPECT_FLOAT_EQ(day.maximumDistance, 1250.0F);
+    EXPECT_FLOAT_EQ(day.angleDegrees, 117.0F);
+    EXPECT_FALSE(day.pointVisible({850, 816}));
+    EXPECT_TRUE(day.pointVisible({1510, 1000}));
+    EXPECT_FALSE(day.pointVisible({300, 820}));
+
+    world.setRaidDaylight(false);
+    world.update(aim, 0.5F);
+    const auto &night = world.raidObservation();
+    EXPECT_FLOAT_EQ(night.maximumDistance, 600.0F);
+    EXPECT_FLOAT_EQ(night.angleDegrees, 65.0F);
+    EXPECT_FALSE(night.pointVisible({1510, 1000}));
+    EXPECT_FALSE(night.pointVisible({850, 816}));
+
+    aim.aimDownSights = false;
+    world.update(aim, 0.0F);
+    EXPECT_EQ(world.activeWeaponOptic(), WeaponOpticMode::None);
+    EXPECT_FALSE(world.lightConeObservationEnabled());
+    EXPECT_TRUE(world.raidObservation().pointVisible({850, 816}));
+}
+
+TEST(GameplayWorldTest, HighOpticFreezesTracerPerShotAndLowRetainsWeakTracer)
+{
+    for (const auto mode : {WeaponOpticMode::Low, WeaponOpticMode::High})
+    {
+        WorldShootingRuntime shooting;
+        auto weapon = *itemDefinition(ItemId::Rifle).weaponUse;
+        weapon.optic = mode;
+        shooting.configureWeapon(weapon);
+        const Vec2 origin{400, 600}, size{3000, 1800};
+        GameplayInput input;
+        const Vec2 viewportSize{1280, 720};
+        input.aimViewport = Rect{raidCameraOffset(origin, size, viewportSize), viewportSize};
+        input.aimWorldPosition = {1000, 600};
+        input.aimDownSights = true;
+        shooting.updateAim(input, origin, {1, 0}, size, 0.5F);
+        ASSERT_EQ(shooting.activeWeaponOptic(), mode);
+        ASSERT_TRUE(shooting.weaponOpticView());
+        input.aimMotionDelta = {12, 0};
+        const auto previousAim = shooting.weaponOpticView()->worldToScreen(shooting.aimWorldPosition());
+        shooting.updateAim(input, origin, {1, 0}, size, 0.01F);
+        const auto moved = shooting.weaponOpticView()->worldToScreen(shooting.aimWorldPosition());
+        if (mode == WeaponOpticMode::Low)
+            EXPECT_NEAR(moved.x, previousAim.x + 12.0F, 0.001F);
+        else
+        {
+            EXPECT_GT(moved.x, previousAim.x);
+            EXPECT_LT(moved.x, previousAim.x + 12.0F);
+        }
+
+        EnemyRoster<> targets;
+        input.forceMaximumWeaponSpread = true;
+        static_cast<void>(shooting.advanceShots(input, 0.01F, origin, 32,
+            false, false, size, targets, {}));
+        EXPECT_FLOAT_EQ(shooting.spreadDegrees(), shooting.accuracyProjection().maximumSpreadDegrees);
+        EXPECT_EQ(shooting.activeWeaponOptic(), mode);
+
+        // The active shot below adds recoil, which continues during lowering.
+        // Verify camera reprojection with the same aim state before that shot.
+        auto withoutRecoil = shooting;
+        input.forceMaximumWeaponSpread = false;
+        input.fireJustPressed = true;
+        static_cast<void>(shooting.advanceShots(input, 0.001F, origin, 32,
+            false, false, size, targets, {}));
+        ASSERT_TRUE(shooting.shotFiredLastUpdate());
+        ASSERT_EQ(shooting.logicalBallistics().size(), 1U);
+        const auto expected = mode == WeaponOpticMode::High ? TracerStyle::None : TracerStyle::Weak;
+        EXPECT_EQ(shooting.logicalBallistics().front().tracerStyle(), expected);
+        input.aimDownSights = false;
+        input.aimMotionDelta = Vec2{};
+        shooting.updateAim(input, origin, {1, 0}, size, 0.01F);
+        EXPECT_EQ(shooting.activeWeaponOptic(), WeaponOpticMode::None);
+        ASSERT_TRUE(shooting.weaponOpticView());
+        EXPECT_LT(shooting.weaponOpticView()->transitionWeight, 1.0F);
+        shooting.updateAim(input, origin, {1, 0}, size, 0.5F);
+        EXPECT_FALSE(shooting.weaponOpticView());
+        withoutRecoil.updateAim(input, origin, {1, 0}, size, 0.01F);
+        withoutRecoil.updateAim(input, origin, {1, 0}, size, 0.5F);
+        const auto lowered = raidWorldToScreen(withoutRecoil.aimWorldPosition(), input.aimViewport->position);
+        EXPECT_NEAR(lowered.x, moved.x, 0.001F);
+        EXPECT_NEAR(lowered.y, moved.y, 0.001F);
+        EXPECT_EQ(shooting.logicalBallistics().front().tracerStyle(), expected);
+    }
+}
+
+TEST(GameplayWorldTest, LowOpticUsesTheMovedCameraAndKeepsStillAimAcrossARaidPortal)
+{
+    auto config = makeInteriorDiscoveryWorldConfig();
+    config.worldSize = {4000.0F, 2200.0F};
+    config.playerSpawn = {1600.0F, 850.0F};
+    config.lightConeObservationEnabled = true;
+    config.interiors.front().exteriorEntrance = {{1580.0F, 830.0F}, {120.0F, 120.0F}};
+    config.interiors.front().interiorSpawn = {40.0F, 50.0F};
+    GameplayWorld world{config};
+    auto weapon = *itemDefinition(ItemId::Rifle).weaponUse;
+    weapon.optic = WeaponOpticMode::Low;
+    world.configureWeaponFire(weapon);
+
+    const Vec2 screen{1280.0F, 720.0F};
+    const Vec2 intent{1000.0F, 320.0F};
+    const auto currentCamera = [&]
+    {
+        const auto position = world.player().position();
+        const float halfSize = world.player().size() * 0.5F;
+        return raidCameraOffset({position.x + halfSize, position.y + halfSize},
+                                world.raidSpaceWorldSize(), screen);
+    };
+    GameplayInput input;
+    input.aimViewport = Rect{currentCamera(), screen};
+    input.aimWorldPosition = raidScreenToWorld(intent, currentCamera());
+    input.aimMotionDelta = Vec2{};
+    world.update(input, 0.0F);
+    const Vec2 before = raidWorldToScreen(world.weaponAimWorldPosition(), currentCamera());
+
+    input.aimDownSights = true;
+    world.update(input, 0.5F);
+    ASSERT_EQ(world.activeWeaponOptic(), WeaponOpticMode::Low);
+    ASSERT_TRUE(world.weaponOpticView());
+    const auto view = *world.weaponOpticView();
+    const Vec2 onOpen = view.worldToScreen(world.weaponAimWorldPosition());
+    EXPECT_NEAR(onOpen.x, before.x, 0.001F);
+    EXPECT_NEAR(onOpen.y, before.y, 0.001F);
+    EXPECT_FLOAT_EQ(world.raidObservation().angleDegrees, 180.0F);
+
+    input.aimMotionDelta = Vec2{125.0F, -28.0F};
+    input.moveRight = true;
+    world.update(input, 0.01F);
+    const auto moved = world.weaponOpticView()->worldToScreen(world.weaponAimWorldPosition());
+    EXPECT_NEAR(moved.x, onOpen.x + 125.0F, 0.001F);
+    EXPECT_NEAR(moved.y, onOpen.y - 28.0F, 0.001F);
+    EXPECT_GT(world.weaponOpticView()->camera.x, view.camera.x);
+    input.aimMotionDelta = Vec2{};
+    input.moveRight = false;
+    input.aimViewport = Rect{currentCamera(), screen};
+    input.aimWorldPosition = raidScreenToWorld(intent, currentCamera());
+    const auto settledCamera = world.weaponOpticView()->camera;
+    const auto settledAim = world.weaponAimWorldPosition();
+    for (int frame = 0; frame < 30; ++frame)
+        world.update(input, 0.01F);
+    EXPECT_FLOAT_EQ(world.weaponOpticView()->camera.x, settledCamera.x);
+    EXPECT_FLOAT_EQ(world.weaponAimWorldPosition().x, settledAim.x);
+    EXPECT_FLOAT_EQ(world.weaponAimWorldPosition().y, settledAim.y);
+
+    input.interactJustPressed = true;
+    world.update(input, 0.0F);
+    ASSERT_TRUE(world.spaceTransitionedLastUpdate());
+    EXPECT_FALSE(world.weaponOpticView());
+    const auto afterPortal = raidWorldToScreen(world.weaponAimWorldPosition(), currentCamera());
+    EXPECT_NEAR(afterPortal.x, moved.x, 0.001F);
+    EXPECT_NEAR(afterPortal.y, moved.y, 0.001F);
+}
+
+TEST(GameplayWorldTest, ScopedDefenseCheckpointRestoresTheSameOrdinaryWindowAim)
+{
+    auto weapon = *itemDefinition(ItemId::Rifle).weaponUse;
+    weapon.optic = WeaponOpticMode::High;
+    weapon.handlingSpeed = 56;
+    weapon.ergonomics = 70;
+    WorldShootingRuntime live;
+    live.configureWeapon(weapon);
+
+    const Vec2 origin{1500.0F, 900.0F}, size{4000.0F, 2000.0F}, screen{1280.0F, 720.0F};
+    const auto camera = raidCameraOffset(origin, size, screen);
+    GameplayInput input;
+    input.aimViewport = Rect{camera, screen};
+    input.aimWorldPosition = raidScreenToWorld({1100.0F, 350.0F}, camera);
+    input.aimDownSights = true;
+    live.updateAim(input, origin, {1, 0}, size, 0.5F);
+    ASSERT_EQ(live.activeWeaponOptic(), WeaponOpticMode::High);
+    ASSERT_TRUE(live.weaponOpticView());
+    input.aimMotionDelta = Vec2{92.0F, 18.0F};
+    live.updateAim(input, origin, {1, 0}, size, 0.1F);
+    const auto scopedPixel = live.weaponOpticView()->worldToScreen(live.aimWorldPosition());
+
+    WorldShootingRuntime restored;
+    restored.configureWeapon(weapon);
+    const auto saved = live.checkpoint();
+    EXPECT_FLOAT_EQ(saved.aimConfig[6], 0.255F);
+    ASSERT_TRUE(restored.restoreCheckpoint(saved));
+    EXPECT_EQ(live.activeWeaponOptic(), WeaponOpticMode::High);
+    EXPECT_EQ(restored.activeWeaponOptic(), WeaponOpticMode::None);
+    EXPECT_FALSE(restored.weaponOpticView());
+    EXPECT_FLOAT_EQ(restored.aimDownSightsProgress(), 0.0F);
+    const auto restoredPixel = raidWorldToScreen(restored.aimWorldPosition(), camera);
+    EXPECT_NEAR(restoredPixel.x, scopedPixel.x, 0.001F);
+    EXPECT_NEAR(restoredPixel.y, scopedPixel.y, 0.001F);
+
+    input.aimMotionDelta = Vec2{};
+    input.aimDownSights = false;
+    restored.updateAim(input, origin, {1, 0}, size, 0.01F);
+    const auto nextPixel = raidWorldToScreen(restored.aimWorldPosition(), camera);
+    EXPECT_NEAR(nextPixel.x, scopedPixel.x, 0.001F);
+    EXPECT_NEAR(nextPixel.y, scopedPixel.y, 0.001F);
+
+    // The ordinary ADS timing in a checkpoint does not replace the
+    // mounted optic's faster transition derived from effective handling.
+    input.aimDownSights = true;
+    restored.updateAim(input, origin, {1, 0}, size, 0.2F);
+    EXPECT_EQ(restored.activeWeaponOptic(), WeaponOpticMode::High);
+}
+
+
+TEST(GameplayWorldTest, OpticTransitionStartsImmediatelyAndUsesEffectiveHandlingAcrossFrameRates)
+{
+    const Vec2 origin{1500.0F, 900.0F}, size{4000.0F, 2000.0F}, screen{1280.0F, 720.0F};
+    const Vec2 anchor{1100.0F, 350.0F};
+    const Vec2 camera = raidCameraOffset(origin, size, screen);
+    auto weapon = *itemDefinition(ItemId::Rifle).weaponUse;
+    for (const auto mode : {WeaponOpticMode::Low, WeaponOpticMode::High})
+        for (const auto handling : {0U, 56U, 100U})
+            for (const auto fps : {30, 60, 144})
+            {
+                SCOPED_TRACE(::testing::Message{} << static_cast<int>(mode) << " / " << handling << " / " << fps);
+                weapon.optic = mode;
+                weapon.handlingSpeed = handling;
+                WorldShootingRuntime shooting;
+                shooting.configureWeapon(weapon);
+                GameplayInput input;
+                input.aimViewport = Rect{camera, screen};
+                input.aimWorldPosition = raidScreenToWorld(anchor, camera);
+                input.aimMotionDelta = Vec2{};
+                shooting.updateAim(input, origin, {1, 0}, size, 0.0F);
+
+                const float step = 1.0F / static_cast<float>(fps);
+                const float duration = std::lerp(0.260F, 0.120F, static_cast<float>(handling) / 100.0F);
+                input.aimDownSights = true;
+                EXPECT_FALSE(shooting.willOpenHighOptic(input, step));
+                shooting.updateAim(input, origin, {1, 0}, size, step);
+                ASSERT_TRUE(shooting.weaponOpticView());
+                const auto first = *shooting.weaponOpticView();
+                EXPECT_LT(first.scale, 1.0F);
+                EXPECT_GT(first.scale, mode == WeaponOpticMode::High ? 0.90F : 0.80F);
+                EXPECT_GT(first.transitionWeight, 0.0F);
+                EXPECT_LT(first.transitionWeight, 1.0F);
+                EXPECT_FLOAT_EQ(first.lensRadius, mode == WeaponOpticMode::High ? 720.0F * 0.27F : 0.0F);
+                EXPECT_FLOAT_EQ(shooting.aimDownSightsProgress(), step / duration);
+                EXPECT_EQ(shooting.activeWeaponOptic(), WeaponOpticMode::None);
+
+                float elapsed = step;
+                while (shooting.activeWeaponOptic() == WeaponOpticMode::None && elapsed < 0.4F)
+                {
+                    const bool highReady = shooting.willOpenHighOptic(input, step);
+                    shooting.updateAim(input, origin, {1, 0}, size, step);
+                    EXPECT_EQ(highReady, shooting.activeWeaponOptic() == WeaponOpticMode::High);
+                    elapsed += step;
+                }
+                ASSERT_EQ(shooting.activeWeaponOptic(), mode);
+                ASSERT_TRUE(shooting.weaponOpticView());
+                EXPECT_FLOAT_EQ(shooting.weaponOpticView()->transitionWeight, 1.0F);
+                EXPECT_GE(elapsed, duration - 0.0001F);
+                EXPECT_LE(elapsed, duration + step + 0.0001F);
+
+                input.aimDownSights = false;
+                shooting.updateAim(input, origin, {1, 0}, size, step);
+                EXPECT_EQ(shooting.activeWeaponOptic(), WeaponOpticMode::None);
+                ASSERT_TRUE(shooting.weaponOpticView());
+                const auto closing = *shooting.weaponOpticView();
+                EXPECT_LT(closing.transitionWeight, 1.0F);
+                EXPECT_GT(closing.transitionWeight, 0.0F);
+                const auto pixel = closing.worldToScreen(shooting.aimWorldPosition());
+                EXPECT_NEAR(pixel.x, anchor.x, 0.001F);
+                EXPECT_NEAR(pixel.y, anchor.y, 0.001F);
+
+                input.aimDownSights = true;
+                shooting.updateAim(input, origin, {1, 0}, size, step * 0.5F);
+                ASSERT_TRUE(shooting.weaponOpticView());
+                EXPECT_GT(shooting.weaponOpticView()->transitionWeight, closing.transitionWeight);
+                EXPECT_LT(shooting.weaponOpticView()->transitionWeight, 1.0F);
+                EXPECT_EQ(shooting.activeWeaponOptic(), WeaponOpticMode::None);
+
+                input.aimDownSights = false;
+                for (int frame = 0; frame < 60 && shooting.weaponOpticView(); ++frame)
+                    shooting.updateAim(input, origin, {1, 0}, size, step);
+                ASSERT_FALSE(shooting.weaponOpticView());
+                const auto ordinaryPixel = raidWorldToScreen(shooting.aimWorldPosition(), camera);
+                EXPECT_NEAR(ordinaryPixel.x, anchor.x, 0.001F);
+                EXPECT_NEAR(ordinaryPixel.y, anchor.y, 0.001F);
+            }
+}
+
+TEST(GameplayWorldTest, OpticShortTapAndForcedCancelKeepTheWindowAnchor)
+{
+    const Vec2 origin{1500.0F, 900.0F}, size{4000.0F, 2000.0F}, screen{1280.0F, 720.0F};
+    const Vec2 anchor{1100.0F, 350.0F};
+    const Vec2 camera = raidCameraOffset(origin, size, screen);
+    auto weapon = *itemDefinition(ItemId::Rifle).weaponUse;
+    weapon.optic = WeaponOpticMode::High;
+    WorldShootingRuntime shooting;
+    shooting.configureWeapon(weapon);
+    GameplayInput input;
+    input.aimViewport = Rect{camera, screen};
+    input.aimWorldPosition = raidScreenToWorld(anchor, camera);
+    shooting.updateAim(input, origin, {1, 0}, size, 0.0F);
+
+    input.aimDownSights = true;
+    shooting.updateAim(input, origin, {1, 0}, size, 0.04F);
+    ASSERT_TRUE(shooting.weaponOpticView());
+    const auto opening = shooting.weaponOpticView()->transitionWeight;
+    input.aimDownSights = false;
+    shooting.updateAim(input, origin, {1, 0}, size, 0.01F);
+    ASSERT_TRUE(shooting.weaponOpticView());
+    EXPECT_LT(shooting.weaponOpticView()->transitionWeight, opening);
+    EXPECT_EQ(shooting.activeWeaponOptic(), WeaponOpticMode::None);
+
+    input.aimDownSights = true;
+    shooting.updateAim(input, origin, {1, 0}, size, 0.01F);
+    ASSERT_TRUE(shooting.weaponOpticView());
+    EXPECT_NEAR(shooting.weaponOpticView()->transitionWeight, opening, 0.00001F);
+    shooting.cancelWeaponOptic();
+    ASSERT_TRUE(shooting.weaponOpticView());
+    EXPECT_FLOAT_EQ(shooting.weaponOpticView()->transitionWeight, 0.0F);
+    EXPECT_FLOAT_EQ(shooting.aimDownSightsProgress(), 0.0F);
+    EXPECT_EQ(shooting.activeWeaponOptic(), WeaponOpticMode::None);
+
+    input.inventoryOpen = true;
+    shooting.updateAim(input, origin, {1, 0}, size, 0.01F);
+    EXPECT_FALSE(shooting.weaponOpticView());
+    const auto ordinaryPixel = raidWorldToScreen(shooting.aimWorldPosition(), camera);
+    EXPECT_NEAR(ordinaryPixel.x, anchor.x, 0.001F);
+    EXPECT_NEAR(ordinaryPixel.y, anchor.y, 0.001F);
+}
+
+TEST(GameplayWorldTest, OpticTransitionAppliesTheSameSpreadToReticleAndShot)
+{
+    const Vec2 origin{1500.0F, 900.0F}, size{4000.0F, 2000.0F}, screen{1280.0F, 720.0F};
+    const Vec2 camera = raidCameraOffset(origin, size, screen);
+    auto weapon = *itemDefinition(ItemId::Rifle).weaponUse;
+    weapon.handlingSpeed = 100;
+    auto handling = deriveWeaponHandling(weapon);
+    handling.aimDownSightsDurationSeconds = 0.120F;
+    for (const auto mode : {WeaponOpticMode::Low, WeaponOpticMode::High})
+    {
+        weapon.optic = mode;
+        WorldShootingRuntime optic, mechanical;
+        optic.configureWeapon(weapon, handling, false);
+        weapon.optic = WeaponOpticMode::None;
+        mechanical.configureWeapon(weapon, handling, false);
+
+        GameplayInput scoped;
+        scoped.aimDownSights = true;
+        scoped.aimViewport = Rect{camera, screen};
+        scoped.aimWorldPosition = raidScreenToWorld({1000.0F, 350.0F}, camera);
+        optic.updateAim(scoped, origin, {1, 0}, size, 0.060F);
+        ASSERT_TRUE(optic.weaponOpticView());
+        EXPECT_FLOAT_EQ(optic.weaponOpticView()->transitionWeight, 0.50F);
+        EXPECT_EQ(optic.activeWeaponOptic(), WeaponOpticMode::None);
+
+        GameplayInput unscoped = scoped;
+        unscoped.aimViewport.reset();
+        unscoped.aimWorldPosition = optic.aimWorldPosition();
+        mechanical.updateAim(unscoped, origin, {1, 0}, size, 0.060F);
+
+        EnemyRoster<> targets;
+        scoped.forceMaximumWeaponSpread = unscoped.forceMaximumWeaponSpread = true;
+        static_cast<void>(optic.advanceShots(scoped, 0.0F, origin, 32,
+            false, false, size, targets, {}));
+        static_cast<void>(mechanical.advanceShots(unscoped, 0.0F, origin, 32,
+            false, false, size, targets, {}));
+        const auto visual = optic.accuracyProjection();
+        const auto reference = mechanical.accuracyProjection();
+        const float multiplier = mode == WeaponOpticMode::Low ? 0.875F : 0.80F;
+        EXPECT_NEAR(visual.worldRadius, reference.worldRadius * multiplier, 0.001F);
+        EXPECT_FLOAT_EQ(optic.spreadDegrees(), visual.maximumSpreadDegrees);
+
+        const auto opticAim = optic.aimDirection();
+        const auto mechanicalAim = mechanical.aimDirection();
+        scoped.fireJustPressed = unscoped.fireJustPressed = true;
+        static_cast<void>(optic.advanceShots(scoped, 0.0F, origin, 32,
+            false, false, size, targets, {}));
+        static_cast<void>(mechanical.advanceShots(unscoped, 0.0F, origin, 32,
+            false, false, size, targets, {}));
+        ASSERT_EQ(optic.logicalBallistics().size(), 1U);
+        ASSERT_EQ(mechanical.logicalBallistics().size(), 1U);
+        EXPECT_EQ(optic.logicalBallistics().front().tracerStyle(), TracerStyle::Weak);
+        const auto deviation = [](Vec2 aim, Vec2 shot)
+        {
+            return std::atan2(aim.x * shot.y - aim.y * shot.x, aim.x * shot.x + aim.y * shot.y);
+        };
+        const float sampled = deviation(opticAim, optic.logicalBallistics().front().direction());
+        const float baseSampled = deviation(mechanicalAim, mechanical.logicalBallistics().front().direction());
+        ASSERT_GT(std::abs(baseSampled), 0.000001F);
+        EXPECT_NEAR(sampled / baseSampled,
+                    std::atan2(visual.worldRadius, visual.aimDistance) /
+                        std::atan2(reference.worldRadius, reference.aimDistance), 0.00001F);
+    }
+}

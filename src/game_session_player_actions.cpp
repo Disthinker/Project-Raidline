@@ -463,6 +463,52 @@ void GameSession::advancePlayerAction(const GameplayInput &input, float deltaTim
 
 }
 
+void GameSession::cancelWeaponOptics() noexcept
+{
+    if (world_) world_->cancelWeaponOptic();
+    if (basePlayerWorld_) basePlayerWorld_->cancelWeaponOptic();
+}
+
+bool GameSession::willOpenHighOptic(const GameplayInput &input, float deltaTime) const noexcept
+{
+    if (raidActionState_.active() &&
+        std::holds_alternative<WeaponSwitchRaidAction>(*raidActionState_.active()))
+        return false;
+    return alphaRaidActive_
+        ? world_ && world_->willOpenHighOptic(input, deltaTime)
+        : basePlayerWorld_ && basePlayerWorld_->willOpenHighOptic(input, deltaTime);
+}
+
+bool GameSession::blocksInteractionForOptics(const GameplayInput &input, float deltaTime) const noexcept
+{
+    if (!input.interactPressed && !input.interactJustPressed)
+        return false;
+    if ((opticInteractionNeedsRelease_ && !input.interactJustPressed) ||
+        willOpenHighOptic(input, deltaTime))
+        return true;
+    // Sprint-to-fire can remove sprint before the world updates aim. Include
+    // that possibility for the client's earlier container-opening decision.
+    if (input.sprint && (input.fireJustPressed || input.firePressed || sprintFireIntentPending_))
+    {
+        GameplayInput ready = input;
+        ready.sprint = false;
+        return willOpenHighOptic(ready, deltaTime);
+    }
+    return false;
+}
+
+void GameSession::gateOpticInteraction(GameplayInput &input, GameplayInput &simulationInput, float deltaTime) noexcept
+{
+    if (!input.interactPressed || input.interactJustPressed)
+        opticInteractionNeedsRelease_ = false;
+    if ((!input.interactPressed && !input.interactJustPressed) ||
+        (!opticInteractionNeedsRelease_ && !willOpenHighOptic(simulationInput, deltaTime)))
+        return;
+    opticInteractionNeedsRelease_ = true;
+    input.interactJustPressed = input.interactPressed = false;
+    simulationInput.interactJustPressed = simulationInput.interactPressed = false;
+}
+
 void GameSession::preparePlayerCombatInput(GameplayInput &simulationInput,const GameplayInput &input,float deltaTime,const std::optional<WeaponHandlingParameters> &weaponHandling)
 {
     const auto weapon=activeAlphaWeapon();
@@ -529,9 +575,16 @@ void GameSession::preparePlayerCombatInput(GameplayInput &simulationInput,const 
     }
     if (raidActionState_.active().has_value())
     {
+        const auto &action = *raidActionState_.active();
+        if (std::holds_alternative<WeaponSwitchRaidAction>(action))
+            simulationInput.allowWeaponOptics = false;
+        const bool scopedChamber = std::holds_alternative<ChamberRaidAction>(action) &&
+            simulationInput.aimDownSights && simulationInput.allowWeaponOptics &&
+            (alphaRaidActive_
+                ? world_->configuredWeaponOptic() != WeaponOpticMode::None
+                : basePlayerWorld_ && basePlayerWorld_->configuredWeaponOptic() != WeaponOpticMode::None);
         simulationInput.forceMaximumWeaponSpread =
-            std::holds_alternative<ReloadRaidAction>(
-                *raidActionState_.active());
+            std::holds_alternative<ReloadRaidAction>(action) || scopedChamber;
         const bool slowMovement = std::visit(
             [](const auto &action)
             {

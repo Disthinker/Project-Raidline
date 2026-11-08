@@ -7,6 +7,7 @@
 #include "raid_lifecycle.h"
 #include "raid_credential_legacy_fixture.h"
 #include "raid_runner_legacy_fixture.h"
+#include "raid_optics_legacy_fixture.h"
 #include "save_repository.h"
 #include "raid_visibility_fixture.h"
 
@@ -54,10 +55,11 @@ protected:
 };
 TEST_F(RaidSceneContainerTest, FrozenRollsHaveOneOwnerAndNoAdditionalRewardsAcrossSeeds) {
     const auto oldContent=contentBeforeRunner();
+    const auto preOptics=contentBeforeOptics();
     for (std::uint64_t seed=1; seed<=8; ++seed) {
-        auto a=makeNewAlphaProfile("stable",content), b=a;
-        ASSERT_TRUE(executeDeploy(a,content,{"r","s",seed,frontier},{a.revision,"d"}).succeeded);
-        ASSERT_TRUE(executeDeploy(b,content,{"r","s",seed,frontier},{b.revision,"d"}).succeeded);
+        auto a=makeNewAlphaProfile("stable",preOptics), b=a;
+        ASSERT_TRUE(executeDeploy(a,preOptics,{"r","s",seed,frontier},{a.revision,"d"}).succeeded);
+        ASSERT_TRUE(executeDeploy(b,preOptics,{"r","s",seed,frontier},{b.revision,"d"}).succeeded);
         EXPECT_EQ(profileStateFingerprint(a),profileStateFingerprint(b));
         EXPECT_EQ(a.pendingRaid->loot,b.pendingRaid->loot);
         EXPECT_EQ(boxes(a).size(),2U);

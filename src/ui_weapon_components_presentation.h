@@ -13,7 +13,7 @@ struct UiWeaponComponentRow {
     std::string source;
 };
 inline constexpr std::size_t kUiComponentSlotCount =
-    static_cast<std::size_t>(WeaponComponentSlot::Muzzle) + 1U;
+    static_cast<std::size_t>(WeaponComponentSlot::Optic) + 1U;
 struct UiWeaponComponentsProjection {
     std::vector<UiWeaponComponentRow> weapons, choices;
     std::array<AssetInstanceId, kUiComponentSlotCount> installed{};

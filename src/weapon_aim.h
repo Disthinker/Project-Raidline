@@ -28,8 +28,7 @@ struct WeaponAimConfig
 };
 
 // SDL-independent transient reticle state. Hip/low-power aim consumes pointer
-// motion directly; a future high-magnification consumer can select the bounded
-// inertial mode. Control and recoil velocities remain separate so firing can
+// motion directly; high-magnification optics select the bounded inertial mode. Control and recoil velocities remain separate so firing can
 // refresh a bounded outward-then-bending recoil stroke without stacking an
 // unbounded impulse or automatically returning to an old pointer position.
 class WeaponAimState
@@ -46,7 +45,8 @@ public:
         float deltaTime,
         std::optional<Vec2> inputMotionDelta = std::nullopt,
         AimControlMode controlMode = AimControlMode::Direct,
-        std::optional<Rect> movementBounds = std::nullopt) noexcept;
+        std::optional<Rect> movementBounds = std::nullopt,
+        float opticTransitionDurationSeconds = 0.0F) noexcept;
 
     void applyShotRecoil(Vec2 shootingOrigin) noexcept;
     void reanchor(
@@ -94,6 +94,9 @@ private:
     bool initialized_{};
     Pcg32 recoilRandom_;
 
+    [[nodiscard]] float nextAimDownSightsProgress(
+        bool requested, float deltaTime, float opticTransitionDurationSeconds) const noexcept;
+    void setControlMode(AimControlMode mode) noexcept;
     void advanceStep(float deltaTime, Rect bounds) noexcept;
     [[nodiscard]] float nextSignedUnit() noexcept;
 };

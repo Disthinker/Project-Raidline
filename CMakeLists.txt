@@ -495,6 +495,9 @@ add_library(raidline_sdl_client STATIC
     src/app_base_fortification.cpp
     src/base_fortification_build_ui.h
     src/app.cpp
+    src/app_weapon_optics.cpp
+    src/ui_weapon_optic_view.cpp
+    src/ui_weapon_optic_view.h
     src/app_developer_range.cpp
     src/first_raid_ui.cpp
     src/app.h

@@ -7,6 +7,12 @@
 
 struct RaidReloadWorldAccess;
 
+[[nodiscard]] bool hasFixedRaidResourceOptic(
+    const ContentRegistry &content,
+    const PendingRaidSnapshot &raid,
+    const RaidResourcePointSnapshot &point,
+    std::uint32_t localSlot) noexcept;
+
 enum class RaidLifecycleError
 {
     None,

@@ -23,3 +23,24 @@
 [[nodiscard]] Rect raidReticleWorldBounds(
     Vec2 cameraOffset,
     Vec2 viewportSize) noexcept;
+
+enum class WeaponOpticMode;
+
+// One logical-window transform shared by input, firing and SDL presentation.
+struct WeaponOpticViewProjection
+{
+    Vec2 camera{};
+    Vec2 screenSize{};
+    float scale{1.0F};
+    float lensRadius{};
+    float transitionWeight{1.0F};
+
+    [[nodiscard]] Vec2 worldToScreen(Vec2 world) const noexcept;
+    [[nodiscard]] Vec2 screenToWorld(Vec2 screen) const noexcept;
+    [[nodiscard]] Rect worldBounds() const noexcept;
+    [[nodiscard]] Rect reticleBounds() const noexcept;
+};
+
+[[nodiscard]] WeaponOpticViewProjection weaponOpticProjection(
+    WeaponOpticMode mode, Vec2 playerCenter, Vec2 worldSize,
+    Vec2 screenSize, Vec2 windowAimIntent, float transitionWeight = 1.0F) noexcept;

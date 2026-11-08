@@ -147,7 +147,9 @@ TEST(ProfileStateTest, NewPublishedProfileCreatesLegacyCatalogAndExcludesPurchas
                      definition.maxStackSize == 1U);
             });
         if (definition.weaponLight || definition.battery || definition.meleeUse || definition.noiseDecoyUse || definition.grenadeUse ||
-            (definition.weaponComponent && definition.weaponComponent->slot == WeaponComponentSlot::Muzzle) ||
+            (definition.weaponComponent &&
+             (definition.weaponComponent->slot == WeaponComponentSlot::Muzzle ||
+              definition.weaponComponent->slot == WeaponComponentSlot::Optic)) ||
             definition.definitionId == ItemDefinitionId{"item.medical.bandage_roll_basic"}) {
             EXPECT_EQ(stored, profile.assets.records().end()) << definition.definitionId.value();
             continue;

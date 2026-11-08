@@ -303,3 +303,29 @@ TEST_F(UiItemDetailsTest, CompleteFailureCanScrollToItsTailAndScrollingCancelsAW
     EXPECT_EQ(A::message(*app).substr(A::message(*app).size() - 24), "FINAL FAILURE CONSTRAINT");
     EXPECT_EQ(before, profileStateFingerprint(profile()));
 }
+
+TEST_F(UiItemDetailsTest, WeaponWithAllSixComponentsKeepsOpticNameInsideDetails) {
+    for (const ItemDefinitionId &id : {ItemDefinitionId{"item.component.precision_barrel"},
+            ItemDefinitionId{"item.component.vertical_grip"}, ItemDefinitionId{"item.component.suppressor_5_45"},
+            ItemDefinitionId{"item.component.optic_4x_5_45"}}) {
+        auto part = find(profile(), id);
+        if (!part) part = add(profile(), id);
+        ASSERT_NE(part, 0U);
+        const auto slot = content.item(id).weaponComponent->slot;
+        const auto change = A::session(*app).executeBaseWeaponComponentChange(
+            {weapon, slot, part}, "details-extra-" + std::string{id.value()});
+        ASSERT_TRUE(change.succeeded) << change.message;
+    }
+
+    const auto before = profileStateFingerprint(profile());
+    A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+    A::open(*app, weapon);
+    const auto model = projectUiItemDetails(profile(), content, weapon, UiLanguage::SimplifiedChinese);
+    ASSERT_TRUE(model);
+    ASSERT_EQ(model->components.size(), 6U);
+    ASSERT_EQ(model->components.back(), "4 倍瞄具");
+    draw("all-six-components-zh");
+    // The last of six 21-unit rows stays in the installed-components panel.
+    EXPECT_GT(bright({648, 298, 150, 20}, 1.0F), 15);
+    EXPECT_EQ(profileStateFingerprint(profile()), before);
+}

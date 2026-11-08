@@ -345,6 +345,22 @@ std::optional<std::string> createLostRaidRecord(
 }
 }
 
+bool hasFixedRaidResourceOptic(
+    const ContentRegistry &content,
+    const PendingRaidSnapshot &raid,
+    const RaidResourcePointSnapshot &point,
+    std::uint32_t localSlot) noexcept
+{
+    return localSlot == 0U &&
+        content.contentVersion() == kOpticsContentVersion &&
+        raid.mapDefinitionId.value() == "map.raid.frontier_exchange" &&
+        point.instanceId == "resource_point.frontier.fabrication_stock:0" &&
+        point.definitionId == "resource_point.frontier.fabrication_stock" &&
+        point.lootTableId.value() == "loot.frontier.fabrication_stock_v1" &&
+        !raid.selfRecovery && !raid.outpostRestoration &&
+        !raid.baseSiteClearance && !raid.basePerimeterSweep;
+}
+
 RaidTravelPreview queryRaidTravel(
     const ProfileState &profile,
     const ContentRegistry &content,
@@ -674,8 +690,7 @@ DeployReceipt executeDeploy(
         std::any_of(map->proceduralOutdoor.encounterArchetypes.begin(), map->proceduralOutdoor.encounterArchetypes.end(),
             [](const auto &group) { return group.id == "encounter.frontier.resource_guard" && group.armoredMemberDefinition.has_value(); });
     const bool runnerEcologyRules = regionalMissionCount == 0U && corpseTrial && highRiskCrisisRules &&
-        (content.contentVersion() == "raid-runner-infected-content-73" ||
-         content.contentVersion() == "raid-weapon-handling-content-74") &&
+        runnerCompatibleContent(content.contentVersion()) &&
         std::any_of(map->proceduralOutdoor.encounterArchetypes.begin(), map->proceduralOutdoor.encounterArchetypes.end(),
             [](const auto &group) { return group.id == "encounter.frontier.route_ambush" && group.runnerMemberDefinition.has_value(); });
     snapshot.rulesVersion = runnerEcologyRules ? std::string{kRaidRunnerRulesVersion} : highRiskCrisisRules
@@ -1573,15 +1588,21 @@ DeployReceipt executeDeploy(
                         resourceTable, resourceLootRandom);
                     const std::uint32_t range = entry.maximumQuantity -
                         entry.minimumQuantity + 1U;
-                    const std::uint32_t quantity = entry.minimumQuantity +
+                    const std::uint32_t rolledQuantity = entry.minimumQuantity +
                         resourceLootRandom.bounded(range);
+                    // Keep both original draws so only this slot changes.
+                    const bool fixedOptic = hasFixedRaidResourceOptic(
+                        content, snapshot, resourcePoint, localSlot);
+                    const ItemDefinitionId &itemId =
+                        fixedOptic ? kFixedRaidOpticId : entry.itemDefinitionId;
+                    const std::uint32_t quantity = fixedOptic ? 1U : rolledQuantity;
                     const AssetInstanceId assetId = candidate.assets.create(
-                        content.item(entry.itemDefinitionId),
+                        content.item(itemId),
                         RaidGroundAssetLocation{command.raidId, globalSlot},
                         quantity);
                     snapshot.loot.push_back(RaidLootSnapshot{
                         assetId,
-                        entry.itemDefinitionId,
+                        itemId,
                         quantity,
                         globalSlot,
                         raidResourcePointLootPosition(

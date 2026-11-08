@@ -283,7 +283,8 @@ public:
     [[nodiscard]] const RaidVisibilityProjection &indoorObservation() const;
     [[nodiscard]] const RaidVisibilityProjection &raidObservation() const { return indoorObservation(); }
     [[nodiscard]] RaidObservationKey raidObservationKey() const;
-    [[nodiscard]] bool lightConeObservationEnabled() const noexcept { return lightConeObservationEnabled_; }
+    [[nodiscard]] bool lightConeObservationEnabled() const noexcept
+    { return lightConeObservationEnabled_ || activeWeaponOptic() != WeaponOpticMode::None; }
     void setRaidDaylight(bool day) noexcept { raidDaylight_ = day; }
     void setWeaponLight(std::uint64_t device, std::uint64_t battery, float angle, float distance, float backgroundRadius) noexcept;
     [[nodiscard]] float weaponLightBackgroundRadius() const noexcept { return weaponLightBackgroundRadius_; }
@@ -405,6 +406,19 @@ public:
     [[nodiscard]] Vec2 weaponAimWorldPosition() const noexcept;
     [[nodiscard]] Vec2 weaponAimDirection() const noexcept;
     [[nodiscard]] float weaponAimDownSightsProgress() const noexcept;
+    [[nodiscard]] WeaponOpticMode configuredWeaponOptic() const noexcept { return shooting_.configuredWeaponOptic(); }
+    [[nodiscard]] WeaponOpticMode activeWeaponOptic() const noexcept
+    {
+        const auto optic = shooting_.activeWeaponOptic();
+        return optic != WeaponOpticMode::None && (!raidSession_.isActive() || player_.isControlled())
+            ? WeaponOpticMode::None : optic;
+    }
+    [[nodiscard]] const std::optional<WeaponOpticViewProjection> &weaponOpticView() const noexcept
+    { return shooting_.weaponOpticView(); }
+    [[nodiscard]] bool willOpenHighOptic(const GameplayInput &input, float deltaTime) const noexcept
+    { return raidSession_.isActive() && !player_.isControlled() && shooting_.willOpenHighOptic(input, deltaTime); }
+    void cancelWeaponOptic() noexcept { shooting_.cancelWeaponOptic(); }
+    void clearWeaponOptic() noexcept { shooting_.clearWeaponOptic(); }
     [[nodiscard]] bool weaponAimBeyondEffectiveRange() const noexcept;
     [[nodiscard]] bool weaponAimBeyondMaximumRange() const noexcept;
     [[nodiscard]] bool shotFiredLastUpdate() const noexcept;

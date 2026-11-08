@@ -41,7 +41,7 @@ UiWeaponComponentsProjection projectUiWeaponComponents(const ProfileState &p, co
     if (weapon && (!assetIsBaseAccessible(p, weaponId) || !platforms.contains(weapon->definitionId))) weapon = nullptr;
     if (weapon) {
         result.current = effectiveWeaponUse(p, c, weaponId);
-        result.choices.push_back({0, {}, "RESTORE DEFAULT", ""});
+        result.choices.push_back({0, {}, slot == WeaponComponentSlot::Optic ? "REMOVE OPTIC" : "RESTORE DEFAULT", ""});
     }
     for (const auto &[id, a] : p.assets.records()) {
         const auto &d = c.item(a.definitionId);
@@ -61,7 +61,11 @@ UiWeaponComponentsProjection projectUiWeaponComponents(const ProfileState &p, co
 }
 SDL_FRect uiComponentWeaponRow(std::size_t i) noexcept { return {64, 188 + 56.0F * i, 254, 50}; }
 SDL_FRect uiComponentChoiceRow(std::size_t i) noexcept { return {338, 330 + 35.0F * i, 468, 32}; }
-SDL_FRect uiComponentSlot(std::size_t i) noexcept { return {338 + 95.0F * i, 222, 88, 58}; }
+SDL_FRect uiComponentSlot(std::size_t i) noexcept {
+    constexpr float gap = 8;
+    constexpr float width = (468 - gap * (kUiComponentSlotCount - 1)) / kUiComponentSlotCount;
+    return {338 + (width + gap) * i, 222, width, 58};
+}
 SDL_FRect uiComponentDetails() noexcept { return {844, 418, 358, 148}; }
 SDL_FRect uiComponentControl(UiComponentControl c) noexcept {
     switch (c) {

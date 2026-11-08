@@ -2,7 +2,9 @@
 #include "raid_camera.h"
 #include "save_repository.h"
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -24,6 +26,22 @@ struct RaidLightConeVisibilityUiTestAccess
         c.initialEnemies = {EnemySpawn{{600, 300}, {50, 50}, 4}};
         a.gameSession_.world_ = std::make_unique<GameplayWorld>(c);
     }
+    static WeaponOpticMode optic(App &a) { return a.visibleWeaponOptic(); }
+    static const WeaponOpticViewProjection *opticView(App &a) { return a.visibleWeaponOpticView(); }
+    static void pointerGate(App &a, bool right, bool menuOpen)
+    {
+        if (menuOpen)
+            a.inventoryOverlayState_.openPlayerInventory();
+        else
+            a.closeInventory();
+        SDL_Event event{};
+        event.type = right ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+        event.button.button = SDL_BUTTON_RIGHT;
+        event.button.down = right;
+        a.input_.handleEvent(event);
+        a.updateWeaponOpticPointerGate();
+    }
+    static bool opticAllowed(App &a) { return a.makeGameplayControls().allowWeaponOptics; }
     static void clearRecoveryWorld(App &a, Vec2 cache)
     {
         RaidWorldConfig c;
@@ -64,6 +82,30 @@ struct RaidLightConeVisibilityUiTestAccess
         c.ballisticBlockers = std::move(walls);
         a.gameSession_.world_ = std::make_unique<GameplayWorld>(c);
     }
+    static void opticRange(App &a, bool withWall = false, bool withTransitionMarker = false)
+    {
+        RaidWorldConfig config;
+        config.lightConeObservationEnabled = true;
+        config.worldSize = {2800, 1600};
+        config.playerSpawn = {1184, 704};
+        config.extractionPoint = {{2650, 1450}, {100, 100}};
+        config.initialEnemies = {EnemySpawn{{1920, 695}, {50, 50}, 100}};
+        config.outdoorLayout.layoutVersion = 4;
+        config.outdoorColumns = 28;
+        config.outdoorRows = 16;
+        config.outdoorChunkSizeCells = 1;
+        config.outdoorLayout.props.push_back(
+            {1, RaidOutdoorPropKind::EngineeringEquipment, RaidOutdoorPropState::Intact,
+             {{1910, 780}, {82, 50}}, 0, false});
+        if (withTransitionMarker)
+            config.outdoorLayout.props.push_back(
+                {2, RaidOutdoorPropKind::EngineeringEquipment, RaidOutdoorPropState::Intact,
+                 {{1460, 780}, {80, 70}}, 0, false});
+        if (withWall)
+            config.ballisticBlockers.push_back({1, {{1450, 570}, {10, 345}}});
+        a.gameSession_.world_ = std::make_unique<GameplayWorld>(config);
+        a.gameSession_.world_->setRaidDaylight(true);
+    }
     static void menu(App &a, bool open)
     {
         if (open)
@@ -100,6 +142,26 @@ struct RaidLightConeVisibilityUiTestAccess
         return a.renderIndoorInformationLayer(viewport);
     }
     static void paint(App &a) { a.renderRaidScreen(); }
+    static bool paintOptic(App &a, const WeaponOpticViewProjection &view)
+    {
+        const auto &world = a.gameSession_.world();
+        return a.renderWeaponOpticWorld(view, false, world.weaponAimWorldPosition(),
+                                        world.raidSpaceWorldSize());
+    }
+    static std::array<Vec2, 2> observationTargetScales(App &a)
+    {
+        const auto target = SDL_GetRenderTarget(a.renderer_);
+        const std::array targets{a.indoorInformationLayer_.get(), a.indoorShadowMask_.get()};
+        std::array<Vec2, 2> scales{};
+        for (std::size_t i = 0; i < targets.size(); ++i)
+        {
+            EXPECT_NE(targets[i], nullptr);
+            EXPECT_TRUE(SDL_SetRenderTarget(a.renderer_, targets[i]));
+            EXPECT_TRUE(SDL_GetRenderScale(a.renderer_, &scales[i].x, &scales[i].y));
+        }
+        EXPECT_TRUE(SDL_SetRenderTarget(a.renderer_, target));
+        return scales;
+    }
     static void directPaint(App &a)
     {
         a.renderBackground();
@@ -323,6 +385,20 @@ class RaidLightConeVisibilityUiTest : public testing::Test
         SDL_Quit();
         removeUiSaveDirectory(path);
     }
+    void resize(int width, int height)
+    {
+        A::detach(*app);
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroySurface(surface);
+        surface = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_RGBA32);
+        ASSERT_NE(surface, nullptr);
+        renderer = SDL_CreateSoftwareRenderer(surface);
+        ASSERT_NE(renderer, nullptr);
+        ASSERT_TRUE(SDL_SetRenderLogicalPresentation(renderer, 1280, 720,
+                                                     SDL_LOGICAL_PRESENTATION_LETTERBOX));
+        ASSERT_TRUE(A::attach(*app, renderer));
+        A::sprites(*app);
+    }
     void key(SDL_Scancode key)
     {
         SDL_Event e{};
@@ -340,6 +416,30 @@ class RaidLightConeVisibilityUiTest : public testing::Test
         Uint8 r{}, g{}, b{}, a{};
         EXPECT_TRUE(SDL_ReadSurfacePixel(surface, x, y, &r, &g, &b, &a));
         return r > 210 && g < 90 && b > 180;
+    }
+    std::array<Uint8, 4> logicalPixel(Vec2 pixel)
+    {
+        std::array<Uint8, 4> rgba{};
+        const float scale = static_cast<float>(surface->w) / 1280.0F;
+        EXPECT_TRUE(SDL_ReadSurfacePixel(surface,
+            static_cast<int>(std::lround(pixel.x * scale)),
+            static_cast<int>(std::lround(pixel.y * scale)),
+            &rgba[0], &rgba[1], &rgba[2], &rgba[3]));
+        return rgba;
+    }
+    bool projectedEnemyPixel(Vec2 pixel)
+    {
+        const auto rgba = logicalPixel(pixel);
+        return rgba[0] > 210 && rgba[1] < 90 && rgba[2] > 180;
+    }
+    void expectOrdinaryObservationTargetScales()
+    {
+        const auto scales = A::observationTargetScales(*app);
+        for (const auto scale : scales)
+        {
+            EXPECT_FLOAT_EQ(scale.x, 1.0F);
+            EXPECT_FLOAT_EQ(scale.y, 1.0F);
+        }
     }
     void paint()
     {
@@ -680,3 +780,530 @@ TEST_F(RaidLightConeVisibilityUiTest,
     EXPECT_EQ(unseen, sample());
 }
 } // namespace
+
+
+namespace
+{
+constexpr Vec2 kOpticTestWindow{1280, 720};
+constexpr Vec2 kOpticRightAim{1130, 360};
+constexpr Vec2 kFarEquipmentCenter{1951, 805};
+constexpr std::array<Uint8, 4> kOpaqueBlack{0, 0, 0, 255};
+
+Vec2 opticTestPlayerCenter(const GameplayWorld &world)
+{
+    const auto &player = world.player();
+    return {player.position().x + player.size() * 0.5F,
+            player.position().y + player.size() * 0.5F};
+}
+
+Vec2 ordinaryOpticTestCamera(const GameplayWorld &world)
+{
+    return raidCameraOffset(opticTestPlayerCenter(world),
+                            world.raidSpaceWorldSize(), kOpticTestWindow);
+}
+
+GameplayInput opticTestInput(const GameplayWorld &world, Vec2 anchor)
+{
+    const Vec2 camera = ordinaryOpticTestCamera(world);
+    GameplayInput input;
+    input.aimDownSights = true;
+    input.aimWorldPosition = raidScreenToWorld(anchor, camera);
+    input.aimMotionDelta = Vec2{};
+    input.aimWorldBounds = raidReticleWorldBounds(camera, kOpticTestWindow);
+    input.aimViewport = Rect{camera, kOpticTestWindow};
+    return input;
+}
+
+void prepareTestOptic(GameSession &session, WeaponOpticMode mode, Vec2 anchor)
+{
+    auto &world = const_cast<GameplayWorld &>(session.world());
+    auto weapon = *publishedContentRegistry().item(
+        ItemDefinitionId{"item.weapon.rifle_5_45_service"}).weaponUse;
+    weapon.optic = mode;
+    world.configureWeaponFire(weapon);
+    face(session, raidScreenToWorld(anchor, ordinaryOpticTestCamera(world)));
+}
+
+void openTestOptic(GameSession &session, WeaponOpticMode mode, Vec2 anchor)
+{
+    prepareTestOptic(session, mode, anchor);
+    auto &world = const_cast<GameplayWorld &>(session.world());
+    const auto input = opticTestInput(world, anchor);
+    for (int frame = 0; frame < 64; ++frame)
+        world.update(input, 1.0F / 60.0F);
+    ASSERT_EQ(world.activeWeaponOptic(), mode);
+    ASSERT_TRUE(world.weaponOpticView());
+}
+
+Vec2 enemyCenter(const GameplayWorld &world)
+{
+    const auto bounds = world.enemies().front().bounds();
+    return {bounds.position.x + bounds.size.x * 0.5F,
+            bounds.position.y + bounds.size.y * 0.5F};
+}
+
+Vec2 opticTestEnemySample(const GameplayWorld &world)
+{
+    const auto center = enemyCenter(world);
+    return {center.x, center.y - 14.0F};
+}
+}
+
+TEST_F(RaidLightConeVisibilityUiTest, LowOpticWidensViewportAndFollowsAimWithoutMovingPlayer)
+{
+    for (const int width : {1024, 1920})
+    {
+        SCOPED_TRACE(width);
+        resize(width, width * 9 / 16);
+        A::opticRange(*app);
+        auto &world = const_cast<GameplayWorld &>(session().world());
+        const auto ordinaryCamera = ordinaryOpticTestCamera(world);
+        const auto playerBefore = opticTestPlayerCenter(world);
+        const auto ordinaryPlayer = raidWorldToScreen(playerBefore, ordinaryCamera);
+
+        A::pointerGate(*app, true, false);
+        prepareTestOptic(session(), WeaponOpticMode::Low, kOpticRightAim);
+        auto input = opticTestInput(world, kOpticRightAim);
+        world.update(input, 1.0F / 60.0F);
+        ASSERT_TRUE(world.weaponOpticView());
+        ASSERT_EQ(A::opticView(*app), &*world.weaponOpticView());
+        EXPECT_EQ(A::optic(*app), WeaponOpticMode::None);
+        EXPECT_GT(world.weaponOpticView()->scale, 0.80F);
+        EXPECT_LT(world.weaponOpticView()->scale, 1.0F);
+        EXPECT_LT(world.weaponOpticView()->worldToScreen(playerBefore).x, ordinaryPlayer.x);
+        for (int frame = 1; frame < 64; ++frame)
+            world.update(input, 1.0F / 60.0F);
+        ASSERT_EQ(A::optic(*app), WeaponOpticMode::Low);
+        const auto view = *world.weaponOpticView();
+        EXPECT_FLOAT_EQ(view.scale, 0.80F);
+        EXPECT_FLOAT_EQ(view.lensRadius, 0.0F);
+        EXPECT_FLOAT_EQ(world.raidObservationKey().angleDegrees,
+                        raidSightParameters(RaidLightEnvironment::DayOutdoor).angleDegrees);
+        EXPECT_FLOAT_EQ(view.worldBounds().size.x, 1600.0F);
+        EXPECT_FLOAT_EQ(view.worldBounds().size.y, 900.0F);
+        EXPECT_FLOAT_EQ(opticTestPlayerCenter(world).x, playerBefore.x);
+        EXPECT_FLOAT_EQ(opticTestPlayerCenter(world).y, playerBefore.y);
+        const auto projectedPlayer = view.worldToScreen(playerBefore);
+        EXPECT_LT(projectedPlayer.x, ordinaryPlayer.x - 25.0F);
+
+        const auto enemy = opticTestEnemySample(world);
+        ASSERT_GT(enemy.x - 40.0F, ordinaryCamera.x + kOpticTestWindow.x);
+        ASSERT_TRUE(world.raidObservation().pointVisible(enemy));
+        const auto projected = view.worldToScreen(enemy);
+        ASSERT_GT(projected.x, 0.0F);
+        ASSERT_LT(projected.x, kOpticTestWindow.x);
+        const auto inverse = view.screenToWorld(projected);
+        EXPECT_NEAR(inverse.x, enemy.x, 0.001F);
+        EXPECT_NEAR(inverse.y, enemy.y, 0.001F);
+
+        paint();
+        EXPECT_TRUE(projectedEnemyPixel(projected));
+        const auto equipment = logicalPixel(view.worldToScreen(kFarEquipmentCenter));
+        EXPECT_GT(equipment[0], 90);
+        EXPECT_GT(equipment[1], 70);
+        EXPECT_LT(equipment[2], 70);
+        const auto playerPixel = logicalPixel(view.worldToScreen(
+            {playerBefore.x - 12.0F, playerBefore.y}));
+        EXPECT_GT(playerPixel[1], 150);
+        EXPECT_GT(playerPixel[2], 100);
+        saveConeImage(surface, width == 1920 ? "optic-v2-low-1920.bmp" : "optic-v2-low-1024.bmp");
+
+        const auto aim = world.weaponAimWorldPosition();
+        for (int frame = 0; frame < 12; ++frame)
+            world.update(input, 1.0F / 60.0F);
+        ASSERT_TRUE(world.weaponOpticView());
+        EXPECT_FLOAT_EQ(world.weaponOpticView()->camera.x, view.camera.x);
+        EXPECT_FLOAT_EQ(world.weaponOpticView()->camera.y, view.camera.y);
+        EXPECT_NEAR(world.weaponAimWorldPosition().x, aim.x, 0.01F);
+        EXPECT_NEAR(world.weaponAimWorldPosition().y, aim.y, 0.01F);
+
+        input.aimMotionDelta = Vec2{-810, 0};
+        world.update(input, 1.0F / 60.0F);
+        ASSERT_TRUE(world.weaponOpticView());
+        const auto swept = *world.weaponOpticView();
+        EXPECT_GT(swept.worldToScreen(playerBefore).x, ordinaryPlayer.x + 25.0F);
+        EXPECT_FLOAT_EQ(opticTestPlayerCenter(world).x, playerBefore.x);
+        const auto scoped = swept.worldToScreen(world.weaponAimWorldPosition());
+
+        A::pointerGate(*app, false, false);
+        input.aimDownSights = false;
+        input.aimMotionDelta = Vec2{};
+        world.update(input, 1.0F / 60.0F);
+        EXPECT_EQ(A::optic(*app), WeaponOpticMode::None);
+        ASSERT_TRUE(world.weaponOpticView());
+        ASSERT_EQ(A::opticView(*app), &*world.weaponOpticView());
+        EXPECT_GT(world.weaponOpticView()->scale, view.scale);
+        EXPECT_LT(world.weaponOpticView()->scale, 1.0F);
+        const auto lowering = world.weaponOpticView()->worldToScreen(world.weaponAimWorldPosition());
+        EXPECT_NEAR(lowering.x, scoped.x, 1.0F);
+        EXPECT_NEAR(lowering.y, scoped.y, 1.0F);
+        paint();
+        for (int frame = 0; frame < 64 && world.weaponOpticView(); ++frame)
+            world.update(input, 1.0F / 60.0F);
+        EXPECT_FALSE(world.weaponOpticView());
+        EXPECT_EQ(A::opticView(*app), nullptr);
+        const auto released = raidWorldToScreen(world.weaponAimWorldPosition(), ordinaryCamera);
+        EXPECT_NEAR(released.x, scoped.x, 1.0F);
+        EXPECT_NEAR(released.y, scoped.y, 1.0F);
+        paint();
+        expectOrdinaryObservationTargetScales();
+        EXPECT_FALSE(projectedEnemyPixel(projected));
+    }
+}
+
+TEST_F(RaidLightConeVisibilityUiTest, HighOpticSweepsBeyondOrdinaryViewportWithBlackPeriphery)
+{
+    for (const int width : {1024, 1920})
+    {
+        SCOPED_TRACE(width);
+        resize(width, width * 9 / 16);
+        A::opticRange(*app);
+        A::pointerGate(*app, true, false);
+        openTestOptic(session(), WeaponOpticMode::High, kOpticRightAim);
+        auto &world = const_cast<GameplayWorld &>(session().world());
+        ASSERT_EQ(A::optic(*app), WeaponOpticMode::High);
+        const auto view = *world.weaponOpticView();
+        EXPECT_FLOAT_EQ(view.scale, 0.90F);
+        EXPECT_FLOAT_EQ(view.lensRadius, 720.0F * 0.27F);
+        const auto ordinaryCamera = ordinaryOpticTestCamera(world);
+        const auto enemy = opticTestEnemySample(world);
+        ASSERT_GT(enemy.x - 40.0F, ordinaryCamera.x + kOpticTestWindow.x);
+        ASSERT_TRUE(world.raidObservation().pointVisible(enemy));
+        const auto projected = view.worldToScreen(enemy);
+        const auto reticle = view.worldToScreen(world.weaponAimWorldPosition());
+        ASSERT_GT(projected.x, 0.0F);
+        ASSERT_LT(projected.x, kOpticTestWindow.x);
+        ASSERT_LT(std::hypot(projected.x - reticle.x, projected.y - reticle.y), view.lensRadius);
+
+        paint();
+        EXPECT_TRUE(projectedEnemyPixel(projected));
+        for (const auto pixel : {Vec2{300, 315}, Vec2{580, 410}})
+            EXPECT_EQ(logicalPixel(pixel), kOpaqueBlack);
+        saveConeImage(surface, width == 1920 ? "optic-v2-high-1920.bmp" : "optic-v2-high-1024.bmp");
+        if (width == 1920 && std::getenv("RAIDLINE_LIGHT_CONE_QA_DIR"))
+        {
+            // Software rendering is timed separately from the simulation gate.
+            std::array<double, 24> frames{};
+            for (double &sample : frames)
+            {
+                const auto start = std::chrono::steady_clock::now();
+                paint();
+                sample = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - start).count();
+            }
+            std::sort(frames.begin(), frames.end());
+            RecordProperty("software_frame_p95_ms", std::to_string(frames[22]));
+        }
+
+        auto input = opticTestInput(world, kOpticRightAim);
+        input.aimMotionDelta = Vec2{-310, 0};
+        world.update(input, 1.0F / 60.0F);
+        input.aimMotionDelta = Vec2{};
+        for (int frame = 0; frame < 90; ++frame)
+            world.update(input, 1.0F / 60.0F);
+        ASSERT_TRUE(world.weaponOpticView());
+        const auto swept = *world.weaponOpticView();
+        EXPECT_LT(swept.camera.x, view.camera.x - 60.0F);
+        const auto movedReticle = swept.worldToScreen(world.weaponAimWorldPosition());
+        EXPECT_LT(movedReticle.x, reticle.x - 100.0F);
+        const auto stillObservable = opticTestEnemySample(world);
+        ASSERT_TRUE(world.raidObservation().pointVisible(stillObservable));
+        const auto outsideLens = swept.worldToScreen(stillObservable);
+        ASSERT_GT(outsideLens.x, 0.0F);
+        ASSERT_LT(outsideLens.x, kOpticTestWindow.x);
+        ASSERT_GT(std::hypot(outsideLens.x - movedReticle.x,
+                             outsideLens.y - movedReticle.y), swept.lensRadius + 4.0F);
+        paint();
+        EXPECT_EQ(logicalPixel(outsideLens), kOpaqueBlack);
+        saveConeImage(surface, width == 1920 ? "optic-v2-sweep-1920.bmp" : "optic-v2-sweep-1024.bmp");
+
+        A::opticRange(*app, true);
+        openTestOptic(session(), WeaponOpticMode::High, kOpticRightAim);
+        const auto &blockedWorld = session().world();
+        const auto blocked = opticTestEnemySample(blockedWorld);
+        ASSERT_FALSE(blockedWorld.raidObservation().pointVisible(blocked));
+        const auto blockedView = *blockedWorld.weaponOpticView();
+        const auto blockedPixel = blockedView.worldToScreen(blocked);
+        const auto blockedReticle = blockedView.worldToScreen(blockedWorld.weaponAimWorldPosition());
+        ASSERT_LT(std::hypot(blockedPixel.x - blockedReticle.x,
+                             blockedPixel.y - blockedReticle.y), blockedView.lensRadius);
+        paint();
+        EXPECT_FALSE(projectedEnemyPixel(blockedPixel));
+        saveConeImage(surface, width == 1920 ? "optic-v2-wall-1920.bmp" : "optic-v2-wall-1024.bmp");
+
+        A::opticRange(*app);
+        auto &nightWorld = const_cast<GameplayWorld &>(session().world());
+        nightWorld.setRaidDaylight(false);
+        openTestOptic(session(), WeaponOpticMode::High, kOpticRightAim);
+        const auto dark = opticTestEnemySample(nightWorld);
+        ASSERT_FALSE(nightWorld.raidObservation().pointVisible(dark));
+        const auto nightView = *nightWorld.weaponOpticView();
+        const auto darkPixel = nightView.worldToScreen(dark);
+        const auto nightReticle = nightView.worldToScreen(nightWorld.weaponAimWorldPosition());
+        ASSERT_LT(std::hypot(darkPixel.x - nightReticle.x,
+                             darkPixel.y - nightReticle.y), nightView.lensRadius);
+        paint();
+        EXPECT_FALSE(projectedEnemyPixel(darkPixel));
+    }
+}
+
+TEST_F(RaidLightConeVisibilityUiTest, HighOpticRendersIntermediateFramesAndReverses)
+{
+    constexpr Vec2 marker{1495, 821};
+    constexpr Vec2 healthBar{100, 611};
+    constexpr float frameTime = 1.0F / 60.0F;
+    for (const int width : {1024, 1920})
+    {
+        SCOPED_TRACE(width);
+        resize(width, width * 9 / 16);
+        A::opticRange(*app, false, true);
+        auto &world = const_cast<GameplayWorld &>(session().world());
+        A::pointerGate(*app, false, false);
+        prepareTestOptic(session(), WeaponOpticMode::High, kOpticRightAim);
+        const auto ordinaryCamera = ordinaryOpticTestCamera(world);
+        const auto startAnchor = raidWorldToScreen(world.weaponAimWorldPosition(), ordinaryCamera);
+        const auto expectAnchor = [&](const WeaponOpticViewProjection &view)
+        {
+            const auto anchor = view.worldToScreen(world.weaponAimWorldPosition());
+            EXPECT_NEAR(anchor.x, startAnchor.x, 1.0F);
+            EXPECT_NEAR(anchor.y, startAnchor.y, 1.0F);
+        };
+        const auto sampleMarker = [&](const WeaponOpticViewProjection &view)
+        {
+            const auto point = view.worldToScreen(marker);
+            const auto reticle = view.worldToScreen(world.weaponAimWorldPosition());
+            EXPECT_GT(std::hypot(point.x - reticle.x, point.y - reticle.y), view.lensRadius + 4.0F);
+            return logicalPixel(point);
+        };
+
+        paint();
+        const auto ordinaryMarker = logicalPixel(raidWorldToScreen(marker, ordinaryCamera));
+        const auto ordinaryHud = logicalPixel(healthBar);
+        EXPECT_GT(ordinaryMarker[0], 60);
+        EXPECT_GT(ordinaryHud[1], 100);
+        ASSERT_EQ(A::opticView(*app), nullptr);
+
+        A::pointerGate(*app, true, false);
+        auto input = opticTestInput(world, kOpticRightAim);
+        world.update(input, frameTime);
+        ASSERT_TRUE(world.weaponOpticView());
+        const auto first = *world.weaponOpticView();
+        ASSERT_EQ(A::opticView(*app), &*world.weaponOpticView());
+        EXPECT_EQ(A::optic(*app), WeaponOpticMode::None);
+        EXPECT_GT(first.transitionWeight, 0.0F);
+        EXPECT_LT(first.transitionWeight, 1.0F);
+        EXPECT_LT(first.scale, 1.0F);
+        EXPECT_GT(first.scale, 0.90F);
+        expectAnchor(first);
+        paint();
+        const auto openingMarker = sampleMarker(first);
+        EXPECT_GT(openingMarker[0], 0);
+        EXPECT_LE(openingMarker[0], ordinaryMarker[0]);
+        EXPECT_EQ(logicalPixel(healthBar), ordinaryHud);
+
+        for (int frame = 1; frame < 5; ++frame)
+            world.update(input, frameTime);
+        ASSERT_TRUE(world.weaponOpticView());
+        const auto middle = *world.weaponOpticView();
+        EXPECT_GT(middle.transitionWeight, first.transitionWeight);
+        EXPECT_LT(middle.transitionWeight, 1.0F);
+        EXPECT_LT(middle.scale, first.scale);
+        expectAnchor(middle);
+        const auto buildsBefore = world.indoorObservationBuildCount();
+        paint();
+        EXPECT_LE(world.indoorObservationBuildCount(), buildsBefore + 1);
+        const auto middleMarker = sampleMarker(middle);
+        EXPECT_GT(middleMarker[0], 0);
+        EXPECT_LT(middleMarker[0], openingMarker[0]);
+        EXPECT_EQ(logicalPixel(healthBar), ordinaryHud);
+        saveConeImage(surface, width == 1920
+            ? "optic-v3-high-opening-1920.bmp" : "optic-v3-high-opening-1024.bmp");
+        if (width == 1920 && std::getenv("RAIDLINE_LIGHT_CONE_QA_DIR"))
+        {
+            // Time the same settled intermediate pose separately from simulation.
+            std::array<double, 24> frames{};
+            const auto built = world.indoorObservationBuildCount();
+            for (double &sample : frames)
+            {
+                const auto start = std::chrono::steady_clock::now();
+                paint();
+                sample = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - start).count();
+            }
+            EXPECT_EQ(world.indoorObservationBuildCount(), built);
+            std::sort(frames.begin(), frames.end());
+            RecordProperty("transition_software_frame_p95_ms", std::to_string(frames[22]));
+        }
+
+        A::pointerGate(*app, false, false);
+        input.aimDownSights = false;
+        world.update(input, frameTime);
+        ASSERT_TRUE(world.weaponOpticView());
+        const auto reversing = *world.weaponOpticView();
+        ASSERT_EQ(A::opticView(*app), &*world.weaponOpticView());
+        EXPECT_GT(reversing.transitionWeight, 0.0F);
+        EXPECT_LT(reversing.transitionWeight, middle.transitionWeight);
+        EXPECT_GT(reversing.scale, middle.scale);
+        expectAnchor(reversing);
+        paint();
+        const auto reversingMarker = sampleMarker(reversing);
+        EXPECT_GT(reversingMarker[0], middleMarker[0]);
+        EXPECT_LT(reversingMarker[0], ordinaryMarker[0]);
+        EXPECT_EQ(logicalPixel(healthBar), ordinaryHud);
+        saveConeImage(surface, width == 1920
+            ? "optic-v3-high-lowering-1920.bmp" : "optic-v3-high-lowering-1024.bmp");
+
+        A::pointerGate(*app, true, false);
+        input.aimDownSights = true;
+        world.update(input, frameTime);
+        ASSERT_TRUE(world.weaponOpticView());
+        EXPECT_NEAR(world.weaponOpticView()->transitionWeight, middle.transitionWeight, 0.001F);
+        expectAnchor(*world.weaponOpticView());
+        for (int frame = 0; frame < 64 && A::optic(*app) == WeaponOpticMode::None; ++frame)
+            world.update(input, frameTime);
+        ASSERT_EQ(A::optic(*app), WeaponOpticMode::High);
+        ASSERT_TRUE(world.weaponOpticView());
+        EXPECT_FLOAT_EQ(world.weaponOpticView()->transitionWeight, 1.0F);
+        expectAnchor(*world.weaponOpticView());
+        paint();
+        EXPECT_EQ(sampleMarker(*world.weaponOpticView()), kOpaqueBlack);
+        EXPECT_EQ(logicalPixel(healthBar), ordinaryHud);
+
+        A::pointerGate(*app, false, false);
+        input.aimDownSights = false;
+        world.update(input, frameTime);
+        EXPECT_EQ(A::optic(*app), WeaponOpticMode::None);
+        ASSERT_TRUE(world.weaponOpticView());
+        ASSERT_EQ(A::opticView(*app), &*world.weaponOpticView());
+        EXPECT_GT(world.weaponOpticView()->transitionWeight, 0.0F);
+        EXPECT_LT(world.weaponOpticView()->transitionWeight, 1.0F);
+        expectAnchor(*world.weaponOpticView());
+        paint();
+
+        // A menu cancels even while the camera is lowering. Its next ordinary
+        // update consumes the previous projection without moving the pointer.
+        A::pointerGate(*app, true, true);
+        EXPECT_EQ(A::opticView(*app), nullptr);
+        EXPECT_FALSE(A::opticAllowed(*app));
+        input.aimDownSights = true;
+        input.allowWeaponOptics = false;
+        world.update(input, frameTime);
+        EXPECT_FALSE(world.weaponOpticView());
+        const auto resetAnchor = raidWorldToScreen(world.weaponAimWorldPosition(), ordinaryCamera);
+        EXPECT_NEAR(resetAnchor.x, startAnchor.x, 1.0F);
+        EXPECT_NEAR(resetAnchor.y, startAnchor.y, 1.0F);
+        A::pointerGate(*app, false, false);
+        paint();
+        expectOrdinaryObservationTargetScales();
+    }
+}
+
+TEST_F(RaidLightConeVisibilityUiTest, ConsumedRightButtonCannotReopenOpticThroughMenu)
+{
+    A::opticRange(*app);
+    A::pointerGate(*app, true, false);
+    openTestOptic(session(), WeaponOpticMode::High, kOpticRightAim);
+    ASSERT_EQ(A::optic(*app), WeaponOpticMode::High);
+    auto &world = const_cast<GameplayWorld &>(session().world());
+    ASSERT_TRUE(world.weaponOpticView());
+    const auto beforeMenu = world.weaponOpticView()->worldToScreen(world.weaponAimWorldPosition());
+    A::pointerGate(*app, true, true);
+    EXPECT_EQ(A::optic(*app), WeaponOpticMode::None);
+    EXPECT_EQ(world.activeWeaponOptic(), WeaponOpticMode::None);
+    A::pointerGate(*app, true, false);
+    EXPECT_FALSE(A::opticAllowed(*app));
+    A::pointerGate(*app, false, false);
+    auto released = opticTestInput(world, kOpticRightAim);
+    released.aimDownSights = false;
+    world.update(released, 1.0F / 60.0F);
+    EXPECT_FALSE(world.weaponOpticView());
+    const auto afterMenu = raidWorldToScreen(world.weaponAimWorldPosition(),
+                                             ordinaryOpticTestCamera(world));
+    EXPECT_NEAR(afterMenu.x, beforeMenu.x, 1.0F);
+    EXPECT_NEAR(afterMenu.y, beforeMenu.y, 1.0F);
+    A::pointerGate(*app, true, false);
+    EXPECT_TRUE(A::opticAllowed(*app));
+}
+
+
+TEST_F(RaidLightConeVisibilityUiTest, OrdinaryViewMatchesBeforeAndAfterOpticPasses)
+{
+    constexpr Vec2 healthBar{100.0F, 611.0F};
+    for (const int width : {1280, 1920})
+    {
+        SCOPED_TRACE(width);
+        resize(width, width * 9 / 16);
+        A::opticRange(*app, false, true);
+        face(session(), {1750.0F, 720.0F});
+        const auto &world = session().world();
+
+        // Hold all simulation and HUD state fixed. The only operation between
+        // ordinary frames is a real scoped draw into the shared targets.
+        paint();
+        expectOrdinaryObservationTargetScales();
+        const auto *pixels = static_cast<const Uint8 *>(surface->pixels);
+        const auto byteCount = static_cast<std::size_t>(surface->pitch) * surface->h;
+        const std::vector<Uint8> ordinary(pixels, pixels + byteCount);
+        const auto healthBefore = logicalPixel(healthBar);
+        ASSERT_GT(healthBefore[1], 100);
+
+        for (const auto mode : {WeaponOpticMode::Low, WeaponOpticMode::High})
+        {
+            SCOPED_TRACE(static_cast<int>(mode));
+            for (const float weight : {0.5F, 1.0F})
+            {
+                SCOPED_TRACE(weight);
+                const auto scoped = weaponOpticProjection(mode, opticTestPlayerCenter(world),
+                    world.raidSpaceWorldSize(), kOpticTestWindow, {1110.0F, 360.0F}, weight);
+                ASSERT_TRUE(A::paintOptic(*app, scoped));
+                const auto scopedScale = A::observationTargetScales(*app).front();
+                ASSERT_FLOAT_EQ(scopedScale.x, scoped.scale);
+                ASSERT_FLOAT_EQ(scopedScale.y, scoped.scale);
+
+                paint();
+                expectOrdinaryObservationTargetScales();
+                EXPECT_EQ(logicalPixel(healthBar), healthBefore);
+                EXPECT_TRUE(std::equal(ordinary.begin(), ordinary.end(),
+                    static_cast<const Uint8 *>(surface->pixels)))
+                    << "The ordinary frame must exactly match its pre-optic scene and HUD.";
+            }
+        }
+    }
+}
+
+TEST_F(RaidLightConeVisibilityUiTest, DoorCancelsLowOpticAndRestoresOrdinaryObservationScale)
+{
+    for (const int width : {1280, 1920})
+    {
+        SCOPED_TRACE(width);
+        resize(width, width * 9 / 16);
+        A::syntheticRoom(*app, true);
+        auto &world = const_cast<GameplayWorld &>(session().world());
+        const auto portals = world.visibleRaidSpacePortals();
+        ASSERT_EQ(portals.size(), 1U);
+        ASSERT_TRUE(portals.front().returnsOutside);
+        const auto door = portals.front().bounds;
+        position({door.position.x + door.size.x / 2.0F,
+                  door.position.y + door.size.y / 2.0F});
+        ASSERT_TRUE(world.raidSpacePortalInteractionInRange());
+        A::pointerGate(*app, true, false);
+        openTestOptic(session(), WeaponOpticMode::Low, kOpticRightAim);
+        ASSERT_TRUE(world.weaponOpticView());
+        const auto before = world.weaponOpticView()->worldToScreen(world.weaponAimWorldPosition());
+        paint();
+
+        auto input = opticTestInput(world, kOpticRightAim);
+        input.interactJustPressed = true;
+        world.update(input, 0.0F);
+        ASSERT_TRUE(world.spaceTransitionedLastUpdate());
+        ASSERT_TRUE(world.inOutdoorRaidSpace());
+        EXPECT_FALSE(world.weaponOpticView());
+        const auto after = raidWorldToScreen(world.weaponAimWorldPosition(),
+                                             ordinaryOpticTestCamera(world));
+        EXPECT_NEAR(after.x, before.x, 1.0F);
+        EXPECT_NEAR(after.y, before.y, 1.0F);
+        paint();
+        expectOrdinaryObservationTargetScales();
+        A::pointerGate(*app, false, false);
+    }
+}

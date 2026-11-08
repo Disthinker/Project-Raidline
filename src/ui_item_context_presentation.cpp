@@ -47,6 +47,14 @@ std::string compactUiItemName(const ItemDefinition &d,UiLanguage language) {
     return localizeUiText(language,d.displayName);
 }
 
+const char *uiWeaponOpticBehaviorText(WeaponOpticMode mode) noexcept {
+    switch (mode) {
+    case WeaponOpticMode::Low: return "WIDE VIEW | TIGHT SPREAD | WEAK TRACERS";
+    case WeaponOpticMode::High: return "LONG-RANGE LENS | TIGHT SPREAD | NO TRACERS";
+    default: return "MECHANICAL SIGHTS";
+    }
+}
+
 std::vector<UiItemActionEntry> projectUiItemActions(
     const ProfileState &profile, const ContentRegistry &content,
     AssetInstanceId id, bool inRaid, MedicalAccess medicalAccess) {
@@ -146,6 +154,10 @@ std::vector<std::string> projectUiItemSummary(
         lines.push_back(fmt::format("SHOT NOISE RANGE {:.0f}%",
             definition.weaponComponent->acoustics.noiseRadiusMultiplier * 100.0F));
         lines.push_back(fmt::format("HANDLING {:+}", definition.weaponComponent->handlingSpeed));
+        lines.emplace_back("5.45 SERVICE RIFLE ONLY");
+    }
+    if (definition.weaponComponent && definition.weaponComponent->optic != WeaponOpticMode::None) {
+        lines.emplace_back(uiWeaponOpticBehaviorText(definition.weaponComponent->optic));
         lines.emplace_back("5.45 SERVICE RIFLE ONLY");
     }
     return lines;

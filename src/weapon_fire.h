@@ -68,6 +68,7 @@ struct WeaponFireContext
     float overEffectiveRangeFactor{};
     float reticleControlSpeed{};
     bool forceMaximumSpread{};
+    float opticSpreadRadiusMultiplier{1.0F};
 };
 
 struct ShotSpec
@@ -116,6 +117,8 @@ private:
     float lastAimDownSightsProgress_{};
     float lastDistanceSpreadFactor_{1.0F};
     float lastOverEffectiveRangeFactor_{};
+    // The open optic is transient. Checkpoints retain the unscaled spread.
+    float opticSpreadRadiusMultiplier_{1.0F};
     Pcg32 random_;
     std::uint32_t burstShotCount_{};
 

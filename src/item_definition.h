@@ -169,6 +169,7 @@ struct WeaponAcousticsDefinition
 };
 
 enum class WeaponFireMode { SemiAutomatic, ThreeRoundBurst, Automatic };
+enum class WeaponOpticMode { None, Low, High };
 
 struct WeaponUseDefinition
 {
@@ -189,6 +190,8 @@ struct WeaponUseDefinition
     std::vector<WeaponFireMode> supportedFireModes;
     WeaponFireMode defaultFireMode{WeaponFireMode::SemiAutomatic};
     std::uint32_t burstShotCount{};
+    bool providesOpticMount{};
+    WeaponOpticMode optic{WeaponOpticMode::None};
 
     friend bool operator==(
         const WeaponUseDefinition &,
@@ -332,7 +335,7 @@ enum class BaseSupplyCategory
 
 // 一种物品的共享静态数据。
 // 它不代表世界中某一个具体物品，也不拥有 Texture。
-enum class WeaponComponentSlot { Barrel, Handguard, Grip, Light, Muzzle };
+enum class WeaponComponentSlot { Barrel, Handguard, Grip, Light, Muzzle, Optic };
 
 struct MeleeUseDefinition
 {
@@ -361,6 +364,7 @@ struct WeaponComponentDefinition
     float effectiveRange{};
     bool providesLightMount{}, requiresLightMount{};
     WeaponAcousticsDefinition acoustics;
+    WeaponOpticMode optic{WeaponOpticMode::None};
 };
 
 struct NoiseDecoyUseDefinition

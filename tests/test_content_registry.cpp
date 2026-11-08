@@ -127,7 +127,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        "raid-weapon-handling-content-74");
+        kOpticsContentVersion);
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -259,7 +259,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.category, BaseSupplyCategory::Recreation);
     EXPECT_EQ(comfort.requiredContribution, 14U);
     EXPECT_FALSE(comfort.sourceHint.empty());
-    ASSERT_EQ(registry.items().size(), 61U);
+    ASSERT_EQ(registry.items().size(), 63U);
     const auto &light = registry.item(ItemDefinitionId{"item.component.weapon_flashlight_basic"});
     const auto &battery = registry.item(ItemDefinitionId{"item.battery.universal"});
     ASSERT_TRUE(light.weaponLight);
@@ -1925,9 +1925,13 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
                 return recipe.outputItemDefinitionId ==
                     item.definitionId;
             });
+        // The 4x optic has a dedicated resource slot, exercised by the
+        // seeded Frontier deployment regression rather than a weighted table.
+        const bool fixedResourceSource =
+            item.definitionId == kFixedRaidOpticId;
         EXPECT_TRUE(
             item.marketBuyPrice > 0U || lootSource ||
-            manufacturingSource)
+            manufacturingSource || fixedResourceSource)
             << item.definitionId.value();
 
         const bool manufacturingConsumer = std::any_of(
@@ -2150,10 +2154,58 @@ TEST(ContentRegistryTest, FieldBandageRollIsManufacturedOnlyAndCannotIncreaseRec
         [&](const auto &recipe) { return recipe.outputItemDefinitionId == rollId; }), 1);
 }
 
+TEST(ContentRegistryTest, OpticDefinitionsSeparateTheReceiverMountAndOpticModes)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    const ItemDefinitionId rifle{"item.weapon.rifle_5_45_service"};
+    const ItemDefinitionId low{"item.component.optic_1_5x_5_45"};
+    const ItemDefinitionId high{"item.component.optic_4x_5_45"};
+    const auto &lowDefinition = content.item(low);
+    const auto &highDefinition = content.item(high);
+    for (const auto &item : content.items())
+        if (item.weaponUse)
+        {
+            EXPECT_EQ(item.weaponUse->providesOpticMount, item.definitionId == rifle);
+            EXPECT_EQ(item.weaponUse->optic, WeaponOpticMode::None);
+        }
+    for (const auto *item : {&lowDefinition, &highDefinition})
+    {
+        ASSERT_TRUE(item->weaponComponent);
+        EXPECT_EQ(item->weaponComponent->weaponDefinitionId, rifle);
+        EXPECT_EQ(item->weaponComponent->slot, WeaponComponentSlot::Optic);
+        EXPECT_FALSE(item->weaponComponent->requiresUnderbarrel);
+        EXPECT_FALSE(item->weaponComponent->requiresLightMount);
+        EXPECT_EQ(item->inventoryWidthCells, 1);
+        EXPECT_EQ(item->inventoryHeightCells, 1);
+        EXPECT_EQ(item->maxStackSize, 1U);
+        EXPECT_EQ(item->marketRecyclePrice, 0U);
+        for (const auto &table : content.lootTables())
+            for (const auto &entry : table.entries)
+                EXPECT_NE(entry.itemDefinitionId, item->definitionId);
+    }
+    EXPECT_EQ(lowDefinition.marketBuyPrice, 120U);
+    EXPECT_EQ(lowDefinition.weaponComponent->optic, WeaponOpticMode::Low);
+    EXPECT_EQ(highDefinition.marketBuyPrice, 0U);
+    EXPECT_EQ(highDefinition.weaponComponent->optic, WeaponOpticMode::High);
+
+    const auto original = hospitalContentCandidateJson();
+    auto missingMount = original;
+    for (auto &item : missingMount["items"])
+        if (item.at("id") == std::string{rifle.value()})
+            item["weapon_use"].erase("provides_optic_mount");
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(missingMount.dump())), ContentRegistryError);
+
+    auto missingMode = original;
+    for (auto &item : missingMode["items"])
+        if (item.at("id") == std::string{high.value()})
+            item["weapon_component"].erase("optic_mode");
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(missingMode.dump())), ContentRegistryError);
+}
+
 TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDefinitions)
 {
     const auto original = hospitalContentCandidateJson();
-    ASSERT_EQ(original.at("content_version"), "raid-weapon-handling-content-74");
+    ASSERT_EQ(original.at("content_version").get<std::string>(), kOpticsContentVersion);
     for (const auto *required : {"fortifications", "enemy_combat_definitions"})
     {
         SCOPED_TRACE(required);

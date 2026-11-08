@@ -11,6 +11,14 @@ namespace
     constexpr float kDynamicSpreadRadiusAtFullBloom{70.0F};
     constexpr float kDynamicSpreadPresentationExponent{0.80F};
 
+    float scaledAngularSpread(float degrees, float radiusMultiplier) noexcept
+    {
+        if (radiusMultiplier == 1.0F)
+            return degrees;
+        return std::atan(std::tan(degrees * kPi / 180.0F) * radiusMultiplier) *
+            180.0F / kPi;
+    }
+
     bool finiteNonNegative(float value)
     {
         return std::isfinite(value) && value >= 0.0F;
@@ -216,11 +224,15 @@ std::optional<ShotSpec> WeaponFireState::update(
         !finiteNonNegative(context.aimDistance) ||
         !std::isfinite(context.distanceSpreadFactor) ||
         !std::isfinite(context.overEffectiveRangeFactor) ||
-        !finiteNonNegative(context.reticleControlSpeed))
+        !finiteNonNegative(context.reticleControlSpeed) ||
+        !std::isfinite(context.opticSpreadRadiusMultiplier) ||
+        context.opticSpreadRadiusMultiplier <= 0.0F ||
+        context.opticSpreadRadiusMultiplier > 1.0F)
     {
         return std::nullopt;
     }
 
+    opticSpreadRadiusMultiplier_ = context.opticSpreadRadiusMultiplier;
     updateContextualEnvelope(context);
     updateMovementAndMotionBloom(deltaTime, context);
     recoverShotBloom(triggerPressed, deltaTime);
@@ -263,17 +275,19 @@ std::optional<ShotSpec> WeaponFireState::update(
 
 float WeaponFireState::spreadDegrees() const noexcept
 {
-    return spreadDegrees_;
+    return scaledAngularSpread(spreadDegrees_, opticSpreadRadiusMultiplier_);
 }
 
 float WeaponFireState::contextualMinimumSpreadDegrees() const noexcept
 {
-    return contextualMinimumSpreadDegrees_;
+    return scaledAngularSpread(contextualMinimumSpreadDegrees_,
+                               opticSpreadRadiusMultiplier_);
 }
 
 float WeaponFireState::contextualMaximumSpreadDegrees() const noexcept
 {
-    return contextualMaximumSpreadDegrees_;
+    return scaledAngularSpread(contextualMaximumSpreadDegrees_,
+                               opticSpreadRadiusMultiplier_);
 }
 
 float WeaponFireState::spreadPresentationFraction() const noexcept
@@ -300,14 +314,16 @@ float WeaponFireState::spreadRadiusAtDistance(float distance) const noexcept
     const float dynamicRadius = kDynamicSpreadRadiusAtFullBloom * std::pow(
         std::clamp(combinedBloomFraction_, 0.0F, 1.0F),
         kDynamicSpreadPresentationExponent);
-    return std::max(0.0F, angularRadius + dynamicRadius);
+    // Scale the total radius so movement, shot bloom and reload all use the
+    // same envelope for both the reticle and sampled shot directions.
+    return std::max(0.0F, angularRadius + dynamicRadius) * opticSpreadRadiusMultiplier_;
 }
 
 float WeaponFireState::spreadDegreesAtDistance(float distance) const noexcept
 {
     if (!finiteNonNegative(distance) || distance <= 0.0001F)
     {
-        return spreadDegrees_;
+        return spreadDegrees();
     }
 
     return std::atan2(spreadRadiusAtDistance(distance), distance) *

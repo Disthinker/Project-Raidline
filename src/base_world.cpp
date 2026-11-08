@@ -334,6 +334,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
     if (wasControlled) {
         input.moveUp = input.moveDown = input.moveLeft = input.moveRight = false;
         input.firePressed = input.fireJustPressed = input.meleeJustPressed = input.interactJustPressed = false;
+        input.allowWeaponOptics = false;
     }
     perimeterDamageObservation_.reset();
     perimeterRemovals_.clear();
@@ -437,20 +438,8 @@ std::optional<BaseFacilityKind> BaseWorld::update(
         input.aimMotionDelta.has_value();
     if (pointerAiming)
     {
-        GameplayInput aimInput = input;
-        if (input.aimViewport && validRaidViewport(*input.aimViewport))
-        {
-            const Vec2 camera = raidCameraOffset(
-                playerCenter, layout_.worldSize, input.aimViewport->size);
-            if (input.aimWorldPosition)
-            {
-                aimInput.aimWorldPosition = raidScreenToWorld(
-                    raidWorldToScreen(*input.aimWorldPosition, input.aimViewport->position), camera);
-            }
-            aimInput.aimWorldBounds = raidReticleWorldBounds(camera, input.aimViewport->size);
-        }
         shooting_.updateAim(
-            aimInput,
+            input,
             playerCenter,
             playerFacingDirection_,
             layout_.worldSize,
@@ -474,6 +463,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                 return !grenade_.pendingExplosion() || (commitGrenade && commitGrenade());
             });
         applyPlayerControl(baseDefense_->controlLastUpdate());
+        if (playerControlled()) shooting_.cancelWeaponOptic();
         if (baseDefense_->damageLastUpdate() > 0) applyPlayerImpactSlow(.18F);
         baseEnemyDeaths_.insert(baseEnemyDeaths_.end(), baseDefense_->deathsLastUpdate().begin(), baseDefense_->deathsLastUpdate().end());
         return input.interactJustPressed ? interactableFacility() : std::nullopt;
@@ -597,6 +587,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
         }
     }
 
+    if (playerControlled()) shooting_.cancelWeaponOptic();
     if (input.interactJustPressed)
     {
         return interactableFacility();
@@ -799,6 +790,7 @@ void BaseWorld::clearBaseDefense() noexcept
 void BaseWorld::clearSpatialCombatState() noexcept
 {
     shooting_.clearSpatialTransientPresentation();
+    shooting_.cancelWeaponOptic();
     perimeterRemovals_.clear();
     baseEnemyDeaths_.clear();
     perimeterDamageObservation_.reset();
@@ -824,6 +816,14 @@ void BaseWorld::resetCombatForProfileLoad() noexcept
 void BaseWorld::discardUncommittedShot() noexcept
 {
     shooting_.clearSpatialTransientPresentation();
+}
+
+bool BaseWorld::willOpenHighOptic(const GameplayInput &input, float deltaTime) const noexcept
+{
+    if (baseDefense_ && std::isfinite(deltaTime))
+        deltaTime = std::clamp(deltaTime, 0.0F, 0.1F);
+    return !playerControlled() && (input.aimWorldPosition || input.aimMotionDelta) &&
+        shooting_.willOpenHighOptic(input, deltaTime);
 }
 
 Vec2 BaseWorld::playerPosition() const noexcept
