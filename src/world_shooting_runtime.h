@@ -10,6 +10,7 @@
 #include "item_definition.h"
 #include "logical_ballistics.h"
 #include "particle_system.h"
+#include "raid_camera.h"
 #include "shot_feedback_presentation.h"
 #include "weapon_aim.h"
 #include "weapon_fire.h"
@@ -96,6 +97,13 @@ public:
     [[nodiscard]] Vec2 aimWorldPosition() const noexcept;
     [[nodiscard]] Vec2 aimDirection() const noexcept;
     [[nodiscard]] float aimDownSightsProgress() const noexcept;
+    [[nodiscard]] WeaponOpticMode configuredWeaponOptic() const noexcept { return weaponOptic_; }
+    [[nodiscard]] WeaponOpticMode activeWeaponOptic() const noexcept { return activeWeaponOptic_; }
+    [[nodiscard]] const std::optional<WeaponOpticViewProjection> &weaponOpticView() const noexcept
+    { return weaponOpticView_; }
+    [[nodiscard]] bool willOpenHighOptic(const GameplayInput &, float deltaTime) const noexcept;
+    void cancelWeaponOptic() noexcept;
+    void clearWeaponOptic() noexcept;
     [[nodiscard]] bool aimBeyondEffectiveRange() const noexcept;
     [[nodiscard]] bool aimBeyondMaximumRange() const noexcept;
 
@@ -137,4 +145,18 @@ private:
     WeaponAcousticsDefinition weaponAcoustics_;
     WeaponAcousticsDefinition shotAcousticsLastUpdate_;
     bool aimInputRebasePending_{};
+    WeaponOpticMode weaponOptic_{WeaponOpticMode::None};
+    WeaponOpticMode activeWeaponOptic_{WeaponOpticMode::None};
+    float opticTransitionDurationSeconds_{};
+    std::optional<WeaponOpticViewProjection> weaponOpticView_;
+    std::optional<Vec2> opticAbsolutePointer_;
+    Vec2 opticWindowIntent_{};
+
+    void reprojectOpticAim(
+        const WeaponOpticViewProjection &previous, const WeaponOpticViewProjection &next) noexcept;
+    void prepareOpticAimInput(
+        const GameplayInput &, float transitionWeight, Vec2 shooterCenter, Vec2 worldSize,
+        const WeaponOpticViewProjection &ordinary, Vec2 &desired,
+        std::optional<Vec2> &motion, std::optional<Rect> &bounds) noexcept;
+    [[nodiscard]] bool opticInputAllowed(const GameplayInput &) const noexcept;
 };

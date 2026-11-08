@@ -231,3 +231,83 @@ TEST(RunnerInfectedPerformanceTest, RealMixedPursuitObservationAndDeathStayWithi
         }
     }
 }
+
+namespace
+{
+void expectScopeBudget(WeaponOpticMode mode)
+{
+    auto weapon = *publishedContentRegistry().item(
+        ItemDefinitionId{"item.weapon.rifle_5_45_service"}).weaponUse;
+    weapon.optic = mode;
+    const bool high = mode == WeaponOpticMode::High;
+    for (int count : {32, 100})
+    {
+        SCOPED_TRACE(count);
+        const auto config = mixedArena(count);
+        ASSERT_EQ(config.initialEnemies.size(), static_cast<std::size_t>(count));
+        ASSERT_EQ(config.ballisticBlockers.size(), 220U);
+        std::vector<double> samples;
+        std::size_t observed{};
+        for (int iteration = 0; iteration < 160; ++iteration)
+        {
+            GameplayWorld world{config};
+            world.configureWeaponFire(weapon);
+            for (auto &enemy : RunnerInfectedTestAccess::actors(world))
+                enemy.hearTarget(center);
+            const auto victim = world.enemies()[iteration % count].combatTargetId();
+            queueDeath(world, victim);
+            const float heading = iteration * 0.09F;
+            GameplayInput input;
+            input.aimDownSights = true;
+            // Exercise the normal logical window projection and camera pan
+            // while retaining all heading samples and the same dense arena.
+            constexpr Vec2 screen{1280.0F, 720.0F};
+            input.aimViewport = Rect{raidCameraOffset(center, config.worldSize, screen), screen};
+            input.aimWorldPosition = {center.x + std::cos(heading) * 300.0F,
+                center.y + std::sin(heading) * 300.0F};
+            auto &shooting = RunnerInfectedTestAccess::shooting(world);
+            shooting.updateAim(input, center, {1, 0}, config.worldSize, 1.0F);
+            ASSERT_EQ(world.activeWeaponOptic(), mode);
+
+            const auto start = Clock::now();
+            world.update(input, 1.0F / 60);
+            const auto &view = world.raidObservation();
+            std::size_t visible{};
+            for (const auto &enemy : world.enemies())
+                visible += world.raidEnemyObservable(enemy.combatTargetId()) ? 1U : 0U;
+            const double elapsed = std::chrono::duration<double, std::milli>(
+                Clock::now() - start).count();
+            if (iteration >= 10) samples.push_back(elapsed);
+
+            observed += visible;
+            ASSERT_EQ(world.activeWeaponOptic(), mode);
+            ASSERT_TRUE(world.weaponOpticView());
+            ASSERT_TRUE(view.validGeometry());
+            EXPECT_FLOAT_EQ(view.maximumDistance, high ? 1250.0F : 1100.0F);
+            EXPECT_FLOAT_EQ(view.angleDegrees, high ? 117.0F : 180.0F);
+            EXPECT_EQ(world.indoorObservationBuildCount(), 1U);
+            EXPECT_EQ(world.enemies().size(), static_cast<std::size_t>(count - 1));
+            EXPECT_EQ(world.simulationWorkloadLastUpdate().activeBlockers, 220U);
+            EXPECT_EQ(world.simulationWorkloadLastUpdate().activeEnemies, static_cast<std::size_t>(count));
+            EXPECT_GT(world.simulationWorkloadLastUpdate().enemySubsteps, 0U);
+        }
+        ASSERT_EQ(samples.size(), 150U);
+        EXPECT_GT(observed, 0U);
+        std::sort(samples.begin(), samples.end());
+        testing::Test::RecordProperty(std::string{high ? "high_optic_" : "low_optic_"} +
+            std::to_string(count) + "_update_p95_ms",
+            std::to_string(samples[142]));
+        EXPECT_LE(samples[142], 3.0) << "enemies=" << count << " blockers=220 samples=150";
+    }
+}
+}
+
+TEST(WeaponOpticsPerformanceTest, HighScopeDenseObservationAndSimulationStayWithinThreeMilliseconds)
+{
+    expectScopeBudget(WeaponOpticMode::High);
+}
+
+TEST(WeaponOpticsPerformanceTest, LowScopeDenseObservationAndSimulationStayWithinThreeMilliseconds)
+{
+    expectScopeBudget(WeaponOpticMode::Low);
+}

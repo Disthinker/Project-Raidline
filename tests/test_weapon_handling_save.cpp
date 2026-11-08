@@ -11,6 +11,7 @@
 #include "inventory_domain.h"
 #include "lost_raid_domain.h"
 #include "raid_lifecycle.h"
+#include "raid_optics_legacy_fixture.h"
 #include "save_repository.h"
 #include "test_temp_directory.h"
 #include "weapon_ammo_domain.h"
@@ -18,7 +19,6 @@
 namespace {
 using Json = nlohmann::json;
 constexpr std::string_view previousContent{"raid-runner-infected-content-73"};
-constexpr std::string_view currentContent{"raid-weapon-handling-content-74"};
 
 AssetInstanceId firstAsset(const ProfileState &profile, const ItemDefinitionId &id) {
     for (const auto &[instance, asset] : profile.assets.records())
@@ -97,7 +97,7 @@ TEST_F(WeaponHandlingSaveTest, Schema59RoundTripPreservesSelectedModeAndComplete
     const auto text = serializeProfileEnvelope(profile, content.contentVersion(), 59);
     auto envelope = Json::parse(text);
     EXPECT_EQ(envelope.at("schema_version"), 59U);
-    EXPECT_EQ(envelope.at("content_version").get<std::string>(), std::string{currentContent});
+    EXPECT_EQ(envelope.at("content_version").get<std::string>(), std::string{kOpticsContentVersion});
     EXPECT_EQ(assetJson(envelope, rifle).at("fire_mode"), "three_round_burst");
     for (const auto &asset : envelope.at("payload").at("assets")) {
         ASSERT_TRUE(asset.contains("fire_mode"));
@@ -286,6 +286,72 @@ TEST_F(WeaponHandlingSaveTest, UpgradePreservesBothOriginalSourcesBeforeFurtherP
         ASSERT_TRUE(reopened.profile) << reopened.message;
         EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
         EXPECT_NO_THROW(nested.cleanup());
+    }
+}
+
+TEST_F(WeaponHandlingSaveTest, OpticContentKeepsSchema59And60FrozenLootAndArchivesOriginalSlots) {
+    const auto &content = publishedContentRegistry();
+    const auto historical = contentBeforeOptics();
+    for (const auto schema : {59U, 60U}) {
+        SCOPED_TRACE(schema);
+        raidline::test::TemporaryDirectory nested;
+        nested.claim("raidline-optic-save-", std::to_string(schema));
+        SaveRepository repository{nested.path()};
+        auto source = makeNewAlphaProfile("optic-old-pending", historical);
+        auto current = makeNewAlphaProfile("optic-old-pending", content);
+        const DeployCommand command{"optic-raid", "optic-settlement", 7712201U + schema,
+            MapDefinitionId{"map.raid.frontier_exchange"}};
+        const auto oldDeploy = executeDeploy(source, historical, command, {source.revision, "optic-seed"});
+        ASSERT_TRUE(oldDeploy.succeeded) << oldDeploy.message;
+        const auto newDeploy = executeDeploy(current, content, command, {current.revision, "optic-seed"});
+        ASSERT_TRUE(newDeploy.succeeded) << newDeploy.message;
+        const auto &newRaid = *current.pendingRaid;
+        const auto &oldRaid = *source.pendingRaid;
+        EXPECT_EQ(newRaid.spatialLayout, oldRaid.spatialLayout);
+        EXPECT_EQ(newRaid.enemies, oldRaid.enemies);
+        EXPECT_EQ(newRaid.rulesVersion, oldRaid.rulesVersion);
+        ASSERT_EQ(newRaid.loot.size(), oldRaid.loot.size());
+        std::size_t fixedOptics{};
+        for (std::size_t index = 0; index < newRaid.loot.size(); ++index) {
+            auto loot = newRaid.loot[index];
+            if (loot.definitionId == kFixedRaidOpticId) {
+                ++fixedOptics;
+                EXPECT_EQ(loot.quantity, 1U);
+                EXPECT_EQ(loot.spaceId, outdoorRaidSpaceId());
+                EXPECT_EQ(loot.resourcePointInstanceId, "resource_point.frontier.fabrication_stock:0");
+                EXPECT_EQ(loot.resourcePointSlotIndex, 0U);
+                EXPECT_FALSE(loot.requiresHighRisk);
+                EXPECT_NE(loot.definitionId, oldRaid.loot[index].definitionId);
+                loot.definitionId = oldRaid.loot[index].definitionId;
+                loot.quantity = oldRaid.loot[index].quantity;
+            }
+            EXPECT_EQ(loot, oldRaid.loot[index]) << "loot slot " << index;
+        }
+        EXPECT_EQ(fixedOptics, 1U);
+
+        const auto primary = serializeProfileEnvelope(source, historical.contentVersion(), schema);
+        ++source.revision;
+        const auto backup = serializeProfileEnvelope(source, historical.contentVersion(), schema);
+        writeBytes(repository.primaryPath(), primary);
+        writeBytes(repository.backupPath(), backup);
+        const auto loaded = repository.load(content);
+        ASSERT_TRUE(loaded.profile) << loaded.message;
+        EXPECT_EQ(loaded.profile->pendingRaid->loot, oldRaid.loot);
+        EXPECT_EQ(loaded.profile->assets.nextAssetId(), source.assets.nextAssetId());
+        const auto saved = repository.save(*loaded.profile, content.contentVersion());
+        ASSERT_TRUE(saved.succeeded) << saved.message;
+        const auto archive = [&](bool backupSlot, std::string_view bytes) {
+            return nested.path() / (std::string{backupSlot ? "profile.backup.pre-" : "profile.pre-"} +
+                "raid-optics-loot-gunsmith-v1." + checksum(bytes) + ".json");
+        };
+        EXPECT_EQ(readBytes(archive(false, primary)), primary);
+        EXPECT_EQ(readBytes(archive(true, backup)), backup);
+        auto reopened = repository.load(content);
+        ASSERT_TRUE(reopened.profile) << reopened.message;
+        EXPECT_EQ(reopened.profile->pendingRaid->loot, oldRaid.loot);
+        EXPECT_TRUE(rollbackPendingRaidToBase(*reopened.profile, content).succeeded);
+        EXPECT_FALSE(reopened.profile->pendingRaid);
+        EXPECT_EQ(firstAsset(*reopened.profile, kFixedRaidOpticId), 0U);
     }
 }
 

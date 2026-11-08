@@ -8,6 +8,28 @@
 
 namespace
 {
+bool finite(Vec2 point) noexcept
+{
+    return std::isfinite(point.x) && std::isfinite(point.y);
+}
+
+Vec2 clampWindowAim(Vec2 point, Vec2 screen) noexcept
+{
+    return {std::clamp(point.x, 0.0F, screen.x - 1.0F),
+            std::clamp(point.y, 0.0F, screen.y - 1.0F)};
+}
+
+Vec2 remapWindowAim(Vec2 point, const WeaponOpticViewProjection &previous,
+                    const WeaponOpticViewProjection &next) noexcept
+{
+    return next.screenToWorld(clampWindowAim(previous.worldToScreen(point), next.screenSize));
+}
+
+float easedOpticProgress(float progress) noexcept
+{
+    return progress * progress * (3.0F - 2.0F * progress);
+}
+
 float distanceSquared(Vec2 first, Vec2 second) noexcept
 {
     const float dx = first.x - second.x;
@@ -133,6 +155,24 @@ WorldShootingCheckpoint WorldShootingRuntime::checkpoint() const
     s.aimDownSightsProgress = weaponAim_.aimDownSightsProgress_;
     s.recoilBendRemaining = weaponAim_.recoilBendRemainingSeconds_;
     s.aimControlMode = static_cast<std::uint32_t>(weaponAim_.controlMode_);
+    if (weaponOpticView_)
+    {
+        // An optic is transient. Persist the equivalent ordinary-window aim
+        // for checkpoint resume without the previous camera or mouse capture.
+        const auto &scoped = *weaponOpticView_;
+        const WeaponOpticViewProjection ordinary{
+            raidCameraOffset(weaponAim_.shootingOrigin_, weaponAim_.worldSize_, scoped.screenSize),
+            scoped.screenSize};
+        s.aimVectors[0] = checkpointPoint(remapWindowAim(
+            weaponAim_.currentWorldPosition_, scoped, ordinary));
+        s.aimVectors[1] = s.aimVectors[0];
+        const auto inputPixel = opticAbsolutePointer_.value_or(opticWindowIntent_);
+        s.aimVectors[2] = checkpointPoint(ordinary.screenToWorld(
+            clampWindowAim(inputPixel, ordinary.screenSize)));
+        s.aimVectors[5] = {};
+        s.aimDownSightsProgress = 0.0F;
+        s.aimControlMode = static_cast<std::uint32_t>(AimControlMode::Direct);
+    }
     s.aimInitialized = weaponAim_.initialized_; s.recoilSeed = a.recoilSeed;
     s.recoilRandomState = weaponAim_.recoilRandom_.state_;
     s.recoilRandomIncrement = weaponAim_.recoilRandom_.increment_;
@@ -170,12 +210,15 @@ bool WorldShootingRuntime::restoreCheckpoint(const WorldShootingCheckpoint &s)
         // An empty initial checkpoint has no flight history. Keep the caller's
         // configured weapon, not an unrelated space's in-flight target intent.
         clearSpatialTransientPresentation();
+        cancelWeaponOptic();
         return true;
     }
     WorldShootingRuntime candidate;
     // Static component capability is derived from the current asset tree by
     // the activity before restoring its transient shot/aim checkpoint.
     candidate.weaponAcoustics_ = weaponAcoustics_;
+    candidate.weaponOptic_ = weaponOptic_;
+    candidate.opticTransitionDurationSeconds_ = opticTransitionDurationSeconds_;
     const auto &f = s.fireConfig;
     candidate.weaponFire_ = WeaponFireState{WeaponFireConfig{
         f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9],
@@ -236,6 +279,7 @@ bool WorldShootingRuntime::restoreCheckpoint(const WorldShootingCheckpoint &s)
         flight.distanceTravelled_ = vflight.travelled;
         candidate.logicalBallistics_.push_back(flight);
     }
+    candidate.cancelWeaponOptic();
     *this = std::move(candidate);
     return true;
 }
@@ -266,6 +310,113 @@ void WorldShootingRuntime::beginFrame(float deltaTime) noexcept
         });
 }
 
+bool WorldShootingRuntime::opticInputAllowed(const GameplayInput &input) const noexcept
+{
+    return input.allowWeaponOptics && !input.sprint && !input.inventoryOpen &&
+           !input.freezeObservationDirection && !input.throwableModal;
+}
+
+bool WorldShootingRuntime::willOpenHighOptic(const GameplayInput &input, float deltaTime) const noexcept
+{
+    return weaponOptic_ == WeaponOpticMode::High && input.aimDownSights &&
+        opticInputAllowed(input) &&
+        weaponAim_.nextAimDownSightsProgress(true, deltaTime, opticTransitionDurationSeconds_) >= 1.0F;
+}
+
+void WorldShootingRuntime::cancelWeaponOptic() noexcept
+{
+    if (weaponOptic_ == WeaponOpticMode::None)
+        return;
+    activeWeaponOptic_ = WeaponOpticMode::None;
+    weaponFire_.opticSpreadRadiusMultiplier_ = 1.0F;
+    // Keep the previous geometry for pointer handoff, but hide it before
+    // the next aim update or relocation remaps the reticle.
+    if (weaponOpticView_)
+        weaponOpticView_->transitionWeight = 0.0F;
+    weaponAim_.aimDownSightsProgress_ = 0.0F;
+    weaponAim_.setControlMode(AimControlMode::Direct);
+}
+
+void WorldShootingRuntime::clearWeaponOptic() noexcept
+{
+    cancelWeaponOptic();
+    weaponOptic_ = WeaponOpticMode::None;
+    opticTransitionDurationSeconds_ = 0.0F;
+}
+
+void WorldShootingRuntime::reprojectOpticAim(
+    const WeaponOpticViewProjection &previous, const WeaponOpticViewProjection &next) noexcept
+{
+    if (!weaponAim_.initialized_ ||
+        (previous.camera.x == next.camera.x && previous.camera.y == next.camera.y &&
+         previous.scale == next.scale && previous.screenSize.x == next.screenSize.x &&
+         previous.screenSize.y == next.screenSize.y))
+        return;
+    weaponAim_.currentWorldPosition_ = remapWindowAim(weaponAim_.currentWorldPosition_, previous, next);
+    weaponAim_.targetWorldPosition_ = remapWindowAim(weaponAim_.targetWorldPosition_, previous, next);
+}
+
+void WorldShootingRuntime::prepareOpticAimInput(
+    const GameplayInput &input, float transitionWeight, Vec2 shooterCenter, Vec2 worldSize,
+    const WeaponOpticViewProjection &ordinary, Vec2 &desired,
+    std::optional<Vec2> &motion, std::optional<Rect> &bounds) noexcept
+{
+    if (transitionWeight <= 0.0F)
+    {
+        reprojectOpticAim(*weaponOpticView_, ordinary);
+        const Vec2 pixel = ordinary.worldToScreen(desired);
+        if (finite(pixel))
+            desired = ordinary.screenToWorld(clampWindowAim(pixel, ordinary.screenSize));
+        if (weaponOpticView_->transitionWeight > 0.0F && opticAbsolutePointer_)
+            weaponAim_.inputWorldPosition_ = ordinary.screenToWorld(
+                clampWindowAim(*opticAbsolutePointer_, ordinary.screenSize));
+        else
+            weaponAim_.inputWorldPosition_ = desired;
+        weaponOpticView_.reset();
+        opticAbsolutePointer_.reset();
+        return;
+    }
+
+    const WeaponOpticViewProjection previous = weaponOpticView_.value_or(
+        WeaponOpticViewProjection{input.aimViewport->position, ordinary.screenSize});
+    std::optional<Vec2> absolutePointer;
+    if (input.aimWorldPosition)
+    {
+        const auto pixel = raidWorldToScreen(*input.aimWorldPosition, input.aimViewport->position);
+        if (finite(pixel)) absolutePointer = pixel;
+    }
+
+    if (!weaponOpticView_)
+    {
+        const Vec2 start = weaponAim_.initialized_
+            ? previous.worldToScreen(weaponAim_.currentWorldPosition_)
+            : ordinary.worldToScreen(desired);
+        opticWindowIntent_ = finite(start) ? clampWindowAim(start, ordinary.screenSize)
+            : Vec2{ordinary.screenSize.x * 0.5F, ordinary.screenSize.y * 0.5F};
+    }
+    Vec2 delta = motion && finite(*motion) ? *motion : Vec2{};
+    if (absolutePointer && opticAbsolutePointer_)
+    {
+        delta.x += absolutePointer->x - opticAbsolutePointer_->x;
+        delta.y += absolutePointer->y - opticAbsolutePointer_->y;
+    }
+    opticAbsolutePointer_ = absolutePointer;
+    if (!finite(delta)) delta = {};
+    const Vec2 previousIntent = opticWindowIntent_;
+    opticWindowIntent_ = clampWindowAim(
+        {previousIntent.x + delta.x, previousIntent.y + delta.y}, ordinary.screenSize);
+
+    const auto next = weaponOpticProjection(
+        weaponOptic_, shooterCenter, worldSize, ordinary.screenSize,
+        opticWindowIntent_, transitionWeight);
+    reprojectOpticAim(previous, next);
+    weaponAim_.inputWorldPosition_ = next.screenToWorld(previousIntent);
+    desired = next.screenToWorld(opticWindowIntent_);
+    motion.reset(); // The change in projected pointer already contains all motion.
+    bounds = next.reticleBounds();
+    weaponOpticView_ = next;
+}
+
 void WorldShootingRuntime::updateAim(
     const GameplayInput &input,
     Vec2 shooterCenter,
@@ -277,30 +428,59 @@ void WorldShootingRuntime::updateAim(
     Vec2 desired{
         shooterCenter.x + fallbackDirection.x * 400.0F,
         shooterCenter.y + fallbackDirection.y * 400.0F};
-    if (allowPointerInput && input.aimWorldPosition.has_value())
-    {
+    if (allowPointerInput && input.aimWorldPosition)
         desired = *input.aimWorldPosition;
-    }
     if (!allowPointerInput)
-    {
         desired = weaponAim_.inputWorldPosition_;
-    }
-    else if (aimInputRebasePending_)
+
+    const bool hasOptic = weaponOptic_ != WeaponOpticMode::None;
+    const bool opticAllowed = hasOptic && allowPointerInput && opticInputAllowed(input);
+    if (hasOptic && !opticAllowed)
+        cancelWeaponOptic();
+    const bool scopeRequested = opticAllowed && input.aimDownSights;
+    const float nextOpticProgress = opticAllowed
+        ? weaponAim_.nextAimDownSightsProgress(scopeRequested, deltaTime, opticTransitionDurationSeconds_)
+        : 0.0F;
+    const WeaponOpticMode scope = scopeRequested && nextOpticProgress >= 1.0F
+        ? weaponOptic_ : WeaponOpticMode::None;
+    auto motion = allowPointerInput ? input.aimMotionDelta : std::optional<Vec2>{Vec2{}};
+    auto bounds = input.aimWorldBounds;
+    if (input.aimViewport && validRaidViewport(*input.aimViewport))
     {
-        // Legacy simulation callers have no viewport projection. Only they
-        // need a first absolute sample to establish the new input anchor.
+        // Both activities use the camera after player movement for this shot.
+        const auto viewport = *input.aimViewport;
+        const Vec2 camera = raidCameraOffset(shooterCenter, worldSize, viewport.size);
+        if (allowPointerInput && input.aimWorldPosition)
+            desired = raidScreenToWorld(raidWorldToScreen(desired, viewport.position), camera);
+        bounds = raidReticleWorldBounds(camera, viewport.size);
+        const float transitionWeight = easedOpticProgress(nextOpticProgress);
+        if (weaponOpticView_ || transitionWeight > 0.0F)
+        {
+            const WeaponOpticViewProjection ordinary{camera, viewport.size};
+            prepareOpticAimInput(input, transitionWeight,
+                                 shooterCenter, worldSize, ordinary, desired, motion, bounds);
+        }
+    }
+    else if (weaponOpticView_)
+    {
+        // A construction viewport does not carry a combat camera transform.
+        weaponOpticView_.reset();
+        opticAbsolutePointer_.reset();
+        aimInputRebasePending_ = true;
+    }
+    if (allowPointerInput && aimInputRebasePending_)
+    {
         weaponAim_.rebaseInput(desired);
         aimInputRebasePending_ = false;
     }
     weaponAim_.update(
-        desired,
-        shooterCenter,
-        worldSize,
-        input.aimDownSights,
-        deltaTime,
-        allowPointerInput ? input.aimMotionDelta : std::optional<Vec2>{Vec2{}},
-        AimControlMode::Direct,
-        input.aimWorldBounds);
+        desired, shooterCenter, worldSize,
+        weaponOptic_ == WeaponOpticMode::None ? input.aimDownSights : scopeRequested,
+        deltaTime, motion,
+        scope == WeaponOpticMode::High ? AimControlMode::HighMagnificationInertial : AimControlMode::Direct,
+        bounds, opticTransitionDurationSeconds_);
+    activeWeaponOptic_ = scope != WeaponOpticMode::None && weaponAim_.aimDownSightsProgress() >= 1.0F
+        ? scope : WeaponOpticMode::None;
 }
 
 WorldShootingAdvance WorldShootingRuntime::advanceShots(
@@ -314,6 +494,9 @@ WorldShootingAdvance WorldShootingRuntime::advanceShots(
     EnemyLifecycle &targets,
     const std::vector<BallisticBlocker> &blockers)
 {
+    const float opticMultiplier = weaponOptic_ == WeaponOpticMode::None ? 1.0F :
+        std::lerp(1.0F, weaponOptic_ == WeaponOpticMode::Low ? 0.75F : 0.60F,
+                  easedOpticProgress(weaponAim_.aimDownSightsProgress()));
     const std::optional<ShotSpec> shot = weaponFire_.update(
         !controlsSuppressed && !input.sprint &&
             (input.firePressed || input.fireJustPressed),
@@ -328,7 +511,8 @@ WorldShootingAdvance WorldShootingRuntime::advanceShots(
             .overEffectiveRangeFactor =
                 weaponAim_.overEffectiveRangeFactor(),
             .reticleControlSpeed = weaponAim_.reticleControlSpeed(),
-            .forceMaximumSpread = input.forceMaximumWeaponSpread});
+            .forceMaximumSpread = input.forceMaximumWeaponSpread,
+            .opticSpreadRadiusMultiplier = opticMultiplier});
 
     if (shot.has_value())
     {
@@ -366,7 +550,7 @@ WorldShootingAdvance WorldShootingRuntime::advanceShots(
         }
         logicalBallistics_.emplace_back(
             resolution,
-            weaponTracerStyle_,
+            activeWeaponOptic_ == WeaponOpticMode::High ? TracerStyle::None : weaponTracerStyle_,
             weaponTracerLength_,
             weaponTracerOpacity_,
             weaponTracerLifetimeSeconds_);
@@ -549,6 +733,16 @@ void WorldShootingRuntime::configureWeapon(
     weaponMaximumRange_ = definition.maximumRange;
     weaponLogicalBallisticSpeed_ = definition.logicalBallisticSpeed;
     weaponAcoustics_ = definition.acoustics;
+    if (!preserveTransientState || weaponOptic_ != definition.optic)
+        cancelWeaponOptic();
+    if (weaponOptic_ == WeaponOpticMode::None && definition.optic != WeaponOpticMode::None)
+        weaponAim_.aimDownSightsProgress_ = 0.0F;
+    weaponOptic_ = definition.optic;
+    // Derive the optic's reversible transition from effective handling.
+    // The mechanical ADS configuration and persisted aim config stay intact.
+    opticTransitionDurationSeconds_ = weaponOptic_ == WeaponOpticMode::None ? 0.0F :
+        std::lerp(0.260F, 0.120F,
+                  static_cast<float>(std::min(definition.handlingSpeed, 100U)) / 100.0F);
     weaponTracerStyle_ = TracerStyle::Weak;
     weaponTracerLength_ = handling.weakTracerLength;
     weaponTracerOpacity_ = handling.weakTracerOpacity;
@@ -571,6 +765,9 @@ void WorldShootingRuntime::reanchor(
     Vec2 direction,
     Vec2 worldSize) noexcept
 {
+    cancelWeaponOptic();
+    weaponOpticView_.reset();
+    opticAbsolutePointer_.reset();
     weaponAim_.reanchor(shooterCenter, direction, worldSize);
     aimInputRebasePending_ = false;
 }
@@ -588,7 +785,18 @@ void WorldShootingRuntime::relocate(
         translation = {camera.x - previousViewport->position.x,
                        camera.y - previousViewport->position.y};
         bounds = raidReticleWorldBounds(camera, previousViewport->size);
+        if (weaponOpticView_)
+        {
+            const WeaponOpticViewProjection ordinary{camera, previousViewport->size};
+            reprojectOpticAim(*weaponOpticView_, ordinary);
+            const auto inputPixel = opticAbsolutePointer_.value_or(opticWindowIntent_);
+            weaponAim_.inputWorldPosition_ = ordinary.screenToWorld(
+                clampWindowAim(inputPixel, ordinary.screenSize));
+            translation = {};
+        }
     }
+    weaponOpticView_.reset();
+    opticAbsolutePointer_.reset();
     weaponAim_.relocate(nextCenter, worldSize, translation, bounds);
     // Viewport-aware input is translated with the reticle, so the next
     // sample must still consume genuine camera/device movement immediately.

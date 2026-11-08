@@ -36,6 +36,9 @@ struct GameplayInput
     // It never grants permission to shoot through a modal surface.
     bool firePhysicallyPressed{};
     bool aimDownSights{};
+    // A modal or consumed secondary-button press must not open an optic.
+    // Mechanical aim retains its existing input rules.
+    bool allowWeaponOptics{true};
     bool forceMaximumWeaponSpread{};
 
     // Runtime developer override supplied by the SDL client. It never enters

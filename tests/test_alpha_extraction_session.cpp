@@ -10,7 +10,9 @@
 #include <vector>
 
 #include "alpha_content_ids.h"
+#include "base_world.h"
 #include "game_session.h"
+#include "weapon_component_domain.h"
 #include "profile_ui_test_wait.h"
 #include "medical_domain.h"
 
@@ -2220,4 +2222,135 @@ TEST(AlphaExtractionSessionTest, RescueCheckpointSaveFailureIsZeroCommit)
         session.world().ordinarySurvivorRescueProgress(),
         1.0F); // The completed interaction waits for its immutable save candidate.
     EXPECT_FALSE(session.persistenceMessage().empty());
+}
+
+TEST(AlphaExtractionSessionTest, InstalledHighOpticOpensInBaseAndRaidAndBlocksHeldInteraction)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewPublishedProfile("optics-session", content);
+    const ItemDefinitionId rifle{"item.weapon.rifle_5_45_service"};
+    const auto &optic = content.item(ItemDefinitionId{"item.component.optic_4x_5_45"});
+    const auto guns = assets(profile, rifle);
+    ASSERT_FALSE(guns.empty());
+    const auto gun = guns.front();
+    const auto grid = findFirstProfileFit(profile, content, ProfileContainerId::stash(),
+        optic, ItemOrientation::Degrees0);
+    ASSERT_TRUE(grid);
+    const auto component = profile.assets.create(optic,
+        StoredAssetLocation{ProfileContainerId::stash(), *grid});
+    ASSERT_TRUE(executeWeaponComponentChange(profile, content,
+        {gun, WeaponComponentSlot::Optic, component}, {profile.revision, "install-optic"}).succeeded);
+    ASSERT_TRUE(executeInventory(profile, content, InventoryEquipCommand{gun, EquipmentSlotKind::PrimaryWeapon},
+        {profile.revision, "equip-gun"}).succeeded);
+    profile.tutorial = TutorialProgress::Complete;
+    TemporarySaveDirectory directory;
+    ASSERT_TRUE(SaveRepository(directory.path()).save(profile, content.contentVersion()).succeeded);
+
+    BaseWorld base;
+    GameSession session;
+    session.configurePersistence(directory.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    GameplayInput aim;
+    aim.aimWorldPosition = {800, 400};
+    aim.aimDownSights = true;
+
+    static_cast<void>(session.updateBaseWorld(base, aim, 0.5F));
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+    static_cast<void>(session.updateBaseWorld(base, aim, 0.5F));
+    EXPECT_EQ(base.activeWeaponOptic(), WeaponOpticMode::High);
+    const auto &baseView = base.observation();
+    EXPECT_FLOAT_EQ(baseView.angleDegrees, 0.65F * raidSightParameters(baseView.environment).angleDegrees);
+    session.cancelWeaponOptics();
+    EXPECT_EQ(base.activeWeaponOptic(), WeaponOpticMode::None);
+
+    ASSERT_TRUE(session.deployAlpha(77235, MapDefinitionId{"map.v0.test"}))
+        << session.persistenceMessage();
+    auto &world = session.world();
+    aim.allowWeaponOptics = false;
+    session.update(aim, 0.5F);
+    EXPECT_EQ(world.activeWeaponOptic(), WeaponOpticMode::None);
+    aim.allowWeaponOptics = true;
+    session.update(aim, 0.5F);
+    ASSERT_EQ(world.activeWeaponOptic(), WeaponOpticMode::High);
+    ASSERT_TRUE(world.triggerHighRiskForDeveloper());
+    ASSERT_TRUE(world.emergencyExtractionPoint());
+    const auto bounds = world.emergencyExtractionPoint()->bounds();
+    ASSERT_TRUE(const_cast<Player &>(world.player()).setPosition(bounds.position));
+
+    aim.interactJustPressed = aim.interactPressed = true;
+    EXPECT_TRUE(session.blocksInteractionForOptics(aim, 0.0F));
+    session.update(aim, 0.0F);
+    EXPECT_FALSE(world.raidSession().signalCalledLastUpdate());
+    aim.aimDownSights = aim.interactJustPressed = false;
+    EXPECT_TRUE(session.blocksInteractionForOptics(aim, 0.0F));
+    session.update(aim, 0.0F);
+    EXPECT_EQ(world.activeWeaponOptic(), WeaponOpticMode::None);
+    EXPECT_FALSE(world.raidSession().signalCalledLastUpdate());
+
+    aim.interactPressed = false;
+    session.update(aim, 0.0F);
+    aim.interactJustPressed = aim.interactPressed = true;
+    EXPECT_FALSE(session.blocksInteractionForOptics(aim, 0.0F));
+    session.update(aim, 0.0F);
+    EXPECT_TRUE(world.raidSession().signalCalledLastUpdate());
+}
+
+TEST(AlphaExtractionSessionTest, OpticTransitionUsesHandlingAfterInstallation)
+{
+    const auto &content = publishedContentRegistry();
+    const ItemDefinitionId rifle{"item.weapon.rifle_5_45_service"};
+    const ItemDefinitionId optic{"item.component.optic_4x_5_45"};
+    const ItemDefinitionId suppressor{"item.component.suppressor_5_45"};
+    for (const bool fitSuppressor : {false, true})
+    {
+        SCOPED_TRACE(fitSuppressor);
+        auto profile = makeNewPublishedProfile("optic-handling", content);
+        profile.tutorial = TutorialProgress::Complete;
+        const auto guns = assets(profile, rifle);
+        ASSERT_FALSE(guns.empty());
+        const auto gun = guns.front();
+        std::vector<ItemDefinitionId> parts{optic};
+        if (fitSuppressor)
+            parts.push_back(suppressor);
+        for (const auto &part : parts)
+        {
+            const auto &definition = content.item(part);
+            ASSERT_TRUE(definition.weaponComponent);
+            const auto grid = findFirstProfileFit(profile, content, ProfileContainerId::stash(),
+                definition, ItemOrientation::Degrees0);
+            ASSERT_TRUE(grid);
+            const auto component = profile.assets.create(definition,
+                StoredAssetLocation{ProfileContainerId::stash(), *grid});
+            ASSERT_TRUE(executeWeaponComponentChange(profile, content,
+                {gun, definition.weaponComponent->slot, component},
+                {profile.revision, "fit-" + std::string{part.value()}}).succeeded);
+        }
+        ASSERT_EQ(effectiveWeaponUse(profile, content, gun).handlingSpeed,
+                  fitSuppressor ? 48U : 56U);
+        ASSERT_TRUE(executeInventory(profile, content, InventoryEquipCommand{gun, EquipmentSlotKind::PrimaryWeapon},
+            {profile.revision, "equip-optic-rifle"}).succeeded);
+        TemporarySaveDirectory directory;
+        ASSERT_TRUE(SaveRepository(directory.path()).save(profile, content.contentVersion()).succeeded);
+
+        GameSession session;
+        session.configurePersistence(directory.path());
+        ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+        ASSERT_TRUE(session.deployAlpha(77235, MapDefinitionId{"map.v0.test"}))
+            << session.persistenceMessage();
+        GameplayInput aim;
+        aim.aimWorldPosition = {800, 400};
+        aim.aimViewport = Rect{{}, {1280, 720}};
+        aim.aimMotionDelta = Vec2{};
+        aim.aimDownSights = true;
+
+        // 185 ms lies between the stock 181.6 ms and the suppressed 192.8 ms.
+        for (int frame = 0; frame < 37; ++frame)
+            session.update(aim, 0.005F);
+        ASSERT_TRUE(session.world().weaponOpticView());
+        EXPECT_EQ(session.world().activeWeaponOptic(),
+                  fitSuppressor ? WeaponOpticMode::None : WeaponOpticMode::High);
+        for (int frame = 0; frame < 3; ++frame)
+            session.update(aim, 0.005F);
+        EXPECT_EQ(session.world().activeWeaponOptic(), WeaponOpticMode::High);
+    }
 }

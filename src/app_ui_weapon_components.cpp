@@ -6,7 +6,7 @@
 namespace {
 using Control = UiComponentControl;
 using Kind = UiComponentEventKind;
-constexpr const char *slots[]{"BARREL", "HANDGUARD", "GRIP", "WEAPON LIGHT", "MUZZLE"};
+constexpr const char *slots[]{"BARREL", "HANDGUARD", "GRIP", "WEAPON LIGHT", "MUZZLE", "OPTIC"};
 static_assert(std::size(slots) == kUiComponentSlotCount);
 bool samePlan(const WeaponComponentPlan &a, const WeaponComponentPlan &b) {
     if (a.canCommit != b.canCommit || a.revision != b.revision || a.before != b.before ||
@@ -191,15 +191,38 @@ void App::renderWeaponComponents() {
         renderBaseSupplyImage(weapon->definitionId, {350, 140, 444, 52});
         text({338, 194, 468, 24}, content.item(weapon->definitionId).displayName, 14, UiTextAlign::Center, 1);
     } else text({350, 155, 444, 50}, "SELECT AN ACCESSIBLE WEAPON", 14, UiTextAlign::Center);
+    const auto language = uiTextRenderer_.language();
+    const bool opticSelected = componentSlot_ == WeaponComponentSlot::Optic;
     for (std::size_t i = 0; i < kUiComponentSlotCount; ++i) {
         const auto box = uiComponentSlot(i);
-        renderFoundationButton(3440 + static_cast<int>(i), box, "", componentWeapon_ != 0, false, static_cast<std::size_t>(componentSlot_) == i, {}, 14);
-        text({box.x + 10, box.y + 6, box.w - 20, 22}, uiTextRenderer_.language() == UiLanguage::English && i == 3 ? "LIGHT" : slots[i], 12, UiTextAlign::Center, 1);
+        const auto slot = static_cast<WeaponComponentSlot>(i);
+        renderFoundationButton(3440 + static_cast<int>(i), box, "", componentWeapon_ != 0, false, false, {}, 14);
+        if (componentSlot_ == slot) {
+            SDL_SetRenderDrawColor(renderer_, 113, 191, 179, 255);
+            SDL_RenderRect(renderer_, &box);
+            // The narrow cards use the bottom edge for the selection marker.
+            const SDL_FRect marker{box.x + 8, box.y + box.h - 5, box.w - 16, 2};
+            SDL_RenderFillRect(renderer_, &marker);
+        }
+        const char *label = slots[i];
+        if (language == UiLanguage::English) {
+            if (slot == WeaponComponentSlot::Handguard) label = "FOREND";
+            if (slot == WeaponComponentSlot::Light) label = "LIGHT";
+        }
+        text({box.x + 2, box.y + 6, box.w - 4, 22}, label, 12, UiTextAlign::Center, 1);
         const auto *a = p.assets.find(componentRows_.installed[i]);
-        text({box.x + 8, box.y + 32, box.w - 16, 18}, a ? compactUiItemName(content.item(a->definitionId), uiTextRenderer_.language()) : (uiTextRenderer_.language() == UiLanguage::English ? "DEFAULT" : "DEFAULT STRUCTURE"), 12, UiTextAlign::Center, 1);
+        const char *empty = slot == WeaponComponentSlot::Optic ? "NO OPTIC" :
+            language == UiLanguage::English ? "DEFAULT" : "DEFAULT STRUCTURE";
+        auto fit = a ? compactUiItemName(content.item(a->definitionId), language)
+                     : localizeUiText(language, empty);
+        if (a && slot == WeaponComponentSlot::Optic)
+            fit = componentRows_.current->optic == WeaponOpticMode::High ? "4×" : "1.5×";
+        text({box.x + 2, box.y + 32, box.w - 4, 18}, fit, 12, UiTextAlign::Center, 1);
     }
     const auto *installed = p.assets.find(componentRows_.installed[static_cast<std::size_t>(componentSlot_)]);
-    text({338, 286, 468, 38}, fmt::format("CURRENT FIT: {}", installed ? localizeUiText(uiTextRenderer_.language(), content.item(installed->definitionId).displayName) : localizeUiText(uiTextRenderer_.language(), "DEFAULT STRUCTURE")), 14);
+    const auto currentFit = installed ? content.item(installed->definitionId).displayName :
+        opticSelected ? "NO OPTIC" : "DEFAULT STRUCTURE";
+    text({338, 286, 468, 38}, fmt::format("CURRENT FIT: {}", localizeUiText(language, currentFit)), 14);
     for (std::size_t i = 0; i < kUiComponentPageSize; ++i) {
         const auto index = componentChoicePage_ * kUiComponentPageSize + i;
         if (index >= componentRows_.choices.size()) break;
@@ -217,7 +240,8 @@ void App::renderWeaponComponents() {
     std::string operation = "VIEW CURRENT FIT ONLY";
     if (componentActionSelected_) {
         const auto *a = p.assets.find(componentChoice_);
-        operation = a ? content.item(a->definitionId).displayName : "RESTORE DEFAULT";
+        operation = a ? content.item(a->definitionId).displayName :
+            opticSelected ? "REMOVE OPTIC" : "RESTORE DEFAULT";
     }
     text({844, 176, 358, 38}, operation, 14);
     const bool english = uiTextRenderer_.language() == UiLanguage::English;
@@ -256,6 +280,10 @@ void App::renderWeaponComponents() {
     if (const auto *weapon = p.assets.find(componentWeapon_)) add("WEAPON NAME: " + localizeUiText(uiTextRenderer_.language(), content.item(weapon->definitionId).displayName));
     if (componentActionSelected_) {
         if (const auto *part = p.assets.find(componentChoice_)) add("SELECTED PART: " + localizeUiText(uiTextRenderer_.language(), content.item(part->definitionId).displayName));
+    }
+    if (opticSelected && componentRows_.current) {
+        const auto mode = plan && plan->canCommit ? plan->after.optic : componentRows_.current->optic;
+        add(uiWeaponOpticBehaviorText(mode));
     }
     if (componentRows_.current &&
         (componentRows_.current->acoustics.noiseRadiusMultiplier < 1.0F ||

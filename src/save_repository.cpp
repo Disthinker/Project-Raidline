@@ -32,20 +32,11 @@ namespace
 {
 using Json = nlohmann::json;
 
-constexpr std::string_view kWeaponHandlingContentVersion{
-    "raid-weapon-handling-content-74"};
-
 AssetInstanceId parseWeaponHandlingAssetId(const Json &value)
 {
     if (!value.is_number_unsigned() || value.get<AssetInstanceId>() == 0U)
         throw std::invalid_argument{"weapon handling parent must be a nonzero uint64 integer"};
     return value.get<AssetInstanceId>();
-}
-
-bool runnerCompatibleContent(std::string_view version) noexcept
-{
-    return version == "raid-runner-infected-content-73" ||
-        version == kWeaponHandlingContentVersion;
 }
 
 std::string_view fireModeName(WeaponFireMode mode)
@@ -2961,7 +2952,7 @@ std::string serializeProfileEnvelope(
 {
     if (profile.pendingRaid && profile.pendingRaid->rulesVersion == kRaidRunnerRulesVersion &&
         !runnerCompatibleContent(contentVersion))
-        throw std::invalid_argument{"runner Raid requires compatible content 73 or 74"};
+        throw std::invalid_argument{"runner Raid requires compatible content 73, 74 or 75"};
     if (schemaVersion != 1 && schemaVersion != 2 &&
         schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 &&
         schemaVersion != 6 && schemaVersion != 7 && schemaVersion != 8 &&
@@ -3155,7 +3146,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             (schemaVersion >= 57 && contentVersion == "base-field-medical-supplies-content-70") ||
             (schemaVersion >= 57 && contentVersion == "weapon-suppressor-acoustics-content-71") ||
             (schemaVersion >= 57 && contentVersion == "raid-fragmentation-grenade-content-72") ||
-            (schemaVersion >= 58 && contentVersion == "raid-runner-infected-content-73");
+            (schemaVersion >= 58 && contentVersion == "raid-runner-infected-content-73") ||
+            (schemaVersion >= 59 && contentVersion == kWeaponHandlingContentVersion);
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -5087,11 +5079,35 @@ SaveWriteResult SaveRepository::save(
     const auto sourceMetadata = [&](const std::filesystem::path &path)
         -> const std::optional<SaveEnvelopeMetadata> &
     { return path == primaryPath_ ? primaryMetadata : backupMetadata; };
+    const auto usesWeaponHandling = [](std::string_view version)
+    {
+        return version == kWeaponHandlingContentVersion || version == kOpticsContentVersion;
+    };
+    const auto isPreOpticsContentSource = [&](const std::filesystem::path &path, bool valid)
+    {
+        const auto &source = sourceMetadata(path);
+        return valid && contentVersion == kOpticsContentVersion &&
+            source && source->contentVersion != kOpticsContentVersion;
+    };
+    if (isPreOpticsContentSource(primaryPath_, validPrimary) ||
+        isPreOpticsContentSource(backupPath_, validBackup))
+    {
+        // Installed optics reuse the existing component location. Preserve both
+        // actual input slots before writing the new content version.
+        const auto preserved = preserveLayoutMigrationSources(
+            validPrimary ? SaveLoadStatus::LoadedPrimary : SaveLoadStatus::RecoveredBackup,
+            "raid-optics-loot-gunsmith-v1");
+        if (!preserved.succeeded)
+        {
+            std::filesystem::remove(temporaryPath_, error);
+            return {false, preserved.message};
+        }
+    }
     const auto isPrePlayerSystemsSource = [&](const std::filesystem::path &path, bool valid)
     {
-        if (!valid || contentVersion != kWeaponHandlingContentVersion) return false;
+        if (!valid || !usesWeaponHandling(contentVersion)) return false;
         const auto &source = sourceMetadata(path);
-        return source && (source->schemaVersion < 60U || source->contentVersion != contentVersion);
+        return source && (source->schemaVersion < 60U || !usesWeaponHandling(source->contentVersion));
     };
     if (isPrePlayerSystemsSource(primaryPath_, validPrimary) ||
         isPrePlayerSystemsSource(backupPath_, validBackup))
@@ -5107,9 +5123,9 @@ SaveWriteResult SaveRepository::save(
     }
     const auto isPreWeaponHandlingSource = [&](const std::filesystem::path &path, bool valid)
     {
-        if (!valid || contentVersion != kWeaponHandlingContentVersion) return false;
+        if (!valid || !usesWeaponHandling(contentVersion)) return false;
         const auto &source = sourceMetadata(path);
-        return source && (source->schemaVersion < 59U || source->contentVersion != contentVersion);
+        return source && (source->schemaVersion < 59U || !usesWeaponHandling(source->contentVersion));
     };
     if (isPreWeaponHandlingSource(primaryPath_, validPrimary) ||
         isPreWeaponHandlingSource(backupPath_, validBackup))
@@ -5169,7 +5185,7 @@ SaveWriteResult SaveRepository::save(
                        contentVersion != "weapon-suppressor-acoustics-content-71" &&
                        contentVersion != "raid-fragmentation-grenade-content-72" &&
                        contentVersion != "raid-runner-infected-content-73" &&
-                       contentVersion != kWeaponHandlingContentVersion))
+                       !usesWeaponHandling(contentVersion)))
             return false;
         const auto &source = sourceMetadata(path);
         if (!source) return false;
@@ -5178,7 +5194,8 @@ SaveWriteResult SaveRepository::save(
             return sourceContent != contentVersion && sourceContent != "base-field-medical-supplies-content-70" &&
                 sourceContent != "weapon-suppressor-acoustics-content-71" &&
                 sourceContent != "raid-fragmentation-grenade-content-72" &&
-                sourceContent != "raid-runner-infected-content-73";
+                sourceContent != "raid-runner-infected-content-73" &&
+                !usesWeaponHandling(sourceContent);
         }
     };
     if (isPreFieldMedicalContentSource(primaryPath_, validPrimary) ||
@@ -5202,7 +5219,7 @@ SaveWriteResult SaveRepository::save(
         if (!valid || (contentVersion != "weapon-suppressor-acoustics-content-71" &&
                        contentVersion != "raid-fragmentation-grenade-content-72" &&
                        contentVersion != "raid-runner-infected-content-73" &&
-                       contentVersion != kWeaponHandlingContentVersion))
+                       !usesWeaponHandling(contentVersion)))
             return false;
         const auto &source = sourceMetadata(path);
         if (!source) return false;
@@ -5210,7 +5227,8 @@ SaveWriteResult SaveRepository::save(
             const auto &sourceContent = source->contentVersion;
             return sourceContent != contentVersion && sourceContent != "weapon-suppressor-acoustics-content-71" &&
                 sourceContent != "raid-fragmentation-grenade-content-72" &&
-                sourceContent != "raid-runner-infected-content-73";
+                sourceContent != "raid-runner-infected-content-73" &&
+                !usesWeaponHandling(sourceContent);
         }
     };
     if (isPreSuppressorContentSource(primaryPath_, validPrimary) ||
@@ -5232,14 +5250,15 @@ SaveWriteResult SaveRepository::save(
     {
         if (!valid || (contentVersion != "raid-fragmentation-grenade-content-72" &&
                        contentVersion != "raid-runner-infected-content-73" &&
-                       contentVersion != kWeaponHandlingContentVersion))
+                       !usesWeaponHandling(contentVersion)))
             return false;
         const auto &source = sourceMetadata(path);
         if (!source) return false;
         {
             const auto &sourceContent = source->contentVersion;
             return sourceContent != contentVersion && sourceContent != "raid-fragmentation-grenade-content-72" &&
-                sourceContent != "raid-runner-infected-content-73";
+                sourceContent != "raid-runner-infected-content-73" &&
+                !usesWeaponHandling(sourceContent);
         }
     };
     if (isPreGrenadeContentSource(primaryPath_, validPrimary) ||

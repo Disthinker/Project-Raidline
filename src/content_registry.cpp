@@ -525,6 +525,7 @@ namespace
         const auto burstCount = burst.get<std::int64_t>();
         if (burstCount < 0 || burstCount > 3) fail("invalid burst shot count");
         result.burstShotCount = static_cast<std::uint32_t>(burstCount);
+        result.providesOpticMount = found->value("provides_optic_mount", false);
         return result;
     }
 
@@ -855,7 +856,7 @@ ContentRegistry ContentRegistry::fromJson(
             registry.contentVersion_ == "base-fortification-foundation-content-61" ||
             registry.contentVersion_ == "hospital-raid-theme-content-62" ||
             registry.contentVersion_ == "weapon-components-content-63" ||
-            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71" || registry.contentVersion_ == "raid-fragmentation-grenade-content-72" || (registry.contentVersion_ == "raid-runner-infected-content-73" || registry.contentVersion_ == "raid-weapon-handling-content-74"));
+            (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71" || registry.contentVersion_ == "raid-fragmentation-grenade-content-72" || runnerCompatibleContent(registry.contentVersion_));
 
         if (root.contains("fortifications"))
         {
@@ -881,7 +882,7 @@ ContentRegistry ContentRegistry::fromJson(
         if ((registry.contentVersion_ == "base-fortification-foundation-content-61" ||
              registry.contentVersion_ == "hospital-raid-theme-content-62" ||
              registry.contentVersion_ == "weapon-components-content-63" ||
-             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71" || registry.contentVersion_ == "raid-fragmentation-grenade-content-72" || (registry.contentVersion_ == "raid-runner-infected-content-73" || registry.contentVersion_ == "raid-weapon-handling-content-74"))) &&
+             (registry.contentVersion_ == "raid-armored-infected-content-64" || registry.contentVersion_ == "weapon-flashlight-battery-content-65" || registry.contentVersion_ == "quick-melee-self-defense-content-66" || registry.contentVersion_ == "raid-noise-decoy-content-67" || registry.contentVersion_ == "ui-unified-chest-rig-content-68" || registry.contentVersion_ == "raid-credential-extraction-content-69" || registry.contentVersion_ == "base-field-medical-supplies-content-70" || registry.contentVersion_ == "weapon-suppressor-acoustics-content-71" || registry.contentVersion_ == "raid-fragmentation-grenade-content-72" || runnerCompatibleContent(registry.contentVersion_))) &&
             !registry.fortifications_.contains(kWoodBarricadeDefinition))
             fail("wood barricade definition is required by content 61");
 
@@ -930,7 +931,7 @@ ContentRegistry ContentRegistry::fromJson(
             }
             if (!registry.enemyCombatDefinitions_.contains(ordinaryInfectedDefinitionId()))
                 fail("ordinary infected combat definition is required");
-            if ((registry.contentVersion_ == "raid-runner-infected-content-73" || registry.contentVersion_ == "raid-weapon-handling-content-74") &&
+            if (runnerCompatibleContent(registry.contentVersion_) &&
                 !registry.enemyCombatDefinitions_.contains(EnemyCombatDefinitionId{"enemy.infected.runner"}))
                 fail("runner combat definition is required by content 73");
         }
@@ -1753,7 +1754,15 @@ ContentRegistry ContentRegistry::fromJson(
                 else if (slot == "grip") component.slot = WeaponComponentSlot::Grip;
                 else if (slot == "light") component.slot = WeaponComponentSlot::Light;
                 else if (slot == "muzzle") component.slot = WeaponComponentSlot::Muzzle;
+                else if (slot == "optic") component.slot = WeaponComponentSlot::Optic;
                 else fail("unknown weapon component slot");
+                if (c.contains("optic_mode"))
+                {
+                    const auto mode = requiredString(c, "optic_mode");
+                    if (mode == "low") component.optic = WeaponOpticMode::Low;
+                    else if (mode == "high") component.optic = WeaponOpticMode::High;
+                    else fail("unknown weapon optic mode");
+                }
                 component.providesUnderbarrel = c.value("provides_underbarrel", false);
                 component.requiresUnderbarrel = c.value("requires_underbarrel", false);
                 component.providesLightMount = c.value("provides_light_mount", false);
@@ -1777,6 +1786,12 @@ ContentRegistry ContentRegistry::fromJson(
                     !std::isfinite(acoustics.outdoorTailGain) || acoustics.outdoorTailGain < 0.0F || acoustics.outdoorTailGain > 1.0F ||
                     (component.slot != WeaponComponentSlot::Muzzle && acoustics != WeaponAcousticsDefinition{}))
                     fail("invalid weapon component acoustics");
+                const bool optic = component.slot == WeaponComponentSlot::Optic;
+                if (optic != (component.optic != WeaponOpticMode::None) ||
+                    (optic && (definition.inventoryWidthCells != 1 || definition.inventoryHeightCells != 1 ||
+                     definition.marketRecyclePrice != 0U || component.recoilControl || component.stability ||
+                     component.handlingSpeed || component.ergonomics || component.accuracy || component.effectiveRange != 0.0F)))
+                    fail("invalid weapon optic capability");
                 if (definition.category != ItemCategory::WeaponComponent || definition.maxStackSize != 1 ||
                     (component.providesUnderbarrel && component.slot != WeaponComponentSlot::Handguard) ||
                     (component.providesLightMount && component.slot != WeaponComponentSlot::Handguard) ||
@@ -1950,7 +1965,8 @@ ContentRegistry ContentRegistry::fromJson(
                     CaliberDefinitionId{*caliber}};
             }
 
-            if (definition.marketBuyPrice != 0)
+            if (definition.marketBuyPrice != 0 &&
+                (!definition.weaponComponent || definition.weaponComponent->slot != WeaponComponentSlot::Optic))
             {
                 const std::uint32_t expectedRecyclePrice = std::max(
                     1U,
@@ -2151,15 +2167,29 @@ ContentRegistry ContentRegistry::fromJson(
 
         for (const ItemDefinition &definition : registry.items_)
         {
-            if (definition.weaponComponent &&
-                !registry.item(definition.weaponComponent->weaponDefinitionId).weaponUse)
-                fail("component platform must be a weapon");
+            if (definition.weaponComponent)
+            {
+                const auto &platform = registry.item(definition.weaponComponent->weaponDefinitionId).weaponUse;
+                if (!platform)
+                    fail("component platform must be a weapon");
+                if (definition.weaponComponent->slot == WeaponComponentSlot::Optic && !platform->providesOpticMount)
+                    fail("optic platform requires an upper receiver mount");
+            }
 
             if (definition.marketBuyPrice > 0U)
             {
                 registry.fixedSupplyItemIds_.push_back(
                     definition.definitionId);
             }
+        }
+
+        if (registry.contentVersion_ == kOpticsContentVersion)
+        {
+            const auto &fixedOptic = registry.item(kFixedRaidOpticId);
+            if (!fixedOptic.weaponComponent ||
+                fixedOptic.weaponComponent->optic != WeaponOpticMode::High ||
+                fixedOptic.marketBuyPrice != 0U)
+                fail("fixed Raid optic requires a non-purchasable high optic definition");
         }
 
         for (const ItemDefinition &definition : registry.items_)
@@ -2879,7 +2909,7 @@ ContentRegistry ContentRegistry::fromJson(
                             std::move(archetype));
                     }
                 }
-                if ((registry.contentVersion_ == "raid-runner-infected-content-73" || registry.contentVersion_ == "raid-weapon-handling-content-74") &&
+                if (runnerCompatibleContent(registry.contentVersion_) &&
                     definition.id == MapDefinitionId{"map.raid.frontier_exchange"} &&
                     std::none_of(value.encounterArchetypes.begin(), value.encounterArchetypes.end(),
                         [](const auto &group) { return group.runnerMemberDefinition.has_value(); }))

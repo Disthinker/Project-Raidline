@@ -43,12 +43,16 @@ struct RaidObservationKey
     }
 };
 
+enum class WeaponOpticMode;
+
 struct RaidSightParameters
 {
     float angleDegrees{}, maximumDistance{};
 };
 [[nodiscard]] RaidSightParameters
     raidSightParameters(RaidLightEnvironment) noexcept;
+[[nodiscard]] RaidSightParameters
+    raidOpticSightParameters(RaidSightParameters, RaidLightEnvironment, WeaponOpticMode) noexcept;
 
 // Owned, transient observation data. No actor/asset pointers or save identity.
 // The simulation builds it from its current space; clients never grant access.

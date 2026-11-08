@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-weapon-handling-content-74",
+  "content_version": "raid-optics-loot-gunsmith-content-75",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -574,6 +574,44 @@
       }
     },
     {
+      "id": "item.component.optic_1_5x_5_45",
+      "display_name": "1.5x Optic",
+      "category": "weapon_component",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 160,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 32, "y": 24}, "pickup_size": {"x": 36, "y": 28}},
+      "inventory_texture": "items/inventory/unpublished_component.png",
+      "world_texture": "items/world/unpublished_component.png",
+      "market_buy_price": 120,
+      "market_recycle_price": 0,
+      "weapon_component": {
+        "weapon": "item.weapon.rifle_5_45_service",
+        "slot": "optic",
+        "optic_mode": "low"
+      }
+    },
+    {
+      "id": "item.component.optic_4x_5_45",
+      "display_name": "4x Optic",
+      "category": "weapon_component",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 300,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 32, "y": 24}, "pickup_size": {"x": 36, "y": 28}},
+      "inventory_texture": "items/inventory/unpublished_component.png",
+      "world_texture": "items/world/unpublished_component.png",
+      "market_buy_price": 0,
+      "market_recycle_price": 0,
+      "weapon_component": {
+        "weapon": "item.weapon.rifle_5_45_service",
+        "slot": "optic",
+        "optic_mode": "high"
+      }
+    },
+    {
       "id": "item.component.precision_barrel",
       "display_name": "5.45 Precision Barrel",
       "category": "weapon_component",
@@ -1044,7 +1082,7 @@
       "compatible_ammunition": "item.ammunition.5_45x39_standard",
       "compatible_magazine": "item.magazine.5_45x39_30",
       "weapon_condition": {"maximum_durability_centi": 10000, "wear_per_successful_shot_centi": 8, "reliability_multiplier_basis_points": 8800, "malfunctions": [{"type": "stovepipe", "weight": 100}]},
-      "weapon_use": {"supported_fire_modes": ["semi_automatic", "automatic"], "default_fire_mode": "automatic", "burst_shot_count": 0, "automatic_fire": true, "shot_interval_seconds": 0.11, "recoil_control": 68, "stability": 72, "handling_speed": 56, "ergonomics": 70, "accuracy": 78, "base_damage": 5, "effective_range": 820.0, "maximum_range": 1120.0, "logical_ballistic_speed": 8400.0}
+      "weapon_use": {"supported_fire_modes": ["semi_automatic", "automatic"], "default_fire_mode": "automatic", "burst_shot_count": 0, "automatic_fire": true, "shot_interval_seconds": 0.11, "recoil_control": 68, "stability": 72, "handling_speed": 56, "ergonomics": 70, "accuracy": 78, "base_damage": 5, "effective_range": 820.0, "maximum_range": 1120.0, "logical_ballistic_speed": 8400.0, "provides_optic_mount": true}
     },
     {
       "id": "item.weapon.dmr_7_62x51_service",

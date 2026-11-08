@@ -218,6 +218,10 @@ public:
     [[nodiscard]] std::optional<BaseCorpseRecord> nearbyBaseCorpse() const;
     [[nodiscard]] InventoryPlan queryBaseCorpseInspection(std::string_view corpseId) const;
     void cancelPlayerControlIntent() noexcept;
+    void cancelWeaponOptics() noexcept;
+    // The client opens containers before update(); this non-mutating query
+    // uses the same scope and F-release policy as the session update.
+    [[nodiscard]] bool blocksInteractionForOptics(const GameplayInput &, float deltaTime) const noexcept;
     [[nodiscard]] bool preparePlayerActivityBoundary(bool requireFinishedThrowables = true);
     [[nodiscard]] bool restoreBasePlayerRuntime(BaseWorld &);
 
@@ -673,6 +677,8 @@ private:
     void advancePlayerAction(const GameplayInput &, float deltaTime, float weaponActionDelta);
     void preparePlayerCombatInput(GameplayInput &, const GameplayInput &, float,
         const std::optional<WeaponHandlingParameters> &);
+    void gateOpticInteraction(GameplayInput &input, GameplayInput &simulationInput, float deltaTime) noexcept;
+    [[nodiscard]] bool willOpenHighOptic(const GameplayInput &, float deltaTime) const noexcept;
     void preparePlayerLightInput(const GameplayInput &, float);
     void finishBasePlayerFrame(const GameplayInput &, float, float);
     void recordBaseEnemyDeaths(ProfileState &);
@@ -691,6 +697,7 @@ private:
     float medicalTickAccumulatorSeconds_{};
     bool fireSuppressedUntilRelease_{};
     bool sprintSuppressedUntilRelease_{};
+    bool opticInteractionNeedsRelease_{};
     bool sprintFireIntentPending_{};
     float sprintFireReadyRemaining_{};
     EquipmentSlotKind activeWeaponSlot_{EquipmentSlotKind::PrimaryWeapon};

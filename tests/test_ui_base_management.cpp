@@ -3,6 +3,7 @@
 #include "test_temp_directory.h"
 #include "ui_base_management_presentation.h"
 #include "ui_base_defense_presentation.h"
+#include "raid_camera.h"
 #include "base_siege_warning_layout.h"
 #include <gtest/gtest.h>
 #include <SDL3_image/SDL_image.h>
@@ -25,7 +26,24 @@ struct UiBaseManagementTestAccess {
     }
     static void frame(App &a) { a.processEvents();a.update(0);a.input_.endFrame(); settle(a); }
     static void attach(App &a,SDL_Renderer *r,float scale){a.renderer_=r;ASSERT_TRUE(a.uiTextRenderer_.initialize(r));a.uiTextRenderer_.setRasterScale(scale);}
-    static void detach(App &a){a.uiTextRenderer_.shutdown();a.renderer_=nullptr;}
+    static void detach(App &a){
+        a.indoorInformationLayer_.reset();
+        a.indoorShadowMask_.reset();
+        a.uiTextRenderer_.shutdown();
+        a.renderer_=nullptr;
+    }
+    static void renderWalkingBase(App &a) { a.renderBaseWorld(); a.renderAimCrosshair(); }
+    static SDL_FRect interactionBox(App &a) { return a.baseBottomHudLayout().interaction; }
+    static WeaponOpticMode optic(App &a) { return a.visibleWeaponOptic(); }
+    static void rightMouse(App &a, bool pressed) {
+        SDL_Event event{};
+        event.type = pressed ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+        event.button.button = SDL_BUTTON_RIGHT;
+        event.button.down = pressed;
+        a.input_.handleEvent(event);
+    }
+    static Vec2 walkingCamera(App &a) { return a.baseWorldCameraOffset(); }
+    static const std::string &message(const App &a) { return a.uiMessage_; }
     static void reset(App &a){
         a.baseConstructionPanelOpen_=true;a.baseConstructionPage_=BaseConstructionPage::Purchase;a.baseConstructionCatalogPage_=0;
         a.fortificationBuildUi_={};a.selectedBaseFixedFacility_.reset();a.selectedBasePlacedAssetId_.reset();
@@ -557,4 +575,88 @@ TEST_F(UiBaseManagementTest,WorkPointGlyphWarningsUseOnlyTheMatchingOriginalFact
     const auto blocked=paint({},{},{});flow.status=BaseResourceFlowWorldStatus::Prepared;
     EXPECT_EQ(paint({},{},flow),blocked)<<"a resource marker must not hide the service's blocked state";
     EXPECT_EQ(profileStateFingerprint(profile()),before);
+}
+
+TEST_F(UiBaseManagementTest, HighOpticKeepsBaseFacilityPromptOutOfPeripheralView) {
+    attach(1920, 1080);
+    A::closeBuild(*app);
+    auto &world = A::flow(*app).baseWorld();
+    const auto facility = std::find_if(world.facilities().begin(), world.facilities().end(),
+        [](const auto &candidate) { return candidate.active && candidate.kind == BaseFacilityKind::Supply; });
+    ASSERT_NE(facility, world.facilities().end());
+    const auto entrance = baseFacilityAccessGeometry(*facility).interactionZone;
+    const Vec2 playerSize = world.playerSize();
+    const Vec2 playerCenter{entrance.position.x + entrance.size.x * 0.5F,
+                            entrance.position.y + entrance.size.y * 0.5F};
+    ASSERT_TRUE(world.restorePlayerBody(
+        {playerCenter.x - playerSize.x * 0.5F, playerCenter.y - playerSize.y * 0.5F},
+        {1, 0}, 0, 0));
+    ASSERT_EQ(world.interactableFacility(), BaseFacilityKind::Supply);
+    A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+    const auto draw = [&] {
+        clear();
+        A::renderWalkingBase(*app);
+        ASSERT_TRUE(SDL_RenderPresent(renderer));
+    };
+    const auto interaction = A::interactionBox(*app);
+    draw();
+    EXPECT_GT(bright(interaction), 10);
+
+    auto weapon = *content.item(ItemDefinitionId{"item.weapon.rifle_5_45_service"}).weaponUse;
+    weapon.optic = WeaponOpticMode::High;
+    world.configureWeaponFire(weapon);
+    A::rightMouse(*app, true);
+    constexpr Vec2 viewport{1280, 720};
+    const Vec2 camera = A::walkingCamera(*app);
+    const Vec2 target{playerCenter.x + 160.0F, playerCenter.y - 20.0F};
+    GameplayInput input;
+    input.aimWorldPosition = target;
+    input.aimViewport = Rect{camera, viewport};
+    input.aimWorldBounds = raidReticleWorldBounds(camera, viewport);
+    static_cast<void>(world.update(input, 0.0F));
+    const auto actual = world.weaponAimWorldPosition();
+    input.aimMotionDelta = Vec2{target.x - actual.x, target.y - actual.y};
+    static_cast<void>(world.update(input, 0.0F));
+    input.aimMotionDelta = Vec2{};
+    input.aimDownSights = true;
+    for (int frame = 0; frame < 64; ++frame)
+        static_cast<void>(world.update(input, 1.0F / 60.0F));
+    ASSERT_EQ(A::optic(*app), WeaponOpticMode::High);
+
+    ASSERT_TRUE(world.observation().valid);
+    ASSERT_EQ(world.interactableFacility(), BaseFacilityKind::Supply);
+    ASSERT_TRUE(world.weaponOpticView());
+    const auto &view = *world.weaponOpticView();
+    const auto reticle = view.worldToScreen(world.weaponAimWorldPosition());
+    ASSERT_LT(reticle.y + view.lensRadius, interaction.y);
+
+    draw();
+    EXPECT_NE(A::message(*app), "RAID OBSERVATION UNAVAILABLE");
+    EXPECT_EQ(bright(interaction), 0);
+    const Vec2 peripheral{40, 360};
+    ASSERT_GT(std::hypot(peripheral.x - reticle.x, peripheral.y - reticle.y),
+              view.lensRadius + 4.0F);
+    std::array<Uint8, 4> rgba{};
+    ASSERT_TRUE(SDL_ReadSurfacePixel(surface, 60, 540, &rgba[0], &rgba[1], &rgba[2], &rgba[3]));
+    EXPECT_EQ(rgba, (std::array<Uint8, 4>{0, 0, 0, 255}));
+    if (const char *output = std::getenv("RAIDLINE_UI_BASE_OPTIC_QA_DIR")) {
+        const std::filesystem::path directory{output};
+        std::filesystem::create_directories(directory);
+        ASSERT_TRUE(IMG_SavePNG(surface, (directory / "base-high-optic-v2-1920-zh.png").string().c_str()));
+    }
+
+    A::rightMouse(*app, false);
+    input.aimDownSights = false;
+    static_cast<void>(world.update(input, 1.0F / 60.0F));
+    ASSERT_EQ(A::optic(*app), WeaponOpticMode::None);
+    ASSERT_TRUE(world.weaponOpticView());
+    EXPECT_GT(world.weaponOpticView()->transitionWeight, 0.0F);
+    EXPECT_LT(world.weaponOpticView()->transitionWeight, 1.0F);
+    draw();
+    EXPECT_GT(bright(interaction), 10);
+    for (int frame = 0; frame < 64 && world.weaponOpticView(); ++frame)
+        static_cast<void>(world.update(input, 1.0F / 60.0F));
+    EXPECT_FALSE(world.weaponOpticView());
+    draw();
+    EXPECT_GT(bright(interaction), 10);
 }

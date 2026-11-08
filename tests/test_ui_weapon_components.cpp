@@ -55,7 +55,8 @@ namespace {
 using A = UiWeaponComponentsTestAccess;
 using Control = UiComponentControl;
 const ItemDefinitionId rifle{"item.weapon.rifle_5_45_service"}, barrel{"item.component.precision_barrel"},
-    rail{"item.component.rail_handguard"}, grip{"item.component.vertical_grip"};
+    rail{"item.component.rail_handguard"}, grip{"item.component.vertical_grip"},
+    lowOptic{"item.component.optic_1_5x_5_45"}, highOptic{"item.component.optic_4x_5_45"};
 Vec2 center(SDL_FRect r) { return {r.x + r.w / 2, r.y + r.h / 2}; }
 void pointer(Vec2 p, bool down) {
     SDL_Event e{}; e.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
@@ -351,10 +352,10 @@ TEST_F(UiWeaponComponentsTest, EmptyWeaponListIsReadableAndDoesNotSendEmptyComma
     EXPECT_FALSE(A::action(*app)); EXPECT_EQ(profileStateFingerprint(profile()), before);
 }
 
-TEST_F(UiWeaponComponentsTest, EverySlotIncludingMuzzleHasItsOwnHitTargetAndKeepsBrowsingReadOnly) {
+TEST_F(UiWeaponComponentsTest, EverySlotIncludingOpticHasItsOwnHitTargetAndKeepsBrowsingReadOnly) {
     const auto before = profileStateFingerprint(profile());
     const auto &rows = A::rows(*app);
-    ASSERT_EQ(rows.installed.size(), 5U);
+    ASSERT_EQ(rows.installed.size(), 6U);
     for (std::size_t i = 0; i < kUiComponentSlotCount; ++i) {
         const auto box = uiComponentSlot(i);
         const auto hit = hitUiWeaponComponents(center(box), rows, 0, 0, std::nullopt);
@@ -368,6 +369,7 @@ TEST_F(UiWeaponComponentsTest, EverySlotIncludingMuzzleHasItsOwnHitTargetAndKeep
         EXPECT_FALSE(A::action(*app));
     }
     EXPECT_EQ(static_cast<std::size_t>(WeaponComponentSlot::Muzzle), 4U);
+    EXPECT_EQ(static_cast<std::size_t>(WeaponComponentSlot::Optic), 5U);
     control(Control::Confirm);
     EXPECT_EQ(profileStateFingerprint(profile()), before);
 }
@@ -414,4 +416,87 @@ TEST_F(UiWeaponComponentsTest, SuppressorDetailsAndShortNamesAreChineseAndUseDec
     EXPECT_NE(std::find(summary.begin(), summary.end(), "SHOT NOISE RANGE 50%"), summary.end());
     EXPECT_NE(std::find(summary.begin(), summary.end(), "HANDLING -8"), summary.end());
     EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, "SHOT NOISE RANGE 50%"), "枪声范围 50%");
+}
+
+TEST_F(UiWeaponComponentsTest, OpticPreviewSwapAndRemovalKeepInstanceIdentity) {
+    const auto weapon = find(rifle);
+    const auto low = create(lowOptic);
+    const auto high = create(highOptic);
+    ASSERT_NE(low, 0U);
+    ASSERT_NE(high, 0U);
+    A::open(*app, weapon);
+    slot(WeaponComponentSlot::Optic);
+
+    A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+    const auto &choices = A::rows(*app).choices;
+    ASSERT_EQ(choices.size(), 3U);
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, choices[0].name), "卸下瞄具");
+    EXPECT_EQ(choices[1].id, low);
+    EXPECT_EQ(choices[1].name, "1.5 倍瞄具");
+    EXPECT_EQ(choices[2].id, high);
+    EXPECT_EQ(choices[2].name, "4 倍瞄具");
+
+    const auto before = profileStateFingerprint(profile());
+    select(low);
+    ASSERT_TRUE(A::preview(*app)->canCommit);
+    EXPECT_EQ(A::preview(*app)->after.optic, WeaponOpticMode::Low);
+    EXPECT_EQ(profileStateFingerprint(profile()), before);
+    control(Control::Confirm);
+    EXPECT_EQ(A::rows(*app).installed[static_cast<std::size_t>(WeaponComponentSlot::Optic)], low);
+    EXPECT_EQ(std::get<InstalledWeaponComponentLocation>(profile().assets.find(low)->location).weaponAssetId, weapon);
+
+    select(high);
+    ASSERT_TRUE(A::preview(*app)->canCommit);
+    EXPECT_EQ(A::preview(*app)->after.optic, WeaponOpticMode::High);
+    control(Control::Confirm);
+    EXPECT_EQ(A::rows(*app).installed[static_cast<std::size_t>(WeaponComponentSlot::Optic)], high);
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(profile().assets.find(low)->location));
+
+    select(0);
+    ASSERT_TRUE(A::preview(*app)->canCommit);
+    EXPECT_EQ(A::preview(*app)->after.optic, WeaponOpticMode::None);
+    control(Control::Confirm);
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(profile().assets.find(high)->location));
+    EXPECT_TRUE(validateProfileState(profile(), content).valid);
+}
+
+TEST_F(UiWeaponComponentsTest, OpticLabelsAndPreviewFitAtSmallAndLargeRasterScales) {
+    const auto high = create(highOptic);
+    ASSERT_NE(high, 0U);
+    const auto opticBox = uiComponentSlot(static_cast<std::size_t>(WeaponComponentSlot::Optic));
+    for (const UiWindowSize size : {UiWindowSize{1024, 576}, UiWindowSize{1600, 900}, UiWindowSize{1920, 1080}}) {
+        for (const auto language : {UiLanguage::SimplifiedChinese, UiLanguage::English}) {
+            detach();
+            attach(size.width, size.height);
+            A::text(*app).setLanguage(language);
+            A::open(*app, find(rifle));
+            slot(WeaponComponentSlot::Optic);
+            for (const auto label : {"OPTIC", "NO OPTIC", "1.5×", "4×"}) {
+                const auto localized = localizeUiText(language, label);
+                EXPECT_LE(A::text(*app).measure(localized, 12), opticBox.w - 4) << localized;
+            }
+            const auto suffix = std::to_string(size.width) + (language == UiLanguage::SimplifiedChinese ? "-zh" : "-en");
+            draw("optic-empty-" + suffix);
+            select(high);
+            ASSERT_TRUE(A::preview(*app)->canCommit);
+            draw("optic-preview-" + suffix);
+        }
+    }
+}
+
+TEST_F(UiWeaponComponentsTest, OpticHoverUsesLocalizedNameAndModeFromDefinition) {
+    for (const auto &id : {lowOptic, highOptic}) {
+        const auto &definition = content.item(id);
+        AssetRecord part;
+        part.definitionId = id;
+        part.quantity = 1;
+        const auto summary = projectUiItemSummary(part, definition);
+        const auto behavior = uiWeaponOpticBehaviorText(definition.weaponComponent->optic);
+        EXPECT_NE(std::find(summary.begin(), summary.end(), behavior), summary.end());
+        EXPECT_NE(std::find(summary.begin(), summary.end(), "5.45 SERVICE RIFLE ONLY"), summary.end());
+        EXPECT_EQ(compactUiItemName(definition, UiLanguage::SimplifiedChinese),
+                  id == lowOptic ? "1.5 倍瞄具" : "4 倍瞄具");
+        EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, behavior),
+                  id == lowOptic ? "开阔前探 · 收紧散布 · 弱曳光" : "远探圆镜 · 收紧散布 · 无曳光");
+    }
 }

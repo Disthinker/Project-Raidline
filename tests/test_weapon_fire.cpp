@@ -374,6 +374,99 @@ TEST(WeaponFireStateTest,
     EXPECT_GT(farthestSampleRadius, expectedRadius * 0.90F);
 }
 
+TEST(WeaponFireStateTest, OpticRadiusIncludesDynamicBloomAndItsOwnReloadMaximum)
+{
+    constexpr float kDistance{500.0F};
+    constexpr Vec2 kDirection{1.0F, 0.0F};
+    constexpr float kRadiansPerDegree{3.14159265358979323846F / 180.0F};
+    for (const float multiplier : {0.75F, 0.60F})
+    {
+        SCOPED_TRACE(multiplier);
+        WeaponFireState mechanical, optic;
+        WeaponFireContext aim;
+        aim.aimDownSightsProgress = 1.0F;
+        aim.aimDistance = kDistance;
+        const auto compareFrame = [&](float deltaTime)
+        {
+            auto opticAim = aim;
+            opticAim.opticSpreadRadiusMultiplier = multiplier;
+            EXPECT_FALSE(mechanical.update(false, kDirection, deltaTime, aim));
+            EXPECT_FALSE(optic.update(false, kDirection, deltaTime, opticAim));
+            EXPECT_NEAR(optic.spreadRadiusAtDistance(kDistance),
+                        mechanical.spreadRadiusAtDistance(kDistance) * multiplier, 0.001F);
+            EXPECT_NEAR(std::tan(optic.contextualMaximumSpreadDegrees() * kRadiansPerDegree),
+                        std::tan(mechanical.contextualMaximumSpreadDegrees() * kRadiansPerDegree) *
+                            multiplier, 0.00001F);
+        };
+
+        compareFrame(0.0F);
+        const float rested = optic.spreadRadiusAtDistance(kDistance);
+        aim.moving = true;
+        aim.reticleControlSpeed = 1600.0F;
+        compareFrame(0.1F);
+        EXPECT_GT(optic.spreadRadiusAtDistance(kDistance), rested);
+
+        aim.forceMaximumSpread = true;
+        compareFrame(0.1F);
+        const float reloadRadius = optic.spreadRadiusAtDistance(kDistance);
+        EXPECT_FLOAT_EQ(optic.spreadDegrees(), optic.contextualMaximumSpreadDegrees());
+        EXPECT_FLOAT_EQ(optic.spreadPresentationFraction(), 1.0F);
+
+        aim.forceMaximumSpread = false;
+        aim.moving = false;
+        aim.reticleControlSpeed = 0.0F;
+        compareFrame(0.5F);
+        EXPECT_LT(optic.spreadRadiusAtDistance(kDistance), reloadRadius);
+
+        EXPECT_FALSE(mechanical.update(false, kDirection, 0.0F, aim));
+        EXPECT_FALSE(optic.update(false, kDirection, 0.0F, aim));
+        EXPECT_FLOAT_EQ(optic.spreadRadiusAtDistance(kDistance),
+                        mechanical.spreadRadiusAtDistance(kDistance));
+    }
+}
+
+TEST(WeaponFireStateTest, ScopedShotDirectionsUseTheSameReducedRadiusAsTheReticle)
+{
+    constexpr float kDistance{500.0F};
+    constexpr Vec2 kDirection{1.0F, 0.0F};
+    constexpr float kRadiansPerDegree{3.14159265358979323846F / 180.0F};
+    for (const float multiplier : {0.75F, 0.60F})
+    {
+        SCOPED_TRACE(multiplier);
+        float farthestSample{};
+        float opticRadius{};
+        for (std::uint64_t seed = 1U; seed <= 128U; ++seed)
+        {
+            WeaponFireConfig config;
+            config.spreadSeed = seed;
+            WeaponFireState mechanical{config}, optic{config};
+            WeaponFireContext aim;
+            aim.aimDownSightsProgress = 1.0F;
+            aim.aimDistance = kDistance;
+            aim.forceMaximumSpread = true;
+            const auto mechanicalShot = mechanical.update(true, kDirection, 0.0F, aim);
+            aim.opticSpreadRadiusMultiplier = multiplier;
+            const auto opticShot = optic.update(true, kDirection, 0.0F, aim);
+            ASSERT_TRUE(mechanicalShot);
+            ASSERT_TRUE(opticShot);
+
+            opticRadius = optic.spreadRadiusAtDistance(kDistance);
+            EXPECT_NEAR(opticRadius,
+                        mechanical.spreadRadiusAtDistance(kDistance) * multiplier, 0.001F);
+            const float sampledOffset = std::atan2(opticShot->direction.y, opticShot->direction.x);
+            EXPECT_TRUE(std::isfinite(sampledOffset));
+            EXPECT_NEAR(sampledOffset, opticShot->spreadOffsetDegrees * kRadiansPerDegree, 0.00001F);
+            const float lateral = std::tan(std::abs(sampledOffset)) * kDistance;
+            EXPECT_LE(lateral, opticRadius + 0.001F);
+            farthestSample = std::max(farthestSample, lateral);
+            EXPECT_NEAR(opticShot->spreadOffsetDegrees / optic.spreadDegreesAtDistance(kDistance),
+                        mechanicalShot->spreadOffsetDegrees / mechanical.spreadDegreesAtDistance(kDistance),
+                        0.00001F);
+        }
+        EXPECT_GT(farthestSample, opticRadius * 0.9F);
+    }
+}
+
 TEST(WeaponFireStateTest, InvalidAimOrDeltaTimeNeverCreatesInvalidState)
 {
     WeaponFireState fire;
@@ -387,6 +480,12 @@ TEST(WeaponFireStateTest, InvalidAimOrDeltaTimeNeverCreatesInvalidState)
         std::numeric_limits<float>::quiet_NaN();
     EXPECT_FALSE(fire.update(
         true, Vec2{1.0F, 0.0F}, 0.0F, invalidDistance));
+    WeaponFireContext invalidOptic;
+    invalidOptic.opticSpreadRadiusMultiplier =
+        std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(fire.update(true, Vec2{1.0F, 0.0F}, 0.0F, invalidOptic));
+    invalidOptic.opticSpreadRadiusMultiplier = 0.0F;
+    EXPECT_FALSE(fire.update(true, Vec2{1.0F, 0.0F}, 0.0F, invalidOptic));
     EXPECT_TRUE(std::isfinite(fire.spreadDegrees()));
     EXPECT_TRUE(fire.update(true, Vec2{1.0F, 0.0F}, 0.0F));
 }

@@ -28,6 +28,7 @@
 #include "pause_menu.h"
 #include "profile_inventory_interaction.h"
 #include "profile_container_presentation.h"
+#include "raid_camera.h"
 #include "raid_pointer_capture.h"
 #include "texture.h"
 #include "ui_text_renderer.h"
@@ -235,6 +236,7 @@ private:
     std::size_t quickWheelVisualIndex_{static_cast<std::size_t>(-1)};
     bool windowHasInputFocus_{true};
     Vec2 pendingRelativeAimMotion_{};
+    bool opticAimBlockedUntilRelease_{};
     GameAudioOutput gameAudio_;
     UiTextRenderer uiTextRenderer_;
     std::filesystem::path settingsPath_;
@@ -767,6 +769,8 @@ private:
         const RaidDeploymentProgress &progress);
     void renderBase();
     void renderBaseWorld();
+    void renderBaseWorldScene(Rect visible, bool terrainOnly, bool drawAvatar = true);
+    void renderBaseWorldInteractionHud();
     void renderBasePlacementPreview();
     void renderBaseConstructionPanel();
     void renderBaseOperationsOverview();
@@ -879,6 +883,7 @@ private:
         std::size_t animationFrame);
     void renderPlayerPreview(const SDL_FRect &bounds);
     void renderRaidScreen();
+    void renderUnscopedRaidWorld();
     [[nodiscard]] bool ensureIndoorObservationTargets();
     [[nodiscard]] bool renderIndoorInformationLayer(const SDL_Rect &worldViewport);
     [[nodiscard]] Vec2 baseWorldCameraOffset() const noexcept;
@@ -887,14 +892,16 @@ private:
     void renderRaidTacticalMap();
     void renderScreenPrimaryButton(
         const char *label);
-    void renderBackground(bool drawOutdoorDetails = true);
+    void renderBackground(bool drawOutdoorDetails = true, bool terrainOnly = false,
+                          std::optional<Rect> worldView = std::nullopt);
     SDL_FRect worldLabelBounds(float x, float y, std::string_view label);
     void renderWorldLabel(float x, float y, std::string_view label);
     void renderExtractionPoint();
     void renderRaidCredentialDocuments();
     void renderRaidSpacePortal();
     void renderStorageCabinet();
-    void renderBallisticBlockers();
+    void renderBallisticBlockers(bool terrainOnly = false,
+                                 std::optional<Rect> worldView = std::nullopt);
     void renderGroundItems();
     void renderAlphaRaidLoot();
     void renderEnemyAttackTelegraphs();
@@ -905,6 +912,13 @@ private:
     [[nodiscard]] Vec2 raidWorldCameraOffset() const noexcept;
     [[nodiscard]] Vec2 raidWorldScreenShakePixels() const noexcept;
     void renderAimCrosshair();
+    void updateWeaponOpticPointerGate();
+    [[nodiscard]] WeaponOpticMode visibleWeaponOptic() const noexcept;
+    [[nodiscard]] const WeaponOpticViewProjection *visibleWeaponOpticView() const noexcept;
+    [[nodiscard]] bool renderWeaponOpticWorld(const WeaponOpticViewProjection &,
+        bool inBase, Vec2 aim, Vec2 worldSize);
+    void renderRaidOpticScene(Rect visible, bool terrainOnly, bool drawAvatar);
+    void clearUnavailableOpticView();
     void renderCombatFeedback();
     void renderParticles();
     void renderInventoryPlacementPreview(

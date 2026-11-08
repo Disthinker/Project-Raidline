@@ -322,3 +322,28 @@ TEST(WeaponAimStateTest, RecoilStaysInsideWindowWithoutAutomaticReturn)
     EXPECT_FLOAT_EQ(aim.actualWorldPosition().x,1262);
     EXPECT_FLOAT_EQ(aim.actualWorldPosition().y,706);
 }
+
+TEST(WeaponAimStateTest, HighMagnificationEntryDropsDirectVelocityAndKeepsRecoil)
+{
+    WeaponAimState aim;
+    aim.update({400, 100}, kOrigin, kWorld, false, 0.0F);
+    aim.update({600, 100}, kOrigin, kWorld, false, 0.01F);
+    ASSERT_GT(aim.controlVelocity().x, 5000.0F);
+    aim.applyShotRecoil(kOrigin);
+    const auto position = aim.actualWorldPosition();
+    const auto recoil = aim.recoilVelocity();
+
+    aim.update({600, 100}, kOrigin, kWorld, true, 0.0F,
+        std::nullopt, AimControlMode::HighMagnificationInertial);
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().x, position.x);
+    EXPECT_FLOAT_EQ(magnitude(aim.controlVelocity()), 0.0F);
+    EXPECT_FLOAT_EQ(aim.recoilVelocity().x, recoil.x);
+    EXPECT_FLOAT_EQ(aim.recoilVelocity().y, recoil.y);
+
+    aim.update({700, 100}, kOrigin, kWorld, true, 0.01F,
+        std::nullopt, AimControlMode::HighMagnificationInertial);
+    EXPECT_LT(aim.actualWorldPosition().x, position.x + 10.0F);
+    const auto beforeRelease = aim.actualWorldPosition();
+    aim.update({700, 100}, kOrigin, kWorld, false, 0.0F);
+    EXPECT_FLOAT_EQ(aim.actualWorldPosition().x, beforeRelease.x);
+}

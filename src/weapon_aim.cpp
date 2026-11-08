@@ -115,7 +115,8 @@ void WeaponAimState::update(
     float deltaTime,
     std::optional<Vec2> inputMotionDelta,
     AimControlMode controlMode,
-    std::optional<Rect> movementBounds) noexcept
+    std::optional<Rect> movementBounds,
+    float opticTransitionDurationSeconds) noexcept
 {
     if (!finite(targetWorldPosition) ||
         !finite(shootingOrigin) ||
@@ -147,13 +148,7 @@ void WeaponAimState::update(
     }
     else
     {
-        if (controlMode != controlMode_ &&
-            controlMode == AimControlMode::Direct)
-        {
-            targetWorldPosition_ = currentWorldPosition_;
-            controlVelocity_ = Vec2{};
-        }
-        controlMode_ = controlMode;
+        setControlMode(controlMode);
 
         Vec2 motion{};
         if (inputMotionDelta.has_value() && finite(*inputMotionDelta))
@@ -210,20 +205,23 @@ void WeaponAimState::update(
         remaining -= step;
     }
 
-    if (deltaTime > 0.0F)
-    {
-        const float progressStep =
-            deltaTime / config_.aimDownSightsDurationSeconds;
-        aimDownSightsProgress_ = std::clamp(
-            aimDownSightsProgress_ +
-                (aimDownSights ? progressStep : -progressStep),
-            0.0F,
-            1.0F);
-    }
+    aimDownSightsProgress_ = nextAimDownSightsProgress(
+        aimDownSights, deltaTime, opticTransitionDurationSeconds);
     if (movementBounds)
     {
         constrainToBounds(bounds);
     }
+}
+
+float WeaponAimState::nextAimDownSightsProgress(
+    bool requested, float deltaTime, float opticTransitionDurationSeconds) const noexcept
+{
+    if (!std::isfinite(deltaTime) || deltaTime <= 0.0F)
+        return aimDownSightsProgress_;
+    const float duration = opticTransitionDurationSeconds > 0.0F
+        ? opticTransitionDurationSeconds : config_.aimDownSightsDurationSeconds;
+    const float step = deltaTime / duration;
+    return std::clamp(aimDownSightsProgress_ + (requested ? step : -step), 0.0F, 1.0F);
 }
 
 void WeaponAimState::reanchor(
@@ -290,6 +288,17 @@ void WeaponAimState::rebaseInput(Vec2 inputWorldPosition) noexcept
     inputWorldPosition_ = Vec2{
         std::clamp(inputWorldPosition.x, 0.0F, worldSize_.x),
         std::clamp(inputWorldPosition.y, 0.0F, worldSize_.y)};
+}
+
+void WeaponAimState::setControlMode(AimControlMode mode) noexcept
+{
+    if (mode == controlMode_)
+        return;
+    // Start the new control law at the visible reticle. The previous mode's
+    // pointer velocity is not a physical impulse. Recoil remains independent.
+    targetWorldPosition_ = currentWorldPosition_;
+    controlVelocity_ = {};
+    controlMode_ = mode;
 }
 
 void WeaponAimState::advanceStep(float deltaTime, Rect bounds) noexcept

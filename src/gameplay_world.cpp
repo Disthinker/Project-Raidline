@@ -1157,20 +1157,7 @@ void GameplayWorld::update(
 
     const Vec2 centerAfterMovement = playerCenter(player_);
     GameplayInput aimInput = input;
-    if (input.aimViewport && validRaidViewport(*input.aimViewport))
-    {
-        // Render uses the camera after movement/transfer. Resolve this same
-        // projection before aim and firing, rather than one frame later.
-        const Vec2 camera = raidCameraOffset(
-            centerAfterMovement, activeWorldSize(), input.aimViewport->size);
-        if (input.aimWorldPosition)
-        {
-            aimInput.aimWorldPosition = raidScreenToWorld(
-                raidWorldToScreen(*input.aimWorldPosition, input.aimViewport->position),
-                camera);
-        }
-        aimInput.aimWorldBounds = raidReticleWorldBounds(camera, input.aimViewport->size);
-    }
+    aimInput.allowWeaponOptics = input.allowWeaponOptics && !controlsSuppressedAtFrameStart;
     const bool freezeObservation = input.freezeObservationDirection || input.inventoryOpen;
     if (freezeObservation && !observationDirectionFrozen_)
         observationDirection_ = weaponAimDirection();
@@ -1635,6 +1622,8 @@ void GameplayWorld::update(
         activeEnemySet,[&](Vec2 a,Vec2 b){return activeBlockerIndex().hasLineOfSight(a,b);});
 
     updateCredentialInvestigation(input, deltaTime, controlsSuppressedAtFrameStart);
+    if (player_.isControlled() || !raidSession_.isActive())
+        shooting_.cancelWeaponOptic();
 
 }
 
@@ -1751,20 +1740,28 @@ void GameplayWorld::updateObservationLight(float seconds)
 
 RaidLightEnvironment GameplayWorld::currentObservationEnvironment() const noexcept
 {
-    if(!lightConeObservationEnabled_) return RaidLightEnvironment::WeakIndoor;
+    if (!lightConeObservationEnabled()) return RaidLightEnvironment::WeakIndoor;
     return activeInteriorIndex_ ? interiors_[*activeInteriorIndex_].lightEnvironment :
         (raidDaylight_ ? RaidLightEnvironment::DayOutdoor : RaidLightEnvironment::NightOutdoor);
 }
 
 RaidSightParameters GameplayWorld::currentObservationParameters() const noexcept
 {
-    if(!lightConeObservationEnabled_) return {360,0};
-    return observationLightSpace_ == activeRaidSpaceId() ? observationParameters_ : raidSightParameters(currentObservationEnvironment());
+    const auto optic = activeWeaponOptic();
+    if (!lightConeObservationEnabled_ && optic == WeaponOpticMode::None)
+        return {360, 0};
+    const auto ambient = observationLightSpace_ == activeRaidSpaceId()
+        ? observationParameters_ : raidSightParameters(currentObservationEnvironment());
+    if (optic == WeaponOpticMode::None)
+        return ambient;
+    const auto environment = inOutdoorRaidSpace()
+        ? currentObservationEnvironment() : RaidLightEnvironment::WeakIndoor;
+    return raidOpticSightParameters(ambient, environment, optic);
 }
 
 Vec2 GameplayWorld::currentObservationDirection() const noexcept
 {
-    if(!lightConeObservationEnabled_) return {1,0};
+    if (!lightConeObservationEnabled()) return {1, 0};
     Vec2 direction = observationDirectionFrozen_ ? observationDirection_ : weaponAimDirection();
     const float length=std::hypot(direction.x,direction.y);
     return std::isfinite(length) && length>0.0001F ? Vec2{direction.x/length,direction.y/length} : observationDirection_;
@@ -1822,7 +1819,7 @@ const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
         const auto key = raidObservationKey();
         enemyObservationCache_.clear();
         enemyObservationIndexReady_ = false;
-        if (lightConeObservationEnabled_)
+        if (lightConeObservationEnabled())
             indoorObservationCache_ = buildRaidSpaceConeVisibility(
                 activeBlockerIndex(), key, &observationWork_);
         else if (!inOutdoorRaidSpace())
@@ -1872,7 +1869,7 @@ bool GameplayWorld::raidBoundsObservable(Rect bounds) const
 HitFeedbackPresentationSnapshot GameplayWorld::observableHitFeedback() const
 {
     auto feedback = hitFeedbackPresentation();
-    if (!isAlphaRaidWorld() || !lightConeObservationEnabled_)
+    if (!isAlphaRaidWorld() || !lightConeObservationEnabled())
         return feedback;
     const auto visible = [&](const std::optional<HitFeedbackSource> &source)
     {
@@ -1898,7 +1895,7 @@ HitFeedbackPresentationSnapshot GameplayWorld::observableHitFeedback() const
 
 bool GameplayWorld::raidEnemyObservable(CombatTargetId id) const
 {
-    if (!lightConeObservationEnabled_)
+    if (!lightConeObservationEnabled())
     {
         const Enemy *found = activeEnemies().find(id);
         return found && raidBoundsObservable(found->bounds());
@@ -3308,6 +3305,7 @@ bool GameplayWorld::tryTransitionRaidSpace(
 void GameplayWorld::clearSpatialTransientPresentation() noexcept
 {
     shooting_.clearSpatialTransientPresentation();
+    shooting_.cancelWeaponOptic();
     pendingPlayerDamageObservations_.clear();
 }
 

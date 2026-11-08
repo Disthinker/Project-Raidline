@@ -1,3 +1,15 @@
+# 当前 · 对局视角对齐 v4 已复验，正在交付
+
+收镜后普通对局恢复正确图层比例，场景轮廓与遮罩重新对齐。[修复记录](../exec-plans/active/raid-optics-loot-gunsmith-v1.md)
+
+- task_id `raid-optics-loot-gunsmith-v1`，plan_version `RL-RAID-VIEW-ALIGNMENT-v4`，state `accepted_delivering`。
+- v4 approval_source 为 2026-11-08 主控会话用户明确同意 RL-RAID-VIEW-ALIGNMENT-v4，并要求保留开收镜手感、窗口准星锚点和 3ms 门槛，核对 HUD 裁切，暂不提交、推送或合并。candidate_id `RL-RAID-VIEW-ALIGNMENT-v4-local-e3fb3846b22b`。accepted_candidate_id `RL-RAID-VIEW-ALIGNMENT-v4-local-e3fb3846b22b`。acceptance_source 为 2026-11-08 主控会话用户明确回复“对局视角对齐 v4 复验通过，请完成提交、推送和合并。”
+- 基线 `origin/main@07714af5c5cacb6953171fe74bdae51f9f421f4d`。[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42374312459) 双平台各 3111/3111，原 10 项 3ms 检查全部通过。
+- 隔离工作树 `E:\WorkPlace\Projects\C\Project Raidline-raid-optics-loot-gunsmith-v1`，分支 `codex/raid-optics-loot-gunsmith-v1`，HEAD `07714af5c5cacb6953171fe74bdae51f9f421f4d`。
+- 固定桌面入口已指向 v4。Windows 3143/3143，3ms 检查 12/12。[四步复验](../acceptance/raid-optics-loot-gunsmith-v1.md)
+
+---
+
 # 当前：迅捷感染者 CI v2，正在验证双平台
 
 **本地全量2882/2882通过，候选`b9344c8cd631`已冻结。按用户批准，先提交推送原PR #197验证准确HEAD的Windows／Ubuntu CI；通过后复验，复验前不合并。**

@@ -82,7 +82,7 @@ void BaseWorld::setWeaponLight(std::uint64_t device, std::uint64_t battery,
 RaidObservationKey BaseWorld::observationKey() const {
   static_cast<void>(playerEffectsGeometry());
   const auto environment = daylight_ ? RaidLightEnvironment::DayOutdoor : RaidLightEnvironment::NightOutdoor;
-  const auto parameters = raidSightParameters(environment);
+  const auto parameters = raidOpticSightParameters(raidSightParameters(environment), environment, activeWeaponOptic());
   return {spaceId_, {playerPosition_.x + playerSize_.x / 2, playerPosition_.y + playerSize_.y / 2},
           observationDirection_, parameters.angleDegrees, parameters.maximumDistance, environment,
           playerEffectsGeometryKey_, lightDevice_, lightBattery_, lightAngle_, lightDistance_};

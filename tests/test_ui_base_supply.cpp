@@ -125,12 +125,28 @@ protected:
 }
 
 TEST_F(UiBaseSupplyTest, EveryCatalogRowReachableAndBrowsingNeverTrades) {
-    const auto before=profileStateFingerprint(profile());const auto ids=content.fixedSupplyItemIds();ASSERT_EQ(ids.size(),29);
+    const auto before=profileStateFingerprint(profile());const auto ids=content.fixedSupplyItemIds();ASSERT_EQ(ids.size(),30);
     EXPECT_NE(std::find(ids.begin(), ids.end(), ItemDefinitionId{"item.component.suppressor_5_45"}), ids.end());
     EXPECT_NE(std::find(ids.begin(), ids.end(), ItemDefinitionId{"item.throwable.frag_grenade_basic"}), ids.end());
     for(const auto &id:ids) {select(id);draw("catalog");}
     tab(Tab::Recycle);control(Control::Next);tab(Tab::Maintenance);tab(Tab::Purchase);
     EXPECT_EQ(profileStateFingerprint(profile()),before);EXPECT_FALSE(A::state(*app).selection);
+}
+TEST_F(UiBaseSupplyTest, OnlyLowOpticAppearsForSaleAndCosts120) {
+    const ItemDefinitionId low{"item.component.optic_1_5x_5_45"}, high{"item.component.optic_4x_5_45"};
+    const auto purchase = rows();
+    const auto row = std::find_if(purchase.begin(), purchase.end(),
+        [&](const auto &offer) { return offer.key.definitionId == low; });
+    ASSERT_NE(row, purchase.end());
+    EXPECT_EQ(row->quote, 120U);
+    EXPECT_TRUE(std::none_of(purchase.begin(), purchase.end(),
+        [&](const auto &offer) { return offer.key.definitionId == high; }));
+    const auto currency = profile().currency;
+    const auto before = quantity(low);
+    select(low);
+    control(Control::Main);
+    EXPECT_EQ(quantity(low), before + 1);
+    EXPECT_EQ(profile().currency, currency - 120);
 }
 TEST_F(UiBaseSupplyTest, AmmoPurchaseUsesOriginalThirtyBatchAndOneClickOnly) {
     select(alpha_content::ammunition);const auto before=quantity(alpha_content::ammunition);const auto money=profile().currency;

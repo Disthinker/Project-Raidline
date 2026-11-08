@@ -1,4 +1,5 @@
 #include "raid_visibility.h"
+#include "item_definition.h"
 #include <algorithm>
 #include <cfenv>
 #include <cfloat>
@@ -67,6 +68,20 @@ raidSightParameters(RaidLightEnvironment environment) noexcept
         return {110, 500};
     }
     return {};
+}
+
+RaidSightParameters raidOpticSightParameters(
+    RaidSightParameters ambient,
+    RaidLightEnvironment environment,
+    WeaponOpticMode optic) noexcept
+{
+    if (optic == WeaponOpticMode::None)
+        return ambient;
+    const bool high = optic == WeaponOpticMode::High;
+    if (high) ambient.angleDegrees *= 0.65F;
+    if (environment == RaidLightEnvironment::DayOutdoor)
+        ambient.maximumDistance *= high ? 1.25F : 1.10F;
+    return ambient;
 }
 
 RaidObservationKey RaidVisibilityProjection::key() const

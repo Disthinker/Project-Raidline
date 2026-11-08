@@ -1,5 +1,6 @@
 // Implementation of the App class
 #include "app.h"
+#include "ui_weapon_optic_view.h"
 #include "base_siege_warning_layout.h"
 #include "base_wish_expedition.h"
 #include "first_raid_guidance.h"
@@ -1826,6 +1827,7 @@ GameplayInput App::makeGameplayControls() const
     input.firePressed=input_.isActionPressed(GameAction::Fire) || input_.isPrimaryPointerPressed();
     input.firePhysicallyPressed=input_.isActionPressed(GameAction::Fire) || input_.isPrimaryPointerPhysicallyPressed();
     input.aimDownSights = input_.isSecondaryPointerPressed();
+    input.allowWeaponOptics = !opticAimBlockedUntilRelease_;
     input.developerInfiniteAmmo = developerInfiniteAmmoEnabled_;
     input.interactJustPressed =
         input_.wasActionJustPressed(
@@ -2910,7 +2912,7 @@ void App::updateBase(float deltaTime)
         input.interactJustPressed = false;
         input.interactPressed = false;
     }
-    if (input.interactJustPressed)
+    if (input.interactJustPressed && !gameSession_.blocksInteractionForOptics(input, deltaTime))
     {
         if (const auto nearest = gameFlow_.nearestBaseGroundAsset())
         {
@@ -5630,6 +5632,7 @@ void App::handleDeveloperPanelClick(MousePosition position)
 
 void App::update(float deltaTime)
 {
+    updateWeaponOpticPointerGate();
     uiClockSeconds_+=std::max(0.0F,deltaTime);
     updateInventoryUiPersistence(deltaTime);
     if(!failedHomeHintsProfileId_.empty() &&
@@ -6058,7 +6061,9 @@ void App::update(float deltaTime)
     {
         gameplayInput.quitRaidJustPressed = false;
     }
-    if (gameplayInput.interactJustPressed && !inventoryOverlayState_.isOpen() && !tacticalMapOpen_ &&
+    const bool opticsBlocksInteraction = gameSession_.blocksInteractionForOptics(gameplayInput, deltaTime);
+    if (gameplayInput.interactJustPressed && !opticsBlocksInteraction &&
+        !inventoryOverlayState_.isOpen() && !tacticalMapOpen_ &&
         !medicalWheelOpen_ && !developerWeaponPanelOpen_ && !developerWeaponPanelBlocksGameplayThisFrame_ &&
         inputDecision.controlAction == InventoryFrameControlAction::None)
     {
@@ -6093,7 +6098,7 @@ void App::update(float deltaTime)
                     InventoryFrameControlAction::None,
                 !gameSession_.world().isAlphaRaidWorld() &&
                     gameSession_.world().canInteractWithContainer(),
-                gameplayInput.interactJustPressed);
+                gameplayInput.interactJustPressed && !opticsBlocksInteraction);
 
     if (containerDecision.openContainer)
     {
@@ -6392,9 +6397,10 @@ void App::renderDebugText()
         p.crisis=(crisis->detailsKnown || developerCrisisRevealEnabled_)?fmt::format("{} · {}",crisis->displayName,crisis->warning):tr("危机未知 · 购买敌情可提前了解","UNKNOWN CRISIS · ENEMY INTELLIGENCE REVEALS IT");
         if(crisis->active)p.crisis=std::string(tr("危机已激活 · ","CRISIS ACTIVE · "))+p.crisis;
     }
+    const bool highOptic = visibleWeaponOptic() == WeaponOpticMode::High;
     if(raid.extractionRoute()==RaidExtractionRoute::EmergencySignal)p.signal=tr("信号已发送 · 附近敌人已警觉","SIGNAL SENT · NEARBY ENEMIES ALERTED");
-    else if(world.signalInterruptedVisible())p.signal=gameSession_.canCallSignalExtraction()?tr("信号中断 · 返回后按 F 重试","SIGNAL INTERRUPTED · RETURN AND PRESS F"):tr("信号中断","SIGNAL INTERRUPTED");
-    else if(gameSession_.canCallSignalExtraction())p.signal=tr("F 呼叫撤离 · 会吸引附近敌人","F CALL EXTRACTION · ATTRACTS NEARBY ENEMIES");
+    else if(world.signalInterruptedVisible())p.signal=!highOptic && gameSession_.canCallSignalExtraction()?tr("信号中断 · 返回后按 F 重试","SIGNAL INTERRUPTED · RETURN AND PRESS F"):tr("信号中断","SIGNAL INTERRUPTED");
+    else if(!highOptic && gameSession_.canCallSignalExtraction())p.signal=tr("F 呼叫撤离 · 会吸引附近敌人","F CALL EXTRACTION · ATTRACTS NEARBY ENEMIES");
     if(profile.pendingRaid){
         if(profile.pendingRaid->credentialExtraction &&
            profile.pendingRaid->credentialExtraction->investigationCompleted &&
@@ -7517,7 +7523,8 @@ void App::renderStashOverlay()
         SDL_BLENDMODE_NONE);
 }
 
-void App::renderBackground(bool drawOutdoorDetails)
+void App::renderBackground(bool drawOutdoorDetails, bool terrainOnly,
+                           std::optional<Rect> worldView)
 {
     if (gameSession_.developerRangeActive())
     {
@@ -7534,12 +7541,14 @@ void App::renderBackground(bool drawOutdoorDetails)
             const SDL_FRect rect{p.x - 10, p.y - 10, 240, 160};
             SDL_SetRenderDrawColor(renderer_, 193, 151, 79, 255);
             SDL_RenderRect(renderer_, &rect);
-            uiTextRenderer_.render(renderer_, p.x, p.y - 35, fmt::format("TARGET PAD {}", i + 1).c_str());
+            if (!terrainOnly)
+                uiTextRenderer_.render(renderer_, p.x, p.y - 35, fmt::format("TARGET PAD {}", i + 1).c_str());
         }
         const SDL_FRect console{kDeveloperRangeConsole.x - 40, kDeveloperRangeConsole.y - 35, 200, 110};
         SDL_SetRenderDrawColor(renderer_, 80, 181, 158, 255);
         SDL_RenderRect(renderer_, &console);
-        uiTextRenderer_.render(renderer_, console.x, console.y - 30, "RANGE CONSOLE | F8");
+        if (!terrainOnly)
+            uiTextRenderer_.render(renderer_, console.x, console.y - 30, "RANGE CONSOLE | F8");
         return;
     }
     if (gameSession_.world().isAlphaRaidWorld() &&
@@ -7562,12 +7571,13 @@ void App::renderBackground(bool drawOutdoorDetails)
                              worldSize.x - 2.0F, worldSize.y - 2.0F};
         SDL_SetRenderDrawColor(renderer_, 130, 119, 84, 255);
         SDL_RenderRect(renderer_, &room);
-        if (gameSession_.profile().pendingRaid)
+        if (!terrainOnly && gameSession_.profile().pendingRaid)
         {
             const auto &map = publishedContentRegistry().map(
                 gameSession_.profile().pendingRaid->mapDefinitionId);
-            const ContentRect view{raidWorldCameraOffset(),
-                {static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight)}};
+            const Rect bounds = worldView.value_or(Rect{raidWorldCameraOffset(),
+                {static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight)}});
+            const ContentRect view{bounds.position, bounds.size};
             for (const auto &sign : raidRoomSigns(map,
                      gameSession_.world().activeRaidSpaceId(), worldSize))
             {
@@ -7614,12 +7624,10 @@ void App::renderBackground(bool drawOutdoorDetails)
             {
                 return;
             }
-            const Vec2 camera = raidWorldCameraOffset();
+            const Rect visible = worldView.value_or(Rect{raidWorldCameraOffset(),
+                {static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight)}});
             const RaidOutdoorPresentationProjection &projection =
-                gameSession_.world().outdoorPresentation(ContentRect{
-                    camera,
-                    {static_cast<float>(kWindowWidth),
-                     static_cast<float>(kWindowHeight)}});
+                gameSession_.world().outdoorPresentation({visible.position, visible.size});
             for (const RaidTerrainSpan &span : projection.terrainSpans)
             {
                 switch (span.kind)
@@ -7738,8 +7746,13 @@ SDL_FRect App::worldLabelBounds(float x, float y, std::string_view label)
     const Vec2 camera = inBase ? baseWorldCameraOffset() : raidWorldCameraOffset();
     const float zoom = inBase ? baseConstructionZoom() : 1.0F;
     const Vec2 shake = raidWorldScreenShakePixels();
-    const SDL_FRect visible{camera.x - shake.x / zoom, camera.y - shake.y / zoom,
+    SDL_FRect visible{camera.x - shake.x / zoom, camera.y - shake.y / zoom,
         kWindowWidth / zoom, kWindowHeight / zoom};
+    if (const auto *projection = visibleWeaponOpticView())
+    {
+        const auto bounds = projection->worldBounds();
+        visible = {bounds.position.x, bounds.position.y, bounds.size.x, bounds.size.y};
+    }
     const auto localized = localizeUiText(uiTextRenderer_.language(), label);
     const float width = std::clamp(uiTextRenderer_.measure(localized, 12), 24.0F, 280.0F);
     const auto observed = [&](const SDL_FRect &bounds) {
@@ -8536,7 +8549,7 @@ void App::renderShotFeedbackPresentations()
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
-void App::renderBallisticBlockers()
+void App::renderBallisticBlockers(bool terrainOnly, std::optional<Rect> worldView)
 {
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     if (gameSession_.world().isAlphaRaidWorld() &&
@@ -8544,11 +8557,9 @@ void App::renderBallisticBlockers()
         gameSession_.profile().pendingRaid.has_value() &&
         gameSession_.profile().pendingRaid->spatialLayout.layoutVersion >= 3U)
     {
-        const Vec2 camera = raidWorldCameraOffset();
-        const ContentRect visibleWorldBounds{
-            camera,
-            {static_cast<float>(kWindowWidth),
-             static_cast<float>(kWindowHeight)}};
+        const Rect bounds = worldView.value_or(Rect{raidWorldCameraOffset(),
+            {static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight)}});
+        const ContentRect visibleWorldBounds{bounds.position, bounds.size};
         const RaidOutdoorPresentationProjection &projection =
             gameSession_.world().outdoorPresentation(visibleWorldBounds);
         const auto visible = [&visibleWorldBounds](ContentRect bounds)
@@ -8562,37 +8573,40 @@ void App::renderBallisticBlockers()
                 bounds.position.y + bounds.size.y >
                     visibleWorldBounds.position.y;
         };
-        for (const RaidResourcePointSnapshot &resourcePoint :
-             projection.resourcePoints)
+        if (!terrainOnly)
         {
-            if (!visible(resourcePoint.bounds))
-                continue;
-            const SDL_FRect bounds{
-                resourcePoint.bounds.position.x,
-                resourcePoint.bounds.position.y,
-                resourcePoint.bounds.size.x,
-                resourcePoint.bounds.size.y};
-            if (resourcePoint.kind == RaidResourcePointKind::HighValue)
-                SDL_SetRenderDrawColor(renderer_, 218, 178, 58, 52);
-            else if (resourcePoint.kind ==
-                     RaidResourcePointKind::LandmarkSpecific)
-                SDL_SetRenderDrawColor(renderer_, 86, 176, 190, 48);
-            else
-                SDL_SetRenderDrawColor(renderer_, 92, 158, 102, 42);
-            SDL_RenderFillRect(renderer_, &bounds);
-            if (resourcePoint.kind == RaidResourcePointKind::HighValue)
-                SDL_SetRenderDrawColor(renderer_, 236, 198, 80, 220);
-            else if (resourcePoint.kind ==
-                     RaidResourcePointKind::LandmarkSpecific)
-                SDL_SetRenderDrawColor(renderer_, 118, 214, 224, 210);
-            else
-                SDL_SetRenderDrawColor(renderer_, 126, 196, 132, 190);
-            SDL_RenderRect(renderer_, &bounds);
-            const std::string label = resourcePoint.displayName +
-                " | RISK TIER " + std::to_string(resourcePoint.riskTier);
-            uiTextRenderer_.render(
-                renderer_, bounds.x + 4.0F, bounds.y + 4.0F,
-                label.c_str());
+            for (const RaidResourcePointSnapshot &resourcePoint :
+                 projection.resourcePoints)
+            {
+                if (!visible(resourcePoint.bounds))
+                    continue;
+                const SDL_FRect bounds{
+                    resourcePoint.bounds.position.x,
+                    resourcePoint.bounds.position.y,
+                    resourcePoint.bounds.size.x,
+                    resourcePoint.bounds.size.y};
+                if (resourcePoint.kind == RaidResourcePointKind::HighValue)
+                    SDL_SetRenderDrawColor(renderer_, 218, 178, 58, 52);
+                else if (resourcePoint.kind ==
+                         RaidResourcePointKind::LandmarkSpecific)
+                    SDL_SetRenderDrawColor(renderer_, 86, 176, 190, 48);
+                else
+                    SDL_SetRenderDrawColor(renderer_, 92, 158, 102, 42);
+                SDL_RenderFillRect(renderer_, &bounds);
+                if (resourcePoint.kind == RaidResourcePointKind::HighValue)
+                    SDL_SetRenderDrawColor(renderer_, 236, 198, 80, 220);
+                else if (resourcePoint.kind ==
+                         RaidResourcePointKind::LandmarkSpecific)
+                    SDL_SetRenderDrawColor(renderer_, 118, 214, 224, 210);
+                else
+                    SDL_SetRenderDrawColor(renderer_, 126, 196, 132, 190);
+                SDL_RenderRect(renderer_, &bounds);
+                const std::string label = resourcePoint.displayName +
+                    " | RISK TIER " + std::to_string(resourcePoint.riskTier);
+                uiTextRenderer_.render(
+                    renderer_, bounds.x + 4.0F, bounds.y + 4.0F,
+                    label.c_str());
+            }
         }
         for (const RaidOutdoorPropSnapshot &prop : projection.props)
         {
@@ -8636,27 +8650,33 @@ void App::renderBallisticBlockers()
                 SDL_SetRenderDrawColor(renderer_, 151, 134, 92, 230);
                 SDL_RenderRect(renderer_, &bounds);
             }
-            SDL_SetRenderDrawColor(renderer_, 226, 218, 176, 245);
-            const auto structureSign = raidLandmarkStructureSign(prop,
-                gameSession_.profile().pendingRaid->spatialLayout.landmarks);
-            uiTextRenderer_.render(
-                renderer_, bounds.x + 3.0F,
-                prop.collidable ? bounds.y + 3.0F : bounds.y - 14.0F,
-                structureSign.empty() ? raidOutdoorPropLabel(prop.kind) : structureSign.data());
+            if (!terrainOnly)
+            {
+                SDL_SetRenderDrawColor(renderer_, 226, 218, 176, 245);
+                const auto structureSign = raidLandmarkStructureSign(prop,
+                    gameSession_.profile().pendingRaid->spatialLayout.landmarks);
+                uiTextRenderer_.render(
+                    renderer_, bounds.x + 3.0F,
+                    prop.collidable ? bounds.y + 3.0F : bounds.y - 14.0F,
+                    structureSign.empty() ? raidOutdoorPropLabel(prop.kind) : structureSign.data());
+            }
         }
-        SDL_SetRenderDrawColor(renderer_, 226, 218, 176, 245);
-        for (const RaidOutdoorLabelProjection &label : projection.labels)
+        if (!terrainOnly)
         {
-            if (label.position.x < visibleWorldBounds.position.x ||
-                label.position.y < visibleWorldBounds.position.y ||
-                label.position.x > visibleWorldBounds.position.x +
-                    visibleWorldBounds.size.x ||
-                label.position.y > visibleWorldBounds.position.y +
-                    visibleWorldBounds.size.y)
-                continue;
-            uiTextRenderer_.render(
-                renderer_, label.position.x, label.position.y,
-                label.text.c_str());
+            SDL_SetRenderDrawColor(renderer_, 226, 218, 176, 245);
+            for (const RaidOutdoorLabelProjection &label : projection.labels)
+            {
+                if (label.position.x < visibleWorldBounds.position.x ||
+                    label.position.y < visibleWorldBounds.position.y ||
+                    label.position.x > visibleWorldBounds.position.x +
+                        visibleWorldBounds.size.x ||
+                    label.position.y > visibleWorldBounds.position.y +
+                        visibleWorldBounds.size.y)
+                    continue;
+                uiTextRenderer_.render(
+                    renderer_, label.position.x, label.position.y,
+                    label.text.c_str());
+            }
         }
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
         return;
@@ -8720,9 +8740,13 @@ void App::syncRaidPointerCapture() noexcept
     const bool shouldCapture = shouldCaptureWorldPointer() || wheel;
     if (shouldCapture != relativeMouseModeActive_)
     {
-        const Vec2 reticle = gameFlow_.isRaidScreen()
-            ? raidWorldToScreen(gameSession_.world().weaponAimWorldPosition(), raidWorldCameraOffset())
-            : raidWorldToScreen(gameFlow_.baseWorld().weaponAimWorldPosition(), baseWorldCameraOffset());
+        const bool inRaid = gameFlow_.isRaidScreen();
+        const Vec2 aim = inRaid ? gameSession_.world().weaponAimWorldPosition()
+                               : gameFlow_.baseWorld().weaponAimWorldPosition();
+        const auto &optic = inRaid ? gameSession_.world().weaponOpticView()
+                                   : gameFlow_.baseWorld().weaponOpticView();
+        const Vec2 reticle = optic ? optic->worldToScreen(aim)
+            : raidWorldToScreen(aim, inRaid ? raidWorldCameraOffset() : baseWorldCameraOffset());
         if (!shouldCapture && windowHasInputFocus_ && window_ != nullptr)
         {
             pointerWorldPosition_ = Vec2{
@@ -8783,25 +8807,33 @@ void App::renderAimCrosshair()
     const WeaponAccuracyProjection accuracy = inBaseWorld
         ? gameFlow_.baseWorld().weaponAccuracyProjection()
         : gameSession_.world().weaponAccuracyProjection();
-    const float feedbackRadius = std::round(std::max(
-        10.0F,
-        accuracy.reticleRadius));
-    constexpr float kArmLength{15.0F};
     const Vec2 camera = inBaseWorld
         ? baseWorldCameraOffset() : raidWorldCameraOffset();
-    const Vec2 screenCenter = raidWorldToScreen(accuracy.center, camera);
+    const auto *optic = visibleWeaponOpticView();
+    const Vec2 screenCenter = optic ? optic->worldToScreen(accuracy.center)
+                                    : raidWorldToScreen(accuracy.center, camera);
     const Vec2 center{
         std::round(screenCenter.x),
         std::round(screenCenter.y)};
 
+    const bool high = optic && optic->lensRadius > 0.0F;
+    const float weight = optic ? optic->transitionWeight : 0.0F;
+    const float armLength = high ? std::lerp(15.0F, 12.0F, weight) : 15.0F;
+    const float ordinarySpread = std::max(10.0F, accuracy.reticleRadius);
+    const float projectedSpread = optic
+        ? std::lerp(ordinarySpread, std::max(4.0F, accuracy.worldRadius * optic->scale), weight)
+        : ordinarySpread;
+    const float feedbackRadius = std::round(projectedSpread);
+    const bool armsFit = !high || feedbackRadius + armLength + 2.0F < optic->lensRadius;
+    const float armsOpacity = armsFit ? 1.0F : std::max(0.0F, 1.0F - 2.0F * weight);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     if (accuracy.beyondEffectiveRange)
     {
-        SDL_SetRenderDrawColor(renderer_, 232, 62, 52, 235);
+        SDL_SetRenderDrawColor(renderer_, 232, 62, 52, static_cast<Uint8>(235.0F * armsOpacity));
     }
     else
     {
-        SDL_SetRenderDrawColor(renderer_, 235, 240, 225, 220);
+        SDL_SetRenderDrawColor(renderer_, 235, 240, 225, static_cast<Uint8>(220.0F * armsOpacity));
     }
     const auto drawHorizontalArm = [&](float startX, float endX)
     {
@@ -8821,23 +8853,44 @@ void App::renderAimCrosshair()
                 center.x + offset, endY);
         }
     };
-    drawHorizontalArm(
-        center.x - feedbackRadius - kArmLength,
-        center.x - feedbackRadius);
-    drawHorizontalArm(
-        center.x + feedbackRadius,
-        center.x + feedbackRadius + kArmLength);
-    drawVerticalArm(
-        center.y - feedbackRadius - kArmLength,
-        center.y - feedbackRadius);
-    drawVerticalArm(
-        center.y + feedbackRadius,
-        center.y + feedbackRadius + kArmLength);
+    if (armsOpacity > 0.0F)
+    {
+        drawHorizontalArm(
+            center.x - feedbackRadius - armLength,
+            center.x - feedbackRadius);
+        drawHorizontalArm(
+            center.x + feedbackRadius,
+            center.x + feedbackRadius + armLength);
+        drawVerticalArm(
+            center.y - feedbackRadius - armLength,
+            center.y - feedbackRadius);
+        drawVerticalArm(
+            center.y + feedbackRadius,
+            center.y + feedbackRadius + armLength);
+    }
+    if (high)
+    {
+        SDL_SetRenderDrawColor(renderer_, 16, 23, 19, static_cast<Uint8>(210.0F * weight));
+        const SDL_FRect centerShadow{center.x - 2.0F, center.y - 2.0F, 5.0F, 5.0F};
+        SDL_RenderFillRect(renderer_, &centerShadow);
+        SDL_SetRenderDrawColor(renderer_, 235, 240, 225, static_cast<Uint8>(235.0F * weight));
+        SDL_RenderPoint(renderer_, center.x, center.y);
+    }
     const HitFeedbackPresentationSnapshot hitFeedback = inBaseWorld
         ? gameFlow_.baseWorld().hitFeedbackPresentation()
         : gameSession_.world().observableHitFeedback();
     const auto feedbackSourceOnScreen = [&](const std::optional<HitFeedbackSource> &source)
     {
+        if (optic)
+        {
+            if (!source || !makeUiWeaponOpticView(*optic, accuracy.center).includes(source->position))
+                return false;
+            const Rect bounds{{source->position.x - 1.0F, source->position.y - 1.0F}, {2.0F, 2.0F}};
+            if (inBaseWorld)
+                return gameFlow_.baseWorld().boundsObservable(bounds);
+            const auto &raid = gameSession_.world();
+            return !raid.isAlphaRaidWorld() || raid.raidObservation().pointVisible(source->position);
+        }
         if (inBaseWorld || !gameSession_.world().lightConeObservationEnabled()) return true;
         if (!source) return false;
         const Vec2 camera=raidWorldCameraOffset();
@@ -8845,8 +8898,18 @@ void App::renderAimCrosshair()
             source->position.x<camera.x+kWindowWidth && source->position.y<camera.y+kWindowHeight;
     };
     if (hitFeedback.armorFeedbackSeconds > 0.0F && feedbackSourceOnScreen(hitFeedback.armorSource))
-        uiTextRenderer_.render(renderer_, center.x + 24, center.y + 26,
-            hitFeedback.armorBroken ? "ENEMY ARMOR BROKEN" : "ENEMY ARMOR ABSORBED HIT");
+    {
+        const char *label = hitFeedback.armorBroken ? "ENEMY ARMOR BROKEN" : "ENEMY ARMOR ABSORBED HIT";
+        if (high)
+        {
+            const float width = optic->lensRadius;
+            uiTextRenderer_.renderBox(renderer_,
+                {center.x - width / 2.0F, center.y + 26.0F, width, 24.0F},
+                label, {12, UiTextAlign::Center, 1});
+        }
+        else
+            uiTextRenderer_.render(renderer_, center.x + 24, center.y + 26, label);
+    }
     if (hitFeedback.remainingSeconds > 0.0F && feedbackSourceOnScreen(hitFeedback.semanticSource))
     {
         const Uint8 red = hitFeedback.semantic == HitSemantic::WeakPoint
@@ -8959,6 +9022,8 @@ void App::updatePlayerActionInput(GameplayInput &gameplayInput)
         medicalWheelOptions_.clear();
     }
     updateThrowableInput(gameplayInput);
+    updateWeaponOpticPointerGate();
+    gameplayInput.allowWeaponOptics = !opticAimBlockedUntilRelease_ && !gameplayInput.throwableModal;
     if(gameplayInput.throwableModal || medicalWheelOpen_ || inventoryOverlayState_.isOpen() || tacticalMapOpen_) {
         gameSession_.cancelPlayerControlIntent();
         gameplayInput.cycleFireModeJustPressed=false;gameplayInput.raidReloadIntents.clear();
@@ -9107,7 +9172,10 @@ void App::renderCombatFeedback()
         playerDamageFeedbackRemaining_ / 0.28F,
         0.0F,
         1.0F);
-    const Uint8 alpha = static_cast<Uint8>(80.0F + normalized * 120.0F);
+    const auto *optic = visibleWeaponOpticView();
+    const float edgeOpacity = optic && optic->lensRadius > 0.0F
+        ? 1.0F - optic->transitionWeight : 1.0F;
+    const Uint8 alpha = static_cast<Uint8>((80.0F + normalized * 120.0F) * edgeOpacity);
     if (lastIncomingDamageReducedByArmor_)
     {
         SDL_SetRenderDrawColor(renderer_, 70, 160, 202, alpha);
@@ -9122,10 +9190,13 @@ void App::renderCombatFeedback()
     const SDL_FRect bottom{0.0F, 720.0F - kEdgeThickness, 1280.0F, kEdgeThickness};
     const SDL_FRect left{0.0F, 0.0F, kEdgeThickness, 720.0F};
     const SDL_FRect right{1280.0F - kEdgeThickness, 0.0F, kEdgeThickness, 720.0F};
-    SDL_RenderFillRect(renderer_, &top);
-    SDL_RenderFillRect(renderer_, &bottom);
-    SDL_RenderFillRect(renderer_, &left);
-    SDL_RenderFillRect(renderer_, &right);
+    if (alpha > 0)
+    {
+        SDL_RenderFillRect(renderer_, &top);
+        SDL_RenderFillRect(renderer_, &bottom);
+        SDL_RenderFillRect(renderer_, &left);
+        SDL_RenderFillRect(renderer_, &right);
+    }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 
     if (lastIncomingDamageReducedByArmor_)
@@ -9679,42 +9750,17 @@ void App::renderScreenPrimaryButton(
 void App::renderMainMenu() { renderFoundationMenu(false); }
 void App::renderPauseMenu() { if(pauseMenu_.isOpen()) renderFoundationMenu(true); }
 
-void App::renderBaseWorld()
+void App::renderBaseWorldScene(Rect visible, bool terrainOnly, bool drawAvatar)
 {
     const BaseWorld &world = gameFlow_.baseWorld();
-    SDL_Texture *sceneTarget=SDL_GetRenderTarget(renderer_);
-    const bool observationLayer=!baseConstructionPanelOpen_ && !basePlacementState_ &&
-        !baseFixedFacilityPlacementState_ && ensureIndoorObservationTargets() &&
-        SDL_SetRenderTarget(renderer_,indoorInformationLayer_.get());
-    if(observationLayer) {
-        SDL_SetRenderViewport(renderer_,nullptr);SDL_SetRenderScale(renderer_,1,1);
-        SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_NONE);
-        SDL_SetRenderDrawColor(renderer_,15,21,21,255);SDL_RenderClear(renderer_);
-    }
-    const Vec2 camera = baseWorldCameraOffset();
-    const Vec2 shakePixels = raidWorldScreenShakePixels();
     const Vec2 worldSize = world.worldSize();
-    const float zoom = baseConstructionZoom();
-    static_cast<void>(SDL_SetRenderScale(renderer_, zoom, zoom));
-    const Vec2 viewportOrigin = baseBuildViewportOrigin(
-        camera, zoom, shakePixels);
-    const SDL_Rect worldViewport{
-        static_cast<int>(std::lround(viewportOrigin.x)),
-        static_cast<int>(std::lround(viewportOrigin.y)),
-        static_cast<int>(std::ceil(worldSize.x)),
-        static_cast<int>(std::ceil(worldSize.y))};
-    static_cast<void>(SDL_SetRenderViewport(renderer_, &worldViewport));
-
     SDL_SetRenderDrawColor(renderer_, 45, 49, 36, 255);
     const SDL_FRect worldGround{0.0F, 0.0F, worldSize.x, worldSize.y};
     SDL_RenderFillRect(renderer_, &worldGround);
 
     const HomeRegionLayout &layout = world.layout();
     const HomeRegionPresentationProjection &projection =
-        world.outdoorPresentation(ContentRect{
-            camera,
-            {static_cast<float>(kWindowWidth) / zoom,
-             static_cast<float>(kWindowHeight) / zoom}});
+        world.outdoorPresentation({visible.position, visible.size});
     const float cellWidth = worldSize.x / static_cast<float>(layout.columns);
     const float cellHeight = worldSize.y / static_cast<float>(layout.rows);
     for (const RaidTerrainSpan &span : projection.terrainSpans)
@@ -9767,7 +9813,7 @@ void App::renderBaseWorld()
     SDL_SetRenderDrawColor(renderer_, 126, 196, 166, 240);
     SDL_RenderRect(renderer_, &parcel);
 
-    if (world.surveying())
+    if (!terrainOnly && world.surveying())
     {
         SDL_SetRenderDrawColor(renderer_, 220, 230, 200, 255);
         renderWorldLabel(kFoundingCamp.position.x,
@@ -9781,9 +9827,12 @@ void App::renderBaseWorld()
             SDL_RenderRect(renderer_, &bounds);
             const SDL_FRect core{plot.corePosition.x-20,plot.corePosition.y-20,40,40};
             SDL_RenderFillRect(renderer_, &core);
-            renderWorldLabel(plot.bounds.position.x+24,plot.bounds.position.y+24,plot.name.data());
-            if (world.surveying())
-                renderWorldLabel(plot.corePosition.x-120,plot.corePosition.y+34,"E INSPECT BASE SITE");
+            if (!terrainOnly)
+            {
+                renderWorldLabel(plot.bounds.position.x+24,plot.bounds.position.y+24,plot.name.data());
+                if (world.surveying())
+                    renderWorldLabel(plot.corePosition.x-120,plot.corePosition.y+34,"E INSPECT BASE SITE");
+            }
         }
 
     for (const RaidOutdoorPropSnapshot &prop : projection.props)
@@ -9815,16 +9864,13 @@ void App::renderBaseWorld()
             SDL_SetRenderDrawColor(renderer_, 151, 134, 92, 230);
             SDL_RenderRect(renderer_, &bounds);
         }
-        renderWorldLabel(bounds.x + 3.0F,
-                               bounds.y + 3.0F,
-                               raidOutdoorPropLabel(prop.kind));
+        if (!terrainOnly)
+            renderWorldLabel(bounds.x + 3.0F, bounds.y + 3.0F, raidOutdoorPropLabel(prop.kind));
     }
-    for (const HomeRegionDistrictSnapshot &district : projection.districts)
-    {
-        renderWorldLabel(district.labelPosition.x,
-                               district.labelPosition.y,
-                               homeRegionDistrictName(district.kind));
-    }
+    if (!terrainOnly)
+        for (const HomeRegionDistrictSnapshot &district : projection.districts)
+            renderWorldLabel(district.labelPosition.x, district.labelPosition.y,
+                             homeRegionDistrictName(district.kind));
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 
     for (const BaseFacility &facility : world.facilities())
@@ -9833,24 +9879,6 @@ void App::renderBaseWorld()
             continue;
         const BaseFacilityAccessGeometry access =
             baseFacilityAccessGeometry(facility);
-        const BaseFacilityWorldServiceProjection service =
-            projectBaseFacilityWorldService(
-                gameSession_.profile(),
-                publishedContentRegistry(),
-                facility.kind);
-        const std::optional<BaseFacilityWorkSocketProjection> workSocket =
-            baseFacilityWorkSocket(facility);
-        const std::optional<BaseFacilityWorkerWorldProjection> worker =
-            projectBaseFacilityWorkerWorldStatus(
-                gameSession_.profile(), publishedContentRegistry(),
-                facility.kind);
-        const std::optional<BaseResidentWorldProjection> residents =
-            projectBaseResidentWorldStatus(
-                gameSession_.profile(), facility.kind);
-        const std::optional<BaseResourceFlowWorldProjection> resourceFlow =
-            projectBaseResourceFlowWorldStatus(
-                gameSession_.profile(), publishedContentRegistry(),
-                facility.kind);
         const SDL_FRect bounds{
             facility.bounds.position.x,
             facility.bounds.position.y,
@@ -9900,6 +9928,8 @@ void App::renderBaseWorld()
         SDL_RenderFillRect(renderer_, &bounds);
         SDL_SetRenderDrawColor(renderer_, 174, 188, 180, 255);
         SDL_RenderRect(renderer_, &bounds);
+        if (terrainOnly)
+            continue;
         if (baseConstructionPanelOpen_ &&
             selectedBaseFixedFacility_ == facility.kind)
         {
@@ -9928,6 +9958,24 @@ void App::renderBaseWorld()
         }
         renderWorldLabel(bounds.x + 18.0F, bounds.y + bounds.h / 2.0F,
             uiBaseFacilityShortName(facility.kind, uiTextRenderer_.language()));
+        const BaseFacilityWorldServiceProjection service =
+            projectBaseFacilityWorldService(
+                gameSession_.profile(),
+                publishedContentRegistry(),
+                facility.kind);
+        const std::optional<BaseFacilityWorkSocketProjection> workSocket =
+            baseFacilityWorkSocket(facility);
+        const std::optional<BaseFacilityWorkerWorldProjection> worker =
+            projectBaseFacilityWorkerWorldStatus(
+                gameSession_.profile(), publishedContentRegistry(),
+                facility.kind);
+        const std::optional<BaseResidentWorldProjection> residents =
+            projectBaseResidentWorldStatus(
+                gameSession_.profile(), facility.kind);
+        const std::optional<BaseResourceFlowWorldProjection> resourceFlow =
+            projectBaseResourceFlowWorldStatus(
+                gameSession_.profile(), publishedContentRegistry(),
+                facility.kind);
         // These are visual markers only. Access, work-socket geometry and all
         // service/worker/resident/resource facts still come from the original queries.
         renderUiBaseEntranceGlyph(renderer_,
@@ -9939,15 +9987,18 @@ void App::renderBaseWorld()
 
     }
 
+    if (terrainOnly)
+        return;
+
     for (const BaseGroundAssetProjection &ground :
          gameFlow_.baseGroundAssets())
     {
         if(!baseConstructionPanelOpen_ && !basePlacementState_ && !baseFixedFacilityPlacementState_ &&
            !world.boundsObservable({{ground.position.x-24,ground.position.y-24},{48,48}}))continue;
-        if (ground.position.x < camera.x - 96.0F ||
-            ground.position.y < camera.y - 96.0F ||
-            ground.position.x > camera.x + kWindowWidth / zoom + 96.0F ||
-            ground.position.y > camera.y + kWindowHeight / zoom + 96.0F)
+        if (ground.position.x < visible.position.x - 96.0F ||
+            ground.position.y < visible.position.y - 96.0F ||
+            ground.position.x > visible.position.x + visible.size.x + 96.0F ||
+            ground.position.y > visible.position.y + visible.size.y + 96.0F)
         {
             continue;
         }
@@ -9998,10 +10049,10 @@ void App::renderBaseWorld()
     {
         if(!baseConstructionPanelOpen_ && !world.enemyObservable(enemy.combatTargetId()))continue;
         const Rect enemyBounds = enemy.bounds();
-        if (enemyBounds.position.x < camera.x - 96.0F ||
-            enemyBounds.position.y < camera.y - 96.0F ||
-            enemyBounds.position.x > camera.x + kWindowWidth / zoom + 96.0F ||
-            enemyBounds.position.y > camera.y + kWindowHeight / zoom + 96.0F)
+        if (enemyBounds.position.x < visible.position.x - 96.0F ||
+            enemyBounds.position.y < visible.position.y - 96.0F ||
+            enemyBounds.position.x > visible.position.x + visible.size.x + 96.0F ||
+            enemyBounds.position.y > visible.position.y + visible.size.y + 96.0F)
             continue;
         SDL_FRect destination{
             enemyBounds.position.x +
@@ -10036,19 +10087,52 @@ void App::renderBaseWorld()
         }
     }
 
-    const Vec2 playerPosition = world.playerPosition();
-    const Vec2 playerSize = world.playerSize();
-    renderPlayerAvatar(
-        playerPosition,
-        playerSize,
-        world.playerFacingDirection(),
-        world.playerIsMoving(),
-        world.playerAnimationFrame());
+    if (drawAvatar)
+        renderPlayerAvatar(world.playerPosition(), world.playerSize(),
+            world.playerFacingDirection(), world.playerIsMoving(), world.playerAnimationFrame());
     renderMeleeSwing(world.melee());
     renderShotPresentations();
     renderShotFeedbackPresentations();
     renderParticles();
     renderNoiseDecoyWorld();
+
+}
+
+void App::renderBaseWorld()
+{
+    const BaseWorld &world = gameFlow_.baseWorld();
+    const Vec2 screen{static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight)};
+    if (const auto *optic = visibleWeaponOpticView())
+    {
+        if (!renderWeaponOpticWorld(*optic, true, world.weaponAimWorldPosition(), world.worldSize()))
+            clearUnavailableOpticView();
+        renderBaseWorldInteractionHud();
+        return;
+    }
+    SDL_Texture *sceneTarget=SDL_GetRenderTarget(renderer_);
+    const bool observationLayer=!baseConstructionPanelOpen_ && !basePlacementState_ &&
+        !baseFixedFacilityPlacementState_ && ensureIndoorObservationTargets() &&
+        SDL_SetRenderTarget(renderer_,indoorInformationLayer_.get());
+    if(observationLayer) {
+        SDL_SetRenderViewport(renderer_,nullptr);SDL_SetRenderScale(renderer_,1,1);
+        SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_NONE);
+        SDL_SetRenderDrawColor(renderer_,15,21,21,255);SDL_RenderClear(renderer_);
+    }
+    const Vec2 camera = baseWorldCameraOffset();
+    const Vec2 shakePixels = raidWorldScreenShakePixels();
+    const Vec2 worldSize = world.worldSize();
+    const float zoom = baseConstructionZoom();
+    static_cast<void>(SDL_SetRenderScale(renderer_, zoom, zoom));
+    const Vec2 viewportOrigin = baseBuildViewportOrigin(
+        camera, zoom, shakePixels);
+    const SDL_Rect worldViewport{
+        static_cast<int>(std::lround(viewportOrigin.x)),
+        static_cast<int>(std::lround(viewportOrigin.y)),
+        static_cast<int>(std::ceil(worldSize.x)),
+        static_cast<int>(std::ceil(worldSize.y))};
+    static_cast<void>(SDL_SetRenderViewport(renderer_, &worldViewport));
+
+    renderBaseWorldScene({camera, {screen.x / zoom, screen.y / zoom}}, false);
 
     if(observationLayer) {
         SDL_SetRenderTarget(renderer_,sceneTarget);
@@ -10077,16 +10161,23 @@ void App::renderBaseWorld()
         for(const auto &near:world.weaponLightBackgroundObservations())paintVisibility(near,true);
         paintVisibility(world.observation(),false);
         SDL_SetRenderViewport(renderer_,&worldViewport);
-        renderPlayerAvatar(playerPosition,playerSize,world.playerFacingDirection(),
+        renderPlayerAvatar(world.playerPosition(),world.playerSize(),world.playerFacingDirection(),
             world.playerIsMoving(),world.playerAnimationFrame());
     }
 
     static_cast<void>(SDL_SetRenderViewport(renderer_, nullptr));
     static_cast<void>(SDL_SetRenderScale(renderer_, 1.0F, 1.0F));
 
+    renderBaseWorldInteractionHud();
+}
+
+void App::renderBaseWorldInteractionHud()
+{
     if (!baseWorldHudVisible()) return;
     renderBaseCombatVitals();
     renderMeleeStatus();
+    if (visibleWeaponOptic() == WeaponOpticMode::High) return;
+    const auto &world = gameFlow_.baseWorld();
 
     // One nearby interaction, with the same ground-first target selection and
     // eligibility as before. Population, service and regional ledgers remain
@@ -13589,7 +13680,9 @@ bool App::renderIndoorInformationLayer(const SDL_Rect &worldViewport)
                 indices.push_back(first + j + 1);
             }
         }
-    if (!SDL_SetRenderTarget(renderer_, indoorShadowMask_.get()))
+    // The optic pass shares these targets. SDL retains scale per target.
+    if (!SDL_SetRenderTarget(renderer_, indoorShadowMask_.get()) ||
+        !SDL_SetRenderScale(renderer_, 1.0F, 1.0F))
         return false;
     SDL_SetRenderViewport(renderer_, nullptr);
     SDL_SetRenderClipRect(renderer_, nullptr);
@@ -13605,7 +13698,8 @@ bool App::renderIndoorInformationLayer(const SDL_Rect &worldViewport)
                             indices.data(), static_cast<int>(indices.size())))
         return false;
 
-    if (!SDL_SetRenderTarget(renderer_, indoorInformationLayer_.get()))
+    if (!SDL_SetRenderTarget(renderer_, indoorInformationLayer_.get()) ||
+        !SDL_SetRenderScale(renderer_, 1.0F, 1.0F))
         return false;
     SDL_SetRenderViewport(renderer_, nullptr);
     SDL_SetRenderClipRect(renderer_, nullptr);
@@ -13681,14 +13775,8 @@ bool App::renderIndoorInformationLayer(const SDL_Rect &worldViewport)
     return true;
 }
 
-void App::renderRaidScreen()
+void App::renderUnscopedRaidWorld()
 {
-    bool wheelBackdrop=medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_;
-    if(wheelBackdrop && !quickWheelBackdrop_.begin(renderer_)) {
-        medicalWheelOpen_=false;medicalWheelOptions_.clear();cancelThrowableUi();cancelMagazineWheel();
-        uiMessage_="QUICK WHEEL BACKDROP UNAVAILABLE";wheelBackdrop=false;
-        SDL_LogError(SDL_LOG_CATEGORY_RENDER,"Quick wheel backdrop: %s",SDL_GetError());
-    }
     const Vec2 cameraOffset = raidWorldCameraOffset();
     const Vec2 shakePixels = raidWorldScreenShakePixels();
     const Vec2 activeWorldSize = gameSession_.world().raidSpaceWorldSize();
@@ -13757,6 +13845,27 @@ void App::renderRaidScreen()
     if (worldIsTranslated)
     {
         static_cast<void>(SDL_SetRenderViewport(renderer_, nullptr));
+    }
+}
+
+void App::renderRaidScreen()
+{
+    bool wheelBackdrop=medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_;
+    if(wheelBackdrop && !quickWheelBackdrop_.begin(renderer_)) {
+        medicalWheelOpen_=false;medicalWheelOptions_.clear();cancelThrowableUi();cancelMagazineWheel();
+        uiMessage_="QUICK WHEEL BACKDROP UNAVAILABLE";wheelBackdrop=false;
+        SDL_LogError(SDL_LOG_CATEGORY_RENDER,"Quick wheel backdrop: %s",SDL_GetError());
+    }
+    if (const auto *optic = visibleWeaponOpticView())
+    {
+        const auto &world = gameSession_.world();
+        if (!renderWeaponOpticWorld(*optic, false,
+                                   world.weaponAimWorldPosition(), world.raidSpaceWorldSize()))
+            clearUnavailableOpticView();
+    }
+    else
+    {
+        renderUnscopedRaidWorld();
     }
     if(wheelBackdrop) {
         if(!quickWheelBackdrop_.compose()) {
@@ -14112,8 +14221,9 @@ void App::renderProfileWeaponDetails()
     uiFinalTextAt(renderer_, uiTextRenderer_, 640, 148, "INSTALLED COMPONENTS", 548, 16);
     uiFinalPanel(renderer_, {630, 184, 570, 140});
     if (model->components.empty()) uiFinalTextAt(renderer_, uiTextRenderer_, 648, 198, "DEFAULT CONFIGURATION", 530, 14);
+    const float componentStride = model->components.size() > 4 ? 21.0F : 30.0F;
     for (std::size_t i = 0; i < model->components.size(); ++i)
-        uiFinalTextAt(renderer_, uiTextRenderer_, 648, 193 + static_cast<float>(i) * 30, model->components[i], 530, 14);
+        uiFinalTextAt(renderer_, uiTextRenderer_, 648, 193 + static_cast<float>(i) * componentStride, model->components[i], 530, 14);
     uiFinalTextAt(renderer_, uiTextRenderer_, 640, 340, "WEAPON LIGHT", 420, 16);
     uiFinalTextAt(renderer_, uiTextRenderer_, 640, 373, lightStateLabel(light), 432, 14);
     uiFinalTextAt(renderer_, uiTextRenderer_, 640, 398,

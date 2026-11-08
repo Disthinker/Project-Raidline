@@ -15,6 +15,7 @@ struct UiItemActionEntry {
     std::string label;
 };
 [[nodiscard]] std::string compactUiItemName(const ItemDefinition &, UiLanguage);
+[[nodiscard]] const char *uiWeaponOpticBehaviorText(WeaponOpticMode) noexcept;
 [[nodiscard]] std::vector<UiItemActionEntry> projectUiItemActions(
     const ProfileState &, const ContentRegistry &, AssetInstanceId, bool inRaid,
     MedicalAccess medicalAccess = MedicalAccess::AnyOwned);
