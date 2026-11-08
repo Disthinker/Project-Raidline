@@ -28,6 +28,12 @@ SDL 会为每张绘制纹理保存缩放。开镜后，共用观察纹理留下�
 - Windows Debug 专项 157/157、全量 3143/3143，保留全部 12 项 3ms 检查及负载。旧档隔离副本保存回读状态指纹一致。掉落、改装、存档、瞄准运行时及全部资源与 v3 字节一致。验证未启动游戏或写入正式存档。
 - HEAD `07714af5c5cacb6953171fe74bdae51f9f421f4d`。源码 SHA256 `e3fb3846b22b3c4017ef5a05b07e905a47cea5bab645aa6db10ad17afe467dbd`，程序 SHA256 `59f8697b720395fee4835f080b168594c8f3935835508b3c3ee10b4b93eaaaa9`。原 v3 程序与桌面快捷方式备份已保全，可回退到 `RL-RAID-OPTICS-ADS-TRANSITION-v3-local-7b6c2e3f2859`。构建、测试、截图、冻结清单与快捷方式证据在 `E:\CodexWorkspace\Temp\Raidline-raid-view-alignment-v4`。本轮候选已获用户复验，按提交、推送、精确提交双平台 CI、合并的顺序交付。
 
+### 交付 CI 与测试精度
+
+- 用户验收的提交已推送 [PR #201](https://github.com/Disthinker/Project-Raidline/pull/201)。首轮 Ubuntu 在下载 zstd 时遇到 HTTP/2 错误。Windows 仅 1000 资产的基地存盘测试超出 8ms，12 项 3ms 检查全部通过。主线与候选本机各 6 次对照均通过，同一提交只重跑一次。
+- 重跑后 Windows 3143/3143。Ubuntu 3142/3143，唯一失败是低倍 144 Hz 完整收镜后约 0.00110 像素的浮点偏差。只把该回归的收镜后坐标容差调整为 1/512 像素，原有时序、其他准星断言、8ms 和 3ms 门槛均保留。所有生产输入、程序和固定入口与实机验收一致。
+- Windows 本地专项 4/4。两轮全量在较高并发负载下各 3141/3143，混合感染者和武器操控计时越线。两组交替对照中，原主线同负载也出现相同两项失败。此前同一验收程序本机全量和 PR Windows CI 各 3143/3143。保留本地失败日志和原负载，由更新后的准确提交重新完成双平台全量 CI。历史失败与重跑见 [CI 记录](https://github.com/Disthinker/Project-Raidline/actions/runs/42477875546)。
+
 ## v3 开镜与收镜过渡
 
 v3 的实现和验证保留如下。对局视角错位见上方 v4。

@@ -4900,8 +4900,10 @@ TEST(GameplayWorldTest, OpticTransitionStartsImmediatelyAndUsesEffectiveHandling
                     shooting.updateAim(input, origin, {1, 0}, size, step);
                 ASSERT_FALSE(shooting.weaponOpticView());
                 const auto ordinaryPixel = raidWorldToScreen(shooting.aimWorldPosition(), camera);
-                EXPECT_NEAR(ordinaryPixel.x, anchor.x, 0.001F);
-                EXPECT_NEAR(ordinaryPixel.y, anchor.y, 0.001F);
+                // A full transition accumulates float roundoff across projections.
+                constexpr float closedAnchorTolerance = 1.0F / 512.0F;
+                EXPECT_NEAR(ordinaryPixel.x, anchor.x, closedAnchorTolerance);
+                EXPECT_NEAR(ordinaryPixel.y, anchor.y, closedAnchorTolerance);
             }
 }
 
