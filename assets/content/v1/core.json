@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-hospital-night-operations-content-77",
+  "content_version": "raid-cross-map-freight-access-content-78",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -1822,6 +1822,21 @@
       "base_contribution": {"security": 20},
       "base_construction_material": 6,
       "market_recycle_price": 80
+    },
+    {
+      "id": "item.loot.freight_crate_key",
+      "display_name": "Freight Crate Key",
+      "category": "loot",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 50,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 24, "y": 24},
+        "pickup_size": {"x": 32, "y": 32}
+      },
+      "inventory_texture": "items/inventory/unpublished_precision_components.png",
+      "world_texture": "items/world/unpublished_precision_components.png"
     },
     {
       "id": "item.throwable.frag_grenade_basic",

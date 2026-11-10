@@ -155,7 +155,7 @@ TEST_F(NightVisionDomainTest, Schema61RoundTripAndInvalidHostChecksPreserveAsset
     ASSERT_NO_FATAL_FAILURE(mount());
     ASSERT_TRUE(executeDeviceSwitch(profile, content, device, {profile.revision, "on"}).succeeded);
     advanceNightVision(profile, content, binding(), true, 1.25F);
-    const auto envelope = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto envelope = serializeProfileEnvelope(profile, kHospitalNightOperationsContentVersion, 61);
     EXPECT_EQ(nlohmann::json::parse(envelope).at("schema_version"), 61U);
     const auto loaded = deserializeProfileEnvelope(envelope, content);
     ASSERT_TRUE(loaded.profile) << loaded.message;

@@ -723,7 +723,7 @@ std::optional<AssetInstanceId> raidSceneContainerRoot(
     return std::nullopt;
 }
 
-bool raidSceneContainerAccessible(const ProfileState &profile, const RaidSceneContainerAccess &access)
+bool raidSceneContainerObservable(const ProfileState &profile, const RaidSceneContainerAccess &access)
 {
     const auto *asset = profile.assets.find(access.containerAssetId);
     if (!access.observation || !access.currentObservation ||
@@ -742,6 +742,60 @@ bool raidSceneContainerAccessible(const ProfileState &profile, const RaidSceneCo
     const float dx = scene->position.x - access.playerCenter.x, dy = scene->position.y - access.playerCenter.y;
     if (!access.observation->boundsVisible({{scene->position.x-24,scene->position.y-18},{48,36}})) return false;
     return dx * dx + dy * dy <= 72.0F * 72.0F;
+}
+
+bool raidSceneContainerLocked(const ProfileState &profile, AssetInstanceId containerAssetId) noexcept
+{
+    return profile.pendingRaid && profile.pendingRaid->sealedFreightCrate &&
+        profile.pendingRaid->sealedFreightCrate->containerAssetId == containerAssetId &&
+        !profile.pendingRaid->sealedFreightCrate->unlocked;
+}
+
+bool raidSceneContainerAccessible(const ProfileState &profile, const RaidSceneContainerAccess &access)
+{
+    return !raidSceneContainerLocked(profile, access.containerAssetId) &&
+        raidSceneContainerObservable(profile, access);
+}
+
+bool raidFreightCrateKeyCarried(const ProfileState &profile)
+{
+    return std::any_of(profile.assets.records().begin(), profile.assets.records().end(),
+        [&](const auto &entry) {
+            return entry.second.definitionId == kFreightCrateKeyId && assetIsCarried(profile, entry.first);
+        });
+}
+
+InventoryReceipt unlockRaidFreightCrate(
+    ProfileState &profile,
+    const RaidSceneContainerAccess &access,
+    const CommandContext &context)
+{
+    if (context.transactionId.empty())
+        return failure(DomainErrorCode::InvalidTransaction, "transaction ID must not be empty", profile.revision);
+
+    auto *crate = profile.pendingRaid && profile.pendingRaid->sealedFreightCrate
+        ? &*profile.pendingRaid->sealedFreightCrate : nullptr;
+    if (!crate || crate->containerAssetId != access.containerAssetId)
+        return failure(DomainErrorCode::IllegalDestination, "sealed freight crate is unavailable", profile.revision);
+    if (profile.committedTransactions.contains(context.transactionId))
+    {
+        if (crate->unlocked)
+            return {true, true, DomainErrorCode::None, {}, profile.revision};
+        return failure(DomainErrorCode::InvalidTransaction, "transaction ID is already committed", profile.revision);
+    }
+    if (context.expectedRevision != profile.revision)
+        return failure(DomainErrorCode::StaleRevision, "profile revision is stale", profile.revision);
+    if (profile.revision == std::numeric_limits<ProfileRevision>::max())
+        return failure(DomainErrorCode::RevisionOverflow, "profile revision cannot advance", profile.revision);
+    if (crate->unlocked || !raidSceneContainerObservable(profile, access))
+        return failure(DomainErrorCode::IllegalDestination, "sealed freight crate is unavailable", profile.revision);
+    if (!raidFreightCrateKeyCarried(profile))
+        return failure(DomainErrorCode::MissingAsset, "freight crate key must be carried", profile.revision);
+
+    profile.committedTransactions.insert(context.transactionId);
+    crate->unlocked = true;
+    ++profile.revision;
+    return {true, false, DomainErrorCode::None, {}, profile.revision};
 }
 
 namespace

@@ -1,11 +1,24 @@
-# 当前 · 医院夜间行动与供电整备 v1 已验收，正在交付
+# 当前 · 跨图后勤钥匙与封存补给 v1 已验收，正在交付
+
+从河畔检查站带回钥匙，下一趟开边境交换站货运装卸间的封存器材箱，将精密组件带回工坊。[具体开发方案](../exec-plans/active/raid-cross-map-freight-access-v1.md)
+
+- task_id `raid-cross-map-freight-access-v1`，plan_version `RL-RAID-CROSS-MAP-FREIGHT-ACCESS-v1`，state `accepted_delivering`。approval_source 为 2026-11-10 用户明确批准 RL-RAID-CROSS-MAP-FREIGHT-ACCESS-v1，要求一次性完成整阶段，保留已验收 UI 和玩法、原存档、固定入口和 13 项 3ms 门槛，暂不提交、推送或合并。 candidate_id `RL-RAID-CROSS-MAP-FREIGHT-ACCESS-v1-local-e359892b5d99`。accepted_candidate_id `RL-RAID-CROSS-MAP-FREIGHT-ACCESS-v1-local-e359892b5d99`。acceptance_source 为 2026-11-10 用户明确回复“跨图后勤钥匙与封存补给 v1 验收通过，请完成提交、推送和合并。”
+- 基线 `origin/main@692e6689d821bc1177b03dfe51b852ede8df2f08`。PR #203 已验收合并，[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42781670873) 双平台各 3172/3172，原 12 项及新增双设备 3ms 检查通过。
+- 原策划线程已回复 `MAIN-NEXT-STAGE-20261110-AFTER-HOSPITAL-NIGHT-01`，协调任务 `raid-next-stage-after-hospital-night`，协议 `RL-NEXT-STAGE-REQUEST-v1`，回复基线一致，状态 `proposal_ready_awaiting_human_approval`。已从同一主线建立隔离工作树 E:\WorkPlace\Projects\C\Project Raidline-raid-cross-map-freight-access-v1。
+- 固定入口已更新。Windows 3187/3187，3ms 检查 13/13。[联合验收](../acceptance/raid-cross-map-freight-access-v1.md)
+
+---
+
+# 当前 · 医院夜间行动与供电整备 v1 已验收并合并
 
 去医院后勤走廊搜获夜视仪，在基地安装和供电，安排第二趟夜间出击并带回医疗物资。[具体开发方案](../exec-plans/active/raid-hospital-night-operations-v1.md)
 
-- task_id `raid-hospital-night-operations-v1`，plan_version `RL-RAID-HOSPITAL-NIGHT-OPERATIONS-v1`，state `accepted_delivering`。approval_source 为 2026-11-10 用户明确批准 RL-RAID-HOSPITAL-NIGHT-OPERATIONS-v1，要求一次性完成整阶段，保留已验收 UI 和玩法、原存档、固定入口和 12 项 3ms 门槛，暂不提交、推送或合并。 candidate_id `RL-RAID-HOSPITAL-NIGHT-OPERATIONS-v1-local-849df0f58fe0`。accepted_candidate_id `RL-RAID-HOSPITAL-NIGHT-OPERATIONS-v1-local-849df0f58fe0`。acceptance_source 为 2026-11-10 用户明确回复“医院夜间行动与供电整备 v1 验收通过，请完成提交、推送和合并。”
+- task_id `raid-hospital-night-operations-v1`，plan_version `RL-RAID-HOSPITAL-NIGHT-OPERATIONS-v1`，state `merged`。approval_source 为 2026-11-10 用户明确批准 RL-RAID-HOSPITAL-NIGHT-OPERATIONS-v1，要求一次性完成整阶段，保留已验收 UI 和玩法、原存档、固定入口和 12 项 3ms 门槛，暂不提交、推送或合并。 candidate_id `RL-RAID-HOSPITAL-NIGHT-OPERATIONS-v1-local-849df0f58fe0`。accepted_candidate_id `RL-RAID-HOSPITAL-NIGHT-OPERATIONS-v1-local-849df0f58fe0`。acceptance_source 为 2026-11-10 用户明确回复“医院夜间行动与供电整备 v1 验收通过，请完成提交、推送和合并。”
 - 基线 `origin/main@c20114622b28429357605b112ff57cdadeceeb3f`。PR #202 已验收合并，[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42753123503) 双平台各 3155/3155，12 项 3ms 检查通过。
 - 原策划线程已回复 `MAIN-NEXT-STAGE-20261110-AFTER-AMMO-01`，协调任务 `raid-next-stage-after-ammo`，协议 `RL-NEXT-STAGE-REQUEST-v1`，回复基线一致，状态 `proposal_ready_awaiting_human_approval`。已从同一主线建立隔离工作树 E:\WorkPlace\Projects\C\Project Raidline-raid-hospital-night-operations-v1。
 - 固定入口已更新。Windows 3172/3172，原 3ms 检查 12/12。[联合验收](../acceptance/raid-hospital-night-operations-v1.md)
+- 提交 `bbc91cc` 已推送，[PR #203](https://github.com/Disthinker/Project-Raidline/pull/203)。已合入 `main@692e668`。[PR 双平台 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42777321999) 各 3172/3172，原 12 项 3ms 和新增双设备检查通过。[合并后主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42781670873) 双平台各 3172/3172，原 12 项及新增双设备 3ms 检查通过。Windows 首轮两条旧首局用例在临时存档回读失败，同一提交仅重跑 Windows 后通过。
+- 用户于 2026-11-10 要求主线通过后协调策划，下一阶段等确认。请求 MAIN-NEXT-STAGE-20261110-AFTER-HOSPITAL-NIGHT-01 已发给原策划线程 019feff4-477c-75c2-bf31-3f09ff1e3891，turn 01a1c4c9-d2da-7522-b2c2-c96b361224f5。协调任务 raid-next-stage-after-hospital-night，协议 RL-NEXT-STAGE-REQUEST-v1，基线 692e6689d821bc1177b03dfe51b852ede8df2f08。已收到匹配回复。下一阶段 [跨图后勤钥匙与封存补给 v1](../exec-plans/active/raid-cross-map-freight-access-v1.md) 待用户批准。
 
 ---
 

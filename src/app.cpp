@@ -2494,6 +2494,20 @@ SDL_FRect App::loadoutArchetypeButton(std::size_t index) const noexcept
         34.0F};
 }
 
+void App::openRaidSceneContainer(AssetInstanceId id)
+{
+    profileInventoryInteraction_.reset();
+    clearProfileItemContext();
+    openedRaidSceneContainerId_ = id;
+    inventoryOverlayState_.openContainerInventory();
+    input_.suppressPrimaryPointerUntilRelease();
+    const auto *root = gameSession_.profile().assets.find(id);
+    uiMessage_ = gameSession_.isRaidFreightCrate(id)
+        ? "FREIGHT CRATE OPENED | WORLD CONTINUES"
+        : root && std::holds_alternative<RaidCorpseContainerAssetLocation>(root->location)
+            ? "CORPSE OPENED | WORLD CONTINUES" : "SCENE CONTAINER OPENED | WORLD CONTINUES";
+}
+
 void App::closeInventory()
 {
     // A close request immediately discards old pointer targets and selections.
@@ -4731,6 +4745,7 @@ void App::processEvents()
             if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST)
             {
                 gameSession_.cancelPlayerControlIntent();
+                gameSession_.cancelRaidFreightUnlock();
                 windowHasInputFocus_ = false;
                 homeFoundingPrompt_.reset();
                 static_cast<void>(
@@ -5648,6 +5663,7 @@ void App::update(float deltaTime)
     }
     if(pendingInventoryBarrierAction_ || profileUiBusy()) {
         gameSession_.cancelPlayerControlIntent();
+        gameSession_.cancelRaidFreightUnlock();
         if (gameSession_.tacticalDeviceWheelOpen()) gameSession_.cancelWeaponLightInput();
         pendingBaseClicks_.clear();pendingBaseRightClicks_.clear();pendingInventoryUiEvents_.clear();
         return;
@@ -5658,12 +5674,17 @@ void App::update(float deltaTime)
         (gameFlow_.state() != GameFlowState::Raid || pauseMenu_.isOpen() || !windowHasInputFocus_ ||
          developerWeaponPanelOpen_ || developerRangePanelOpen_ || raidSaveProtectionVisible()))
         gameSession_.cancelWeaponLightInput();
+    if (raidSaveProtectionVisible())
+        gameSession_.cancelRaidFreightUnlock();
     if(pauseMenu_.isOpen() || !windowHasInputFocus_ || developerWeaponPanelOpen_ || developerRangePanelOpen_ ||
        developerWeaponPanelBlocksGameplayThisFrame_ || medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_ || selectedThrowable_ ||
        inventoryOverlayState_.isOpen() || tacticalMapOpen_ || baseConstructionPanelOpen_ ||
        basePlacementState_ || baseFixedFacilityPlacementState_ || gameFlow_.activeBaseFacility() ||
        baseSiegeWarningVisible() || baseDefenseResultVisible_ || gameSession_.baseDailySaveBlocked() || gameSession_.baseDefenseSaveBlocked())
+    {
         gameSession_.cancelPlayerControlIntent();
+        gameSession_.cancelRaidFreightUnlock();
+    }
     updateBasePresentation(deltaTime);
     if (gameFlow_.state() == GameFlowState::RaidResult &&
         (pauseMenu_.isOpen() || developerWeaponPanelOpen_ ||
@@ -5848,6 +5869,7 @@ void App::update(float deltaTime)
     if (pauseEligible && escapePressed && !existingModalHandlesEscape)
     {
         gameSession_.cancelPlayerControlIntent();
+        gameSession_.cancelRaidFreightUnlock();
         pauseMenu_.open();
         gameSession_.cancelWeaponLightInput();
         gameSession_.cancelRaidCredentialInteraction();
@@ -6081,19 +6103,12 @@ void App::update(float deltaTime)
     {
         if (const auto container = gameSession_.nearbyRaidSceneContainer())
         {
-            profileInventoryInteraction_.reset();
-            clearProfileItemContext();
-            openedRaidSceneContainerId_ = container;
-            inventoryOverlayState_.openContainerInventory();
-            input_.suppressPrimaryPointerUntilRelease();
+            openRaidSceneContainer(*container);
             gameplayInput.inventoryOpen = true;
             gameplayInput.interactJustPressed = gameplayInput.interactPressed = false;
             gameplayInput.fireJustPressed = gameplayInput.firePressed = false;
             gameplayInput.reloadJustPressed = gameplayInput.healJustPressed = false;
             gameplayInput.weaponSlotJustPressed.reset();
-            const auto *root = gameSession_.profile().assets.find(*container);
-            uiMessage_ = root && std::holds_alternative<RaidCorpseContainerAssetLocation>(root->location)
-                ? "CORPSE OPENED | WORLD CONTINUES" : "SCENE CONTAINER OPENED | WORLD CONTINUES";
         }
         else if(const auto corpse=gameSession_.nearbyBaseCorpse())
         {
@@ -6150,6 +6165,12 @@ void App::update(float deltaTime)
         resetRaidResultUi();
         refreshRaidResultUi(true);
     }
+    if (const auto opened = gameSession_.takeOpenedRaidFreightCrate();
+        opened && gameFlow_.state() == GameFlowState::Raid && windowHasInputFocus_ &&
+        !inventoryOverlayState_.isOpen() && !tacticalMapOpen_ && !quickWheelOpen() &&
+        !selectedThrowable_ && !raidSaveProtectionVisible() &&
+        gameSession_.canOpenRaidSceneContainer(*opened))
+        openRaidSceneContainer(*opened);
     if (openedRaidSceneContainerId_ && !gameSession_.raidSceneContainerAvailable(*openedRaidSceneContainerId_))
     {
         closeInventory();
@@ -6463,6 +6484,19 @@ void App::renderDebugText()
     if(world.credentialInvestigationProgress()>0.0F && world.credentialInvestigationInRange()){
         p.actionActive=true;p.actionFraction=world.credentialInvestigationProgress();
         p.action=fmt::format("{} {:.0f}%",tr("调查通行资料","INVESTIGATING TRANSIT DOCUMENTS"),p.actionFraction*100);
+    }
+    if (const auto freight = gameSession_.raidFreightUnlock(); freight && !highOptic)
+    {
+        if (freight->progress > 0.0F)
+        {
+            p.actionActive = true;
+            p.actionFraction = freight->progress;
+            p.action = fmt::format("{} {:.0f}%", tr("开锁中", "UNLOCKING FREIGHT CRATE"),
+                                  p.actionFraction * 100.0F);
+        }
+        else if (p.action.empty())
+            p.action = freight->hasKey ? "HOLD F TO UNLOCK SEALED CRATE"
+                                       : "SEALED CRATE | CARRY THE KEY";
     }
     if(raid.state()==RaidSessionState::Extracting || raid.state()==RaidSessionState::Extracted){p.actionActive=true;p.actionFraction=raid.extractionProgress();p.action=fmt::format("{} {:.0f}%",tr("撤离中","EXTRACTING"),p.actionFraction*100);}
     const auto light = gameSession_.activeWeaponLight();
@@ -12488,6 +12522,10 @@ void App::renderProfileInventory(
     bool inRaid,
     std::optional<AssetInstanceId> externalContainerId)
 {
+    const bool freightCrate = inRaid && externalContainerId &&
+        gameSession_.isRaidFreightCrate(*externalContainerId);
+    if (freightCrate && !gameSession_.raidSceneContainerAvailable(*externalContainerId))
+        return;
     if(inventoryWeaponComponentsOpen_ && (!inRaid || gameSession_.developerRangeAtConsole())) {renderWeaponComponents();return;}
     if(profileDetailsAsset_) {renderProfileWeaponDetails();return;}
     const auto &profile=gameSession_.profileForInventoryPresentation();
@@ -12530,9 +12568,12 @@ void App::renderProfileInventory(
         else if(profilePresentation_.returns && !assetsInContainer(profile,ProfileContainerId::baseIntake()).empty())title="UNASSIGNED RETURNS";
         if(externalContainerId) {
             const auto *owner=profile.assets.find(*externalContainerId);
-            title=owner && std::holds_alternative<RaidCorpseContainerAssetLocation>(owner->location)?"CORPSE":inRaid?"SCENE STORAGE":"BASE GROUND CONTAINER";
+            title = freightCrate ? "SEALED FREIGHT CRATE"
+                : owner && std::holds_alternative<RaidCorpseContainerAssetLocation>(owner->location)
+                    ? "CORPSE" : inRaid ? "SCENE STORAGE" : "BASE GROUND CONTAINER";
         }
-        const int titleSize = !inRaid && externalContainerId && uiTextRenderer_.language()==UiLanguage::English ? 13 : 16;
+        const int titleSize = externalContainerId && (!inRaid || freightCrate) &&
+            uiTextRenderer_.language()==UiLanguage::English ? 13 : 16;
         text({808,64,190,24},title,titleSize);
         if(externalContainerId && !inRaid)
             renderFoundationButton(3142,profileGroundContainerPickupRect(),
@@ -12646,8 +12687,20 @@ void App::renderAlphaRaidLoot()
         SDL_RenderRect(renderer_, &box);
         SDL_RenderLine(renderer_, box.x, box.y + 12, box.x + box.w, box.y + 12);
         SDL_SetRenderDrawColor(renderer_, 244, 230, 180, 255);
-        renderWorldLabel(box.x, box.y - 20,
-            !inventoryOverlayState_.isOpen() && gameSession_.canOpenRaidSceneContainer(id) ? "F: OPEN STORAGE" : "SCENE STORAGE");
+        const bool canOpen = !inventoryOverlayState_.isOpen() && gameSession_.canOpenRaidSceneContainer(id);
+        const char *label = canOpen ? "F: OPEN STORAGE" : "SCENE STORAGE";
+        if (gameSession_.isRaidFreightCrate(id))
+        {
+            const bool locked = !profile.pendingRaid->sealedFreightCrate->unlocked;
+            label = canOpen ? "F: OPEN SEALED CRATE" : "SEALED FREIGHT CRATE";
+            if (locked)
+            {
+                const SDL_FRect latch{box.x + 20, box.y + 10, 8, 10};
+                SDL_RenderFillRect(renderer_, &latch);
+                label = "SEALED CRATE | LOCKED";
+            }
+        }
+        renderWorldLabel(box.x, box.y - 20, label);
     }
     for (const auto &[id, asset] : profile.assets.records())
     {
@@ -12706,6 +12759,18 @@ void App::renderAlphaRaidLoot()
             loot.position.y - size.y / 2.0F,
             size.x,
             size.y};
+        if (asset->definitionId == kFreightCrateKeyId)
+        {
+            const SDL_FRect bow{destination.x + 3, loot.position.y - 4, 8, 8};
+            const float bit = destination.x + destination.w - 3;
+            SDL_SetRenderDrawColor(renderer_, 238, 214, 132, 255);
+            SDL_RenderRect(renderer_, &bow);
+            SDL_RenderLine(renderer_, bow.x + bow.w, loot.position.y, bit, loot.position.y);
+            SDL_RenderLine(renderer_, bit, loot.position.y, bit, loot.position.y + 4);
+            SDL_RenderLine(renderer_, bit - 4, loot.position.y, bit - 4, loot.position.y + 3);
+            renderWorldLabel(destination.x, destination.y - 20, definition.displayName);
+            continue;
+        }
         bool rendered{};
         if (const auto legacy = legacyItemId(asset->definitionId))
         {
@@ -14361,6 +14426,7 @@ void App::renderProfileWeaponDetails()
     const bool inRaid = gameSession_.alphaRaidActive();
     const bool helmet = model->kind == UiItemDetailsKind::Helmet;
     const bool weapon = model->kind == UiItemDetailsKind::Weapon;
+    const bool freightKey = model->kind == UiItemDetailsKind::FreightKey;
     const auto device = detailDevice(gameSession_, profile, content, asset, inRaid);
     const bool canFit = helmet && gameFlow_.state() == GameFlowState::Base &&
         gameFlow_.baseWorld().canAccessStash();
@@ -14393,6 +14459,12 @@ void App::renderProfileWeaponDetails()
         const float componentStride = model->components.size() > 4 ? 21.0F : 30.0F;
         for (std::size_t i = 0; i < model->components.size(); ++i)
             uiFinalTextAt(renderer_, uiTextRenderer_, 648, 193 + static_cast<float>(i) * componentStride, model->components[i], 530, 14);
+    } else if (freightKey) {
+        uiFinalTextAt(renderer_, uiTextRenderer_, 640, 148, "UNLOCK LOCATION", 548, 16);
+        uiFinalPanel(renderer_, {630, 184, 570, 140});
+        for (std::size_t i = 0; i < model->notes.size(); ++i)
+            uiFinalTextAt(renderer_, uiTextRenderer_, 648, 198 + static_cast<float>(i) * 32,
+                          model->notes[i], 530, i == 0 ? 16 : 14);
     } else {
         uiFinalTextAt(renderer_, uiTextRenderer_, 640, 148, "NIGHT VISION MOUNT", 548, 16);
         uiFinalPanel(renderer_, {630, 184, 570, 140});
@@ -15005,6 +15077,7 @@ void App::handleProfileContextMenuClick(MousePosition position, bool inRaid) {
     case UiItemAction::DecoyDetails:
     case UiItemAction::HelmetDetails:
     case UiItemAction::NightVisionDetails:
+    case UiItemAction::FreightKeyDetails:
         itemDetailsInteraction_ = {}; deviceBatteryDrag_.reset();
         profileDetailsAsset_ = id;
         return;

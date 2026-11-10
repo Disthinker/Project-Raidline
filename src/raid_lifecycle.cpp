@@ -951,6 +951,9 @@ DeployReceipt executeDeploy(
 
     const LootTableDefinition &lootTable =
         content.lootTable(map->raidLootTableId);
+    const bool freightAccessRules = regionalMissionCount == 0U &&
+        content.contentVersion() == kCrossMapFreightContentVersion;
+    const bool freightKeySource = freightAccessRules && map->id == kFreightKeySourceMapId;
     if (!resourceEcologyRules)
     {
         for (const std::size_t slotIndex : selectLootSlots(*map, lootRandom))
@@ -958,24 +961,38 @@ DeployReceipt executeDeploy(
             const LootContentEntry &entry = rollLoot(lootTable, lootRandom);
             const std::uint32_t range =
                 entry.maximumQuantity - entry.minimumQuantity + 1U;
-            const std::uint32_t quantity = entry.minimumQuantity +
+            const auto &slot = map->raidLootSlots[slotIndex];
+            std::uint32_t quantity = entry.minimumQuantity +
                 lootRandom.bounded(range);
+            // Slot selection is already sorted. Keep both original draws even
+            // when the first selected central slot supplies the freight key.
+            const bool freightKeySlot = freightKeySource && slot.route == "central" &&
+                !snapshot.freightKeyLootSlotId;
+            const ItemDefinitionId &item = freightKeySlot ? kFreightCrateKeyId : entry.itemDefinitionId;
+            if (freightKeySlot)
+            {
+                quantity = 1U;
+                snapshot.freightKeyLootSlotId = slot.id;
+            }
             const AssetInstanceId assetId = candidate.assets.create(
-                content.item(entry.itemDefinitionId),
+                content.item(item),
                 RaidGroundAssetLocation{
                     command.raidId,
                     static_cast<std::uint32_t>(slotIndex)},
                 quantity);
             snapshot.loot.push_back(RaidLootSnapshot{
                 assetId,
-                entry.itemDefinitionId,
+                item,
                 quantity,
                 static_cast<std::uint32_t>(slotIndex),
-                map->raidLootSlots[slotIndex].position,
+                slot.position,
                 false,
                 false});
         }
     }
+    if (freightKeySource && !snapshot.freightKeyLootSlotId)
+        return deployFailure(RaidLifecycleError::InvalidProfile,
+            "freight crate key source slot was not selected", profile.revision);
 
     const LootTableDefinition &advancedLootTable = content.lootTable(
         highRiskCrisis != nullptr
@@ -1010,7 +1027,9 @@ DeployReceipt executeDeploy(
     std::size_t interiorSlotIndex = regularLootSlotCount +
         map->highRisk.advancedLootSlots.size();
     const bool nightVisionLootRules = regionalMissionCount == 0U &&
-        content.contentVersion() == kHospitalNightOperationsContentVersion;
+        hospitalNightCompatibleContent(content.contentVersion());
+    const bool sealedFreightRules = freightAccessRules && map->id == kFreightCrateMapId;
+    std::optional<AssetInstanceId> freightSupplyAssetId;
     for (std::size_t interiorIndex{};
          interiorIndex < map->interiors.size(); ++interiorIndex)
     {
@@ -1030,13 +1049,17 @@ DeployReceipt executeDeploy(
             // only the existing hospital service-corridor slot.
             const bool nightVisionSlot = nightVisionLootRules &&
                 isHospitalNightVisionLootSlot(map->id, interior.id, slot.id);
+            const bool sealedFreightSlot = sealedFreightRules && interior.id == kFreightCrateSpaceId &&
+                slot.id == kFreightCrateSlotId;
             const ItemDefinitionId &item = nightVisionSlot
-                ? kHospitalNightVisionId : entry.itemDefinitionId;
+                ? kHospitalNightVisionId
+                : sealedFreightSlot ? kFreightCrateSupplyId : entry.itemDefinitionId;
             if (nightVisionSlot)
             {
                 quantity = 1U;
                 snapshot.hospitalNightVisionLoot = true;
             }
+            if (sealedFreightSlot) quantity = 1U;
             const AssetInstanceId assetId = candidate.assets.create(
                 content.item(item),
                 RaidGroundAssetLocation{
@@ -1052,6 +1075,7 @@ DeployReceipt executeDeploy(
                 false,
                 false,
                 interior.id});
+            if (sealedFreightSlot) freightSupplyAssetId = assetId;
             ++interiorSlotIndex;
         }
     }
@@ -1831,6 +1855,32 @@ DeployReceipt executeDeploy(
     candidate.pendingRaid = std::move(snapshot);
     const auto corpseFreeze = freezeRaidCorpseLoot(candidate, content);
     if (!corpseFreeze.valid) return deployFailure(RaidLifecycleError::InvalidProfile, corpseFreeze.message, profile.revision);
+    if (sealedFreightRules)
+    {
+        // Allocate after both existing scene and corpse containers to keep
+        // their frozen asset identities stable.
+        auto &raid = *candidate.pendingRaid;
+        const auto supply = std::find_if(raid.loot.begin(), raid.loot.end(),
+            [&](const auto &loot) { return loot.assetId == freightSupplyAssetId; });
+        if (supply == raid.loot.end() || supply->sceneContainerAssetId)
+            return deployFailure(RaidLifecycleError::InvalidProfile,
+                "sealed freight crate Loot slot is unavailable", profile.revision);
+        if (candidate.assets.nextAssetId() == std::numeric_limits<AssetInstanceId>::max())
+            return deployFailure(RaidLifecycleError::Capacity,
+                "sealed freight crate asset identity space exhausted", profile.revision);
+        const auto containerId = candidate.assets.create(
+            content.item(ItemDefinitionId{"item.container.base_storage_crate"}),
+            RaidSceneContainerAssetLocation{raid.raidId, supply->spaceId, supply->position});
+        auto *asset = candidate.assets.findMutable(supply->assetId);
+        const auto container = ProfileContainerId::compartment(containerId, 0);
+        const auto fit = findFirstProfileFit(candidate, content, container,
+            content.item(asset->definitionId), asset->orientation, asset->instanceId);
+        if (!fit) return deployFailure(RaidLifecycleError::InvalidProfile,
+            "sealed freight crate Loot does not fit its container", profile.revision);
+        asset->location = StoredAssetLocation{container, *fit};
+        supply->sceneContainerAssetId = containerId;
+        raid.sealedFreightCrate = RaidSealedFreightCrateSnapshot{containerId, false};
+    }
     if (!advanceProfileWorldTime(
             candidate,
             content,

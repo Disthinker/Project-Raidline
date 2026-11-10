@@ -436,6 +436,7 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
 {
     if(!prepared)return;
     if(prepared->kind==PreparedPlayerTransition::Kind::Deploy) {
+    freightUnlock_ = {};
     world_=std::move(prepared->world);
     world_->setRaidDaylight(worldClockProjection().timeOfDay == WorldTimeOfDay::Day);
     activeRaidRecoveryProfile_ = std::move(prepared->raidRecoveryProfile);
@@ -470,6 +471,7 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     synchronizeNightVision();
     if(prepared->requirePhysicalRelease)cancelPlayerControlIntent();
     } else if(prepared->kind==PreparedPlayerTransition::Kind::RaidSettlement) {
+    freightUnlock_ = {};
     cancelWeaponLightInput();
     world_->commitNoiseDecoy({});
     world_->commitGrenade({});

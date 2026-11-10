@@ -98,7 +98,7 @@ TEST_F(WeaponHandlingSaveTest, Schema59RoundTripPreservesSelectedModeAndComplete
     const auto text = serializeProfileEnvelope(profile, content.contentVersion(), 59);
     auto envelope = Json::parse(text);
     EXPECT_EQ(envelope.at("schema_version"), 59U);
-    EXPECT_EQ(envelope.at("content_version").get<std::string>(), kHospitalNightOperationsContentVersion);
+    EXPECT_EQ(envelope.at("content_version").get<std::string>(), kCrossMapFreightContentVersion);
     EXPECT_EQ(assetJson(envelope, rifle).at("fire_mode"), "three_round_burst");
     for (const auto &asset : envelope.at("payload").at("assets")) {
         ASSERT_TRUE(asset.contains("fire_mode"));
@@ -256,13 +256,14 @@ TEST_F(WeaponHandlingSaveTest, RetainedLossMagazineRoundTripsAsAnOwnedChildAndCa
 
 TEST_F(WeaponHandlingSaveTest, UpgradePreservesBothOriginalSourcesBeforeFurtherPlayAndPendingMirror) {
     const auto &content = publishedContentRegistry();
+    const auto historical = contentBeforeCrossMapFreight();
     for (bool pending : {false, true}) {
         SCOPED_TRACE(pending);
         raidline::test::TemporaryDirectory nested;
         nested.claim("raidline-weapon-upgrade-", pending ? "pending" : "base");
         SaveRepository repository{nested.path()};
         auto profile = fresh();
-        if (pending) ASSERT_TRUE(executeDeploy(profile, content,
+        if (pending) ASSERT_TRUE(executeDeploy(profile, historical,
             {"save-upgrade-raid", "save-upgrade-result", 1983U, MapDefinitionId{"map.raid.frontier_exchange"}},
             {profile.revision, "save-upgrade-deploy"}).succeeded);
         const auto primary = serializeProfileEnvelope(profile, previousContent, 58);
@@ -293,18 +294,19 @@ TEST_F(WeaponHandlingSaveTest, UpgradePreservesBothOriginalSourcesBeforeFurtherP
 TEST_F(WeaponHandlingSaveTest, OpticContentKeepsSchema59And60FrozenLootAndArchivesOriginalSlots) {
     const auto &content = publishedContentRegistry();
     const auto historical = contentBeforeOptics();
+    const auto beforeFreight = contentBeforeCrossMapFreight();
     for (const auto schema : {59U, 60U}) {
         SCOPED_TRACE(schema);
         raidline::test::TemporaryDirectory nested;
         nested.claim("raidline-optic-save-", std::to_string(schema));
         SaveRepository repository{nested.path()};
         auto source = makeNewAlphaProfile("optic-old-pending", historical);
-        auto current = makeNewAlphaProfile("optic-old-pending", content);
+        auto current = makeNewAlphaProfile("optic-old-pending", beforeFreight);
         const DeployCommand command{"optic-raid", "optic-settlement", 7712201U + schema,
             MapDefinitionId{"map.raid.frontier_exchange"}};
         const auto oldDeploy = executeDeploy(source, historical, command, {source.revision, "optic-seed"});
         ASSERT_TRUE(oldDeploy.succeeded) << oldDeploy.message;
-        const auto newDeploy = executeDeploy(current, content, command, {current.revision, "optic-seed"});
+        const auto newDeploy = executeDeploy(current, beforeFreight, command, {current.revision, "optic-seed"});
         ASSERT_TRUE(newDeploy.succeeded) << newDeploy.message;
         const auto &newRaid = *current.pendingRaid;
         const auto &oldRaid = *source.pendingRaid;
@@ -403,7 +405,7 @@ TEST_F(WeaponHandlingSaveTest, AmmoLoopUpgradeKeepsOldOrderAndPendingRaidAndArch
     EXPECT_EQ(readBytes(archive(false, primary)), primary);
     EXPECT_EQ(readBytes(archive(true, backup)), backup);
     const auto upgraded = Json::parse(readBytes(repository.primaryPath()));
-    EXPECT_EQ(upgraded.at("schema_version"), 61U);
+    EXPECT_EQ(upgraded.at("schema_version"), 62U);
     EXPECT_EQ(upgraded.at("content_version").get<std::string>(), kAmmoLoopContentVersion);
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile) << reopened.message;
@@ -433,7 +435,7 @@ TEST_F(WeaponHandlingSaveTest, ArchiveConflictCannotReplaceEitherOriginalSlot) {
 }
 
 TEST_F(WeaponHandlingSaveTest, HospitalNightUpgradePreservesOldFrozenLootAndBothSourceSlots) {
-    const auto &content = publishedContentRegistry();
+    const auto content = contentBeforeCrossMapFreight();
     const auto historical = contentBeforeHospitalNightOperations();
     SaveRepository repository{directory.path()};
     auto source = makeNewAlphaProfile("old-hospital-night", historical);
@@ -467,6 +469,95 @@ TEST_F(WeaponHandlingSaveTest, HospitalNightUpgradePreservesOldFrozenLootAndBoth
     ASSERT_TRUE(reopened.profile->pendingRaid);
     EXPECT_FALSE(reopened.profile->pendingRaid->hospitalNightVisionLoot);
     EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(source));
+}
+
+TEST_F(WeaponHandlingSaveTest, FreightUpgradeKeepsFrozenSchema61CratesAndHospitalNightLoot)
+{
+    const auto &content = publishedContentRegistry();
+    const auto historical = contentBeforeCrossMapFreight();
+    for (const bool hospital : {false, true})
+    {
+        SCOPED_TRACE(hospital);
+        const auto folder = directory.path() / (hospital ? "hospital" : "frontier");
+        ASSERT_TRUE(std::filesystem::create_directory(folder));
+        const SaveRepository repository{folder};
+        auto oldProfile = makeNewAlphaProfile("freight-schema61-source", historical);
+        const MapDefinitionId map{hospital ? "map.raid.hospital_district" : "map.raid.frontier_exchange"};
+        const auto deployed = executeDeploy(oldProfile, historical, {"old-raid", "old-end", 42U, map},
+            {oldProfile.revision, "old-deploy"});
+        ASSERT_TRUE(deployed.succeeded) << deployed.message;
+        ASSERT_TRUE(oldProfile.pendingRaid);
+        EXPECT_FALSE(oldProfile.pendingRaid->sealedFreightCrate);
+        EXPECT_EQ(oldProfile.pendingRaid->hospitalNightVisionLoot, hospital);
+
+        const auto primary = serializeProfileEnvelope(oldProfile, historical.contentVersion(), 61);
+        auto older = oldProfile;
+        ++older.revision;
+        const auto backup = serializeProfileEnvelope(older, historical.contentVersion(), 61);
+        writeBytes(repository.primaryPath(), primary);
+        writeBytes(repository.backupPath(), backup);
+        const auto loaded = repository.load(content);
+        ASSERT_TRUE(loaded.profile) << loaded.message;
+        const auto fingerprint = profileStateFingerprint(oldProfile);
+        EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+        const auto upgraded = repository.save(*loaded.profile, content.contentVersion());
+        ASSERT_TRUE(upgraded.succeeded) << upgraded.message;
+        EXPECT_EQ(readBytes(folder / ("profile.pre-raid-cross-map-freight-access-v1." + checksum(primary) + ".json")),
+            primary);
+        EXPECT_EQ(readBytes(folder / ("profile.backup.pre-raid-cross-map-freight-access-v1." + checksum(backup) + ".json")),
+            backup);
+        const auto reopened = repository.load(content);
+        ASSERT_TRUE(reopened.profile && reopened.profile->pendingRaid) << reopened.message;
+        ASSERT_TRUE(reopened.sourceEnvelope);
+        EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 62U);
+        EXPECT_EQ(reopened.profile->pendingRaid->loot, oldProfile.pendingRaid->loot);
+        EXPECT_FALSE(reopened.profile->pendingRaid->freightKeyLootSlotId);
+        EXPECT_FALSE(reopened.profile->pendingRaid->sealedFreightCrate);
+        EXPECT_EQ(reopened.profile->pendingRaid->hospitalNightVisionLoot, hospital);
+        EXPECT_EQ(profileStateFingerprint(*reopened.profile), fingerprint);
+    }
+}
+
+TEST_F(WeaponHandlingSaveTest, FreightSchema62RoundTripsStableIdentityAndRejectsMislabelledMetadata)
+{
+    const auto &content = publishedContentRegistry();
+    for (const bool target : {false, true})
+    {
+        SCOPED_TRACE(target);
+        auto profile = fresh();
+        const MapDefinitionId map{target ? "map.raid.frontier_exchange" : "map.raid.riverside"};
+        const auto deployed = executeDeploy(profile, content, {"freight-save", "freight-save-end", 42U, map},
+            {profile.revision, "freight-save-deploy"});
+        ASSERT_TRUE(deployed.succeeded) << deployed.message;
+        ASSERT_TRUE(profile.pendingRaid);
+        if (target)
+        {
+            ASSERT_TRUE(profile.pendingRaid->sealedFreightCrate);
+            profile.pendingRaid->sealedFreightCrate->unlocked = true;
+        }
+        else
+            ASSERT_TRUE(profile.pendingRaid->freightKeyLootSlotId);
+
+        const auto text = serializeProfileEnvelope(profile, content.contentVersion());
+        auto envelope = Json::parse(text);
+        EXPECT_EQ(envelope.at("schema_version"), 62U);
+        const auto loaded = deserializeProfileEnvelope(text, content);
+        ASSERT_TRUE(loaded.profile && loaded.profile->pendingRaid) << loaded.message;
+        EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+        EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, content.contentVersion(), 61)),
+            std::invalid_argument);
+        EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, kHospitalNightOperationsContentVersion)),
+            std::invalid_argument);
+        envelope["content_version"] = kHospitalNightOperationsContentVersion;
+        EXPECT_FALSE(deserializeProfileEnvelope(checked(envelope), content).profile);
+        envelope["content_version"] = content.contentVersion();
+        auto &pending = envelope["payload"]["pending_raid"];
+        if (target)
+            pending["sealed_freight_crate"]["container_asset_id"] = 0;
+        else
+            pending["freight_key_loot_slot_id"] = "perimeter_1";
+        EXPECT_FALSE(deserializeProfileEnvelope(checked(envelope), content).profile);
+    }
 }
 
 TEST_F(WeaponHandlingSaveTest, CorruptPrimaryRecoveryPreservesCorruptSourceAndValidSchema58Backup) {

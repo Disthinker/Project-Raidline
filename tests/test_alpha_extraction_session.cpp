@@ -761,6 +761,147 @@ TEST(AlphaExtractionSessionTest, HospitalMedicineKeepsCarriedLocationAcrossDiskR
     EXPECT_TRUE(validateProfileState(profile, content).valid);
 }
 
+TEST(AlphaExtractionSessionTest, FreightKeyLinksTwoSortiesAndWorkshopProduction)
+{
+    const auto &content = publishedContentRegistry();
+    const MapDefinitionId riverside{"map.raid.riverside"};
+    const MapDefinitionId frontier{"map.raid.frontier_exchange"};
+    const RaidSpaceDefinitionId freight{"raid_space.frontier_exchange.freight_service_bay"};
+    const ItemDefinitionId precision{"item.loot.precision_components"};
+    auto profile = makeNewPublishedProfile("cross-map-freight", content);
+    profile.tutorial = TutorialProgress::Complete;
+    for (const auto id : assets(profile, precision))
+        ASSERT_TRUE(profile.assets.erase(id));
+    const auto bags = assets(profile, alpha_content::backpack);
+    ASSERT_FALSE(bags.empty());
+    const auto bag = bags.front();
+    ASSERT_TRUE(executeInventory(profile, content,
+        InventoryEquipCommand{bag, EquipmentSlotKind::Backpack},
+        {profile.revision, "freight-loop-backpack"}).succeeded);
+
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-freight-", "two-sorties");
+    ASSERT_TRUE(SaveRepository(directory.path()).save(profile, content.contentVersion()).succeeded);
+    GameSession session;
+    session.configurePersistence(directory.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const auto move = [&](Vec2 position) {
+        return const_cast<Player &>(session.world().player()).setPosition(position);
+    };
+    const auto extract = [&] {
+        ASSERT_TRUE(move(session.world().extractionPoint().bounds().position));
+        for (int frame = 0; frame < 45 && session.profile().pendingRaid; ++frame)
+            session.update({}, 0.1F);
+        ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+        ASSERT_FALSE(session.profile().pendingRaid);
+    };
+    GameplayInput interact;
+    interact.interactJustPressed = true;
+    ASSERT_TRUE(session.deployAlpha(14U, riverside)) << session.persistenceMessage();
+    ASSERT_TRUE(session.profile().pendingRaid->freightKeyLootSlotId);
+    const auto &loot = session.profile().pendingRaid->loot;
+    const auto keyLoot = std::find_if(loot.begin(), loot.end(), [](const auto &entry) {
+        return entry.definitionId == kFreightCrateKeyId;
+    });
+    ASSERT_NE(keyLoot, loot.end());
+    const auto key = keyLoot->assetId;
+    const Vec2 keyPosition = keyLoot->position;
+    const float half = session.world().player().size() * 0.5F;
+    ASSERT_TRUE(move({keyPosition.x - half, keyPosition.y - half}));
+    auto pickUp = interact;
+    pickUp.aimWorldPosition = {keyPosition.x + 60.0F, keyPosition.y};
+    session.update(pickUp, 0.0F);
+    ASSERT_TRUE(assetIsCarried(session.profile(), key)) << session.persistenceMessage();
+    ASSERT_NO_FATAL_FAILURE(extract());
+    EXPECT_TRUE(assetIsCarried(session.profile(), key));
+
+    ASSERT_TRUE(session.deployAlpha(42U, frontier)) << session.persistenceMessage();
+    const auto &raid = *session.profile().pendingRaid;
+    ASSERT_TRUE(raid.sealedFreightCrate);
+    const auto crate = raid.sealedFreightCrate->containerAssetId;
+    const auto *crateAsset = session.profile().assets.find(crate);
+    ASSERT_NE(crateAsset, nullptr);
+    const auto &root = std::get<RaidSceneContainerAssetLocation>(crateAsset->location);
+    const Vec2 cratePosition = root.position;
+    const auto location = std::find_if(raid.interiors.begin(), raid.interiors.end(), [&](const auto &interior) {
+        return interior.id == freight;
+    });
+    ASSERT_NE(location, raid.interiors.end());
+    const auto bay = *location;
+    const auto reward = std::find_if(raid.loot.begin(), raid.loot.end(), [&](const auto &entry) {
+        return entry.sceneContainerAssetId == crate;
+    });
+    ASSERT_NE(reward, raid.loot.end());
+    EXPECT_EQ(reward->definitionId, precision);
+    const auto material = reward->assetId;
+    ASSERT_TRUE(move(bay.exteriorEntrance.position));
+    session.update(interact, 0.0F);
+    ASSERT_EQ(session.world().activeRaidSpaceId(), freight);
+    for (const auto &enemy : session.world().enemies())
+        static_cast<void>(const_cast<Enemy &>(enemy).takeDamage(enemy.maxHealth()));
+    session.update({}, 0.0F);
+    ASSERT_TRUE(move({cratePosition.x - half - 48.0F, cratePosition.y - half}));
+
+    GameplayInput hold;
+    hold.aimWorldPosition = cratePosition;
+    hold.aimWorldBounds = Rect{{}, session.world().raidSpaceWorldSize()};
+    session.update(hold, 0.0F);
+    const auto eligible = session.raidFreightUnlock();
+    ASSERT_TRUE(eligible);
+    ASSERT_EQ(eligible->containerAssetId, crate);
+    ASSERT_TRUE(eligible->hasKey);
+    hold.interactPressed = hold.interactJustPressed = true;
+    std::optional<AssetInstanceId> opened;
+    for (int frame = 0; frame < 22 && !opened; ++frame)
+    {
+        session.update(hold, 0.1F);
+        hold.interactJustPressed = false;
+        opened = session.takeOpenedRaidFreightCrate();
+    }
+    ASSERT_EQ(opened, crate) << session.persistenceMessage();
+    EXPECT_TRUE(assetIsCarried(session.profile(), key));
+    const auto bagCompartment = ProfileContainerId::compartment(bag, 0);
+    const auto fit = findFirstProfileFit(session.profile(), content, bagCompartment,
+        content.item(precision), ItemOrientation::Degrees0);
+    ASSERT_TRUE(fit);
+    const auto taken = session.executeRaidSceneContainerInventory(crate,
+        InventoryMoveCommand{material, 0U, {bagCompartment, *fit}}, "freight-loop-take-material");
+    ASSERT_TRUE(taken.succeeded) << taken.message;
+    EXPECT_FALSE(raidSceneContainerRoot(session.profile(), material));
+    EXPECT_TRUE(assetIsCarried(session.profile(), material));
+    ASSERT_TRUE(move(bay.interiorExit.position));
+    session.update(interact, 0.0F);
+    ASSERT_TRUE(session.world().inOutdoorRaidSpace());
+    ASSERT_NO_FATAL_FAILURE(extract());
+
+    const auto stash = ProfileContainerId::stash();
+    const auto stashFit = findFirstProfileFit(session.profile(), content, stash,
+        content.item(precision), ItemOrientation::Degrees0);
+    ASSERT_TRUE(stashFit);
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryMoveCommand{material, 0U, {stash, *stashFit}}, "freight-loop-stash-material").succeeded);
+    ASSERT_TRUE(waitForProfileUiDurability(session));
+    const auto order = session.executeStartBaseManufacturing(
+        BaseManufacturingRecipeDefinitionId{"base_manufacturing.ammunition_5_45x39_expanding"}, "freight-loop-order");
+    ASSERT_TRUE(order.succeeded) << order.message;
+    ASSERT_TRUE(waitForProfileUiDurability(session));
+    ASSERT_TRUE(order.outputAssetId);
+
+    GameSession reopened;
+    reopened.configurePersistence(directory.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_TRUE(assetIsCarried(reopened.profile(), key));
+    ASSERT_TRUE(reopened.profile().baseManufacturing.activeOrder);
+    EXPECT_EQ(reopened.profile().baseManufacturing.activeOrder->inputAssetIds,
+        std::vector<AssetInstanceId>{material});
+    reopened.advanceBaseWorldClock(120.0F);
+    ASSERT_TRUE(waitForProfileUiDurability(reopened));
+    const auto *output = reopened.profile().assets.find(*order.outputAssetId);
+    ASSERT_NE(output, nullptr);
+    EXPECT_EQ(output->definitionId, kExpanding545AmmunitionId);
+    EXPECT_EQ(output->quantity, 18U);
+}
+
 TEST(AlphaExtractionSessionTest, HospitalNightVisionFollowsLootAssemblySecondSortieAndReopen)
 {
     const auto &content = publishedContentRegistry();

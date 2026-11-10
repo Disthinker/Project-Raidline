@@ -288,9 +288,10 @@ std::size_t populatePublishedWarehouseCatalog(
     definitions.reserve(content.items().size());
     for (const ItemDefinition &definition : content.items())
     {
-        // Workshop-only outputs are not automatic or persistent developer grants.
+        // Workshop-only outputs and the field key are earned in play.
         if (definition.definitionId.value() == "item.medical.bandage_roll_basic" ||
-            definition.definitionId == kExpanding545AmmunitionId)
+            definition.definitionId == kExpanding545AmmunitionId ||
+            definition.definitionId == kFreightCrateKeyId)
         {
             continue;
         }
@@ -2157,8 +2158,15 @@ ProfileValidationResult validateProfileState(
                 [&](const auto &value) { return value.id == scene->spaceId; });
             if (interior == map.interiors.end() || interior->lootSlots.empty() ||
                 (scene->spaceId != RaidSpaceDefinitionId{"raid_space.frontier_exchange.office"} &&
-                 scene->spaceId != RaidSpaceDefinitionId{"raid_space.frontier_exchange.freight_service_bay"}) ||
-                scene->position.x != interior->lootSlots.front().position.x || scene->position.y != interior->lootSlots.front().position.y)
+                 scene->spaceId != kFreightCrateSpaceId))
+                return {false, "Raid scene container frozen placement is invalid"};
+            const auto &sealed = profile.pendingRaid->sealedFreightCrate;
+            const bool isSealed = sealed && sealed->containerAssetId == id;
+            if (isSealed && (map.id != kFreightCrateMapId || scene->spaceId != kFreightCrateSpaceId ||
+                interior->lootSlots.size() < 4U || interior->lootSlots[3].id != kFreightCrateSlotId))
+                return {false, "sealed freight crate placement is invalid"};
+            const Vec2 origin = interior->lootSlots[isSealed ? 3U : 0U].position;
+            if (scene->position.x != origin.x || scene->position.y != origin.y)
                 return {false, "Raid scene container frozen placement is invalid"};
             continue;
         }
@@ -2558,14 +2566,30 @@ ProfileValidationResult validateProfileState(
         else if (findRaidAnchorPlacement(raid.spatialLayout, kRaidAnchorCredentialExtraction) != nullptr)
             return {false, "pending Raid credential anchor is missing its snapshot"};
         std::set<RaidSpaceDefinitionId> sceneSpaces;
+        bool foundSealedCrate{};
         for (const auto &[id, asset] : profile.assets.records())
             if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
             {
-                if (!sceneSpaces.insert(scene->spaceId).second) return {false, "duplicate Raid scene container"};
+                const bool isSealed = raid.sealedFreightCrate && raid.sealedFreightCrate->containerAssetId == id;
+                if (isSealed)
+                    foundSealedCrate = true;
+                else if (!sceneSpaces.insert(scene->spaceId).second)
+                    return {false, "duplicate Raid scene container"};
                 const auto origins = std::count_if(raid.loot.begin(), raid.loot.end(),
                     [&](const auto &loot) { return loot.sceneContainerAssetId == id; });
-                if (origins != 2) return {false, "Raid scene container frozen rolls are invalid"};
+                if (origins != (isSealed ? 1 : 2)) return {false, "Raid scene container frozen rolls are invalid"};
+                if (isSealed && !raid.sealedFreightCrate->unlocked)
+                {
+                    const auto stored = std::count_if(profile.assets.records().begin(),
+                        profile.assets.records().end(), [&](const auto &entry) {
+                            const auto *location = std::get_if<StoredAssetLocation>(&entry.second.location);
+                            return location && location->container == ProfileContainerId::compartment(id, 0);
+                        });
+                    if (stored != 1) return {false, "locked freight crate contents are invalid"};
+                }
             }
+        if (raid.sealedFreightCrate && !foundSealedCrate)
+            return {false, "sealed freight crate is missing"};
         if (raid.startingAssets)
         {
             if (sceneSpaces.size() != 2U) return {false, "Raid scene container snapshot is incomplete"};
@@ -4175,6 +4199,13 @@ ProfileValidationResult validateProfileState(
         std::set<AssetInstanceId> snapshotLoot;
         std::set<std::uint32_t> snapshotSlots;
         bool foundNightVisionSlot{};
+        bool foundSealedCrateLoot{};
+        std::optional<std::uint32_t> firstSelectedFreightKeySlot;
+        if ((raid.freightKeyLootSlotId &&
+             (raid.mapDefinitionId != kFreightKeySourceMapId || resourceEcologyRules || regionalMissionCount != 0U)) ||
+            (raid.sealedFreightCrate &&
+             (raid.mapDefinitionId != kFreightCrateMapId || regionalMissionCount != 0U)))
+            return {false, "pending Raid freight snapshot is outside ordinary activity"};
         for (std::size_t lootIndex{};
              lootIndex < raid.loot.size(); ++lootIndex)
         {
@@ -4188,6 +4219,8 @@ ProfileValidationResult validateProfileState(
             bool validSlot{};
             bool validPosition{};
             bool nightVisionSlot{};
+            bool freightKeySlot{};
+            bool sealedFreightSlot{};
             const RaidSelfRecoveryRootSnapshot *recoveryRoot{};
             if (raid.selfRecovery.has_value())
             {
@@ -4217,6 +4250,16 @@ ProfileValidationResult validateProfileState(
                     : loot.slotIndex < regularSlotCount;
                 if (validSlot)
                 {
+                    if (raid.freightKeyLootSlotId && !loot.requiresHighRisk)
+                    {
+                        const auto &slot = raidMap->raidLootSlots[loot.slotIndex];
+                        if (slot.route == "central")
+                        {
+                            if (!firstSelectedFreightKeySlot || loot.slotIndex < *firstSelectedFreightKeySlot)
+                                firstSelectedFreightKeySlot = loot.slotIndex;
+                            freightKeySlot = slot.id == *raid.freightKeyLootSlotId;
+                        }
+                    }
                     const RaidAnchorPlacementSnapshot *anchor =
                         districtLayoutRules && !resourceEcologyRules
                             ? findRaidAnchorPlacement(
@@ -4353,6 +4396,8 @@ ProfileValidationResult validateProfileState(
                             validPosition = loot.position.x == expected.x &&
                                 loot.position.y == expected.y;
                             nightVisionSlot = isHospitalNightVisionLootSlot(raid.mapDefinitionId, interior.id, slot.id);
+                            sealedFreightSlot = raid.sealedFreightCrate && interior.id == kFreightCrateSpaceId &&
+                                slot.id == kFreightCrateSlotId;
                         }
                         break;
                     }
@@ -4454,9 +4499,30 @@ ProfileValidationResult validateProfileState(
             }
             else if (loot.definitionId == kHospitalNightVisionId && recoveryRoot == nullptr)
                 return {false, "pending Raid night vision is outside its fixed loot slot"};
+            if (freightKeySlot)
+            {
+                if (loot.definitionId != kFreightCrateKeyId || loot.quantity != 1U || loot.sceneContainerAssetId)
+                    return {false, "pending Raid freight key slot is invalid"};
+            }
+            else if (loot.definitionId == kFreightCrateKeyId && recoveryRoot == nullptr)
+                return {false, "pending Raid freight key is outside its selected source"};
+            if (sealedFreightSlot)
+            {
+                const auto &sealed = *raid.sealedFreightCrate;
+                if (loot.definitionId != kFreightCrateSupplyId || loot.quantity != 1U ||
+                    loot.sceneContainerAssetId != sealed.containerAssetId ||
+                    (!sealed.unlocked && loot.collected))
+                    return {false, "pending Raid sealed freight Loot is invalid"};
+                foundSealedCrateLoot = true;
+            }
         }
         if (raid.hospitalNightVisionLoot && !foundNightVisionSlot)
             return {false, "pending hospital night vision slot is missing"};
+        if (raid.freightKeyLootSlotId && (!firstSelectedFreightKeySlot ||
+            raidMap->raidLootSlots[*firstSelectedFreightKeySlot].id != *raid.freightKeyLootSlotId))
+            return {false, "pending Raid freight key source is not its first selected central slot"};
+        if (raid.sealedFreightCrate && !foundSealedCrateLoot)
+            return {false, "pending Raid sealed freight Loot is missing"};
         for (AssetInstanceId groundAssetId : groundAssetIds)
         {
             if (!snapshotLoot.contains(groundAssetId))
@@ -5437,6 +5503,17 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashBytes(hash, raid.settlementId);
         hashBytes(hash, raid.rulesVersion);
         if (raid.hospitalNightVisionLoot) hashBytes(hash, "hospital-night-vision-loot-v1");
+        if (raid.freightKeyLootSlotId)
+        {
+            hashBytes(hash, "freight-key-loot-v1");
+            hashBytes(hash, *raid.freightKeyLootSlotId);
+        }
+        if (raid.sealedFreightCrate)
+        {
+            hashBytes(hash, "sealed-freight-crate-v1");
+            hashInteger(hash, raid.sealedFreightCrate->containerAssetId);
+            hashInteger(hash, raid.sealedFreightCrate->unlocked ? 1U : 0U);
+        }
         hashBytes(hash, raid.mapDefinitionId.value());
         hashInteger(hash, raid.seed);
         hashBytes(hash, raid.spawnExtractionPairId);

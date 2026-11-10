@@ -37,7 +37,7 @@ protected:
         owned = p.assets.create(content.item(alpha_content::medkit), StoredAssetLocation{ProfileContainerId::compartment(bag,0),{0,0}});
         baseline = assetHash(p.assets);
         ASSERT_TRUE(executeDeploy(p, content, {"scene-raid","scene-settle",9917,frontier},{p.revision,"scene-deploy"}).succeeded);
-        const auto ids = boxes(p); ASSERT_EQ(ids.size(),2U); box=ids.front();
+        const auto ids = boxes(p); ASSERT_EQ(ids.size(),3U); box=ids.front();
         const auto scene=std::get<RaidSceneContainerAssetLocation>(p.assets.find(box)->location);
         access = {box, scene.spaceId, scene.position};
         access.observation=observeFrozenRaidInterior(p,scene.spaceId,scene.position);
@@ -56,6 +56,7 @@ protected:
 };
 TEST(RaidSceneContainerContentTest, AmmoLoopPreservesFixedOpticAndPrecisionMaterialRolls)
 {
+    const auto content = contentBeforeCrossMapFreight();
     const auto historical = contentBeforeAmmoLoop();
     const ItemDefinitionId precision{"item.loot.precision_components"};
     bool observedPrecision{};
@@ -149,7 +150,7 @@ TEST_F(RaidSceneContainerTest, DistanceSpaceOtherBoxAndWholeRootRejectWithoutMut
     EXPECT_FALSE(queryInventory(p,content,c).canCommit);
     for (auto invalid : {RaidSceneContainerAccess{box,outdoorRaidSpaceId(),access.playerCenter},
          RaidSceneContainerAccess{box,access.spaceId,{access.playerCenter.x+72.01F,access.playerCenter.y}},
-         RaidSceneContainerAccess{boxes(p).back(),access.spaceId,access.playerCenter},
+         RaidSceneContainerAccess{boxes(p)[1],access.spaceId,access.playerCenter},
          RaidSceneContainerAccess{box,access.spaceId,{NAN,0}}}) {
         EXPECT_FALSE(queryInventory(p,content,c,&invalid).canCommit);
         EXPECT_FALSE(executeInventory(p,content,c,{p.revision,"reject"},&invalid).succeeded);

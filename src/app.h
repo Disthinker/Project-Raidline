@@ -201,6 +201,7 @@ private:
     friend struct NoiseDecoyUiTestAccess;
     friend struct DeveloperRangeUiTestAccess;
     friend struct RaidSceneContainerUiTestAccess;
+    friend struct RaidFreightUiTestAccess;
     friend struct PointerContinuityUiTestAccess;
     friend struct RaidIndoorVisibilityUiTestAccess;
     friend struct RaidLightConeVisibilityUiTestAccess;
@@ -766,6 +767,7 @@ private:
         MousePosition position) const noexcept;
 
     void closeInventory();
+    void openRaidSceneContainer(AssetInstanceId);
 
     void render();
     [[nodiscard]] bool shouldCaptureWorldPointer() const noexcept;

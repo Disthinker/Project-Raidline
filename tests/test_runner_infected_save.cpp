@@ -15,6 +15,8 @@
 #include "game_session.h"
 #include "raid_corpse_search.h"
 #include "raid_lifecycle.h"
+#include "raid_optics_legacy_fixture.h"
+#include "raid_runner_legacy_fixture.h"
 #include "save_repository.h"
 
 namespace
@@ -84,9 +86,8 @@ std::vector<std::filesystem::path> archives(const std::filesystem::path &directo
     return result;
 }
 
-ProfileState deployed()
+ProfileState deployed(const ContentRegistry &content = publishedContentRegistry())
 {
-    const auto &content = publishedContentRegistry();
     auto profile = makeNewAlphaProfile("runner-save", content);
     const auto receipt = executeDeploy(profile, content,
         {"runner-save-raid", "runner-save-result", 18293U, frontier},
@@ -95,19 +96,11 @@ ProfileState deployed()
     return profile;
 }
 
-// This test-only reconstruction represents the previous shipped rule 30. It
-// keeps deployment/asset/random results and explicitly restores old basic HP;
-// production serialization must never perform this lossy downgrade itself.
+// Generate the shipped rule 30 before freezing any Loot or enemy snapshots.
+// Relabelling a current deployment would retain newer frozen content.
 ProfileState oldPending()
 {
-    auto profile = deployed();
-    if (!profile.pendingRaid) return profile;
-    profile.pendingRaid->rulesVersion = kRaidCorpseRulesVersion;
-    for (auto &enemy : profile.pendingRaid->enemies)
-    {
-        if (isRunnerEnemyVariant(enemy.variant)) enemy.maximumHealth = 12;
-        enemy.variant.reset();
-    }
+    auto profile = deployed(contentBeforeRunner(oldContent));
     EXPECT_TRUE(validateProfileState(profile, publishedContentRegistry()).valid);
     return profile;
 }
@@ -125,7 +118,7 @@ std::size_t runnerIndex(const Json &envelope)
 TEST(RunnerInfectedSaveTest, Schema58PersistsNamespacedFrozenValuesAndFingerprint)
 {
     const auto &content = publishedContentRegistry();
-    const auto profile = deployed();
+    const auto profile = deployed(contentBeforeOptics());
     ASSERT_TRUE(profile.pendingRaid);
     ASSERT_EQ(profile.pendingRaid->rulesVersion, kRaidRunnerRulesVersion);
     // Keep this shipped-schema regression explicit when the current writer
@@ -209,18 +202,19 @@ TEST(RunnerInfectedSaveTest, MissingMalformedAndUnknownVariantContractsAreReject
 TEST(RunnerInfectedSaveTest, NewTypesAndNewRuleCannotBeDowngradedToSchema57)
 {
     const auto &content = publishedContentRegistry();
-    auto profile = deployed();
+    auto profile = deployed(contentBeforeOptics());
+    // Isolate the runner rejection; freight metadata must not fail first.
+    auto json = Json::parse(serializeProfileEnvelope(profile, content.contentVersion()));
     EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, content.contentVersion(), 57)), std::invalid_argument);
     EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, oldContent, 58)), std::invalid_argument);
     for (auto &enemy : profile.pendingRaid->enemies) enemy.variant.reset();
     EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, content.contentVersion(), 57)), std::invalid_argument);
-    auto json = Json::parse(serializeProfileEnvelope(deployed(), content.contentVersion()));
     json["schema_version"] = 57U;
     json["content_version"] = oldContent;
     EXPECT_FALSE(deserializeProfileEnvelope(checkedEnvelope(json), content).profile);
     json["schema_version"] = 58U;
     EXPECT_FALSE(deserializeProfileEnvelope(checkedEnvelope(json), content).profile);
-    for (const auto version : {62ULL, 4294967354ULL})
+    for (const auto version : {63ULL, 4294967354ULL})
     {
         json = Json::parse(serializeProfileEnvelope(deployed(), content.contentVersion()));
         json["schema_version"] = version;

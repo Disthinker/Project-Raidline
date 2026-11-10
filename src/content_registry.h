@@ -23,9 +23,17 @@ inline constexpr std::string_view kAmmoLoopContentVersion{
     "raid-5-45-ammo-loop-content-76"};
 inline constexpr std::string_view kHospitalNightOperationsContentVersion{
     "raid-hospital-night-operations-content-77"};
+inline constexpr std::string_view kCrossMapFreightContentVersion{
+    "raid-cross-map-freight-access-content-78"};
 inline const ItemDefinitionId kFixedRaidOpticId{"item.component.optic_4x_5_45"};
 inline const ItemDefinitionId kExpanding545AmmunitionId{"item.ammunition.5_45x39_expanding"};
 inline const ItemDefinitionId kHospitalNightVisionId{"item.device.night_vision_basic"};
+inline const ItemDefinitionId kFreightCrateKeyId{"item.loot.freight_crate_key"};
+inline const ItemDefinitionId kFreightCrateSupplyId{"item.loot.precision_components"};
+inline const MapDefinitionId kFreightKeySourceMapId{"map.raid.riverside"};
+inline const MapDefinitionId kFreightCrateMapId{"map.raid.frontier_exchange"};
+inline const RaidSpaceDefinitionId kFreightCrateSpaceId{"raid_space.frontier_exchange.freight_service_bay"};
+inline constexpr std::string_view kFreightCrateSlotId{"freight_sealed_crate"};
 
 [[nodiscard]] inline bool isHospitalNightVisionLootSlot(
     const MapDefinitionId &map, const RaidSpaceDefinitionId &space, std::string_view slotId)
@@ -35,10 +43,15 @@ inline const ItemDefinitionId kHospitalNightVisionId{"item.device.night_vision_b
         slotId == "hospital_service";
 }
 
+[[nodiscard]] inline bool hospitalNightCompatibleContent(std::string_view version) noexcept
+{
+    return version == kHospitalNightOperationsContentVersion || version == kCrossMapFreightContentVersion;
+}
+
 [[nodiscard]] inline bool opticsCompatibleContent(std::string_view version) noexcept
 {
     return version == kOpticsContentVersion || version == kAmmoLoopContentVersion ||
-        version == kHospitalNightOperationsContentVersion;
+        hospitalNightCompatibleContent(version);
 }
 
 [[nodiscard]] inline bool runnerCompatibleContent(std::string_view version) noexcept

@@ -4247,7 +4247,7 @@ ContentRegistry ContentRegistry::fromJson(
             }
         }
 
-        if (registry.contentVersion() == kHospitalNightOperationsContentVersion)
+        if (hospitalNightCompatibleContent(registry.contentVersion()))
         {
             if (!registry.itemIndex_.contains(kHospitalNightVisionId) ||
                 !registry.item(kHospitalNightVisionId).nightVision ||
@@ -4264,6 +4264,43 @@ ContentRegistry ContentRegistry::fromJson(
                     });
                 });
                 if (!anchor) fail("hospital night vision Loot anchor is missing");
+            }
+        }
+        if (registry.contentVersion() == kCrossMapFreightContentVersion)
+        {
+            if (!registry.itemIndex_.contains(kFreightCrateKeyId))
+                fail("cross-map freight requires a crate key");
+            const auto &key = registry.item(kFreightCrateKeyId);
+            if (key.category != ItemCategory::Loot || key.inventoryWidthCells != 1 ||
+                key.inventoryHeightCells != 1 || key.maxStackSize != 1 ||
+                key.unitWeightGrams != 50 || key.marketBuyPrice || key.marketRecyclePrice ||
+                key.baseContribution || key.baseConstructionMaterialValue)
+                fail("freight crate key definition is invalid");
+            const auto inLootTable = [](const LootTableDefinition &table) {
+                return std::any_of(table.entries.begin(), table.entries.end(), [](const auto &entry) {
+                    return entry.itemDefinitionId == kFreightCrateKeyId;
+                });
+            };
+            if (std::any_of(registry.lootTables_.begin(), registry.lootTables_.end(), inLootTable) ||
+                std::any_of(registry.baseManufacturingRecipes_.begin(), registry.baseManufacturingRecipes_.end(),
+                    [](const auto &recipe) { return recipe.outputItemDefinitionId == kFreightCrateKeyId; }))
+                fail("freight crate key requires its fixed field source");
+            if (registry.mapIndex_.contains(kFreightKeySourceMapId))
+            {
+                const auto &source = registry.map(kFreightKeySourceMapId);
+                if ((source.proceduralOutdoor.enabled && source.proceduralOutdoor.layoutVersion >= 4U) ||
+                    std::none_of(source.raidLootSlots.begin(), source.raidLootSlots.end(),
+                        [](const auto &slot) { return slot.route == "central"; }))
+                    fail("freight crate key requires a selected central Loot slot");
+            }
+            if (registry.mapIndex_.contains(kFreightCrateMapId))
+            {
+                const auto &interiors = registry.map(kFreightCrateMapId).interiors;
+                const auto bay = std::find_if(interiors.begin(), interiors.end(),
+                    [](const auto &interior) { return interior.id == kFreightCrateSpaceId; });
+                if (bay == interiors.end() || bay->lootSlots.size() < 4U ||
+                    bay->lootSlots[3].id != kFreightCrateSlotId)
+                    fail("freight crate requires the fourth service bay Loot slot");
             }
         }
         return registry;

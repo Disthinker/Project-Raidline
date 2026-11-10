@@ -59,6 +59,13 @@ struct FortificationPlacementPlan;
 
 enum class TacticalDeviceKind { WeaponLight, NightVision };
 
+struct RaidFreightUnlockProjection
+{
+    AssetInstanceId containerAssetId{};
+    bool hasKey{};
+    float progress{};
+};
+
 enum class GameSessionState
 {
     InRaid,
@@ -402,6 +409,10 @@ public:
     [[nodiscard]] std::optional<AssetInstanceId> nearbyRaidSceneContainer() const;
     [[nodiscard]] bool raidSceneContainerAvailable(AssetInstanceId id) const;
     [[nodiscard]] bool canOpenRaidSceneContainer(AssetInstanceId id) const;
+    [[nodiscard]] bool isRaidFreightCrate(AssetInstanceId id) const noexcept;
+    [[nodiscard]] std::optional<RaidFreightUnlockProjection> raidFreightUnlock() const;
+    [[nodiscard]] std::optional<AssetInstanceId> takeOpenedRaidFreightCrate() noexcept;
+    void cancelRaidFreightUnlock() noexcept;
     [[nodiscard]] InventoryPlan queryRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command) const;
     [[nodiscard]] InventoryReceipt executeRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command, std::string transactionId);
 
@@ -665,6 +676,13 @@ private:
     std::uint64_t weaponFaultSequence_{};
     float raidElapsedSeconds_{};
     float selfRecoveryInteractionSeconds_{};
+    struct RaidFreightUnlockRuntime
+    {
+        std::optional<AssetInstanceId> target;
+        std::optional<AssetInstanceId> opened;
+        float elapsedSeconds{};
+        bool consumesInteraction{};
+    } freightUnlock_;
     bool outpostRestorationObjectiveSecured_{};
     bool baseSiteClearanceObjectiveSecured_{};
     bool basePerimeterSweepObjectiveSecured_{};
@@ -814,6 +832,10 @@ private:
     [[nodiscard]] std::string nextRaidTransaction(std::string_view prefix);
     [[nodiscard]] std::optional<AssetInstanceId> nearbyRaidLoot() const;
     [[nodiscard]] RaidSceneContainerAccess raidSceneAccess(AssetInstanceId) const;
+    [[nodiscard]] std::optional<AssetInstanceId> nearestObservableRaidSceneContainer() const;
+    [[nodiscard]] std::optional<AssetInstanceId> nearbyLockedFreightCrate() const;
+    void prepareRaidFreightUnlock(const GameplayInput &rawInput, GameplayInput &input, GameplayInput &simulationInput);
+    void advanceRaidFreightUnlock(float deltaTime);
     [[nodiscard]] bool selfRecoveryCacheInRange() const noexcept;
     [[nodiscard]] bool raidWorldInteractionAvailable(bool inventoryOpen) const noexcept;
 };
