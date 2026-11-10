@@ -186,7 +186,8 @@ public:
         const WeaponUseDefinition &definition,
         const WeaponHandlingParameters &handling,
         bool preserveWeaponFireTransientState);
-    void configureWeaponAmmunition(int penetration) noexcept;
+    void configureWeaponAmmunition(int penetration,
+                                  int unarmoredDamageBonus = 0) noexcept;
     void configureMelee(std::optional<MeleeUseDefinition> use, bool usable, std::uint64_t assetId=0) noexcept {melee_.configure(use,usable,assetId);}
     [[nodiscard]] const WorldMeleeRuntime &melee() const noexcept {return melee_;}
     [[nodiscard]] bool commitPreparedMelee();

@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 
 #include "alpha_content_ids.h"
+#include "base_manufacturing_domain.h"
 #include "inventory_domain.h"
 #include "lost_raid_domain.h"
 #include "raid_lifecycle.h"
@@ -97,7 +98,7 @@ TEST_F(WeaponHandlingSaveTest, Schema59RoundTripPreservesSelectedModeAndComplete
     const auto text = serializeProfileEnvelope(profile, content.contentVersion(), 59);
     auto envelope = Json::parse(text);
     EXPECT_EQ(envelope.at("schema_version"), 59U);
-    EXPECT_EQ(envelope.at("content_version").get<std::string>(), std::string{kOpticsContentVersion});
+    EXPECT_EQ(envelope.at("content_version").get<std::string>(), std::string{kAmmoLoopContentVersion});
     EXPECT_EQ(assetJson(envelope, rifle).at("fire_mode"), "three_round_burst");
     for (const auto &asset : envelope.at("payload").at("assets")) {
         ASSERT_TRUE(asset.contains("fire_mode"));
@@ -353,6 +354,65 @@ TEST_F(WeaponHandlingSaveTest, OpticContentKeepsSchema59And60FrozenLootAndArchiv
         EXPECT_FALSE(reopened.profile->pendingRaid);
         EXPECT_EQ(firstAsset(*reopened.profile, kFixedRaidOpticId), 0U);
     }
+}
+
+TEST_F(WeaponHandlingSaveTest, AmmoLoopUpgradeKeepsOldOrderAndPendingRaidAndArchivesBothSources) {
+    const auto &content = publishedContentRegistry();
+    const auto historical = contentBeforeAmmoLoop();
+    SaveRepository repository{directory.path()};
+    auto source = makeNewAlphaProfile("ammo-loop-upgrade", historical);
+    const BaseManufacturingRecipeDefinitionId recipe{"base_manufacturing.ammunition_5_45x39_standard"};
+    for (const auto &input : historical.baseManufacturingRecipe(recipe).inputs) {
+        const auto &item = historical.item(input.itemDefinitionId);
+        const auto origin = findFirstProfileFit(source, historical, ProfileContainerId::stash(),
+            item, ItemOrientation::Degrees0);
+        ASSERT_TRUE(origin);
+        static_cast<void>(source.assets.create(item,
+            StoredAssetLocation{ProfileContainerId::stash(), *origin}, input.quantity));
+    }
+    const auto order = executeStartBaseManufacturing(source, historical, {recipe},
+        {source.revision, "ammo-loop-upgrade-order"});
+    ASSERT_TRUE(order.succeeded) << order.message;
+    const auto deployed = executeDeploy(source, historical,
+        {"ammo-loop-old-raid", "ammo-loop-old-settlement", 9917U, MapDefinitionId{"map.raid.frontier_exchange"}},
+        {source.revision, "ammo-loop-upgrade-deploy"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(source.pendingRaid);
+    ASSERT_TRUE(source.baseManufacturing.activeOrder);
+    const auto before = profileStateFingerprint(source);
+    const auto primary = serializeProfileEnvelope(source, historical.contentVersion());
+    auto previousBackup = source;
+    ++previousBackup.revision;
+    const auto backup = serializeProfileEnvelope(previousBackup, historical.contentVersion());
+    writeBytes(repository.primaryPath(), primary);
+    writeBytes(repository.backupPath(), backup);
+
+    const auto loaded = repository.load(content);
+    ASSERT_TRUE(loaded.profile) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), before);
+    ASSERT_TRUE(loaded.profile->pendingRaid);
+    EXPECT_EQ(loaded.profile->pendingRaid->loot, source.pendingRaid->loot);
+    EXPECT_EQ(loaded.profile->pendingRaid->enemies, source.pendingRaid->enemies);
+    EXPECT_EQ(loaded.profile->baseManufacturing.activeOrder, source.baseManufacturing.activeOrder);
+    const auto saved = repository.save(*loaded.profile, content.contentVersion());
+    ASSERT_TRUE(saved.succeeded) << saved.message;
+    const auto archive = [&](bool backupSlot, std::string_view bytes) {
+        return directory.path() / (std::string{backupSlot ? "profile.backup.pre-" : "profile.pre-"} +
+            "raid-5-45-ammo-loop-v1." + checksum(bytes) + ".json");
+    };
+    EXPECT_EQ(readBytes(archive(false, primary)), primary);
+    EXPECT_EQ(readBytes(archive(true, backup)), backup);
+    const auto upgraded = Json::parse(readBytes(repository.primaryPath()));
+    EXPECT_EQ(upgraded.at("schema_version"), 60U);
+    EXPECT_EQ(upgraded.at("content_version").get<std::string>(), kAmmoLoopContentVersion);
+    const auto reopened = repository.load(content);
+    ASSERT_TRUE(reopened.profile) << reopened.message;
+    EXPECT_EQ(profileStateFingerprint(*reopened.profile), before);
+    auto later = *reopened.profile;
+    ++later.revision;
+    ASSERT_TRUE(repository.save(later, content.contentVersion()).succeeded);
+    EXPECT_EQ(readBytes(archive(false, primary)), primary);
+    EXPECT_EQ(readBytes(archive(true, backup)), backup);
 }
 
 TEST_F(WeaponHandlingSaveTest, ArchiveConflictCannotReplaceEitherOriginalSlot) {

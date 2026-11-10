@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <vector>
 
 #include "hit_resolution.h"
@@ -488,4 +489,71 @@ TEST(HitResolutionTest, NearestEnemyStillWinsWhenObstacleIsBehind)
     EXPECT_EQ(result.hits.front().targetKind, HitTargetKind::Enemy);
     ASSERT_EQ(enemies.size(), 1U);
     EXPECT_EQ(enemies.front().health(), 3);
+}
+
+TEST(HitResolutionTest, ExpansionUsesMuzzleToPhysicalContactRange)
+{
+    const Enemy infected{{100.0F, 100.0F}, {20.0F, 40.0F}, {}, 12, 1};
+    auto enemies = makeEnemies({infected});
+    ShotCollisionCandidate shot{
+        1, {94.0F, 120.0F}, {108.0F, 120.0F}, 8.0F, 5, std::nullopt,
+        2, {0.0F, 120.0F}, 1, 100.0F};
+
+    const HitResolutionResult onBoundary = resolveShotEnemyHits({shot}, enemies);
+    ASSERT_EQ(onBoundary.hits.size(), 1U);
+    EXPECT_FLOAT_EQ(onBoundary.hits.front().position.x, 100.0F);
+    EXPECT_EQ(onBoundary.hits.front().damageApplied, 6);
+    ASSERT_EQ(enemies.size(), 1U);
+    EXPECT_EQ(enemies.front().health(), 6);
+
+    shot.shotId = 2;
+    shot.unarmoredDamageRange = std::nextafter(100.0F, 0.0F);
+    const HitResolutionResult beyondBoundary = resolveShotEnemyHits({shot}, enemies);
+    ASSERT_EQ(beyondBoundary.hits.size(), 1U);
+    EXPECT_EQ(beyondBoundary.hits.front().damageApplied, 5);
+    ASSERT_EQ(enemies.size(), 1U);
+    EXPECT_EQ(enemies.front().health(), 1);
+}
+
+TEST(HitResolutionTest, ExpansionRespectsPhysicalArmorCoverageAndOriginalArmorDamage)
+{
+    const Enemy protectedInfected{
+        {100.0F, 100.0F}, {20.0F, 40.0F}, {}, 20, 1, EnemyArmorState{7, 50}};
+    auto enemies = makeEnemies({protectedInfected});
+    ShotCollisionCandidate shot{
+        1, {94.0F, 120.0F}, {108.0F, 120.0F}, 8.0F, 5, std::nullopt,
+        2, {0.0F, 120.0F}, 1, 100.0F};
+
+    const HitResolutionResult blocked = resolveShotEnemyHits({shot}, enemies);
+    ASSERT_EQ(blocked.hits.size(), 1U);
+    EXPECT_EQ(blocked.hits.front().damageApplied, 2);
+    EXPECT_TRUE(blocked.hits.front().armorReducedDamage);
+    ASSERT_EQ(enemies.size(), 1U);
+    ASSERT_TRUE(enemies.front().torsoArmor());
+    EXPECT_EQ(enemies.front().torsoArmor()->durability, 45U);
+
+    shot.shotId = 2;
+    shot.penetration = 7;
+    const HitResolutionResult penetrated = resolveShotEnemyHits({shot}, enemies);
+    ASSERT_EQ(penetrated.hits.size(), 1U);
+    EXPECT_EQ(penetrated.hits.front().damageApplied, 5);
+    EXPECT_EQ(enemies.front().torsoArmor()->durability, 45U);
+
+    shot.shotId = 3;
+    shot.penetration = 2;
+    shot.start.y = shot.end.y = shot.shotOrigin.y = 105.0F;
+    const HitResolutionResult uncovered = resolveShotEnemyHits({shot}, enemies);
+    ASSERT_EQ(uncovered.hits.size(), 1U);
+    EXPECT_EQ(uncovered.hits.front().damageApplied, 6);
+    EXPECT_EQ(uncovered.hits.front().semantic, HitSemantic::Normal);
+    EXPECT_EQ(uncovered.hits.front().region, HitRegion::Torso);
+    EXPECT_EQ(enemies.front().torsoArmor()->durability, 45U);
+
+    enemies.front().applyArmorLoss(45);
+    shot.shotId = 4;
+    shot.start.y = shot.end.y = shot.shotOrigin.y = 120.0F;
+    const HitResolutionResult broken = resolveShotEnemyHits({shot}, enemies);
+    ASSERT_EQ(broken.hits.size(), 1U);
+    EXPECT_EQ(broken.hits.front().damageApplied, 6);
+    EXPECT_FALSE(broken.hits.front().armorReducedDamage);
 }

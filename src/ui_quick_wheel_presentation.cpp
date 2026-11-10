@@ -9,6 +9,13 @@
 #include <set>
 
 namespace {
+std::string_view roundCode(const ContentRegistry &content, const ItemDefinitionId &id) {
+    if (id == kExpanding545AmmunitionId) return "HP";
+    const auto &ammo = content.item(id).ammunitionUse;
+    if (!ammo) return "?";
+    return ammo->tier == AmmunitionTier::Enhanced ? "E" : "S";
+}
+
 bool inWornRig(const ProfileState &p,const ContentRegistry &c,const AssetRecord &a,UiQuickWheelKind kind) {
     const auto rig=equippedAsset(p,EquipmentSlotKind::ChestRig);
     const auto *stored=std::get_if<StoredAssetLocation>(&a.location);
@@ -64,6 +71,12 @@ std::vector<UiQuickWheelEntry> projectUiQuickWheel(
     std::optional<AssetInstanceId> weaponId) {
     std::vector<UiQuickWheelEntry> result;
     std::set<ItemDefinitionId> seen;
+    const auto *weapon = kind == UiQuickWheelKind::Magazine && weaponId
+        ? profile.assets.find(*weaponId) : nullptr;
+    const bool show545Details = weapon &&
+        content.ammunitionFitsWeapon(kExpanding545AmmunitionId, weapon->definitionId);
+    const auto chamber = show545Details && weapon->chamberedRound
+        ? roundCode(content, weapon->chamberedRound->definitionId) : std::string_view{"–"};
     const auto magazines=kind==UiQuickWheelKind::Magazine && weaponId ?
         queryRaidReloadMagazines(profile,content,*weaponId):std::vector<RaidReloadMagazineChoice>{};
     for(const auto id:ids) {
@@ -76,9 +89,18 @@ std::vector<UiQuickWheelEntry> projectUiQuickWheel(
                     [id](const auto &value){return value.magazineAssetId==id;});
                 entry.quantity=1;
                 entry.remainingUses=magazineRoundCount(profile,id);
-                if(!asset->magazineRounds.empty())
-                    entry.mixedAmmunition=std::any_of(asset->magazineRounds.begin(),asset->magazineRounds.end(),
-                        [&](const auto &round){return round.definitionId!=asset->magazineRounds.front().definitionId;});
+                const bool details = show545Details &&
+                    content.ammunitionFitsMagazine(kExpanding545AmmunitionId, asset->definitionId);
+                if (details) {
+                    entry.chamberRound = chamber;
+                    entry.magazineTopRound = asset->magazineRounds.empty() ? "–" :
+                        roundCode(content, asset->magazineRounds.front().definitionId);
+                }
+                if (!asset->magazineRounds.empty()) {
+                    const auto &top = asset->magazineRounds.front().definitionId;
+                    entry.mixedAmmunition = std::any_of(asset->magazineRounds.begin(), asset->magazineRounds.end(),
+                        [&](const auto &round) { return round.definitionId != top; });
+                }
                 entry.usable=choice!=magazines.end() && choice->eligible;
                 const auto &definition=content.item(asset->definitionId);
                 entry.count=fmt::format("{} / {}",entry.remainingUses,
@@ -128,8 +150,28 @@ bool UiQuickWheelProjection::refresh(
 UiQuickWheelLayout layoutUiQuickWheel(
     const std::vector<UiQuickWheelEntry> &entries, std::size_t selected,
     UiQuickWheelKind kind, UiLanguage language, const UiQuickWheelMeasure &measure, std::size_t page) {
-    static_cast<void>(kind);static_cast<void>(language);static_cast<void>(measure);
     UiQuickWheelLayout l;l.selected=selected;l.page=page;
+    if (kind == UiQuickWheelKind::Magazine && selected < entries.size() && !entries[selected].chamberRound.empty()) {
+        const auto &entry = entries[selected];
+        auto count = entry.count;
+        std::erase(count, ' ');
+        l.count.size = 12;
+        if (language == UiLanguage::SimplifiedChinese) {
+            const auto chineseRound = [](std::string_view round) {
+                if (round == "HP") return std::string_view{"扩"};
+                if (round == "E") return std::string_view{"强"};
+                if (round == "S") return std::string_view{"标"};
+                return round;
+            };
+            l.count.text = fmt::format("{} 顶{} 膛{}", count,
+                chineseRound(entry.magazineTopRound), chineseRound(entry.chamberRound));
+        } else {
+            l.count.text = fmt::format("{} TOP:{} CH:{}", count, entry.magazineTopRound, entry.chamberRound);
+            if (measure(l.count.text, l.count.size) > 110)
+                l.count.text = fmt::format("{} T:{} C:{}", count, entry.magazineTopRound, entry.chamberRound);
+        }
+        if (measure(l.count.text, l.count.size) > 110) l.count.size = 11;
+    }
     constexpr float pi=3.14159265358979323846F;
     for(std::size_t i=0;i<8;++i) {
         const float angle=-pi/2+static_cast<float>(i)*pi/4;

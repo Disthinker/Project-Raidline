@@ -19,6 +19,9 @@ struct ShotCollisionCandidate
     int damage{};
     std::optional<ShotAimIntent> aimIntent;
     int penetration{};
+    Vec2 shotOrigin{};
+    int unarmoredDamageBonus{};
+    float unarmoredDamageRange{};
 };
 
 using BallisticBlockerId = std::uint64_t;

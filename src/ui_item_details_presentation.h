@@ -64,4 +64,5 @@ struct UiItemDetailsInteraction {
         std::optional<UiItemDetailsControl>) noexcept;
 };
 void renderUiItemDetailsFeedback(SDL_Renderer *, UiTextRenderer &,
-    UiItemDetailsInteraction &, UiItemDetailsKind, std::string_view);
+    UiItemDetailsInteraction &, UiItemDetailsKind, std::string_view,
+    const std::vector<std::string> &detailLines = {});

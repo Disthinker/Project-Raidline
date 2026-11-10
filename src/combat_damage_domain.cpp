@@ -58,7 +58,7 @@ CombatDamageResolution resolveCombatDamage(
             ? HitSemantic::Headshot
             : HitSemantic::Normal;
 
-    if (command.baseDamage <= 0)
+    if (command.baseDamage <= 0 || !validUnarmoredDamageBonus(command.unarmoredDamageBonus))
     {
         result.status = CombatDamageStatus::RejectedInvalidDamage;
         return result;
@@ -79,8 +79,13 @@ CombatDamageResolution resolveCombatDamage(
         return result;
     }
 
+    result.armorCovered = command.armor.has_value() &&
+        command.armor->coverage == command.region &&
+        command.armor->currentDurability > 0;
+    const int bonus = !result.armorCovered && command.baseDamage < std::numeric_limits<int>::max()
+        ? command.unarmoredDamageBonus : 0;
     result.damageBeforeArmor = multiplyRoundedUp(
-        command.baseDamage,
+        command.baseDamage + bonus,
         regionMultiplierBasisPoints(command.region));
     if (command.weakPoint)
     {
@@ -90,15 +95,12 @@ CombatDamageResolution resolveCombatDamage(
     }
     result.damageApplied = result.damageBeforeArmor;
 
-    if (!command.armor.has_value() ||
-        command.armor->coverage != command.region ||
-        command.armor->currentDurability == 0)
+    if (!result.armorCovered)
     {
         result.status = CombatDamageStatus::Resolved;
         return result;
     }
 
-    result.armorCovered = true;
     if (command.penetration >= command.armor->protectionRequirement)
     {
         result.status = CombatDamageStatus::Resolved;

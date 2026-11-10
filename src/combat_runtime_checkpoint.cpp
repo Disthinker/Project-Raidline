@@ -27,10 +27,11 @@ bool validateEnemyRuntimeCheckpoint(const EnemyRuntimeCheckpoint &e) noexcept
 bool validateWorldShootingCheckpoint(const WorldShootingCheckpoint &s) noexcept
 {
     if (!s.initialized)
-        return s.flights.empty() && s.nextShotId != 0;
+        return s.flights.empty() && s.nextShotId != 0 && s.weaponUnarmoredDamageBonus == 0;
     if (s.nextShotId == 0 || s.flights.size() > 128 || s.aimControlMode > 1 ||
         !(s.spreadRandomIncrement & 1U) || !(s.recoilRandomIncrement & 1U) || s.weaponDamage <= 0 ||
-        s.weaponPenetration < 0 || !nonnegative(s.maximumRange) || s.maximumRange <= 0 ||
+        s.weaponPenetration < 0 || !validUnarmoredDamageBonus(s.weaponUnarmoredDamageBonus) ||
+        !nonnegative(s.maximumRange) || s.maximumRange <= 0 ||
         !nonnegative(s.logicalSpeed) || s.logicalSpeed <= 0 || s.tracerStyle > 1 ||
         !nonnegative(s.tracerLength) || !nonnegative(s.tracerOpacity) || s.tracerOpacity > 1 ||
         !nonnegative(s.tracerLifetime) || s.tracerLifetime <= 0 ||
@@ -63,7 +64,11 @@ bool validateWorldShootingCheckpoint(const WorldShootingCheckpoint &s) noexcept
             !point(f.direction) || !point(f.impact) || !nonnegative(f.speed) || f.speed <= 0 ||
             !nonnegative(f.extent) || !nonnegative(f.travelled) ||
             !nonnegative(f.maximumDistance) || f.maximumDistance <= f.travelled || f.damage <= 0 ||
-            f.penetration < 0 || f.aimedRegion > 2 || f.tracerStyle > 1 ||
+            f.penetration < 0 || !validUnarmoredDamageBonus(f.unarmoredDamageBonus) ||
+            (f.unarmoredDamageBonus > 0
+                 ? !std::isfinite(f.unarmoredDamageRange) || f.unarmoredDamageRange <= 0.0F
+                 : f.unarmoredDamageRange != 0.0F) ||
+            f.aimedRegion > 2 || f.tracerStyle > 1 ||
             !nonnegative(f.tracerLength) || !nonnegative(f.tracerOpacity) || f.tracerOpacity > 1 ||
             !nonnegative(f.tracerLifetime) || f.tracerLifetime <= 0)
             return false;

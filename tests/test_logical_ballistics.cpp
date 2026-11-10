@@ -4,6 +4,7 @@
 #include <stdexcept>
 
 #include "logical_ballistics.h"
+#include "world_shooting_runtime.h"
 
 namespace
 {
@@ -149,4 +150,55 @@ TEST(LogicalBallisticsTest, RejectsUnacceptedResolution)
     EXPECT_THROW(
         static_cast<void>(LogicalBallisticFlight{ShotResolution{}}),
         std::invalid_argument);
+}
+
+TEST(LogicalBallisticsTest, MixedAmmunitionFlightsKeepFireTimeEffectAcrossCheckpoint)
+{
+    WeaponUseDefinition weapon = *itemDefinition(ItemId::Rifle).weaponUse;
+    weapon.shotIntervalSeconds = 0.1F;
+    weapon.baseDamage = 5;
+    weapon.effectiveRange = 180.0F;
+    weapon.maximumRange = 400.0F;
+    weapon.logicalBallisticSpeed = 100.0F;
+    WorldShootingRuntime runtime;
+    runtime.configureWeapon(weapon);
+
+    constexpr Vec2 shooter{100.0F, 100.0F};
+    constexpr Vec2 world{500.0F, 500.0F};
+    EnemyRoster<> targets;
+    GameplayInput fire{};
+    fire.fireJustPressed = true;
+    fire.aimWorldPosition = Vec2{240.0F, 100.0F};
+    runtime.updateAim(fire, shooter, {1.0F, 0.0F}, world, 0.0F);
+
+    runtime.configureAmmunition(2, 1);
+    static_cast<void>(runtime.advanceShots(fire, 0.0F, shooter, 20.0F, false, false, world, targets, {}));
+    ASSERT_EQ(runtime.logicalBallistics().size(), 1U);
+
+    weapon.effectiveRange = 90.0F;
+    runtime.configureWeapon(weapon);
+    runtime.configureAmmunition(7);
+    static_cast<void>(runtime.advanceShots(fire, 0.2F, shooter, 20.0F, false, false, world, targets, {}));
+    ASSERT_EQ(runtime.logicalBallistics().size(), 2U);
+    EXPECT_EQ(runtime.logicalBallistics()[0].penetration(), 2);
+    EXPECT_EQ(runtime.logicalBallistics()[0].unarmoredDamageBonus(), 1);
+    EXPECT_FLOAT_EQ(runtime.logicalBallistics()[0].unarmoredDamageRange(), 180.0F);
+    EXPECT_EQ(runtime.logicalBallistics()[1].penetration(), 7);
+    EXPECT_EQ(runtime.logicalBallistics()[1].unarmoredDamageBonus(), 0);
+    EXPECT_FLOAT_EQ(runtime.logicalBallistics()[1].unarmoredDamageRange(), 0.0F);
+
+    runtime.configureAmmunition(2, 1);
+    const WorldShootingCheckpoint saved = runtime.checkpoint();
+    EXPECT_EQ(saved.weaponUnarmoredDamageBonus, 1);
+    WorldShootingRuntime restored;
+    ASSERT_TRUE(restored.restoreCheckpoint(saved));
+    EXPECT_EQ(restored.checkpoint(), saved);
+
+    WorldShootingCheckpoint invalid = saved;
+    invalid.flights.front().unarmoredDamageRange = 0.0F;
+    EXPECT_FALSE(restored.restoreCheckpoint(invalid));
+    invalid = saved;
+    invalid.weaponUnarmoredDamageBonus = 2;
+    EXPECT_FALSE(restored.restoreCheckpoint(invalid));
+    EXPECT_EQ(restored.checkpoint(), saved);
 }

@@ -159,21 +159,40 @@ std::optional<UiItemDetailsControl> UiItemDetailsInteraction::up(
 }
 
 void renderUiItemDetailsFeedback(SDL_Renderer *renderer, UiTextRenderer &text,
-    UiItemDetailsInteraction &state, UiItemDetailsKind kind, std::string_view message) {
+    UiItemDetailsInteraction &state, UiItemDetailsKind kind, std::string_view message,
+    const std::vector<std::string> &detailLines) {
     const auto localized = localizeUiText(text.language(), message);
-    if (state.feedbackKey != localized) {
-        state.feedbackKey = localized;
+    auto key = localized;
+    for (const auto &line : detailLines) {
+        key += '\n';
+        key += line;
+    }
+    if (state.feedbackKey != key) {
+        state.feedbackKey = std::move(key);
         state.feedbackScroll = 0;
     }
     const auto bounds = uiItemDetailsFeedback(kind);
-    const auto lines = wrapUiText(localized, bounds.w - 116, 0,
-        [&](std::string_view line) { return text.measure(line, 12); });
     const auto visible = std::max(1, static_cast<int>(bounds.h / 17));
+    const auto wrap = [&](std::string_view line) {
+        return wrapUiText(line, bounds.w - 116, 0,
+            [&](std::string_view part) { return text.measure(part, 12); });
+    };
+    auto lines = wrap(localized);
+    const auto messageLineCount = lines.size();
+    // Keep the existing feedback scroll dedicated to a full notice.
+    if (messageLineCount < static_cast<std::size_t>(visible))
+        for (const auto &detail : detailLines) {
+            auto wrapped = wrap(detail);
+            for (auto &line : wrapped) lines.push_back(std::move(line));
+        }
     state.feedbackMaximum = std::max(0, static_cast<int>(lines.size()) - visible);
     state.feedbackScroll = std::clamp(state.feedbackScroll, 0, state.feedbackMaximum);
-    for (int row = 0; row < visible && state.feedbackScroll + row < static_cast<int>(lines.size()); ++row)
+    for (int row = 0; row < visible && state.feedbackScroll + row < static_cast<int>(lines.size()); ++row) {
+        const auto index = static_cast<std::size_t>(state.feedbackScroll + row);
+        const SDL_Color color = index < messageLineCount ? SDL_Color{238, 205, 144, 255} : SDL_Color{200, 211, 220, 255};
         uiFinalText(renderer, text, {bounds.x, bounds.y + row * 17.0F, bounds.w - 116, 18},
-            lines[state.feedbackScroll + row].text, 12, 1, {238, 205, 144, 255});
+            lines[index].text, 12, 1, color);
+    }
     if (state.feedbackMaximum)
         uiFinalText(renderer, text, {bounds.x + bounds.w - 108, bounds.y, 108, bounds.h},
             label(text.language(), "滚轮查看", "Scroll to read"), 12, 2, {157, 181, 174, 255});

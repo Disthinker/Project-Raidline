@@ -198,15 +198,18 @@ TEST(FieldMedicalSuppliesTest, ExistingWorkshopListsAllSixRecipesInChineseWithou
     addToStash(profile, kStock);
     const auto before = profileStateFingerprint(profile);
     const auto projection = projectUiWorkshop(profile, content(), UiLanguage::SimplifiedChinese, kRollRecipe);
-    EXPECT_EQ(projection.recipes.size(), 6U);
-    EXPECT_EQ(uiWorkshopPageCount(projection.recipes.size()), 1U);
+    ASSERT_EQ(projection.recipes.size(), 7U);
+    EXPECT_EQ(uiWorkshopPageCount(projection.recipes.size()), 2U);
+    EXPECT_EQ(projection.recipes.back().id,
+        BaseManufacturingRecipeDefinitionId{"base_manufacturing.ammunition_5_45x39_expanding"});
+    const auto firstPageEnd = projection.recipes.begin() + kUiWorkshopPageSize;
     ASSERT_TRUE(projection.start.canCommit) << projection.start.message;
     EXPECT_EQ(projection.start.durationMinutes, 60U);
     for (const auto &id : {kMedkitRecipe, kRollRecipe})
     {
-        const auto found = std::find_if(projection.recipes.begin(), projection.recipes.end(),
+        const auto found = std::find_if(projection.recipes.begin(), firstPageEnd,
             [&](const auto &row) { return row.id == id; });
-        ASSERT_NE(found, projection.recipes.end());
+        ASSERT_NE(found, firstPageEnd);
         EXPECT_EQ(found->materials, "急救物资  x1\n");
         EXPECT_EQ(found->fullName,
             id == kRollRecipe ? "绷带卷分装" : "基础医疗包分装");

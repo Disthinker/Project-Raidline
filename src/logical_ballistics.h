@@ -35,6 +35,8 @@ public:
     [[nodiscard]] float maximumDistance() const noexcept;
     [[nodiscard]] int damage() const noexcept;
     [[nodiscard]] int penetration() const noexcept;
+    [[nodiscard]] int unarmoredDamageBonus() const noexcept;
+    [[nodiscard]] float unarmoredDamageRange() const noexcept;
     [[nodiscard]] std::optional<ShotAimIntent> aimIntent() const noexcept;
     [[nodiscard]] bool reachedImpact() const noexcept;
     [[nodiscard]] TracerStyle tracerStyle() const noexcept;
@@ -55,6 +57,8 @@ private:
     float maximumDistance_{};
     int damage_{};
     int penetration_{};
+    int unarmoredDamageBonus_{};
+    float unarmoredDamageRange_{};
     std::optional<ShotAimIntent> aimIntent_;
     TracerStyle tracerStyle_{TracerStyle::Weak};
     float tracerLength_{30.0F};

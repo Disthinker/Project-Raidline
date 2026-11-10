@@ -349,6 +349,12 @@ std::uint64_t baseDefenseCheckpointHash(const BaseDefenseSnapshot &s) noexcept
         real(h, f.tracerLength);
         real(h, f.tracerOpacity);
         real(h, f.tracerLifetime);
+        // Zero denotes a legacy flight and leaves its historical hash intact.
+        if (f.unarmoredDamageBonus > 0)
+        {
+            number(h, f.unarmoredDamageBonus);
+            real(h, f.unarmoredDamageRange);
+        }
     }
     for (auto f : w.fireConfig)
         real(h, f);
@@ -378,6 +384,8 @@ std::uint64_t baseDefenseCheckpointHash(const BaseDefenseSnapshot &s) noexcept
     real(h, w.tracerOpacity);
     real(h, w.tracerLifetime);
     number(h, w.initialized);
+    if (w.weaponUnarmoredDamageBonus > 0)
+        number(h, w.weaponUnarmoredDamageBonus);
     number(h, s.activeWeaponSlot);
     number(h, s.commandSequence);
     number(h, s.weaponFaultSequence);

@@ -870,9 +870,10 @@ void BaseWorld::configureWeaponFire(
         definition, handling, preserveWeaponFireTransientState);
 }
 
-void BaseWorld::configureWeaponAmmunition(int penetration) noexcept
+void BaseWorld::configureWeaponAmmunition(
+    int penetration, int unarmoredDamageBonus) noexcept
 {
-    shooting_.configureAmmunition(penetration);
+    shooting_.configureAmmunition(penetration, unarmoredDamageBonus);
 }
 
 std::vector<ShotPresentationSnapshot>

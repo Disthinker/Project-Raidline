@@ -171,3 +171,35 @@ TEST(ShotResolutionTest, StatusNamesCoverPublishedStates)
             static_cast<ShotResolutionStatus>(255)),
         "Unknown");
 }
+
+TEST(ShotResolutionTest, FreezesExpansionRangeIndependentOfWorldBoundary)
+{
+    ShotCommand command{1, {10.0F, 20.0F}, {1.0F, 0.0F}, 100.0F, 8.0F, 5};
+    command.maximumDistance = 100.0F;
+    command.penetration = 2;
+    command.unarmoredDamageBonus = 1;
+    command.unarmoredDamageRange = 180.0F;
+
+    const ShotResolution accepted = resolveShotCommand(command);
+    ASSERT_TRUE(accepted.accepted());
+    EXPECT_EQ(accepted.penetration, 2);
+    EXPECT_EQ(accepted.unarmoredDamageBonus, 1);
+    EXPECT_FLOAT_EQ(accepted.unarmoredDamageRange, 180.0F);
+    EXPECT_FLOAT_EQ(accepted.maximumDistance, 100.0F);
+
+    for (const int invalidBonus : {-1, 0, 2})
+    {
+        command.unarmoredDamageBonus = invalidBonus;
+        EXPECT_EQ(resolveShotCommand(command).status,
+                  ShotResolutionStatus::RejectedInvalidUnarmoredDamage);
+    }
+
+    command.unarmoredDamageBonus = 1;
+    for (const float invalidRange : {0.0F, std::numeric_limits<float>::infinity(),
+                                     std::numeric_limits<float>::quiet_NaN()})
+    {
+        command.unarmoredDamageRange = invalidRange;
+        EXPECT_EQ(resolveShotCommand(command).status,
+                  ShotResolutionStatus::RejectedInvalidUnarmoredDamage);
+    }
+}

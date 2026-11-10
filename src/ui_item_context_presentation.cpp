@@ -29,6 +29,7 @@ std::string compactUiItemName(const ItemDefinition &d,UiLanguage language) {
         {"item.ammunition.9mm_enhanced","9mm E","9mm强"},
         {"item.ammunition.5_45x39_standard","5.45 S","5.45标"},
         {"item.ammunition.5_45x39_enhanced","5.45 E","5.45强"},
+        {"item.ammunition.5_45x39_expanding","5.45 HP","5.45扩"},
         {"item.ammunition.7_62x51_standard","7.62 S","7.62标"},
         {"item.ammunition.7_62x51_enhanced","7.62 E","7.62强"},
         {"item.medical.medkit_alpha","Medkit","医疗包"},
@@ -45,6 +46,43 @@ std::string compactUiItemName(const ItemDefinition &d,UiLanguage language) {
     for(const auto &name:names)if(d.definitionId.value()==name.id)
         return std::string{language==UiLanguage::SimplifiedChinese?name.zh:name.en};
     return localizeUiText(language,d.displayName);
+}
+
+std::vector<std::string> projectUiAmmoInspectionLines(
+    const ProfileState &profile, const ContentRegistry &content, const AssetRecord &asset,
+    UiLanguage language) {
+    const auto &definition = content.item(asset.definitionId);
+    const bool chinese = language == UiLanguage::SimplifiedChinese;
+    std::vector<std::string> lines;
+    const AssetRecord *magazine = nullptr;
+    if (definition.weaponUse &&
+        content.ammunitionFitsWeapon(kExpanding545AmmunitionId, definition.definitionId)) {
+        const auto chamber = asset.chamberedRound
+            ? localizeUiText(language, content.item(asset.chamberedRound->definitionId).displayName)
+            : std::string{chinese ? "空" : "Empty"};
+        lines.push_back(fmt::format("{} {}", chinese ? "枪膛" : "Chamber", chamber));
+        if (const auto id = installedMagazine(profile, asset.instanceId))
+            magazine = profile.assets.find(*id);
+    } else if (definition.magazineUse &&
+               content.ammunitionFitsMagazine(kExpanding545AmmunitionId, definition.definitionId)) {
+        magazine = &asset;
+    }
+    if (!magazine) return lines;
+
+    std::string feed = chinese ? "供弹顺序" : "Feed order";
+    const auto &rounds = magazine->magazineRounds;
+    if (rounds.empty()) feed += chinese ? " 空" : " Empty";
+    // The ammo domain feeds from the front. Count adjacent rounds only.
+    for (auto first = rounds.begin(); first != rounds.end();) {
+        const auto end = std::find_if(std::next(first), rounds.end(), [&](const auto &round) {
+            return round.definitionId != first->definitionId;
+        });
+        feed += fmt::format("{}{} ×{}", first == rounds.begin() ? " " : " → ",
+            compactUiItemName(content.item(first->definitionId), language), std::distance(first, end));
+        first = end;
+    }
+    lines.push_back(std::move(feed));
+    return lines;
 }
 
 const char *uiWeaponOpticBehaviorText(WeaponOpticMode mode) noexcept {

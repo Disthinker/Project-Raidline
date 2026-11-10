@@ -61,7 +61,10 @@ void App::renderQuickWheel(UiQuickWheelKind kind,
     const auto count=kind==UiQuickWheelKind::Magazine ? entry.count+(entry.mixedAmmunition?(language==UiLanguage::SimplifiedChinese?" 混":" MIX"):"") :
         kind==UiQuickWheelKind::Medical?fmt::format("×{} · {}{}",entry.quantity,entry.remainingUses,language==UiLanguage::SimplifiedChinese?"次":" uses"):
         fmt::format("×{}",entry.quantity);
-    uiTextRenderer_.renderBox(renderer_,{image.x-27,image.y+image.h+2,image.w+54,18},count,{12,UiTextAlign::Center,1});
+    const bool magazineDetails = kind == UiQuickWheelKind::Magazine && active && !layout.count.text.empty();
+    uiTextRenderer_.renderBox(renderer_, {image.x-27,image.y+image.h+2,image.w+54,18},
+        magazineDetails ? layout.count.text : count,
+        {magazineDetails ? layout.count.size : 12, UiTextAlign::Center, 1});
     if(!entry.usable) {SDL_SetRenderDrawColor(renderer_,219,154,122,255);SDL_RenderPoint(renderer_,image.x+image.w+5,image.y+4);}
   }
   if(!layout.range.text.empty()) {

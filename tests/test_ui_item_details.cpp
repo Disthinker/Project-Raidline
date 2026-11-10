@@ -304,6 +304,47 @@ TEST_F(UiItemDetailsTest, CompleteFailureCanScrollToItsTailAndScrollingCancelsAW
     EXPECT_EQ(before, profileStateFingerprint(profile()));
 }
 
+TEST_F(UiItemDetailsTest, Mixed545InspectionSeparatesChamberAndPreservesFeedOrderAtThreeSizes) {
+    const ItemDefinitionId enhanced{"item.ammunition.5_45x39_enhanced"};
+    const auto &magazineDefinition = content.item(ItemDefinitionId{"item.magazine.5_45x39_30"});
+    const auto magazine = profile().assets.create(magazineDefinition, InstalledMagazineLocation{weapon});
+    auto *rifleAsset = profile().assets.findMutable(weapon);
+    ASSERT_NE(rifleAsset, nullptr);
+    rifleAsset->chamberedRound = MagazineRoundRecord{enhanced, std::nullopt};
+    auto *magazineAsset = profile().assets.findMutable(magazine);
+    magazineAsset->magazineRounds = {
+        {kExpanding545AmmunitionId, std::nullopt}, {kExpanding545AmmunitionId, std::nullopt},
+        {enhanced, std::nullopt}, {kExpanding545AmmunitionId, std::nullopt}};
+    ++profile().revision;
+    ASSERT_TRUE(validateProfileState(profile(), content).valid);
+    const auto before = profileStateFingerprint(profile());
+    A::message(*app).clear();
+
+    for (const auto size : {UiWindowSize{1024, 576}, UiWindowSize{1280, 720}, UiWindowSize{1920, 1080}})
+        for (const auto language : {UiLanguage::SimplifiedChinese, UiLanguage::English}) {
+            detach(); attach(size.width, size.height); A::text(*app).setLanguage(language);
+            const bool chinese = language == UiLanguage::SimplifiedChinese;
+            const std::string chamber = chinese ? "枪膛 5.45×39增强普通弹" : "Chamber 5.45x39 Enhanced Ball";
+            const std::string feed = chinese ? "供弹顺序 5.45扩 ×2 → 5.45强 ×1 → 5.45扩 ×1"
+                : "Feed order 5.45 HP ×2 → 5.45 E ×1 → 5.45 HP ×1";
+            const auto spare = projectUiAmmoInspectionLines(profile(), content, *magazineAsset, language);
+            ASSERT_EQ(spare, std::vector<std::string>{feed});
+            const auto shortName = compactUiItemName(content.item(kExpanding545AmmunitionId), language);
+            EXPECT_EQ(shortName, chinese ? "5.45扩" : "5.45 HP");
+            EXPECT_EQ(localizeUiText(language, shortName), shortName);
+            EXPECT_EQ(localizeUiText(language, feed), feed);
+
+            const auto lines = projectUiAmmoInspectionLines(profile(), content, *rifleAsset, language);
+            EXPECT_EQ(lines, (std::vector<std::string>{chamber, feed}));
+            for (const auto &line : lines) EXPECT_LT(A::text(*app).measure(line, 12), 1004.0F);
+            draw(fmt::format("mixed-5-45-inspect-{}-{}", size.width, chinese ? "zh" : "en"));
+            const float scale = size.width / 1280.0F;
+            EXPECT_GT(bright({70, 644, 410, 17}, scale), 15);
+            EXPECT_GT(bright({70, 661, 410, 17}, scale), 15);
+        }
+    EXPECT_EQ(profileStateFingerprint(profile()), before);
+}
+
 TEST_F(UiItemDetailsTest, WeaponWithAllSixComponentsKeepsOpticNameInsideDetails) {
     for (const ItemDefinitionId &id : {ItemDefinitionId{"item.component.precision_barrel"},
             ItemDefinitionId{"item.component.vertical_grip"}, ItemDefinitionId{"item.component.suppressor_5_45"},

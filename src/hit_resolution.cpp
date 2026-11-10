@@ -108,6 +108,7 @@ HitResolutionResult resolveShotHits(
         if (shot.shotId == kInvalidShotId ||
             shot.damage <= 0 ||
             shot.penetration < 0 ||
+            !validUnarmoredDamageBonus(shot.unarmoredDamageBonus) ||
             std::find(result.consumedShotIds.begin(), result.consumedShotIds.end(), shot.shotId) != result.consumedShotIds.end())
         {
             continue;
@@ -223,6 +224,13 @@ HitResolutionResult resolveShotHits(
                 : physicalRegion;
         const bool weakPoint =
             aimMatchesPhysicalRegion && shot.aimIntent->weakPoint;
+        // The effect belongs to the bullet and tests the physical contact
+        // against the muzzle and range frozen when this shot was fired.
+        const int unarmoredBonus = shot.unarmoredDamageBonus > 0 &&
+            std::isfinite(shot.unarmoredDamageRange) && shot.unarmoredDamageRange > 0.0F &&
+            std::hypot(hitPosition.x - shot.shotOrigin.x, hitPosition.y - shot.shotOrigin.y)
+                <= shot.unarmoredDamageRange
+            ? shot.unarmoredDamageBonus : 0;
         const CombatDamageResolution damage = resolveCombatDamage(
             CombatDamageCommand{
                 shot.damage,
@@ -231,7 +239,8 @@ HitResolutionResult resolveShotHits(
                 shot.damage,
                 weakPoint,
                 physicalRegion == HitRegion::Torso && enemy.torsoArmor()
-                    ? std::optional{enemy.torsoArmor()->protection()} : std::nullopt});
+                    ? std::optional{enemy.torsoArmor()->protection()} : std::nullopt,
+                unarmoredBonus});
         if (!damage.resolved())
         {
             continue;

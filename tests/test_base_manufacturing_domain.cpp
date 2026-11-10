@@ -141,7 +141,13 @@ TEST(BaseManufacturingDomainTest,
                 "base_manufacturing.ammunition_7_62x51_standard"},
             ItemDefinitionId{"item.ammunition.7_62x51_standard"},
             40U,
-            240U}};
+            240U},
+        RecipeCase{
+            BaseManufacturingRecipeDefinitionId{
+                "base_manufacturing.ammunition_5_45x39_expanding"},
+            kExpanding545AmmunitionId,
+            18U,
+            120U}};
 
     for (const RecipeCase &testCase : cases)
     {
@@ -181,6 +187,24 @@ TEST(BaseManufacturingDomainTest,
         EXPECT_EQ(
             profile.baseManufacturing.activeOrder->recipeDefinitionId,
             testCase.recipeId);
+    }
+}
+
+TEST(BaseManufacturingDomainTest,
+     Expanding545RequiresManufactureAndCannotComeFromWarehouseCatalogs)
+{
+    const auto &content = publishedContentRegistry();
+    for (auto grant : {grantPublishedWarehouseCatalog, grantDeveloperWarehouseCatalog})
+    {
+        auto profile = makeProfile();
+        const auto ownsExpanding = [&] {
+            for (const auto &[id, asset] : profile.assets.records())
+                if (asset.definitionId == kExpanding545AmmunitionId) return true;
+            return false;
+        };
+        EXPECT_FALSE(ownsExpanding());
+        ASSERT_TRUE(grant(profile, content).succeeded);
+        EXPECT_FALSE(ownsExpanding());
     }
 }
 
