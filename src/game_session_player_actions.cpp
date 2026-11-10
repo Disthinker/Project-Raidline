@@ -606,23 +606,70 @@ void GameSession::preparePlayerCombatInput(GameplayInput &simulationInput,const 
 
 }
 
-void GameSession::preparePlayerLightInput(const GameplayInput &input,float deltaTime)
+void GameSession::cancelWeaponLightInput() noexcept
 {
-    if (input.inventoryOpen || input.freezeObservationDirection)
-    { lightKeyPending_=false; lightKeyHeldSeconds_=0; lightLongPressConsumed_=false; }
-    else
+    lightKeyPending_ = false;
+    lightLongPressConsumed_ = false;
+    tacticalDeviceWheelOpen_ = false;
+    lightKeyHeldSeconds_ = 0;
+}
+
+bool GameSession::updatePlayerLightGesture(const GameplayInput &input, float deltaTime)
+{
+    const bool frozen = input.inventoryOpen || input.freezeObservationDirection;
+    if (tacticalDeviceWheelOpen_)
     {
-        if (input.lightJustPressed) { lightKeyPending_=true; lightKeyHeldSeconds_=0; lightLongPressConsumed_=false; }
-        if (lightKeyPending_ && std::isfinite(deltaTime) && deltaTime>0) lightKeyHeldSeconds_ += deltaTime;
-        if (lightKeyPending_ && lightKeyHeldSeconds_>=0.35F && !lightLongPressConsumed_)
-        { lightLongPressConsumed_=true; persistenceMessage_="ONLY WEAPON LIGHT | TAP U"; }
-        if (input.lightJustReleased)
-        {
-            if (lightKeyPending_ && !lightLongPressConsumed_) { const auto receipt=toggleWeaponLight(); if (!receipt.succeeded) persistenceMessage_=receipt.message; }
-            lightKeyPending_=false; lightKeyHeldSeconds_=0;
-        }
+        // The client consumes the release while the modal owns the pointer.
+        // A release passed to the world without a selection remains neutral.
+        if (input.lightJustReleased || input.inventoryOpen || !nightVisionAvailable() ||
+            (!frozen && !input.lightPressed))
+            cancelWeaponLightInput();
+        return false;
+    }
+    if (frozen || (!input.lightPressed && !input.lightJustReleased))
+    {
+        cancelWeaponLightInput();
+        return false;
+    }
+    if (input.lightJustPressed)
+    {
+        lightKeyPending_ = true;
+        lightKeyHeldSeconds_ = 0;
+        lightLongPressConsumed_ = false;
+    }
+    if (!lightKeyPending_) return false;
+    if (std::isfinite(deltaTime) && deltaTime > 0)
+        lightKeyHeldSeconds_ += deltaTime;
+    if (lightKeyHeldSeconds_ >= 0.35F && !lightLongPressConsumed_)
+    {
+        lightLongPressConsumed_ = true;
+        if (!nightVisionAvailable() || !equippedNightVision().deviceAssetId)
+            persistenceMessage_ = "ONLY WEAPON LIGHT | TAP U";
+        else if (!activeWeaponLight().binding.deviceAssetId)
+            persistenceMessage_ = "ONLY NIGHT VISION | TAP U";
+        else if (!input.lightJustReleased)
+            tacticalDeviceWheelOpen_ = true;
+    }
+    if (!input.lightJustReleased) return false;
+    const bool tap = !lightLongPressConsumed_;
+    cancelWeaponLightInput();
+    return tap;
+}
+
+void GameSession::advancePlayerLights(bool toggle, const GameplayInput &input, float deltaTime)
+{
+    if (toggle)
+    {
+        const bool hasNightVision = nightVisionAvailable() && equippedNightVision().deviceAssetId;
+        const bool useNightVision = hasNightVision &&
+            (selectedTacticalDevice_ == TacticalDeviceKind::NightVision ||
+             !activeWeaponLight().binding.deviceAssetId);
+        const auto receipt = useNightVision ? toggleNightVision() : toggleWeaponLight();
+        if (!receipt.succeeded) persistenceMessage_ = receipt.message;
     }
     synchronizeWeaponLight(deltaTime);
+    const bool frozen = input.inventoryOpen || input.freezeObservationDirection || tacticalDeviceWheelOpen_;
+    synchronizeNightVision(frozen ? 0.0F : deltaTime);
 }
 
 void GameSession::finishBasePlayerFrame(const GameplayInput &input,float deltaTime,float weaponActionDelta)

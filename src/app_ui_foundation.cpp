@@ -1,4 +1,5 @@
 #include "app.h"
+#include "ui_raid_hud_presentation.h"
 #include <algorithm>
 #include <cmath>
 #include <fmt/format.h>
@@ -16,8 +17,42 @@ void App::renderQuickWheel(UiQuickWheelKind kind,
         [&](auto t,int n){return uiTextRenderer_.measure(t,n);},quickWheelPage_);
     quickWheelLayoutGeneration_=quickWheelProjection_.generation;quickWheelLayoutLanguage_=language;
   }
-  const auto &entries=quickWheelProjection_.entries;
-  const auto &layout=quickWheelLayout_;
+  renderQuickWheelEntries(kind, quickWheelProjection_.entries, quickWheelLayout_);
+}
+
+void App::renderTacticalDeviceWheel()
+{
+  const auto light = gameSession_.activeWeaponLight();
+  const auto vision = gameSession_.activeNightVision();
+  const auto language = uiTextRenderer_.language();
+  const auto selected = quickWheelSector(wheelPointerOffset_).value_or(8);
+  std::vector<UiQuickWheelEntry> entries(8);
+  const auto configure = [&](std::size_t sector, AssetInstanceId id, const char *name,
+                             std::string_view state, std::uint32_t remaining, std::uint32_t capacity) {
+    auto &entry = entries[sector];
+    entry.instanceId = id;
+    entry.name = localizeUiText(language, name);
+    entry.status = localizeUiText(language, state);
+    entry.count = fmt::format("{}%", capacity ? static_cast<std::uint64_t>(remaining) * 100 / capacity : 0);
+    entry.usable = id != 0;
+  };
+  configure(kTacticalWheelLightSector, light.binding.deviceAssetId, "WEAPON LIGHT",
+    uiWeaponLightStateLabel(light), light.remainingMs, light.capacityMs);
+  configure(kTacticalWheelVisionSector, vision.binding.deviceAssetId, "NIGHT VISION",
+    uiNightVisionStateLabel(vision), vision.remainingCharges, vision.capacityCharges);
+  const auto kind = UiQuickWheelKind::TacticalDevice;
+  const auto layout = layoutUiQuickWheel(entries, selected, kind, language,
+      [&](auto text, int size) { return uiTextRenderer_.measure(text, size); });
+  renderQuickWheelEntries(kind, entries, layout);
+}
+
+void App::renderQuickWheelEntries(UiQuickWheelKind kind,
+                                  const std::vector<UiQuickWheelEntry> &entries,
+                                  const UiQuickWheelLayout &layout)
+{
+  const auto language = uiTextRenderer_.language();
+  const auto selected = layout.selected;
+  const bool tactical = kind == UiQuickWheelKind::TacticalDevice;
   if(quickWheelVisualIndex_!=selected || quickWheelEmphasis_.kind!=kind) {
     quickWheelVisualIndex_=selected;quickWheelEmphasis_.kind=kind;quickWheelEmphasis_.started=uiClockSeconds_;
   }
@@ -27,8 +62,9 @@ void App::renderQuickWheel(UiQuickWheelKind kind,
   SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_BLEND);
   constexpr float pi=3.14159265358979323846F;
   for(std::size_t sector=0;sector<8;++sector) {
-    const auto index=quickWheelPage_*8+sector;
-    const bool active=index==selected,occupied=index<entries.size();
+    const auto index=layout.page*8+sector;
+    const bool occupied=index<entries.size() && (!tactical || entries[index].instanceId != 0);
+    const bool active=index==selected && (!tactical || occupied);
     const float zoom=active?1+emphasis*.065F:1;
     const float inner=88*zoom,outer=230*zoom;
     const float center=-pi/2+sector*pi/4;
@@ -56,6 +92,15 @@ void App::renderQuickWheel(UiQuickWheelKind kind,
     image.x=640+(image.x+image.w/2-640)*zoom-image.w*zoom/2;
     image.y=360+(image.y+image.h/2-360)*zoom-image.h*zoom/2;
     image.w*=zoom;image.h*=zoom;
+    if (tactical) {
+      SDL_SetRenderDrawColor(renderer_, 232, 237, 242, 255);
+      uiTextRenderer_.renderBox(renderer_, {image.x - 38, image.y + 6, image.w + 76, 20},
+          entry.name, {14, UiTextAlign::Center, 1});
+      SDL_SetRenderDrawColor(renderer_, 179, 205, 196, 255);
+      uiTextRenderer_.renderBox(renderer_, {image.x - 38, image.y + 29, image.w + 76, 20},
+          entry.count, {13, UiTextAlign::Center, 1});
+      continue;
+    }
     if(const auto *asset=gameSession_.profile().assets.find(entry.instanceId))renderProfileAsset(*asset,image,56,entry.usable?255:150,false,true,false);
     SDL_SetRenderDrawColor(renderer_,entry.usable?224:150,entry.usable?236:155,entry.usable?229:156,255);
     const auto count=kind==UiQuickWheelKind::Magazine ? entry.count+(entry.mixedAmmunition?(language==UiLanguage::SimplifiedChinese?" 混":" MIX"):"") :
@@ -66,6 +111,17 @@ void App::renderQuickWheel(UiQuickWheelKind kind,
         magazineDetails ? layout.count.text : count,
         {magazineDetails ? layout.count.size : 12, UiTextAlign::Center, 1});
     if(!entry.usable) {SDL_SetRenderDrawColor(renderer_,219,154,122,255);SDL_RenderPoint(renderer_,image.x+image.w+5,image.y+4);}
+  }
+  if (tactical) {
+    SDL_SetRenderDrawColor(renderer_, 225, 235, 229, 255);
+    const bool valid = selected < entries.size() && entries[selected].instanceId;
+    uiTextRenderer_.renderBox(renderer_, {569, 337, 142, 22},
+        valid ? entries[selected].status : localizeUiText(language, "SELECT A DEVICE"),
+        {12, UiTextAlign::Center, 1});
+    SDL_SetRenderDrawColor(renderer_, 169, 194, 185, 255);
+    uiTextRenderer_.renderBox(renderer_, {569, 362, 142, 22},
+        valid ? localizeUiText(language, "RELEASE U TO TOGGLE") : localizeUiText(language, "ESC TO CANCEL"),
+        {12, UiTextAlign::Center, 1});
   }
   if(!layout.range.text.empty()) {
     SDL_SetRenderDrawColor(renderer_,180,204,196,255);

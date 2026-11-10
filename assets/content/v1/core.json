@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-5-45-ammo-loop-content-76",
+  "content_version": "raid-hospital-night-operations-content-77",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -562,6 +562,29 @@
       "market_buy_price": 20,
       "maximum_charges": 600000,
       "battery": true
+    },
+    {
+      "id": "item.device.night_vision_basic",
+      "display_name": "Head-Mounted Night Vision",
+      "category": "loot",
+      "inventory": {"width": 2, "height": 1, "can_rotate": true},
+      "max_stack_size": 1,
+      "unit_weight_grams": 350,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 40, "y": 24},
+        "pickup_size": {"x": 48, "y": 32}
+      },
+      "inventory_texture": "items/inventory/unpublished_component.png",
+      "world_texture": "items/world/unpublished_component.png",
+      "night_vision": {
+        "helmet": "item.protective_gear.helmet_basic",
+        "outdoor_angle_degrees": 150,
+        "outdoor_distance": 850,
+        "indoor_angle_degrees": 140,
+        "indoor_distance": 750,
+        "full_output_seconds": 180
+      }
     },
     {
       "id": "item.component.suppressor_5_45",

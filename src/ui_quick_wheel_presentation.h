@@ -4,7 +4,9 @@
 #include "ui_foundation.h"
 
 // Presentation consumers only: neither projection nor layout selects/uses an item.
-enum class UiQuickWheelKind { Medical, Throwable, Magazine };
+enum class UiQuickWheelKind { Medical, Throwable, Magazine, TacticalDevice };
+inline constexpr std::size_t kTacticalWheelLightSector = 6;
+inline constexpr std::size_t kTacticalWheelVisionSector = 2;
 struct UiQuickWheelEntry {
     AssetInstanceId instanceId{};
     std::string name, count, status;

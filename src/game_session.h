@@ -57,6 +57,8 @@ class BaseWorld;
 struct InstallFortificationCommand;
 struct FortificationPlacementPlan;
 
+enum class TacticalDeviceKind { WeaponLight, NightVision };
+
 enum class GameSessionState
 {
     InRaid,
@@ -367,9 +369,13 @@ public:
     [[nodiscard]] bool startAlphaWeaponSwitch(EquipmentSlotKind targetSlot);
     [[nodiscard]] bool observeAlphaWeaponClearMotion(Vec2 delta);
     [[nodiscard]] WeaponLightProjection activeWeaponLight() const;
+    [[nodiscard]] NightVisionProjection activeNightVision() const;
+    [[nodiscard]] bool tacticalDeviceWheelOpen() const noexcept { return tacticalDeviceWheelOpen_; }
+    [[nodiscard]] TacticalDeviceKind selectedTacticalDevice() const noexcept { return selectedTacticalDevice_; }
+    [[nodiscard]] InventoryReceipt selectTacticalDevice(TacticalDeviceKind);
     [[nodiscard]] InventoryReceipt changeDeviceBattery(DeviceBatteryCommand, std::string transactionId);
     [[nodiscard]] InventoryReceipt toggleWeaponLight();
-    void cancelWeaponLightInput() noexcept { lightKeyPending_=false; lightLongPressConsumed_=false; lightKeyHeldSeconds_=0; }
+    void cancelWeaponLightInput() noexcept;
     void cancelRaidCredentialInteraction() noexcept;
     [[nodiscard]] bool alphaRaidActive() const noexcept;
     [[nodiscard]] bool recoveredAbandonedRaid() const noexcept;
@@ -679,7 +685,8 @@ private:
         const std::optional<WeaponHandlingParameters> &);
     void gateOpticInteraction(GameplayInput &input, GameplayInput &simulationInput, float deltaTime) noexcept;
     [[nodiscard]] bool willOpenHighOptic(const GameplayInput &, float deltaTime) const noexcept;
-    void preparePlayerLightInput(const GameplayInput &, float);
+    [[nodiscard]] bool updatePlayerLightGesture(const GameplayInput &, float);
+    void advancePlayerLights(bool toggle, const GameplayInput &, float);
     void finishBasePlayerFrame(const GameplayInput &, float, float);
     void recordBaseEnemyDeaths(ProfileState &);
     [[nodiscard]] bool playerThrowFlightActive() const noexcept;
@@ -691,9 +698,16 @@ private:
         std::optional<AssetInstanceId> weapon, bool controlsAvailable);
     mutable WeaponLightBinding weaponLightBinding_;
     mutable ProfileRevision weaponLightBindingRevision_{};
-    bool lightKeyPending_{}, lightLongPressConsumed_{};
+    mutable NightVisionBinding nightVisionBinding_;
+    mutable std::optional<ProfileRevision> nightVisionBindingRevision_;
+    TacticalDeviceKind selectedTacticalDevice_{TacticalDeviceKind::WeaponLight};
+    bool lightKeyPending_{}, lightLongPressConsumed_{}, tacticalDeviceWheelOpen_{};
     float lightKeyHeldSeconds_{};
+    [[nodiscard]] bool nightVisionAvailable() const noexcept;
+    [[nodiscard]] NightVisionBinding equippedNightVision() const;
+    [[nodiscard]] InventoryReceipt toggleNightVision();
     void synchronizeWeaponLight(float seconds = 0);
+    void synchronizeNightVision(float seconds = 0);
     float medicalTickAccumulatorSeconds_{};
     bool fireSuppressedUntilRelease_{};
     bool sprintSuppressedUntilRelease_{};

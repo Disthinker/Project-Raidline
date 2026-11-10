@@ -127,7 +127,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        kAmmoLoopContentVersion);
+        kHospitalNightOperationsContentVersion);
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -259,7 +259,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.category, BaseSupplyCategory::Recreation);
     EXPECT_EQ(comfort.requiredContribution, 14U);
     EXPECT_FALSE(comfort.sourceHint.empty());
-    ASSERT_EQ(registry.items().size(), 64U);
+    ASSERT_EQ(registry.items().size(), 65U);
     const auto &light = registry.item(ItemDefinitionId{"item.component.weapon_flashlight_basic"});
     const auto &battery = registry.item(ItemDefinitionId{"item.battery.universal"});
     ASSERT_TRUE(light.weaponLight);
@@ -1902,6 +1902,13 @@ TEST(ContentRegistryTest,
 TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
 {
     const ContentRegistry &registry = publishedContentRegistry();
+    const auto &hospital = registry.map(MapDefinitionId{"map.raid.hospital_district"});
+    const bool nightVisionSlot = std::any_of(hospital.interiors.begin(), hospital.interiors.end(),
+        [&](const auto &interior) {
+            return std::any_of(interior.lootSlots.begin(), interior.lootSlots.end(), [&](const auto &slot) {
+                return isHospitalNightVisionLootSlot(hospital.id, interior.id, slot.id);
+            });
+        });
     for (const ItemDefinition &item : registry.items())
     {
         const bool lootSource = std::any_of(
@@ -1925,10 +1932,11 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
                 return recipe.outputItemDefinitionId ==
                     item.definitionId;
             });
-        // The 4x optic has a dedicated resource slot, exercised by the
-        // seeded Frontier deployment regression rather than a weighted table.
+        // Dedicated slots are exercised by the seeded Frontier and hospital
+        // deployment regressions rather than a weighted table.
         const bool fixedResourceSource =
-            item.definitionId == kFixedRaidOpticId;
+            item.definitionId == kFixedRaidOpticId ||
+            (item.definitionId == kHospitalNightVisionId && nightVisionSlot);
         EXPECT_TRUE(
             item.marketBuyPrice > 0U || lootSource ||
             manufacturingSource || fixedResourceSource)
@@ -1949,6 +1957,7 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
             });
         const bool typedGameplayConsumer =
             item.category != ItemCategory::Loot ||
+            item.nightVision.has_value() ||
             item.baseContribution.has_value() ||
             item.baseConstructionMaterialValue > 0U;
         EXPECT_TRUE(
@@ -2207,7 +2216,7 @@ TEST(ContentRegistryTest, OpticDefinitionsSeparateTheReceiverMountAndOpticModes)
 TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDefinitions)
 {
     const auto original = hospitalContentCandidateJson();
-    ASSERT_EQ(original.at("content_version").get<std::string>(), kAmmoLoopContentVersion);
+    ASSERT_EQ(original.at("content_version").get<std::string>(), kHospitalNightOperationsContentVersion);
     for (const auto *required : {"fortifications", "enemy_combat_definitions"})
     {
         SCOPED_TRACE(required);

@@ -44,6 +44,7 @@ std::optional<UiAllocationAsset> snapshot(const ProfileState &p, const ContentRe
                 equipped->slot==EquipmentSlotKind::ChestRig?"CHEST RIG":"EQUIPPED"); break;
         } else if (const auto *mag=std::get_if<InstalledMagazineLocation>(&owner->location)) current=mag->weaponAssetId;
         else if (const auto *component=std::get_if<InstalledWeaponComponentLocation>(&owner->location)) current=component->weaponAssetId;
+        else if (const auto *device=std::get_if<InstalledHelmetDeviceLocation>(&owner->location)) current=device->helmetAssetId;
         else if (const auto *battery=std::get_if<InstalledDeviceBatteryLocation>(&owner->location)) current=battery->deviceAssetId;
         else break;
     }

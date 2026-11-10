@@ -1,4 +1,5 @@
 #include "ui_item_context_presentation.h"
+#include "ui_item_details_presentation.h"
 #include "medical_domain.h"
 #include "weapon_ammo_domain.h"
 #include "ui_raid_hud_presentation.h"
@@ -119,6 +120,10 @@ std::vector<UiItemActionEntry> projectUiItemActions(
         result = {{UiItemAction::DecoyDetails, "DECOY DETAILS"}};
     if (definition.grenadeUse)
         result = {{UiItemAction::DecoyDetails, "GRENADE DETAILS"}};
+    if (definition.nightVision)
+        result = {{UiItemAction::NightVisionDetails, "NIGHT VISION DETAILS"}};
+    else if (supportsUiNightVisionMount(content, definition))
+        result = {{UiItemAction::HelmetDetails, "HELMET DETAILS"}};
     if (const auto action = queryProfileContextAction(profile, content, id, inRaid)) {
         switch (*action) {
         case ProfileContextActionKind::UnloadMagazine:

@@ -297,7 +297,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     }
     preparePlayerCombatInput(simulationInput,input,deltaTime,weaponHandling);
     gateOpticInteraction(input, simulationInput, deltaTime);
-    preparePlayerLightInput(input,deltaTime);
+    advancePlayerLights(updatePlayerLightGesture(input, deltaTime), input, deltaTime);
 
     std::optional<FireWeaponCommand> pendingFireCommand;
     std::optional<std::string> pendingFireTransaction;
@@ -796,7 +796,9 @@ void GameSession::configurePersistence(
     baseDefenseWriter_.reset();
     baseDefenseWorld_ = nullptr;
     weaponLightBindingRevision_=0; weaponLightBinding_={};
-    lightKeyPending_=false; lightKeyHeldSeconds_=0;
+    nightVisionBindingRevision_.reset();
+    selectedTacticalDevice_ = TacticalDeviceKind::WeaponLight;
+    cancelWeaponLightInput();
     saveRepository_.emplace(std::move(directory));
     inventoryPersistence_.reset();
     profileUiPersistence_.reset();++profileUiEpoch_;
@@ -845,6 +847,9 @@ bool GameSession::startNewProfile(std::string profileId, bool survey)
         saveMessage = result.message;
     }
     profile_ = std::move(candidate);
+    nightVisionBindingRevision_.reset();
+    selectedTacticalDevice_ = TacticalDeviceKind::WeaponLight;
+    cancelWeaponLightInput();
     inventoryPersistence_.reset();
     profileUiPersistence_.reset();++profileUiEpoch_;
     raidActionState_.cancel();
@@ -992,7 +997,9 @@ bool GameSession::continueProfile()
         persistenceMessage_ = saved.message;
     }
     weaponLightBindingRevision_=0; weaponLightBinding_={};
-    lightKeyPending_=false; lightKeyHeldSeconds_=0;
+    nightVisionBindingRevision_.reset();
+    selectedTacticalDevice_ = TacticalDeviceKind::WeaponLight;
+    cancelWeaponLightInput();
     baseDefenseWriter_.reset();
     baseDefenseWorld_ = nullptr;
     baseDefenseSaveBlocked_ = false;
@@ -1577,6 +1584,53 @@ WeaponLightProjection GameSession::activeWeaponLight() const
     return queryWeaponLight(profile_, publishedContentRegistry(), weaponLightBinding_, allowed);
 }
 
+bool GameSession::nightVisionAvailable() const noexcept
+{
+    return alphaRaidActive_ && !developerRange_ && state_ == GameSessionState::InRaid &&
+        world_ && world_->raidSession().isActive() && world_->nightVisionSupported() &&
+        !world_->player().isDead();
+}
+
+NightVisionBinding GameSession::equippedNightVision() const
+{
+    if (nightVisionBindingRevision_ != profile_.revision)
+    {
+        const auto helmet = equippedAsset(profile_, EquipmentSlotKind::Helmet).value_or(0);
+        nightVisionBinding_ = findNightVision(profile_, publishedContentRegistry(), helmet);
+        nightVisionBindingRevision_ = profile_.revision;
+    }
+    return nightVisionBinding_;
+}
+
+NightVisionProjection GameSession::activeNightVision() const
+{
+    if (!nightVisionAvailable()) return {};
+    const auto binding = equippedNightVision();
+    if (!binding.deviceAssetId) return {};
+    return queryNightVision(profile_, publishedContentRegistry(), binding,
+        world_->isDarkForNightVision());
+}
+
+void GameSession::synchronizeNightVision(float seconds)
+{
+    if (!nightVisionAvailable()) return;
+    const auto binding = equippedNightVision();
+    const auto &content = publishedContentRegistry();
+    if (binding.deviceAssetId && seconds > 0 &&
+        world_->isDarkForNightVision())
+        advanceNightVision(profile_, content, binding, true, seconds);
+
+    // Retain the supplied power state through the movement update, so a portal
+    // can immediately choose the new room's light without another fan build.
+    const auto powered = binding.deviceAssetId
+        ? queryNightVision(profile_, content, binding, true) : NightVisionProjection{};
+    if (powered.output)
+        world_->setNightVision({powered.vision.outdoorAngleDegrees, powered.vision.outdoorDistance},
+                               {powered.vision.indoorAngleDegrees, powered.vision.indoorDistance});
+    else
+        world_->setNightVision({}, {});
+}
+
 void GameSession::synchronizeWeaponLight(float seconds)
 {
     if (!playerGameplayContext().available) return;
@@ -1608,6 +1662,37 @@ InventoryReceipt GameSession::toggleWeaponLight()
     return receipt;
 }
 
+InventoryReceipt GameSession::toggleNightVision()
+{
+    const auto binding = nightVisionAvailable() ? equippedNightVision() : NightVisionBinding{};
+    if (!binding.deviceAssetId)
+        return {false, false, DomainErrorCode::IllegalDestination, "NO EQUIPPED NIGHT VISION", profile_.revision};
+
+    auto candidate = profile_;
+    auto receipt = executeDeviceSwitch(candidate, publishedContentRegistry(), binding.deviceAssetId,
+                                      {candidate.revision, nextRaidTransaction("night-vision")});
+    if (receipt.succeeded && !commitProfileCandidate(std::move(candidate), false))
+        return {false, false, DomainErrorCode::InvalidProfile, persistenceMessage_, profile_.revision};
+    if (receipt.succeeded)
+    {
+        synchronizeNightVision();
+        persistenceMessage_ = activeNightVision().switchOn ? "NIGHT VISION ON" : "NIGHT VISION OFF";
+    }
+    return receipt;
+}
+
+InventoryReceipt GameSession::selectTacticalDevice(TacticalDeviceKind kind)
+{
+    const bool open = tacticalDeviceWheelOpen_;
+    cancelWeaponLightInput();
+    if (!open || !nightVisionAvailable() || profileUiCommitPending())
+        return {false, false, DomainErrorCode::IllegalDestination, "TACTICAL DEVICE SELECTION UNAVAILABLE", profile_.revision};
+
+    auto receipt = kind == TacticalDeviceKind::NightVision ? toggleNightVision() : toggleWeaponLight();
+    if (receipt.succeeded) selectedTacticalDevice_ = kind;
+    return receipt;
+}
+
 InventoryReceipt GameSession::changeDeviceBattery(DeviceBatteryCommand command, std::string transactionId)
 {
     if(profileUiCommitPending())return {false,false,DomainErrorCode::IllegalDestination,"PROFILE SAVE PENDING",profile_.revision};
@@ -1633,6 +1718,7 @@ InventoryReceipt GameSession::changeDeviceBattery(DeviceBatteryCommand command, 
         return {false, false, DomainErrorCode::InvalidProfile, persistenceMessage_, profile_.revision};
     if(context.available)worldClockDirty_=true;
     synchronizeWeaponLight();
+    synchronizeNightVision();
     return receipt;
 }
 
@@ -3851,6 +3937,22 @@ void GameSession::updateAlphaRaid(
     const auto meleeId=equippedAsset(profile_,EquipmentSlotKind::QuickMelee);
     world_->configureMelee(currentMeleeDefinition(),currentMeleeUsable(),meleeId.value_or(0));
     prepareNoiseDecoyInput(input,rawInput);
+    const bool toggleLight = updatePlayerLightGesture(input, deltaTime);
+    if (tacticalDeviceWheelOpen_)
+    {
+        // A wheel opened on this frame already owns the controls. Keep the
+        // aim anchor and physical trigger latch across the modal boundary.
+        GameplayInput wheelInput;
+        wheelInput.aimWorldPosition = input.aimWorldPosition;
+        wheelInput.aimWorldBounds = input.aimWorldBounds;
+        wheelInput.aimViewport = input.aimViewport;
+        wheelInput.aimMotionDelta = Vec2{};
+        wheelInput.allowWeaponOptics = false;
+        wheelInput.firePhysicallyPressed = input.firePhysicallyPressed || input.firePressed;
+        wheelInput.freezeObservationDirection = true;
+        input = std::move(wheelInput);
+        cancelPlayerControlIntent();
+    }
     const bool meleeSuppressesThisFrame = input.meleeJustPressed ||
         world_->melee().recoverySeconds() >
             (std::isfinite(deltaTime) ? std::max(0.0F, deltaTime) : 0.0F) + 0.000001F;
@@ -4019,7 +4121,8 @@ void GameSession::updateAlphaRaid(
         simulationInput.firePressed = false;
     }
 
-    preparePlayerLightInput(input,deltaTime);
+    world_->setRaidDaylight(worldClockProjection().timeOfDay == WorldTimeOfDay::Day);
+    advancePlayerLights(toggleLight, input, deltaTime);
     const bool restorationActive =
         profile_.pendingRaid && profile_.pendingRaid->outpostRestoration.has_value();
     const bool siteClearanceActive =
@@ -4030,7 +4133,6 @@ void GameSession::updateAlphaRaid(
         raidActionState_.active() &&
         (std::holds_alternative<ReloadRaidAction>(*raidActionState_.active()) ||
          std::holds_alternative<ChamberRaidAction>(*raidActionState_.active()));
-    world_->setRaidDaylight(worldClockProjection().timeOfDay == WorldTimeOfDay::Day);
     world_->update(simulationInput, deltaTime, [this]{return processGrenadeExplosion();},
         [this] {
             if (cancelActiveRaidAction()) return true;
@@ -4225,6 +4327,7 @@ void GameSession::updateAlphaRaid(
     if (state_ == GameSessionState::SettlementBlocked) return;
 
     synchronizeWeaponLight(); // A completed switch affects observation before this frame can interact.
+    synchronizeNightVision();
     if (input.interactJustPressed &&
         !world_->spaceTransitionedLastUpdate() &&
         !world_->raidSession().signalCalledLastUpdate() &&

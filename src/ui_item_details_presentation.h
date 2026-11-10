@@ -5,7 +5,7 @@
 
 #include <optional>
 
-enum class UiItemDetailsKind { Weapon, Melee, Decoy, Grenade };
+enum class UiItemDetailsKind { Weapon, Melee, Decoy, Grenade, Helmet, NightVision };
 struct UiItemDetailsMetric {
     std::string label;
     std::string value;
@@ -21,6 +21,7 @@ struct UiItemDetailsProjection {
     std::vector<std::string> notes, components;
     bool warning{};
 };
+[[nodiscard]] bool supportsUiNightVisionMount(const ContentRegistry &, const ItemDefinition &);
 [[nodiscard]] std::optional<UiItemDetailsProjection> projectUiItemDetails(
     const ProfileState &, const ContentRegistry &, AssetInstanceId, UiLanguage);
 
@@ -32,14 +33,15 @@ inline constexpr std::size_t kUiDetailsBatteryPageSize{10};
 [[nodiscard]] SDL_FRect uiItemDetailsBattery(std::size_t) noexcept;
 [[nodiscard]] SDL_FRect uiItemDetailsBatterySlot() noexcept;
 [[nodiscard]] SDL_FRect uiItemDetailsRemoveBattery() noexcept;
+[[nodiscard]] SDL_FRect uiItemDetailsHelmetDeviceButton() noexcept;
 [[nodiscard]] SDL_FRect uiItemDetailsPrevious() noexcept;
 [[nodiscard]] SDL_FRect uiItemDetailsNext() noexcept;
 [[nodiscard]] SDL_FRect uiItemDetailsFeedback(UiItemDetailsKind) noexcept;
 
-enum class UiItemDetailsControl { Back, Previous, Next, RemoveBattery };
+enum class UiItemDetailsControl { Back, Previous, Next, RemoveBattery, ChangeHelmetDevice };
 [[nodiscard]] std::optional<UiItemDetailsControl> hitUiItemDetailsControl(
-    Vec2, bool isWeapon, std::size_t page, std::size_t batteries,
-    bool canRemove) noexcept;
+    Vec2, bool hasBatteryTray, std::size_t page, std::size_t batteries,
+    bool canRemove, bool canChangeHelmetDevice = false) noexcept;
 
 // A press is bound to the exact displayed object and page. Moving out cancels
 // the press permanently; a later release cannot revive it or act on a new view.
@@ -49,6 +51,7 @@ struct UiItemDetailsIdentity {
     std::size_t page{};
     UiLanguage language{UiLanguage::SimplifiedChinese};
     bool raid{};
+    std::optional<AssetInstanceId> fittingCandidate;
     bool operator==(const UiItemDetailsIdentity &) const = default;
 };
 struct UiItemDetailsInteraction {

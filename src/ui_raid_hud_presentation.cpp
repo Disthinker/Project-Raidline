@@ -12,6 +12,18 @@ std::string_view uiWeaponLightStateLabel(const WeaponLightProjection &light) noe
     return light.output?"WEAPON LIGHT ON":"LIGHT OUTPUT PAUSED";
 }
 
+std::string_view uiNightVisionStateLabel(const NightVisionProjection &vision) noexcept {
+    if (!vision.binding.deviceAssetId) return "NO NIGHT VISION INSTALLED";
+    if (!vision.remainingCharges) return "NIGHT VISION EMPTY";
+    if (!vision.switchOn) return "NIGHT VISION OFF";
+    if (vision.interrupted || vision.flickering) return "NIGHT VISION INTERRUPTED";
+    if (!vision.output) return "NIGHT VISION STANDBY";
+    if (static_cast<std::uint64_t>(vision.remainingCharges) * 100 <=
+        static_cast<std::uint64_t>(vision.capacityCharges) * vision.vision.lowBatteryPercent)
+        return "NIGHT VISION LOW";
+    return "NIGHT VISION ON";
+}
+
 std::string_view uiPlayerActionLabel(const RaidAction &action) noexcept {
     return std::visit([](const auto &a)->std::string_view {
         using T=std::decay_t<decltype(a)>;
@@ -125,6 +137,9 @@ void renderUiRaidHud(SDL_Renderer *r, UiTextRenderer &text,
     if(!p.feedback.empty()){
         uiFinalCompactFeedback(r,text,bottom.feedback,p.feedback);
     }
+    auto vision = bottom.light;
+    if (!p.light.empty()) vision.y -= vision.h + kUiGameplayHudGap;
+    line(vision,p.nightVision,12);
     line(bottom.light,p.light,12);
     for(std::size_t i=0;i<bottom.slots.size();++i){
         const auto b=bottom.slots[i];uiFinalPanel(r,b);

@@ -216,6 +216,13 @@ EconomyReceipt applyRecycle(
     if (std::holds_alternative<InstalledWeaponComponentLocation>(asset->location) ||
         std::holds_alternative<InstalledDeviceBatteryLocation>(asset->location))
         return failure(DomainErrorCode::IllegalDestination, "USE GUNSMITH TO REMOVE COMPONENTS", candidate.revision);
+    for (const auto &[id, child] : candidate.assets.records())
+    {
+        static_cast<void>(id);
+        if (const auto *mount = std::get_if<InstalledHelmetDeviceLocation>(&child.location);
+            mount && mount->helmetAssetId == command.instanceId)
+            return failure(DomainErrorCode::IllegalDestination, "REMOVE NIGHT VISION DEVICE BEFORE RECYCLING", candidate.revision);
+    }
     const ItemDefinition &definition = content.item(asset->definitionId);
     if (asset->reliefBatchId.has_value() ||
         definition.marketRecyclePrice == 0 ||

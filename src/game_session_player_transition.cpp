@@ -464,9 +464,13 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     sprintFireReadyRemaining_ = 0.0F;
     activeWeaponSlot_ = EquipmentSlotKind::PrimaryWeapon;
     configuredWeaponAssetId_.reset();
+    nightVisionBindingRevision_.reset();
+    cancelWeaponLightInput();
     synchronizeActiveAlphaWeapon();
+    synchronizeNightVision();
     if(prepared->requirePhysicalRelease)cancelPlayerControlIntent();
     } else if(prepared->kind==PreparedPlayerTransition::Kind::RaidSettlement) {
+    cancelWeaponLightInput();
     world_->commitNoiseDecoy({});
     world_->commitGrenade({});
     decoyFireSuppressedUntilRelease_=false;

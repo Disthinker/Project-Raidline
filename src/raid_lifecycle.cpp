@@ -178,6 +178,8 @@ std::set<AssetInstanceId> assetTreeIds(
             }
             if (const auto *component = std::get_if<InstalledWeaponComponentLocation>(&asset.location))
                 child = result.contains(component->weaponAssetId);
+            if (const auto *device = std::get_if<InstalledHelmetDeviceLocation>(&asset.location))
+                child = result.contains(device->helmetAssetId);
             if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset.location))
                 child = result.contains(battery->deviceAssetId);
             if (const auto *retained = std::get_if<RetainedRaidMagazineLocation>(&asset.location))
@@ -1007,6 +1009,8 @@ DeployReceipt executeDeploy(
 
     std::size_t interiorSlotIndex = regularLootSlotCount +
         map->highRisk.advancedLootSlots.size();
+    const bool nightVisionLootRules = regionalMissionCount == 0U &&
+        content.contentVersion() == kHospitalNightOperationsContentVersion;
     for (std::size_t interiorIndex{};
          interiorIndex < map->interiors.size(); ++interiorIndex)
     {
@@ -1020,17 +1024,28 @@ DeployReceipt executeDeploy(
                 rollLoot(interiorLootTable, interiorLootRandom);
             const std::uint32_t range =
                 entry.maximumQuantity - entry.minimumQuantity + 1U;
-            const std::uint32_t quantity = entry.minimumQuantity +
+            std::uint32_t quantity = entry.minimumQuantity +
                 interiorLootRandom.bounded(range);
+            // Keep both original random draws so this fixed reward changes
+            // only the existing hospital service-corridor slot.
+            const bool nightVisionSlot = nightVisionLootRules &&
+                isHospitalNightVisionLootSlot(map->id, interior.id, slot.id);
+            const ItemDefinitionId &item = nightVisionSlot
+                ? kHospitalNightVisionId : entry.itemDefinitionId;
+            if (nightVisionSlot)
+            {
+                quantity = 1U;
+                snapshot.hospitalNightVisionLoot = true;
+            }
             const AssetInstanceId assetId = candidate.assets.create(
-                content.item(entry.itemDefinitionId),
+                content.item(item),
                 RaidGroundAssetLocation{
                     command.raidId,
                     static_cast<std::uint32_t>(interiorSlotIndex)},
                 quantity);
             snapshot.loot.push_back(RaidLootSnapshot{
                 assetId,
-                entry.itemDefinitionId,
+                item,
                 quantity,
                 static_cast<std::uint32_t>(interiorSlotIndex),
                 slot.position,

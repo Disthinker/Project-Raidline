@@ -305,6 +305,7 @@ InventoryReceipt applyMove(
                    std::holds_alternative<TrainingDroppedMagazineLocation>(source->location)))
         return failure(DomainErrorCode::IllegalDestination, "USE THE RAID MAGAZINE OPERATION", candidate.revision);
     if (source && (std::holds_alternative<InstalledWeaponComponentLocation>(source->location) ||
+                   std::holds_alternative<InstalledHelmetDeviceLocation>(source->location) ||
                    std::holds_alternative<InstalledDeviceBatteryLocation>(source->location)))
         return failure(DomainErrorCode::IllegalDestination, "USE GUNSMITH TO REMOVE COMPONENTS", candidate.revision);
     if (source == nullptr)
@@ -716,6 +717,7 @@ std::optional<AssetInstanceId> raidSceneContainerRoot(
         else if (const auto *part = std::get_if<InstalledWeaponComponentLocation>(&asset->location)) assetId = part->weaponAssetId;
         else if (const auto *retained = std::get_if<RetainedRaidMagazineLocation>(&asset->location)) assetId = retained->weaponAssetId;
         else if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset->location)) assetId = battery->deviceAssetId;
+        else if (const auto *mount = std::get_if<InstalledHelmetDeviceLocation>(&asset->location)) assetId = mount->helmetAssetId;
         else return std::nullopt;
     }
     return std::nullopt;

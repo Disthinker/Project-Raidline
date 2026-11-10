@@ -183,6 +183,12 @@ struct InstalledDeviceBatteryLocation
     friend bool operator==(const InstalledDeviceBatteryLocation &, const InstalledDeviceBatteryLocation &) = default;
 };
 
+struct InstalledHelmetDeviceLocation
+{
+    AssetInstanceId helmetAssetId{};
+    friend bool operator==(const InstalledHelmetDeviceLocation &, const InstalledHelmetDeviceLocation &) = default;
+};
+
 // Only replacement-cell overflow uses this root. It is not generated Loot
 // and cannot change frozen slot budgets or be loaded outside its active Raid.
 struct RaidDroppedBatteryLocation
@@ -308,7 +314,8 @@ using AssetLocation = std::variant<
     RetainedRaidMagazineLocation,
     BaseReloadHeldMagazineLocation,
     TrainingHeldMagazineLocation,
-    TrainingDroppedMagazineLocation>;
+    TrainingDroppedMagazineLocation,
+    InstalledHelmetDeviceLocation>;
 
 struct MagazineRoundRecord
 {
@@ -1189,6 +1196,7 @@ struct PendingRaidSnapshot
     RaidIntelligenceLoadout intelligence;
     RaidTravelSnapshot travel;
     std::optional<BaseWishExpeditionSnapshot> wishFocus;
+    bool hospitalNightVisionLoot{};
 };
 
 struct LastRaidResult

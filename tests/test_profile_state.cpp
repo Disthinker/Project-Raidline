@@ -146,7 +146,8 @@ TEST(ProfileStateTest, NewPublishedProfileCreatesLegacyCatalogAndExcludesPurchas
                     (!entry.second.reliefBatchId.has_value() ||
                      definition.maxStackSize == 1U);
             });
-        if (definition.weaponLight || definition.battery || definition.meleeUse || definition.noiseDecoyUse || definition.grenadeUse ||
+        if (definition.weaponLight || definition.nightVision || definition.battery ||
+            definition.meleeUse || definition.noiseDecoyUse || definition.grenadeUse ||
             (definition.weaponComponent &&
              (definition.weaponComponent->slot == WeaponComponentSlot::Muzzle ||
               definition.weaponComponent->slot == WeaponComponentSlot::Optic)) ||

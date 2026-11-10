@@ -343,6 +343,7 @@ BaseGroundReceipt applyDrop(
     }
     if (std::holds_alternative<InstalledMagazineLocation>(asset->location) ||
         std::holds_alternative<InstalledWeaponComponentLocation>(asset->location) ||
+        std::holds_alternative<InstalledHelmetDeviceLocation>(asset->location) ||
         std::holds_alternative<InstalledDeviceBatteryLocation>(asset->location))
     {
         return failure(
@@ -443,7 +444,8 @@ BaseGroundReceipt applyPickup(
     }
     const ItemDefinition &definition = content.item(asset->definitionId);
     const AssetInstanceId affectedId = asset->instanceId;
-    if (definition.maxStackSize > 1)
+    if (definition.maxStackSize > 1 &&
+        (!definition.battery || asset->remainingCharges == definition.maximumCharges))
     {
         std::optional<AssetInstanceId> mergeTarget;
         for (const auto &[id, target] : candidate.assets.records())
@@ -451,6 +453,8 @@ BaseGroundReceipt applyPickup(
             if (id == affectedId || target.definitionId != asset->definitionId ||
                 target.reliefBatchId != asset->reliefBatchId ||
                 !assetIsCarried(candidate, id) ||
+                (definition.battery && (target.remainingCharges != definition.maximumCharges ||
+                    !std::holds_alternative<StoredAssetLocation>(target.location))) ||
                 target.quantity > definition.maxStackSize - asset->quantity)
             {
                 continue;

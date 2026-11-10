@@ -286,6 +286,10 @@ public:
     [[nodiscard]] bool lightConeObservationEnabled() const noexcept
     { return lightConeObservationEnabled_ || activeWeaponOptic() != WeaponOpticMode::None; }
     void setRaidDaylight(bool day) noexcept { raidDaylight_ = day; }
+    [[nodiscard]] bool nightVisionSupported() const noexcept { return lightConeObservationEnabled_; }
+    [[nodiscard]] bool isDarkForNightVision() const noexcept
+    { return currentObservationEnvironment() != RaidLightEnvironment::DayOutdoor; }
+    void setNightVision(RaidSightParameters outdoor, RaidSightParameters indoor) noexcept;
     void setWeaponLight(std::uint64_t device, std::uint64_t battery, float angle, float distance, float backgroundRadius) noexcept;
     [[nodiscard]] float weaponLightBackgroundRadius() const noexcept { return weaponLightBackgroundRadius_; }
     [[nodiscard]] const std::array<RaidVisibilityProjection,2> &weaponLightBackgroundObservations() const
@@ -646,6 +650,7 @@ private:
     RaidLightEnvironment observationLightEnvironment_{RaidLightEnvironment::DayOutdoor};
     RaidSightParameters observationParameters_{180,1000};
     RaidSightParameters observationTransitionStart_{180,1000};
+    RaidSightParameters nightVisionOutdoor_, nightVisionIndoor_;
     float observationLightTransitionSeconds_{0.5F};
     void updateObservationLight(float seconds);
     [[nodiscard]] RaidLightEnvironment currentObservationEnvironment() const noexcept;

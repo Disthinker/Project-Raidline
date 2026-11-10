@@ -1,11 +1,24 @@
-# 当前 · 5.45 弹药工坊与混装战术 v1 已验收，正在交付
+# 当前 · 医院夜间行动与供电整备 v1 已验收，正在交付
+
+去医院后勤走廊搜获夜视仪，在基地安装和供电，安排第二趟夜间出击并带回医疗物资。[具体开发方案](../exec-plans/active/raid-hospital-night-operations-v1.md)
+
+- task_id `raid-hospital-night-operations-v1`，plan_version `RL-RAID-HOSPITAL-NIGHT-OPERATIONS-v1`，state `accepted_delivering`。approval_source 为 2026-11-10 用户明确批准 RL-RAID-HOSPITAL-NIGHT-OPERATIONS-v1，要求一次性完成整阶段，保留已验收 UI 和玩法、原存档、固定入口和 12 项 3ms 门槛，暂不提交、推送或合并。 candidate_id `RL-RAID-HOSPITAL-NIGHT-OPERATIONS-v1-local-849df0f58fe0`。accepted_candidate_id `RL-RAID-HOSPITAL-NIGHT-OPERATIONS-v1-local-849df0f58fe0`。acceptance_source 为 2026-11-10 用户明确回复“医院夜间行动与供电整备 v1 验收通过，请完成提交、推送和合并。”
+- 基线 `origin/main@c20114622b28429357605b112ff57cdadeceeb3f`。PR #202 已验收合并，[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42753123503) 双平台各 3155/3155，12 项 3ms 检查通过。
+- 原策划线程已回复 `MAIN-NEXT-STAGE-20261110-AFTER-AMMO-01`，协调任务 `raid-next-stage-after-ammo`，协议 `RL-NEXT-STAGE-REQUEST-v1`，回复基线一致，状态 `proposal_ready_awaiting_human_approval`。已从同一主线建立隔离工作树 E:\WorkPlace\Projects\C\Project Raidline-raid-hospital-night-operations-v1。
+- 固定入口已更新。Windows 3172/3172，原 3ms 检查 12/12。[联合验收](../acceptance/raid-hospital-night-operations-v1.md)
+
+---
+
+# 当前 · 5.45 弹药工坊与混装战术 v1 已验收并合并
 
 从边境交换站带回精密组件，在工坊制成扩张弹。混装后用标准、增强和扩张弹应对不同目标，再撤离检查余量和供弹顺序。[开发方案](../exec-plans/active/raid-5-45-ammo-loop-v1.md)
 
-- task_id `raid-5-45-ammo-loop-v1`，plan_version `RL-RAID-5-45-AMMO-LOOP-v1`，state `accepted_delivering`。
+- task_id `raid-5-45-ammo-loop-v1`，plan_version `RL-RAID-5-45-AMMO-LOOP-v1`，state `merged`。
 - 策划回复与请求 `MAIN-NEXT-STAGE-20261109-AFTER-OPTICS-01` 匹配。2026-11-09 用户授权协调与规划，approval_source 为 2026-11-10 用户明确批准 RL-RAID-5-45-AMMO-LOOP-v1，要求完成整阶段、保留已验收行为、原存档、固定入口和 12 项 3ms 门槛，验收前暂不提交、推送或合并。 candidate_id `RL-RAID-5-45-AMMO-LOOP-v1-local-c4a7f6c4fcd0`。accepted_candidate_id `RL-RAID-5-45-AMMO-LOOP-v1-local-c4a7f6c4fcd0`。acceptance_source 为 2026-11-10 用户明确回复“5.45 弹药工坊与混装战术 v1 验收通过，请完成提交、推送和合并。”
 - 已核对基线 `origin/main@01cfaa40d0d66539b14e33992e95a0046233c48f`。PR #201 已实机复验和合并，[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42490009396) 双平台各 3143/3143，原 12 项 3ms 检查通过。
 - 隔离工作树 `E:\WorkPlace\Projects\C\Project Raidline-raid-5-45-ammo-loop-v1`，固定入口已更新。Windows 3155/3155，3ms 检查 12/12。[联合验收](../acceptance/raid-5-45-ammo-loop-v1.md)
+- 提交 `3e97244` 已推送，[PR #202](https://github.com/Disthinker/Project-Raidline/pull/202)。已合入 `main@c201146`。[PR 双平台 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42747350858) 各 3155/3155，原 12 项 3ms 检查通过。[合并后主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42753123503) 的 Windows 和 Ubuntu 各 3155/3155，12 项 3ms 检查全部通过。Ubuntu 首轮旧存档重试提示用例失败，同一主线提交仅重跑失败作业后通过。
+- 用户于 2026-11-10 要求主线通过后协调策划，下一阶段待批准。请求 `MAIN-NEXT-STAGE-20261110-AFTER-AMMO-01` 已发往策划线程 `019feff4-477c-75c2-bf31-3f09ff1e3891`，turn `01a1c3de-2958-7110-8646-e7f7eab593eb`。协调任务 `raid-next-stage-after-ammo`，协议 `RL-NEXT-STAGE-REQUEST-v1`，基线 `c20114622b28429357605b112ff57cdadeceeb3f`。策划已回复并匹配请求。下一阶段 [医院夜间行动与供电整备 v1](../exec-plans/active/raid-hospital-night-operations-v1.md) 待用户批准。
 
 ---
 

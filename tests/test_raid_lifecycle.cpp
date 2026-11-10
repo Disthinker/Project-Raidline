@@ -21,6 +21,7 @@
 #include "raid_lifecycle.h"
 #include "raid_corpse_legacy_fixture.h"
 #include "raid_credential_legacy_fixture.h"
+#include "raid_optics_legacy_fixture.h"
 #include "raid_runner_legacy_fixture.h"
 #include "raid_rescue_domain.h"
 #include "regional_operations_domain.h"
@@ -43,6 +44,10 @@ TEST(RaidLifecycleTest, HospitalRealDeployHasReachableConsumersAcross128Seeds)
         ASSERT_EQ(raid.interiors.size(), 1U);
         EXPECT_EQ(raid.interiors.front().worldSize.x, 2400);
         EXPECT_TRUE(raid.highRiskCrisis.has_value());
+        EXPECT_TRUE(raid.hospitalNightVisionLoot);
+        EXPECT_EQ(std::count_if(raid.loot.begin(), raid.loot.end(), [](const auto &loot) {
+            return loot.definitionId == kHospitalNightVisionId;
+        }), 1);
         EXPECT_TRUE(validateProfileState(profile, content).valid);
         hashes.insert(raid.spatialLayout.layoutHash);
         for (const auto id : {kRaidAnchorPlayerSpawn, kRaidAnchorNormalExtraction,
@@ -51,6 +56,58 @@ TEST(RaidLifecycleTest, HospitalRealDeployHasReachableConsumersAcross128Seeds)
             ASSERT_NE(findRaidAnchorPlacement(raid.spatialLayout, id), nullptr);
     }
     EXPECT_GT(hashes.size(), 96U);
+}
+
+TEST(RaidLifecycleTest, HospitalNightVisionChangesOnlyTheFrozenServiceSlotByDayOrNight)
+{
+    const auto &current = publishedContentRegistry();
+    const auto previous = contentBeforeHospitalNightOperations();
+    const MapDefinitionId hospital{"map.raid.hospital_district"};
+    const auto &interior = current.map(hospital).interiors.front();
+    const auto service = std::find_if(interior.lootSlots.begin(), interior.lootSlots.end(),
+        [](const auto &slot) { return slot.id == "hospital_service"; });
+    ASSERT_NE(service, interior.lootSlots.end());
+    for (const auto departure : {8U, 19U})
+    {
+        SCOPED_TRACE(departure);
+        auto oldProfile = makeNewAlphaProfile("hospital-loot", previous);
+        auto newProfile = makeNewAlphaProfile("hospital-loot", current);
+        oldProfile.worldClock.elapsedWorldMinutes = newProfile.worldClock.elapsedWorldMinutes = departure * 60U;
+        const DeployCommand deploy{"hospital-compare", "hospital-compare-end", 9917U, hospital};
+        const auto oldResult = executeDeploy(oldProfile, previous, deploy, {oldProfile.revision, "old-hospital"});
+        const auto newResult = executeDeploy(newProfile, current, deploy, {newProfile.revision, "new-hospital"});
+        ASSERT_TRUE(oldResult.succeeded) << oldResult.message;
+        ASSERT_TRUE(newResult.succeeded) << newResult.message;
+        ASSERT_TRUE(oldProfile.pendingRaid);
+        ASSERT_TRUE(newProfile.pendingRaid);
+        const auto &oldRaid = *oldProfile.pendingRaid;
+        auto &newRaid = *newProfile.pendingRaid;
+        EXPECT_EQ(projectWorldClock(newProfile.worldClock).timeOfDay,
+            departure == 8U ? WorldTimeOfDay::Day : WorldTimeOfDay::Night);
+        EXPECT_FALSE(oldRaid.hospitalNightVisionLoot);
+        EXPECT_TRUE(newRaid.hospitalNightVisionLoot);
+        EXPECT_EQ(oldRaid.enemies, newRaid.enemies);
+        EXPECT_EQ(oldRaid.spatialLayout.layoutHash, newRaid.spatialLayout.layoutHash);
+        ASSERT_EQ(oldRaid.loot.size(), newRaid.loot.size());
+        std::size_t replacements{};
+        for (std::size_t i{}; i < oldRaid.loot.size(); ++i)
+        {
+            auto expected = oldRaid.loot[i];
+            if (expected.spaceId == interior.id && expected.position.x == service->position.x &&
+                expected.position.y == service->position.y)
+            {
+                ++replacements;
+                expected.definitionId = kHospitalNightVisionId;
+                expected.quantity = 1U;
+            }
+            EXPECT_EQ(expected, newRaid.loot[i]);
+        }
+        EXPECT_EQ(replacements, 1U);
+        EXPECT_TRUE(validateProfileState(newProfile, current).valid);
+        EXPECT_TRUE(validateProfileState(oldProfile, current).valid);
+        newRaid.hospitalNightVisionLoot = false;
+        EXPECT_FALSE(validateProfileState(newProfile, current).valid);
+    }
 }
 
 namespace

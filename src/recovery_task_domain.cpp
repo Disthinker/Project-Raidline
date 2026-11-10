@@ -47,6 +47,7 @@ std::optional<AssetInstanceId> parentAssetId(
     if (const auto *component = std::get_if<InstalledWeaponComponentLocation>(&asset.location))
         return component->weaponAssetId;
     if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset.location)) return battery->deviceAssetId;
+    if (const auto *mount = std::get_if<InstalledHelmetDeviceLocation>(&asset.location)) return mount->helmetAssetId;
     return std::nullopt;
 }
 
@@ -94,6 +95,9 @@ bool recoverAsset(
             if (const auto *device = profile.assets.find(assetId))
                 if (const auto *part = std::get_if<InstalledWeaponComponentLocation>(&device->location)) assetId = part->weaponAssetId;
         }
+    if (const auto *asset = profile.assets.find(assetId))
+        if (const auto *mount = std::get_if<InstalledHelmetDeviceLocation>(&asset->location))
+            assetId = mount->helmetAssetId;
     if (const auto *asset = profile.assets.find(assetId))
         if (const auto *retained = std::get_if<RetainedRaidMagazineLocation>(&asset->location))
             assetId = retained->weaponAssetId;
@@ -218,6 +222,7 @@ RecoveryTendency recoveryTendency(
     if (const auto *retained = std::get_if<RetainedRaidMagazineLocation>(&asset.location))
         return recoveryTendency(profile, content, record, retained->weaponAssetId);
     if (std::holds_alternative<InstalledWeaponComponentLocation>(asset.location) ||
+        std::holds_alternative<InstalledHelmetDeviceLocation>(asset.location) ||
         std::holds_alternative<InstalledDeviceBatteryLocation>(asset.location))
         return RecoveryTendency::High;
     const ItemDefinition &definition = content.item(asset.definitionId);

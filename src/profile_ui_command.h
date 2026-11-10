@@ -90,6 +90,7 @@ using ProfileUiCommand = std::variant<
     ArmorMaintenanceCommand,
     WeaponComponentCommand,
     DeviceBatteryCommand,
+    HelmetDeviceCommand,
     FortificationCommand,
     InstallFortificationCommand,
     ProfileUiBaseMedicalCommand,

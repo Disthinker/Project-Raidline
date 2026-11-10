@@ -220,7 +220,7 @@ TEST(RunnerInfectedSaveTest, NewTypesAndNewRuleCannotBeDowngradedToSchema57)
     EXPECT_FALSE(deserializeProfileEnvelope(checkedEnvelope(json), content).profile);
     json["schema_version"] = 58U;
     EXPECT_FALSE(deserializeProfileEnvelope(checkedEnvelope(json), content).profile);
-    for (const auto version : {61ULL, 4294967354ULL})
+    for (const auto version : {62ULL, 4294967354ULL})
     {
         json = Json::parse(serializeProfileEnvelope(deployed(), content.contentVersion()));
         json["schema_version"] = version;
