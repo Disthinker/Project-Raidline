@@ -40,6 +40,7 @@ std::string compactUiItemName(const ItemDefinition &d,UiLanguage language) {
         {"item.throwable.noise_decoy","Decoy","诱饵"},
         {"item.throwable.frag_grenade_basic","Frag","破片"},
         {"item.component.suppressor_5_45","Suppressor","消音器"},
+        {"item.loot.freight_crate_key","Key","货箱钥匙"},
         {"item.container.chest_rig_small","Light rig","小胸挂"},
         {"item.container.chest_rig_patrol","Patrol rig","巡逻胸挂"},
         {"item.container.chest_rig_assault","Assault rig","突击胸挂"}
@@ -124,6 +125,8 @@ std::vector<UiItemActionEntry> projectUiItemActions(
         result = {{UiItemAction::NightVisionDetails, "NIGHT VISION DETAILS"}};
     else if (supportsUiNightVisionMount(content, definition))
         result = {{UiItemAction::HelmetDetails, "HELMET DETAILS"}};
+    else if (definition.definitionId == kFreightCrateKeyId)
+        result = {{UiItemAction::FreightKeyDetails, "FREIGHT CRATE KEY DETAILS"}};
     if (const auto action = queryProfileContextAction(profile, content, id, inRaid)) {
         switch (*action) {
         case ProfileContextActionKind::UnloadMagazine:
@@ -203,6 +206,8 @@ std::vector<std::string> projectUiItemSummary(
         lines.emplace_back(uiWeaponOpticBehaviorText(definition.weaponComponent->optic));
         lines.emplace_back("5.45 SERVICE RIFLE ONLY");
     }
+    if (definition.definitionId == kFreightCrateKeyId)
+        lines.emplace_back("FRONTIER EXCHANGE | FREIGHT SERVICE BAY");
     return lines;
 }
 

@@ -133,6 +133,10 @@ void renderUiRaidHud(SDL_Renderer *r, UiTextRenderer &text,
         SDL_SetRenderDrawColor(r,48,66,63,245);SDL_RenderFillRect(r,&actionTrack);
         actionTrack.w*=std::clamp(p.actionFraction,0.0F,1.0F);
         SDL_SetRenderDrawColor(r,113,191,179,255);SDL_RenderFillRect(r,&actionTrack);
+    } else if (!p.action.empty()) {
+        const SDL_FRect prompt{bottom.action.x, bottom.action.y, bottom.action.w, 34};
+        uiFinalPanel(r, prompt);
+        line({prompt.x + 12, prompt.y + 7, prompt.w - 24, 23}, p.action, 15);
     }
     if(!p.feedback.empty()){
         uiFinalCompactFeedback(r,text,bottom.feedback,p.feedback);

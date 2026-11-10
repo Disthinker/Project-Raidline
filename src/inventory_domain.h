@@ -76,8 +76,17 @@ struct RaidSceneContainerAccess
 
 [[nodiscard]] std::optional<AssetInstanceId> raidSceneContainerRoot(
     const ProfileState &profile, AssetInstanceId assetId);
+[[nodiscard]] bool raidSceneContainerObservable(
+    const ProfileState &profile, const RaidSceneContainerAccess &access);
+[[nodiscard]] bool raidSceneContainerLocked(
+    const ProfileState &profile, AssetInstanceId containerAssetId) noexcept;
 [[nodiscard]] bool raidSceneContainerAccessible(
     const ProfileState &profile, const RaidSceneContainerAccess &access);
+[[nodiscard]] bool raidFreightCrateKeyCarried(const ProfileState &profile);
+[[nodiscard]] InventoryReceipt unlockRaidFreightCrate(
+    ProfileState &profile,
+    const RaidSceneContainerAccess &access,
+    const CommandContext &context);
 
 [[nodiscard]] InventoryPlan queryInventory(
     const ProfileState &profile,

@@ -26,6 +26,8 @@ namespace
     // stimulus separate from audio playback; a later weapon-content slice can
     // data-drive per-shot acoustic profiles without changing AI ownership.
     constexpr float kUnsuppressedGunshotNoiseRadius{900.0F};
+    constexpr float kRaidContainerReach{72.0F};
+    constexpr float kFreightUnlockSeconds{2.0F};
     const LoadoutArchetypeDefinitionId kStarterLoadoutArchetype{
         "loadout_archetype.light_scavenger"};
 
@@ -97,7 +99,11 @@ void GameSession::update(
     const GameplayInput &input,
     float deltaTime)
 {
-    if(profileUiCommitPending())return;
+    if (profileUiCommitPending())
+    {
+        cancelRaidFreightUnlock();
+        return;
+    }
     if (alphaRaidActive_ ||
         (profile_.pendingRaid.has_value() &&
          state_ == GameSessionState::SettlementBlocked))
@@ -799,6 +805,7 @@ void GameSession::configurePersistence(
     nightVisionBindingRevision_.reset();
     selectedTacticalDevice_ = TacticalDeviceKind::WeaponLight;
     cancelWeaponLightInput();
+    freightUnlock_ = {};
     saveRepository_.emplace(std::move(directory));
     inventoryPersistence_.reset();
     profileUiPersistence_.reset();++profileUiEpoch_;
@@ -2270,23 +2277,150 @@ bool GameSession::canOpenRaidSceneContainer(AssetInstanceId id) const
 
 std::optional<AssetInstanceId> GameSession::nearbyRaidSceneContainer() const
 {
+    const auto target = nearestObservableRaidSceneContainer();
+    return target && !raidSceneContainerLocked(profile_, *target) ? target : std::nullopt;
+}
+
+std::optional<AssetInstanceId> GameSession::nearestObservableRaidSceneContainer() const
+{
     std::optional<AssetInstanceId> result;
-    float closest = 72.0F * 72.0F;
-    if (!world_) return result;
+    float closest = kRaidContainerReach * kRaidContainerReach;
+    if (!alphaRaidActive_ || !world_ || !world_->raidSession().isActive() ||
+        world_->player().isDead() || world_->player().isControlled() ||
+        !raidWorldInteractionAvailable(false) || world_->raidSpacePortalInteractionInRange())
+        return result;
+
     const auto p = world_->player().position();
     const float half = world_->player().size() * 0.5F;
     for (const auto &[id, asset] : profile_.assets.records())
-        if (canOpenRaidSceneContainer(id))
+    {
+        Vec2 position{};
+        if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
+            position = scene->position;
+        else if (const auto *corpse = std::get_if<RaidCorpseContainerAssetLocation>(&asset.location);
+                 corpse && corpse->deathPosition)
+            position = *corpse->deathPosition;
+        else
+            continue;
+        const float dx = position.x - p.x - half, dy = position.y - p.y - half;
+        const float distance = dx * dx + dy * dy;
+        if (distance <= closest && raidSceneContainerObservable(profile_, raidSceneAccess(id)))
         {
-            Vec2 position{};
-            if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location)) position = scene->position;
-            else if (const auto *corpse = std::get_if<RaidCorpseContainerAssetLocation>(&asset.location); corpse && corpse->deathPosition) position = *corpse->deathPosition;
-            else continue;
-            const float dx = position.x - p.x - half, dy = position.y - p.y - half;
-            const float distance = dx * dx + dy * dy;
-            if (distance <= closest) { closest = distance; result = id; }
+            closest = distance;
+            result = id;
         }
+    }
     return result;
+}
+
+bool GameSession::isRaidFreightCrate(AssetInstanceId id) const noexcept
+{
+    return profile_.pendingRaid && profile_.pendingRaid->sealedFreightCrate &&
+        profile_.pendingRaid->sealedFreightCrate->containerAssetId == id;
+}
+
+std::optional<AssetInstanceId> GameSession::nearbyLockedFreightCrate() const
+{
+    if (state_ != GameSessionState::InRaid || !profile_.pendingRaid ||
+        !profile_.pendingRaid->sealedFreightCrate || !world_)
+        return std::nullopt;
+    const auto &crate = *profile_.pendingRaid->sealedFreightCrate;
+    if (crate.unlocked) return std::nullopt;
+
+    // The frozen root identifies the sole new interactable. Check its room
+    // and distance before any scene scan or observation work.
+    const auto *asset = profile_.assets.find(crate.containerAssetId);
+    const auto *scene = asset ? std::get_if<RaidSceneContainerAssetLocation>(&asset->location) : nullptr;
+    if (!scene || scene->spaceId != world_->activeRaidSpaceId()) return std::nullopt;
+    const auto position = world_->player().position();
+    const float half = world_->player().size() * 0.5F;
+    const float dx = scene->position.x - position.x - half;
+    const float dy = scene->position.y - position.y - half;
+    if (dx * dx + dy * dy > kRaidContainerReach * kRaidContainerReach) return std::nullopt;
+
+    const auto nearest = nearestObservableRaidSceneContainer();
+    return nearest == crate.containerAssetId ? nearest : std::nullopt;
+}
+
+std::optional<RaidFreightUnlockProjection> GameSession::raidFreightUnlock() const
+{
+    const auto target = nearbyLockedFreightCrate();
+    if (!target) return std::nullopt;
+    const float progress = freightUnlock_.target == target
+        ? freightUnlock_.elapsedSeconds / kFreightUnlockSeconds : 0.0F;
+    return RaidFreightUnlockProjection{*target, raidFreightCrateKeyCarried(profile_), progress};
+}
+
+std::optional<AssetInstanceId> GameSession::takeOpenedRaidFreightCrate() noexcept
+{
+    return std::exchange(freightUnlock_.opened, std::nullopt);
+}
+
+void GameSession::cancelRaidFreightUnlock() noexcept
+{
+    freightUnlock_.target.reset();
+    freightUnlock_.opened.reset();
+    freightUnlock_.elapsedSeconds = 0.0F;
+    // Once this gesture chose the lock, it cannot become a different world
+    // interaction simply because a modal or loss of sight interrupted it.
+}
+
+void GameSession::prepareRaidFreightUnlock(
+    const GameplayInput &rawInput, GameplayInput &input, GameplayInput &simulationInput)
+{
+    if ((!profile_.pendingRaid || !profile_.pendingRaid->sealedFreightCrate) &&
+        !freightUnlock_.consumesInteraction)
+        return;
+
+    const bool modal = input.inventoryOpen || input.freezeObservationDirection || input.throwableModal;
+    if (rawInput.interactJustPressed || (!rawInput.interactPressed && !modal))
+    {
+        cancelRaidFreightUnlock();
+        freightUnlock_.consumesInteraction = false;
+    }
+
+    const bool conflict = modal || input.fireJustPressed || input.firePressed ||
+        input.meleeJustPressed || input.meleePressed || input.reloadJustPressed ||
+        input.reloadGestureJustPressed || !input.raidReloadIntents.empty() ||
+        input.healJustPressed || input.weaponSlotJustPressed.has_value() ||
+        world_->player().isControlled();
+    if (!freightUnlock_.consumesInteraction && simulationInput.interactJustPressed && !modal)
+    {
+        if (const auto target = nearbyLockedFreightCrate())
+        {
+            freightUnlock_.consumesInteraction = true;
+            if (!raidFreightCrateKeyCarried(profile_))
+                persistenceMessage_ = "FREIGHT CRATE REQUIRES KEY";
+            else if (simulationInput.interactPressed && !conflict)
+                freightUnlock_.target = target;
+        }
+    }
+
+    if (!freightUnlock_.consumesInteraction) return;
+    if (!simulationInput.interactPressed || conflict) cancelRaidFreightUnlock();
+    input.interactJustPressed = input.interactPressed = false;
+    simulationInput.interactJustPressed = simulationInput.interactPressed = false;
+    simulationInput.credentialInvestigationAllowed = false;
+}
+
+void GameSession::advanceRaidFreightUnlock(float deltaTime)
+{
+    if (!freightUnlock_.target) return;
+    if (world_->spaceTransitionedLastUpdate() || nearbyLockedFreightCrate() != freightUnlock_.target)
+    {
+        cancelRaidFreightUnlock();
+        return;
+    }
+    if (!std::isfinite(deltaTime) || deltaTime <= 0.0F) return;
+    freightUnlock_.elapsedSeconds += deltaTime;
+    if (freightUnlock_.elapsedSeconds < kFreightUnlockSeconds) return;
+
+    const AssetInstanceId target = *freightUnlock_.target;
+    cancelRaidFreightUnlock();
+    const auto receipt = unlockRaidFreightCrate(profile_, raidSceneAccess(target),
+        {profile_.revision, nextRaidTransaction("unlock-freight-crate")});
+    if (receipt.succeeded) freightUnlock_.opened = target;
+    else persistenceMessage_ = receipt.message;
 }
 
 InventoryPlan GameSession::queryRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command) const
@@ -3833,6 +3967,7 @@ void GameSession::advanceBaseSiegeFromSimulation(float deltaTime)
 void GameSession::resetWorldClockRuntime() noexcept
 {
     weaponTriggerGate_.reset();
+    freightUnlock_ = {};
     droppedRaidMagazineIds_.clear();
     pendingWorldSeconds_ = 0.0;
     worldClockCheckpointElapsedSeconds_ = 0.0F;
@@ -3905,6 +4040,7 @@ void GameSession::updateAlphaRaid(
     }
     if (!developerRange_ && !profile_.pendingRaid.has_value())
     {
+        freightUnlock_ = {};
         alphaRaidActive_ = false;
         outpostRestorationObjectiveSecured_ = false;
         baseSiteClearanceObjectiveSecured_ = false;
@@ -3919,6 +4055,7 @@ void GameSession::updateAlphaRaid(
     synchronizeActiveAlphaWeapon();
     if (input.quitRaidJustPressed && alphaRaidActive_)
     {
+        cancelRaidFreightUnlock();
         if (developerRange_) state_ = GameSessionState::BetweenRaids;
         else static_cast<void>(requestActiveQuitAlphaRaid());
         return;
@@ -3926,11 +4063,13 @@ void GameSession::updateAlphaRaid(
     const RaidSessionState currentState = world_->raidSession().state();
     if (currentState == RaidSessionState::Extracted)
     {
+        cancelRaidFreightUnlock();
         if(developerRange_)static_cast<void>(settleAlphaRaid(RaidResultOutcome::Extracted));else static_cast<void>(requestRaidSettlement(RaidResultOutcome::Extracted));
         return;
     }
     if (currentState == RaidSessionState::PlayerDead)
     {
+        cancelRaidFreightUnlock();
         if(developerRange_)static_cast<void>(settleAlphaRaid(RaidResultOutcome::PlayerDead));else static_cast<void>(requestRaidSettlement(RaidResultOutcome::PlayerDead));
         return;
     }
@@ -4068,6 +4207,7 @@ void GameSession::updateAlphaRaid(
 
     preparePlayerCombatInput(simulationInput,input,deltaTime,weaponHandling);
     gateOpticInteraction(input, simulationInput, deltaTime);
+    prepareRaidFreightUnlock(rawInput, input, simulationInput);
 
     std::optional<FireWeaponCommand> pendingFireCommand;
     std::optional<std::string> pendingFireTransaction;
@@ -4313,12 +4453,14 @@ void GameSession::updateAlphaRaid(
 
     if (world_->raidSession().state() == RaidSessionState::PlayerDead)
     {
+        cancelRaidFreightUnlock();
         if(developerRange_)static_cast<void>(settleAlphaRaid(RaidResultOutcome::PlayerDead));else static_cast<void>(requestRaidSettlement(RaidResultOutcome::PlayerDead));
         return;
     }
     if (world_->player().isControlled()) weaponTriggerGate_.cancelUntilRelease();
     if (world_->raidSession().state() == RaidSessionState::Extracted)
     {
+        cancelRaidFreightUnlock();
         if(developerRange_)static_cast<void>(settleAlphaRaid(RaidResultOutcome::Extracted));else static_cast<void>(requestRaidSettlement(RaidResultOutcome::Extracted));
         return;
     }
@@ -4328,6 +4470,7 @@ void GameSession::updateAlphaRaid(
 
     synchronizeWeaponLight(); // A completed switch affects observation before this frame can interact.
     synchronizeNightVision();
+    advanceRaidFreightUnlock(deltaTime);
     if (input.interactJustPressed &&
         !world_->spaceTransitionedLastUpdate() &&
         !world_->raidSession().signalCalledLastUpdate() &&

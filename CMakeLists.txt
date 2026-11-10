@@ -643,6 +643,7 @@ function(raidline_add_test target source module)
        OR target STREQUAL "RunnerInfectedPerformanceTest"
        OR target STREQUAL "WeaponHandlingPerformanceTest"
        OR target STREQUAL "NightVisionRuntimeTest"
+       OR target STREQUAL "RaidFreightRuntimeTest"
        OR target STREQUAL "PlayerInventoryLatencyTest")
         # Timing gates need an isolated CPU/allocator, not competition with
         # the concurrent 128-seed map validation and other test processes.
@@ -852,6 +853,8 @@ raidline_add_test(
     tests/test_profile_state.cpp
     raidline::domain)
 raidline_add_test(RaidSceneContainerTest tests/test_raid_scene_containers.cpp raidline::services)
+raidline_add_test(RaidFreightRuntimeTest tests/test_raid_freight_runtime.cpp raidline::services)
+raidline_add_test(RaidFreightDomainTest tests/test_raid_freight_domain.cpp raidline::services)
 raidline_add_test(RaidCorpseSearchTest tests/test_raid_corpse_search.cpp raidline::services)
 raidline_add_test(RaidCredentialDataTest tests/test_raid_credential_data.cpp raidline::services)
 raidline_add_test(RaidCredentialRuntimeTest tests/test_raid_credential_runtime.cpp raidline::services)
@@ -862,6 +865,7 @@ raidline_add_test(RaidIndoorVisibilityUiTest tests/test_raid_indoor_visibility_u
 raidline_add_test(RaidLightConeVisibilityTest tests/test_raid_light_cone_visibility.cpp raidline::services)
 raidline_add_test(RaidLightConeVisibilityUiTest tests/test_raid_light_cone_visibility_ui.cpp raidline::sdl_client)
 raidline_add_test(RaidSceneContainerUiTest tests/test_raid_scene_container_ui.cpp raidline::sdl_client)
+raidline_add_test(RaidFreightUiTest tests/test_raid_freight_ui.cpp raidline::sdl_client)
 raidline_add_test(PointerContinuityUiTest tests/test_pointer_continuity_ui.cpp raidline::sdl_client)
 raidline_add_test(
     InventoryDomainTest

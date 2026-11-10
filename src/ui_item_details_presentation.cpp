@@ -28,8 +28,9 @@ std::optional<UiItemDetailsProjection> projectUiItemDetails(
     if (!asset) return std::nullopt;
     const auto &definition = content.item(asset->definitionId);
     const bool helmet = supportsUiNightVisionMount(content, definition);
+    const bool freightKey = definition.definitionId == kFreightCrateKeyId;
     if (!definition.weaponUse && !definition.meleeUse && !definition.noiseDecoyUse &&
-        !definition.grenadeUse && !definition.nightVision && !helmet)
+        !definition.grenadeUse && !definition.nightVision && !helmet && !freightKey)
         return std::nullopt;
     UiItemDetailsProjection result;
     result.instanceId = id;
@@ -89,14 +90,20 @@ std::optional<UiItemDetailsProjection> projectUiItemDetails(
             label(language, "右键或 Esc 取消；声音不穿墙、不跨空间。", "Right-click or Esc cancels; sound stays in the current space and does not cross walls."),
             label(language, "吸引未发现你的普通感染者；不会解除追击。", "Attracts unaware common infected; does not end an active pursuit."),
             label(language, "不造成伤害，不提供照明；使用不消耗电池。", "No damage or illumination; using a decoy consumes no battery.")};
-    } else if (helmet || definition.nightVision) {
-        result.kind = helmet ? UiItemDetailsKind::Helmet : UiItemDetailsKind::NightVision;
-        result.title = localizeUiText(language, helmet ? "HELMET DETAILS" : "NIGHT VISION DETAILS");
+    } else if (helmet || definition.nightVision || freightKey) {
+        result.kind = freightKey ? UiItemDetailsKind::FreightKey
+            : helmet ? UiItemDetailsKind::Helmet : UiItemDetailsKind::NightVision;
+        result.title = localizeUiText(language, freightKey ? "FREIGHT CRATE KEY DETAILS"
+            : helmet ? "HELMET DETAILS" : "NIGHT VISION DETAILS");
         if (helmet)
             metric("耐久", "Durability", fmt::format("{} / {}",
                 asset->currentDurability, asset->currentMaximumDurability));
         metric("重量", "Weight", fmt::format("{} g", definition.unitWeightGrams));
         metric("尺寸", "Size", fmt::format("{} × {}", definition.inventoryWidthCells, definition.inventoryHeightCells));
+        if (freightKey)
+            result.notes = {
+                localizeUiText(language, "FRONTIER EXCHANGE | FREIGHT SERVICE BAY"),
+                localizeUiText(language, "CARRY THE KEY AND HOLD F AT THE SEALED CRATE")};
     } else {
         const auto use = effectiveWeaponUse(profile, content, id);
         result.title = label(language, "枪械详情", "WEAPON DETAILS");
@@ -126,7 +133,7 @@ SDL_FRect uiItemDetailsImage(UiItemDetailsKind kind) noexcept {
 }
 SDL_FRect uiItemDetailsMetric(UiItemDetailsKind kind, std::size_t index) noexcept {
     if (kind == UiItemDetailsKind::Weapon || kind == UiItemDetailsKind::Helmet ||
-        kind == UiItemDetailsKind::NightVision)
+        kind == UiItemDetailsKind::NightVision || kind == UiItemDetailsKind::FreightKey)
         return {70.0F + static_cast<float>(index % 3) * 180.0F,
                 334.0F + static_cast<float>(index / 3) * 58.0F, 166, 48};
     return {640.0F + static_cast<float>(index % 2) * 282.0F,
@@ -142,7 +149,8 @@ SDL_FRect uiItemDetailsPrevious() noexcept { return {70, 602, 100, 32}; }
 SDL_FRect uiItemDetailsNext() noexcept { return {190, 602, 100, 32}; }
 SDL_FRect uiItemDetailsFeedback(UiItemDetailsKind kind) noexcept {
     if (kind == UiItemDetailsKind::Weapon || kind == UiItemDetailsKind::Helmet ||
-        kind == UiItemDetailsKind::NightVision) return {70, 644, 1120, 52};
+        kind == UiItemDetailsKind::NightVision || kind == UiItemDetailsKind::FreightKey)
+        return {70, 644, 1120, 52};
     if (kind == UiItemDetailsKind::Melee) return {70, 654, 1120, 42};
     return {70, 662, 1120, 34};
 }

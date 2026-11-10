@@ -4,9 +4,25 @@
 #include <algorithm>
 #include <nlohmann/json.hpp>
 
-inline nlohmann::json contentBeforeHospitalNightOperationsJson()
+inline nlohmann::json contentBeforeCrossMapFreightJson()
 {
     auto document = nlohmann::json::parse(publishedContentJson());
+    document["content_version"] = std::string{kHospitalNightOperationsContentVersion};
+    auto &items = document["items"];
+    items.erase(std::remove_if(items.begin(), items.end(), [](const auto &item) {
+        return item.at("id") == std::string{kFreightCrateKeyId.value()};
+    }), items.end());
+    return document;
+}
+
+inline ContentRegistry contentBeforeCrossMapFreight()
+{
+    return ContentRegistry::fromJson(contentBeforeCrossMapFreightJson().dump());
+}
+
+inline nlohmann::json contentBeforeHospitalNightOperationsJson()
+{
+    auto document = contentBeforeCrossMapFreightJson();
     document["content_version"] = std::string{kAmmoLoopContentVersion};
     auto &items = document["items"];
     items.erase(std::remove_if(items.begin(), items.end(), [](const auto &item) {

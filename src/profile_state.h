@@ -1166,6 +1166,12 @@ struct RaidCredentialExtractionSnapshot
     std::string rulesVersion{"credential-extraction-1"};
 };
 
+struct RaidSealedFreightCrateSnapshot
+{
+    AssetInstanceId containerAssetId{};
+    bool unlocked{};
+};
+
 struct PendingRaidSnapshot
 {
     std::string raidId;
@@ -1197,6 +1203,8 @@ struct PendingRaidSnapshot
     RaidTravelSnapshot travel;
     std::optional<BaseWishExpeditionSnapshot> wishFocus;
     bool hospitalNightVisionLoot{};
+    std::optional<std::string> freightKeyLootSlotId;
+    std::optional<RaidSealedFreightCrateSnapshot> sealedFreightCrate;
 };
 
 struct LastRaidResult

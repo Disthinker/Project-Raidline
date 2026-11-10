@@ -152,7 +152,8 @@ TEST(ProfileStateTest, NewPublishedProfileCreatesLegacyCatalogAndExcludesPurchas
              (definition.weaponComponent->slot == WeaponComponentSlot::Muzzle ||
               definition.weaponComponent->slot == WeaponComponentSlot::Optic)) ||
             definition.definitionId == ItemDefinitionId{"item.medical.bandage_roll_basic"} ||
-            definition.definitionId == kExpanding545AmmunitionId) {
+            definition.definitionId == kExpanding545AmmunitionId ||
+            definition.definitionId == kFreightCrateKeyId) {
             EXPECT_EQ(stored, profile.assets.records().end()) << definition.definitionId.value();
             continue;
         }
