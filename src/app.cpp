@@ -3366,7 +3366,7 @@ void App::handleProfileInventoryUiEvent(
     if (profileDetailsAsset_)
     {
         if (const auto *pointer = std::get_if<InventoryPointerEvent>(&event)) {
-            handleWeaponLightDetailsPointer(*pointer, inRaid);
+            handleProfileDetailsPointer(*pointer, inRaid);
             if (pointer->type != InventoryPointerEventType::Motion) input_.suppressPrimaryPointerUntilRelease();
         } else if (const auto *navigation = std::get_if<InventoryNavigationEvent>(&event)) {
             handleProfileDetailsNavigation(*navigation);
@@ -4698,6 +4698,12 @@ void App::processEvents()
             deploymentUi_.confirmationKey.reset();
         }
         input_.handleEvent(event);
+        if (gameSession_.tacticalDeviceWheelOpen()) {
+            if (event.type == SDL_EVENT_KEY_UP && event.key.scancode == SDL_SCANCODE_U)
+                tacticalDeviceReleasePointer_ = wheelPointerOffset_;
+            if (event.type == SDL_EVENT_MOUSE_WHEEL || event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                event.type == SDL_EVENT_MOUSE_BUTTON_UP) continue;
+        }
         if (event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE) {
             allocationUi_.press.reset(); pendingAllocationEvents_.clear();
         }
@@ -4745,6 +4751,7 @@ void App::processEvents()
             medicalWheelOpen_ = false;
             medicalWheelOptions_.clear();
             cancelMagazineWheel();
+            gameSession_.cancelWeaponLightInput();
             developerWeaponPanelOpen_ = false;
             developerWeaponPanelBlocksGameplayThisFrame_ = true;
             baseConstructionPanelOpen_ = false; resetBaseFinalDetailsUi();
@@ -4763,7 +4770,7 @@ void App::processEvents()
         if (event.type == SDL_EVENT_MOUSE_MOTION)
         {
             Vec2 motion{event.motion.xrel, event.motion.yrel};
-            if(medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_)
+            if (quickWheelOpen())
             {
                 wheelPointerOffset_=moveQuickWheelPointer(wheelPointerOffset_,motion);
             }
@@ -4804,7 +4811,7 @@ void App::processEvents()
                 !inventoryOverlayState_.isOpen() &&
                 !pauseMenu_.isOpen() &&
                 !developerWeaponPanelOpen_ &&
-                !medicalWheelOpen_ && !throwableWheelOpen_ && !magazineWheelOpen_ &&
+                !quickWheelOpen() &&
                 !baseConstructionPanelOpen_ &&
                 !basePlacementState_.has_value() &&
                 !baseFixedFacilityPlacementState_.has_value() &&
@@ -5641,11 +5648,16 @@ void App::update(float deltaTime)
     }
     if(pendingInventoryBarrierAction_ || profileUiBusy()) {
         gameSession_.cancelPlayerControlIntent();
+        if (gameSession_.tacticalDeviceWheelOpen()) gameSession_.cancelWeaponLightInput();
         pendingBaseClicks_.clear();pendingBaseRightClicks_.clear();pendingInventoryUiEvents_.clear();
         return;
     }
     if((gameFlow_.state()!=GameFlowState::Raid && gameFlow_.state()!=GameFlowState::Base) || pauseMenu_.isOpen() ||
        developerWeaponPanelOpen_ || developerRangePanelOpen_ || !windowHasInputFocus_)cancelMagazineWheel();
+    if (gameSession_.tacticalDeviceWheelOpen() &&
+        (gameFlow_.state() != GameFlowState::Raid || pauseMenu_.isOpen() || !windowHasInputFocus_ ||
+         developerWeaponPanelOpen_ || developerRangePanelOpen_ || raidSaveProtectionVisible()))
+        gameSession_.cancelWeaponLightInput();
     if(pauseMenu_.isOpen() || !windowHasInputFocus_ || developerWeaponPanelOpen_ || developerRangePanelOpen_ ||
        developerWeaponPanelBlocksGameplayThisFrame_ || medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_ || selectedThrowable_ ||
        inventoryOverlayState_.isOpen() || tacticalMapOpen_ || baseConstructionPanelOpen_ ||
@@ -5828,7 +5840,7 @@ void App::update(float deltaTime)
         inventoryOverlayState_.isOpen() ||
         basePlacementState_.has_value() ||
         baseFixedFacilityPlacementState_.has_value() ||
-        medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_ || selectedThrowable_.has_value() ||
+        quickWheelOpen() || selectedThrowable_.has_value() ||
         tacticalMapOpen_ ||
         developerWeaponPanelBlocksGameplayThisFrame_ ||
         (gameFlow_.state() == GameFlowState::Base &&
@@ -6115,13 +6127,19 @@ void App::update(float deltaTime)
         gameplayInput = GameplayInput{};
     }
 
-    gameplayInput.freezeObservationDirection = inventoryOverlayState_.isOpen() ||
-        tacticalMapOpen_ || medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_ || developerWeaponPanelOpen_ ||
-        developerWeaponPanelBlocksGameplayThisFrame_ || !windowHasInputFocus_;
+    gameplayInput.freezeObservationDirection = gameplayInput.freezeObservationDirection ||
+        inventoryOverlayState_.isOpen() || tacticalMapOpen_ || quickWheelOpen() ||
+        developerWeaponPanelOpen_ || developerWeaponPanelBlocksGameplayThisFrame_ || !windowHasInputFocus_;
+    const bool deviceWheelWasOpen = gameSession_.tacticalDeviceWheelOpen();
     const auto actionMessageBefore=gameSession_.persistenceMessage();
     gameFlow_.update(
         gameplayInput,
         deltaTime);
+    if (!deviceWheelWasOpen && gameSession_.tacticalDeviceWheelOpen()) {
+        wheelPointerOffset_ = tacticalDeviceReleasePointer_ = pendingRelativeAimMotion_ = {};
+        input_.suppressPrimaryPointerUntilRelease();
+        cancelMagazineWheel();
+    }
     if((gameplayInput.cycleFireModeJustPressed || !gameplayInput.raidReloadIntents.empty() ||
         gameplayInput.lightJustPressed || gameplayInput.lightJustReleased || gameplayInput.weaponSlotJustPressed) &&
        gameSession_.persistenceMessage()!=actionMessageBefore && !gameSession_.persistenceMessage().empty())
@@ -6447,9 +6465,23 @@ void App::renderDebugText()
         p.action=fmt::format("{} {:.0f}%",tr("调查通行资料","INVESTIGATING TRANSIT DOCUMENTS"),p.actionFraction*100);
     }
     if(raid.state()==RaidSessionState::Extracting || raid.state()==RaidSessionState::Extracted){p.actionActive=true;p.actionFraction=raid.extractionProgress();p.action=fmt::format("{} {:.0f}%",tr("撤离中","EXTRACTING"),p.actionFraction*100);}
-    const auto light=gameSession_.activeWeaponLight();
-    if(light.binding.deviceAssetId)p.light=fmt::format("{} · {}% · U",lightStateLabel(light),light.capacityMs?static_cast<std::uint64_t>(light.remainingMs)*100/light.capacityMs:0);
-    else if(gameSession_.persistenceMessage()=="ONLY WEAPON LIGHT | TAP U" || gameSession_.persistenceMessage()=="NO ACTIVE WEAPON LIGHT")p.light=gameSession_.persistenceMessage();
+    const auto light = gameSession_.activeWeaponLight();
+    const auto vision = gameSession_.activeNightVision();
+    const bool tapVision = vision.binding.deviceAssetId && (!light.binding.deviceAssetId ||
+        gameSession_.selectedTacticalDevice() == TacticalDeviceKind::NightVision);
+    if (light.binding.deviceAssetId) {
+        const auto percent = light.capacityMs
+            ? static_cast<std::uint64_t>(light.remainingMs) * 100 / light.capacityMs : 0;
+        p.light = fmt::format("{} · {}%{}", lightStateLabel(light), percent, tapVision ? "" : " · U");
+    } else if (gameSession_.persistenceMessage() == "ONLY WEAPON LIGHT | TAP U" ||
+               gameSession_.persistenceMessage() == "NO ACTIVE WEAPON LIGHT") {
+        p.light = gameSession_.persistenceMessage();
+    }
+    if (vision.binding.deviceAssetId) {
+        const auto percent = vision.capacityCharges
+            ? static_cast<std::uint64_t>(vision.remainingCharges) * 100 / vision.capacityCharges : 0;
+        p.nightVision = fmt::format("{} · {}%{}", uiNightVisionStateLabel(vision), percent, tapVision ? " · U" : "");
+    }
     p.feedback=raidSaveProtectionVisible()?std::string_view{}:visibleFeedbackMessage();
     renderUiRaidHud(renderer_,uiTextRenderer_,p);
     const RaidSession &raidSession=raid;
@@ -8705,6 +8737,12 @@ void App::renderBallisticBlockers(bool terrainOnly, std::optional<Rect> worldVie
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 
+bool App::quickWheelOpen() const noexcept
+{
+    return medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_ ||
+        gameSession_.tacticalDeviceWheelOpen();
+}
+
 bool App::shouldCaptureWorldPointer() const noexcept
 {
     const bool baseWorldActive = gameFlow_.state() == GameFlowState::Base &&
@@ -8721,7 +8759,7 @@ bool App::shouldCaptureWorldPointer() const noexcept
                 basePlacementState_.has_value() ||
                 baseFixedFacilityPlacementState_.has_value() ||
                 baseConstructionPanelOpen_ || homeFoundingPrompt_.has_value(),
-            medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_,
+            quickWheelOpen(),
             developerWeaponPanelOpen_ || developerRangePanelOpen_,
             pauseMenu_.isOpen(),
             tacticalMapOpen_,
@@ -8730,7 +8768,7 @@ bool App::shouldCaptureWorldPointer() const noexcept
 
 void App::syncRaidPointerCapture() noexcept
 {
-    const bool wheel=(medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_) && windowHasInputFocus_ &&
+    const bool wheel=quickWheelOpen() && windowHasInputFocus_ &&
         !inventoryOverlayState_.isOpen() && !pauseMenu_.isOpen() && !tacticalMapOpen_;
     if(wheelPointerCaptureActive_!=wheel) {
         wheelPointerCaptureActive_=wheel;pendingRelativeAimMotion_={};
@@ -8794,7 +8832,7 @@ void App::renderAimCrosshair()
         basePlacementState_.has_value() ||
         baseFixedFacilityPlacementState_.has_value() ||
         baseConstructionPanelOpen_ ||
-        medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_ ||
+        quickWheelOpen() ||
         tacticalMapOpen_ ||
         developerWeaponPanelOpen_ ||
         developerRangePanelOpen_ ||
@@ -8970,8 +9008,45 @@ void App::openMagazineWheel(AssetInstanceId weapon)
     magazineFireSuppressedUntilRelease_=true;uiMessage_.clear();
 }
 
+void App::updateTacticalDeviceWheelInput(GameplayInput &input)
+{
+    const bool cancel = inventoryOverlayState_.isOpen() || tacticalMapOpen_ ||
+        developerWeaponPanelBlocksGameplayThisFrame_ ||
+        input_.wasActionJustPressed(GameAction::InventoryCancel) ||
+        input_.wasSecondaryPointerJustPressed();
+    if (cancel || input_.wasActionJustReleased(GameAction::WeaponLight)) {
+        const auto sector = cancel ? std::nullopt : quickWheelSector(tacticalDeviceReleasePointer_);
+        if (sector == kTacticalWheelLightSector || sector == kTacticalWheelVisionSector) {
+            const auto kind = sector == kTacticalWheelLightSector
+                ? TacticalDeviceKind::WeaponLight : TacticalDeviceKind::NightVision;
+            const auto result = gameSession_.selectTacticalDevice(kind);
+            uiMessage_ = result.succeeded ? gameSession_.persistenceMessage() : result.message;
+        } else {
+            gameSession_.cancelWeaponLightInput();
+            if (!inventoryOverlayState_.isOpen() && !tacticalMapOpen_)
+                uiMessage_ = "TACTICAL DEVICE SELECTION CANCELLED";
+        }
+    }
+    if (input_.isSecondaryPointerPressed()) opticAimBlockedUntilRelease_ = true;
+    gameSession_.cancelPlayerControlIntent();
+    input_.suppressPrimaryPointerUntilRelease();
+    GameplayInput wheelInput;
+    wheelInput.firePhysicallyPressed = input.firePhysicallyPressed;
+    wheelInput.aimWorldPosition = input.aimWorldPosition;
+    wheelInput.aimViewport = input.aimViewport;
+    wheelInput.aimWorldBounds = input.aimWorldBounds;
+    wheelInput.aimMotionDelta = Vec2{};
+    wheelInput.allowWeaponOptics = false;
+    wheelInput.freezeObservationDirection = true;
+    input = std::move(wheelInput);
+}
+
 void App::updatePlayerActionInput(GameplayInput &gameplayInput)
 {
+    if (gameSession_.tacticalDeviceWheelOpen()) {
+        updateTacticalDeviceWheelInput(gameplayInput);
+        return;
+    }
     gameplayInput.healJustPressed=false;
     if(gameFlow_.state()==GameFlowState::Base && gameSession_.playerGameplayContext().coreBuildAvailable)
         gameplayInput.cycleFireModeJustPressed=false;
@@ -13850,8 +13925,9 @@ void App::renderUnscopedRaidWorld()
 
 void App::renderRaidScreen()
 {
-    bool wheelBackdrop=medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_;
+    bool wheelBackdrop=quickWheelOpen();
     if(wheelBackdrop && !quickWheelBackdrop_.begin(renderer_)) {
+        if (gameSession_.tacticalDeviceWheelOpen()) gameSession_.cancelWeaponLightInput();
         medicalWheelOpen_=false;medicalWheelOptions_.clear();cancelThrowableUi();cancelMagazineWheel();
         uiMessage_="QUICK WHEEL BACKDROP UNAVAILABLE";wheelBackdrop=false;
         SDL_LogError(SDL_LOG_CATEGORY_RENDER,"Quick wheel backdrop: %s",SDL_GetError());
@@ -13869,6 +13945,7 @@ void App::renderRaidScreen()
     }
     if(wheelBackdrop) {
         if(!quickWheelBackdrop_.compose()) {
+            if (gameSession_.tacticalDeviceWheelOpen()) gameSession_.cancelWeaponLightInput();
             medicalWheelOpen_=false;medicalWheelOptions_.clear();cancelThrowableUi();cancelMagazineWheel();
             uiMessage_="QUICK WHEEL BACKDROP UNAVAILABLE";
             SDL_LogError(SDL_LOG_CATEGORY_RENDER,"Quick wheel filter: %s",SDL_GetError());
@@ -13876,6 +13953,7 @@ void App::renderRaidScreen()
             renderMedicalWheel();
             if(magazineWheelOpen_)renderQuickWheel(UiQuickWheelKind::Magazine,magazineWheelOptions_,magazineWheelSelectedIndex_);
             if(throwableWheelOpen_)renderQuickWheel(UiQuickWheelKind::Throwable,throwableWheelOptions_,throwableWheelSelected_);
+            if (gameSession_.tacticalDeviceWheelOpen()) renderTacticalDeviceWheel();
         }
         return;
     }
@@ -14092,9 +14170,68 @@ const char *lightStateLabel(const WeaponLightProjection &light)
     if (light.interrupted || light.flickering) return "LIGHT INTERRUPTED | SHAKE TO RESTORE";
     return light.output ? "WEAPON LIGHT ON" : "LIGHT OUTPUT PAUSED";
 }
+
+struct ItemDetailsDevice {
+    AssetInstanceId device{}, battery{};
+    std::uint32_t remaining{}, capacity{};
+    std::string_view state;
+};
+
+ItemDetailsDevice detailDevice(const GameSession &session, const ProfileState &profile,
+                               const ContentRegistry &content, const AssetRecord &asset, bool inRaid)
+{
+    const auto &definition = content.item(asset.definitionId);
+    if (definition.weaponUse) {
+        const auto binding = findWeaponLight(profile, content, asset.instanceId);
+        const auto active = session.activeWeaponLight();
+        const auto light = queryWeaponLight(profile, content, binding,
+            inRaid && active.binding.weaponAssetId == asset.instanceId && active.output);
+        return {binding.deviceAssetId, binding.batteryAssetId, light.remainingMs,
+            light.capacityMs, lightStateLabel(light)};
+    }
+
+    NightVisionProjection vision;
+    if (supportsUiNightVisionMount(content, definition)) {
+        const auto binding = findNightVision(profile, content, asset.instanceId);
+        const auto active = session.activeNightVision();
+        vision = queryNightVision(profile, content, binding,
+            inRaid && active.binding.helmetAssetId == asset.instanceId && active.output);
+    } else if (definition.nightVision && asset.deviceState) {
+        vision.binding.deviceAssetId = asset.instanceId;
+        vision.vision = definition.nightVision->output;
+        vision.switchOn = asset.deviceState->switchOn;
+        vision.interrupted = asset.deviceState->interrupted;
+        vision.flickering = asset.deviceState->flickerRemainingMs != 0;
+        for (const auto &[id, cell] : profile.assets.records()) {
+            const auto *installed = std::get_if<InstalledDeviceBatteryLocation>(&cell.location);
+            if (!installed || installed->deviceAssetId != asset.instanceId) continue;
+            vision.binding.batteryAssetId = id;
+            vision.remainingCharges = cell.remainingCharges;
+            vision.capacityCharges = content.item(cell.definitionId).maximumCharges;
+            break;
+        }
+    }
+    return {vision.binding.deviceAssetId, vision.binding.batteryAssetId,
+        vision.remainingCharges, vision.capacityCharges, uiNightVisionStateLabel(vision)};
 }
 
-void App::handleWeaponLightDetailsPointer(const InventoryPointerEvent &event, bool inRaid)
+std::optional<HelmetDeviceCommand> detailHelmetFitting(const ProfileState &profile,
+    const ContentRegistry &content, const AssetRecord &helmet, AssetInstanceId attachedDevice)
+{
+    if (profile.pendingRaid || profile.activeBaseDefense || !assetIsBaseAccessible(profile, helmet.instanceId))
+        return std::nullopt;
+    if (attachedDevice) return HelmetDeviceCommand{helmet.instanceId, 0};
+    for (const auto &[id, asset] : profile.assets.records()) {
+        if (!std::holds_alternative<StoredAssetLocation>(asset.location)) continue;
+        const auto &device = content.item(asset.definitionId).nightVision;
+        if (device && device->helmetDefinitionId == helmet.definitionId &&
+            assetIsBaseAccessible(profile, id)) return HelmetDeviceCommand{helmet.instanceId, id};
+    }
+    return std::nullopt;
+}
+}
+
+void App::handleProfileDetailsPointer(const InventoryPointerEvent &event, bool inRaid)
 {
     if (!profileDetailsAsset_ || !windowHasInputFocus_ || pauseMenu_.isOpen() || !inventoryOverlayState_.isOpen()) {
         itemDetailsInteraction_ = {};
@@ -14109,18 +14246,28 @@ void App::handleWeaponLightDetailsPointer(const InventoryPointerEvent &event, bo
         deviceBatteryDrag_.reset();
         return;
     }
-    const auto &definition = publishedContentRegistry().item(asset->definitionId);
-    const bool weapon = definition.weaponUse.has_value();
-    const auto light = weapon ? findWeaponLight(profile, publishedContentRegistry(), asset->instanceId) : WeaponLightBinding{};
-    const auto batteries = weapon ? detailBatteries(profile, inRaid) : std::vector<AssetInstanceId>{};
+    const auto &content = publishedContentRegistry();
+    const auto &definition = content.item(asset->definitionId);
+    const bool helmet = supportsUiNightVisionMount(content, definition);
+    const auto device = detailDevice(gameSession_, profile, content, *asset, inRaid);
+    const bool canFit = helmet && gameFlow_.state() == GameFlowState::Base &&
+        gameFlow_.baseWorld().canAccessStash();
+    const auto fitting = canFit
+        ? detailHelmetFitting(profile, content, *asset, device.device) : std::nullopt;
+    const bool accessible = inRaid ? assetIsCarried(profile, asset->instanceId)
+                                   : assetIsBaseAccessible(profile, asset->instanceId);
+    const bool hasBatteryTray = definition.weaponUse ||
+        ((helmet || definition.nightVision) && device.device && accessible);
+    const auto batteries = hasBatteryTray ? detailBatteries(profile, inRaid) : std::vector<AssetInstanceId>{};
     if (deviceBatteryPage_ * kUiDetailsBatteryPageSize >= batteries.size()) deviceBatteryPage_ = 0;
     const bool hadDrag = deviceBatteryDrag_.has_value();
-    const bool changed = itemDetailsInteraction_.synchronize({asset->instanceId, light.deviceAssetId,
-        profile.revision, deviceBatteryPage_, uiTextRenderer_.language(), inRaid});
+    const bool changed = itemDetailsInteraction_.synchronize({asset->instanceId, device.device,
+        profile.revision, deviceBatteryPage_, uiTextRenderer_.language(), inRaid,
+        fitting ? std::optional{fitting->deviceAssetId} : std::nullopt});
     if (changed) deviceBatteryDrag_.reset();
     deviceBatteryDragPosition_ = event.position;
-    const auto hit = hitUiItemDetailsControl({event.position.x, event.position.y}, weapon,
-        deviceBatteryPage_, batteries.size(), light.deviceAssetId && light.batteryAssetId);
+    const auto hit = hitUiItemDetailsControl({event.position.x, event.position.y}, hasBatteryTray,
+        deviceBatteryPage_, batteries.size(), device.battery != 0, fitting.has_value());
     if (event.type == InventoryPointerEventType::Motion) {
         itemDetailsInteraction_.move(hit);
         return;
@@ -14128,7 +14275,7 @@ void App::handleWeaponLightDetailsPointer(const InventoryPointerEvent &event, bo
     if (event.type == InventoryPointerEventType::LeftButtonDown) {
         if (!itemDetailsInteraction_.down(hit)) return;
         deviceBatteryDrag_.reset();
-        if (hit || !light.deviceAssetId) return;
+        if (hit || !hasBatteryTray || !device.device) return;
         for (std::size_t slot = 0; slot < kUiDetailsBatteryPageSize; ++slot) {
             const auto index = deviceBatteryPage_ * kUiDetailsBatteryPageSize + slot;
             if (index >= batteries.size() || !uiContains(uiItemDetailsBattery(slot), {event.position.x, event.position.y})) continue;
@@ -14157,15 +14304,18 @@ void App::handleWeaponLightDetailsPointer(const InventoryPointerEvent &event, bo
         if (operation == UiItemDetailsControl::Previous) --deviceBatteryPage_;
         else ++deviceBatteryPage_;
         itemDetailsInteraction_ = {};
-    } else if (operation == UiItemDetailsControl::RemoveBattery) {
-        changeInventoryBattery({light.deviceAssetId,0});
+    } else if (operation == UiItemDetailsControl::ChangeHelmetDevice && fitting) {
+        changeInventoryHelmetDevice(*fitting);
         itemDetailsInteraction_ = {};
-    } else if (source && light.deviceAssetId &&
+    } else if (operation == UiItemDetailsControl::RemoveBattery) {
+        changeInventoryBattery({device.device, 0});
+        itemDetailsInteraction_ = {};
+    } else if (source && hasBatteryTray && device.device &&
                uiContains(uiItemDetailsBatterySlot(), {event.position.x, event.position.y})) {
         if (!profileDragSourceMatches(profile, *source)) {
             uiMessage_ = "BATTERY SOURCE CHANGED";
         } else {
-            changeInventoryBattery({light.deviceAssetId,source->instanceId});
+            changeInventoryBattery({device.device, source->instanceId});
         }
         itemDetailsInteraction_ = {};
     }
@@ -14179,6 +14329,16 @@ void App::changeInventoryBattery(DeviceBatteryCommand command)
     if(gameSession_.alphaRaidActive() || gameSession_.developerRangeActive())
         finish(gameSession_.changeDeviceBattery(command,nextProfileTransactionId("device-battery")));
     else submitProfileUi<InventoryReceipt>(command,nextProfileTransactionId("device-battery"),finish);
+}
+
+void App::changeInventoryHelmetDevice(HelmetDeviceCommand command)
+{
+    if (deferInventoryBarrier([this, command] { changeInventoryHelmetDevice(command); })) return;
+    submitProfileUi<InventoryReceipt>(command, nextProfileTransactionId("helmet-device"),
+        [this, installing = command.deviceAssetId != 0](const InventoryReceipt &receipt) {
+            uiMessage_ = !receipt.succeeded ? receipt.message :
+                installing ? "NIGHT VISION INSTALLED" : "NIGHT VISION REMOVED";
+        });
 }
 
 void App::renderProfileWeaponDetails()
@@ -14199,13 +14359,21 @@ void App::renderProfileWeaponDetails()
     if (model->kind == UiItemDetailsKind::Decoy || model->kind == UiItemDetailsKind::Grenade) { renderProfileDecoyDetails(asset, definition); return; }
     const auto choose = [&](const char *zh, const char *en) { return uiTextRenderer_.language() == UiLanguage::SimplifiedChinese ? zh : en; };
     const bool inRaid = gameSession_.alphaRaidActive();
-    const auto binding = findWeaponLight(profile, content, asset.instanceId);
-    const auto active = gameSession_.activeWeaponLight();
-    const auto light = queryWeaponLight(profile, content, binding, inRaid && active.binding.weaponAssetId == asset.instanceId && active.output);
-    const auto batteries = detailBatteries(profile, inRaid);
+    const bool helmet = model->kind == UiItemDetailsKind::Helmet;
+    const bool weapon = model->kind == UiItemDetailsKind::Weapon;
+    const auto device = detailDevice(gameSession_, profile, content, asset, inRaid);
+    const bool canFit = helmet && gameFlow_.state() == GameFlowState::Base &&
+        gameFlow_.baseWorld().canAccessStash();
+    const auto fitting = canFit
+        ? detailHelmetFitting(profile, content, asset, device.device) : std::nullopt;
+    const bool accessible = inRaid ? assetIsCarried(profile, asset.instanceId)
+                                   : assetIsBaseAccessible(profile, asset.instanceId);
+    const bool hasBatteryTray = weapon || (device.device && accessible);
+    const auto batteries = hasBatteryTray ? detailBatteries(profile, inRaid) : std::vector<AssetInstanceId>{};
     if (deviceBatteryPage_ * kUiDetailsBatteryPageSize >= batteries.size()) deviceBatteryPage_ = 0;
-    if (itemDetailsInteraction_.synchronize({asset.instanceId, binding.deviceAssetId, profile.revision,
-        deviceBatteryPage_, uiTextRenderer_.language(), inRaid})) deviceBatteryDrag_.reset();
+    if (itemDetailsInteraction_.synchronize({asset.instanceId, device.device, profile.revision,
+        deviceBatteryPage_, uiTextRenderer_.language(), inRaid,
+        fitting ? std::optional{fitting->deviceAssetId} : std::nullopt})) deviceBatteryDrag_.reset();
     uiFinalPanel(renderer_, uiItemDetailsPanel());
     uiFinalTextAt(renderer_, uiTextRenderer_, 70, 96, model->title, 600, 22);
     renderFoundationButton(21000, uiItemDetailsBack(), "BACK TO INVENTORY", true, false, false, {}, 14);
@@ -14218,25 +14386,49 @@ void App::renderProfileWeaponDetails()
         uiFinalText(renderer_, uiTextRenderer_, {r.x, r.y + 21, r.w, 29}, model->metrics[i].value, 20);
     }
     uiFinalTextAt(renderer_, uiTextRenderer_, 70, 452, model->status, 530, 12, 1, {157, 181, 174, 255});
-    uiFinalTextAt(renderer_, uiTextRenderer_, 640, 148, "INSTALLED COMPONENTS", 548, 16);
-    uiFinalPanel(renderer_, {630, 184, 570, 140});
-    if (model->components.empty()) uiFinalTextAt(renderer_, uiTextRenderer_, 648, 198, "DEFAULT CONFIGURATION", 530, 14);
-    const float componentStride = model->components.size() > 4 ? 21.0F : 30.0F;
-    for (std::size_t i = 0; i < model->components.size(); ++i)
-        uiFinalTextAt(renderer_, uiTextRenderer_, 648, 193 + static_cast<float>(i) * componentStride, model->components[i], 530, 14);
-    uiFinalTextAt(renderer_, uiTextRenderer_, 640, 340, "WEAPON LIGHT", 420, 16);
-    uiFinalTextAt(renderer_, uiTextRenderer_, 640, 373, lightStateLabel(light), 432, 14);
+    if (weapon) {
+        uiFinalTextAt(renderer_, uiTextRenderer_, 640, 148, "INSTALLED COMPONENTS", 548, 16);
+        uiFinalPanel(renderer_, {630, 184, 570, 140});
+        if (model->components.empty()) uiFinalTextAt(renderer_, uiTextRenderer_, 648, 198, "DEFAULT CONFIGURATION", 530, 14);
+        const float componentStride = model->components.size() > 4 ? 21.0F : 30.0F;
+        for (std::size_t i = 0; i < model->components.size(); ++i)
+            uiFinalTextAt(renderer_, uiTextRenderer_, 648, 193 + static_cast<float>(i) * componentStride, model->components[i], 530, 14);
+    } else {
+        uiFinalTextAt(renderer_, uiTextRenderer_, 640, 148, "NIGHT VISION MOUNT", 548, 16);
+        uiFinalPanel(renderer_, {630, 184, 570, 140});
+        if (helmet) {
+            const auto *installed = profile.assets.find(device.device);
+            const auto *candidate = fitting ? profile.assets.find(fitting->deviceAssetId) : nullptr;
+            uiFinalTextAt(renderer_, uiTextRenderer_, 648, 198,
+                installed ? content.item(installed->definitionId).displayName : "NO NIGHT VISION INSTALLED", 530, 16);
+            if (!installed) uiFinalTextAt(renderer_, uiTextRenderer_, 648, 230,
+                candidate ? content.item(candidate->definitionId).displayName :
+                    canFit ? "NO ACCESSIBLE NIGHT VISION" : "HELMET FITTING NEEDS BASE STORAGE", 530, 14);
+            renderFoundationButton(21004, uiItemDetailsHelmetDeviceButton(),
+                installed ? "REMOVE NIGHT VISION" : "INSTALL NIGHT VISION",
+                fitting.has_value(), false, false, {}, 14);
+        } else {
+            uiFinalTextAt(renderer_, uiTextRenderer_, 648, 198, "FITS BASIC HELMET", 530, 16);
+            uiFinalTextAt(renderer_, uiTextRenderer_, 648, 230, "FIT AT BASE VIA HELMET DETAILS", 530, 14);
+        }
+    }
+    if (!hasBatteryTray) {
+        renderUiItemDetailsFeedback(renderer_, uiTextRenderer_, itemDetailsInteraction_, model->kind, uiMessage_);
+        return;
+    }
+    uiFinalTextAt(renderer_, uiTextRenderer_, 640, 340, weapon ? "WEAPON LIGHT" : "NIGHT VISION", 420, 16);
+    uiFinalTextAt(renderer_, uiTextRenderer_, 640, 373, device.state, 432, 14);
     uiFinalTextAt(renderer_, uiTextRenderer_, 640, 398,
-        fmt::format("{} {}%", choose("电量", "Charge"), light.capacityMs ? static_cast<std::uint64_t>(light.remainingMs) * 100 / light.capacityMs : 0), 432, 12);
-    renderFoundationButton(21001, uiItemDetailsRemoveBattery(), "REMOVE BATTERY", binding.deviceAssetId && binding.batteryAssetId, false, false, {}, 12);
-    uiFinalPanel(renderer_, uiItemDetailsBatterySlot(), binding.deviceAssetId && !binding.batteryAssetId);
-    if (binding.batteryAssetId) {
-        const auto *battery = profile.assets.find(binding.batteryAssetId);
+        fmt::format("{} {}%", choose("电量", "Charge"), device.capacity ? static_cast<std::uint64_t>(device.remaining) * 100 / device.capacity : 0), 432, 12);
+    renderFoundationButton(21001, uiItemDetailsRemoveBattery(), "REMOVE BATTERY", device.device && device.battery, false, false, {}, 12);
+    uiFinalPanel(renderer_, uiItemDetailsBatterySlot(), device.device && !device.battery);
+    if (device.battery) {
+        const auto *battery = profile.assets.find(device.battery);
         if (battery) renderBaseSupplyImage(battery->definitionId, {1105, 357, 66, 38});
     }
     uiFinalText(renderer_, uiTextRenderer_, {1096, 397, 84, 24}, choose("电池槽", "SLOT"), 12);
     uiFinalTextAt(renderer_, uiTextRenderer_, 640, 458,
-        binding.deviceAssetId ? choose("将下方一节电池拖入电池槽", "Drag one battery into the slot") : "NO WEAPON LIGHT INSTALLED", 548, 12);
+        device.device ? choose("将下方一节电池拖入电池槽", "Drag one battery into the slot") : "NO WEAPON LIGHT INSTALLED", 548, 12);
     for (std::size_t slot = 0; slot < kUiDetailsBatteryPageSize; ++slot) {
         const auto index = deviceBatteryPage_ * kUiDetailsBatteryPageSize + slot;
         const auto bounds = uiItemDetailsBattery(slot);
@@ -14811,6 +15003,8 @@ void App::handleProfileContextMenuClick(MousePosition position, bool inRaid) {
     case UiItemAction::WeaponDetails:
     case UiItemAction::MeleeDetails:
     case UiItemAction::DecoyDetails:
+    case UiItemAction::HelmetDetails:
+    case UiItemAction::NightVisionDetails:
         itemDetailsInteraction_ = {}; deviceBatteryDrag_.reset();
         profileDetailsAsset_ = id;
         return;

@@ -1750,8 +1750,19 @@ RaidSightParameters GameplayWorld::currentObservationParameters() const noexcept
     const auto optic = activeWeaponOptic();
     if (!lightConeObservationEnabled_ && optic == WeaponOpticMode::None)
         return {360, 0};
-    const auto ambient = observationLightSpace_ == activeRaidSpaceId()
+    auto ambient = observationLightSpace_ == activeRaidSpaceId()
         ? observationParameters_ : raidSightParameters(currentObservationEnvironment());
+    if (nightVisionOutdoor_.maximumDistance > 0)
+    {
+        const auto environment = currentObservationEnvironment();
+        if (environment != RaidLightEnvironment::DayOutdoor)
+        {
+            const auto powered = environment == RaidLightEnvironment::WeakIndoor
+                ? nightVisionIndoor_ : nightVisionOutdoor_;
+            ambient.angleDegrees = std::max(ambient.angleDegrees, powered.angleDegrees);
+            ambient.maximumDistance = std::max(ambient.maximumDistance, powered.maximumDistance);
+        }
+    }
     if (optic == WeaponOpticMode::None)
         return ambient;
     const auto environment = inOutdoorRaidSpace()
@@ -1765,6 +1776,12 @@ Vec2 GameplayWorld::currentObservationDirection() const noexcept
     Vec2 direction = observationDirectionFrozen_ ? observationDirection_ : weaponAimDirection();
     const float length=std::hypot(direction.x,direction.y);
     return std::isfinite(length) && length>0.0001F ? Vec2{direction.x/length,direction.y/length} : observationDirection_;
+}
+
+void GameplayWorld::setNightVision(RaidSightParameters outdoor, RaidSightParameters indoor) noexcept
+{
+    nightVisionOutdoor_ = nightVisionSupported() ? outdoor : RaidSightParameters{};
+    nightVisionIndoor_ = nightVisionSupported() ? indoor : RaidSightParameters{};
 }
 
 void GameplayWorld::setWeaponLight(std::uint64_t device, std::uint64_t battery, float angle, float distance, float radius) noexcept

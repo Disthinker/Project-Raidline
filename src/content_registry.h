@@ -21,12 +21,24 @@ inline constexpr std::string_view kOpticsContentVersion{
     "raid-optics-loot-gunsmith-content-75"};
 inline constexpr std::string_view kAmmoLoopContentVersion{
     "raid-5-45-ammo-loop-content-76"};
+inline constexpr std::string_view kHospitalNightOperationsContentVersion{
+    "raid-hospital-night-operations-content-77"};
 inline const ItemDefinitionId kFixedRaidOpticId{"item.component.optic_4x_5_45"};
 inline const ItemDefinitionId kExpanding545AmmunitionId{"item.ammunition.5_45x39_expanding"};
+inline const ItemDefinitionId kHospitalNightVisionId{"item.device.night_vision_basic"};
+
+[[nodiscard]] inline bool isHospitalNightVisionLootSlot(
+    const MapDefinitionId &map, const RaidSpaceDefinitionId &space, std::string_view slotId)
+{
+    return map.value() == "map.raid.hospital_district" &&
+        space.value() == "raid_space.hospital_district.main_building" &&
+        slotId == "hospital_service";
+}
 
 [[nodiscard]] inline bool opticsCompatibleContent(std::string_view version) noexcept
 {
-    return version == kOpticsContentVersion || version == kAmmoLoopContentVersion;
+    return version == kOpticsContentVersion || version == kAmmoLoopContentVersion ||
+        version == kHospitalNightOperationsContentVersion;
 }
 
 [[nodiscard]] inline bool runnerCompatibleContent(std::string_view version) noexcept

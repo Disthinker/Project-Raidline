@@ -295,7 +295,7 @@ std::size_t populatePublishedWarehouseCatalog(
             continue;
         }
         // Tactical equipment is purchased, never an automatic catalog grant.
-        if (!definition.weaponLight && !definition.battery && !definition.meleeUse && !definition.noiseDecoyUse && !definition.grenadeUse &&
+        if (!definition.weaponLight && !definition.nightVision && !definition.battery && !definition.meleeUse && !definition.noiseDecoyUse && !definition.grenadeUse &&
             !(definition.weaponComponent &&
               (definition.weaponComponent->slot == WeaponComponentSlot::Muzzle ||
                definition.weaponComponent->slot == WeaponComponentSlot::Optic)))
@@ -540,7 +540,7 @@ AssetInstanceId AssetRegistry::create(
         std::nullopt,
         WeaponMalfunctionType::None,
         std::move(location)};
-    if (definition.weaponLight) record.deviceState = TacticalDeviceState{};
+    if (definition.weaponLight || definition.nightVision) record.deviceState = TacticalDeviceState{};
     if (definition.weaponUse) record.fireMode = definition.weaponUse->defaultFireMode;
     if (!records_.emplace(id, std::move(record)).second)
     {
@@ -858,6 +858,11 @@ bool assetIsCarried(
             current = battery->deviceAssetId;
             continue;
         }
+        if (const auto *mount = std::get_if<InstalledHelmetDeviceLocation>(&asset->location))
+        {
+            current = mount->helmetAssetId;
+            continue;
+        }
         return false;
     }
     return false;
@@ -996,6 +1001,11 @@ bool assetIsBaseAccessible(
             current = battery->deviceAssetId;
             continue;
         }
+        if (const auto *mount = std::get_if<InstalledHelmetDeviceLocation>(&asset->location))
+        {
+            current = mount->helmetAssetId;
+            continue;
+        }
         return false;
     }
     return false;
@@ -1122,6 +1132,8 @@ bool assetIsLegacyOverflowAsset(
             instanceId = component->weaponAssetId;
         else if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&asset->location))
             instanceId = battery->deviceAssetId;
+        else if (const auto *mount = std::get_if<InstalledHelmetDeviceLocation>(&asset->location))
+            instanceId = mount->helmetAssetId;
         else return false;
     }
     return false;
@@ -2083,6 +2095,7 @@ ProfileValidationResult validateProfileState(
         }
 
         if (std::holds_alternative<InstalledWeaponComponentLocation>(asset.location) ||
+            std::holds_alternative<InstalledHelmetDeviceLocation>(asset.location) ||
             std::holds_alternative<InstalledDeviceBatteryLocation>(asset.location))
             continue;
 
@@ -4161,6 +4174,7 @@ ProfileValidationResult validateProfileState(
         }
         std::set<AssetInstanceId> snapshotLoot;
         std::set<std::uint32_t> snapshotSlots;
+        bool foundNightVisionSlot{};
         for (std::size_t lootIndex{};
              lootIndex < raid.loot.size(); ++lootIndex)
         {
@@ -4173,6 +4187,7 @@ ProfileValidationResult validateProfileState(
                 raidMap->highRisk.advancedLootSlots.size();
             bool validSlot{};
             bool validPosition{};
+            bool nightVisionSlot{};
             const RaidSelfRecoveryRootSnapshot *recoveryRoot{};
             if (raid.selfRecovery.has_value())
             {
@@ -4333,10 +4348,11 @@ ProfileValidationResult validateProfileState(
                             loot.slotIndex < end;
                         if (validSlot)
                         {
-                            const Vec2 expected = interior.lootSlots[
-                                loot.slotIndex - firstInteriorSlot].position;
+                            const auto &slot = interior.lootSlots[loot.slotIndex - firstInteriorSlot];
+                            const Vec2 expected = slot.position;
                             validPosition = loot.position.x == expected.x &&
                                 loot.position.y == expected.y;
+                            nightVisionSlot = isHospitalNightVisionLootSlot(raid.mapDefinitionId, interior.id, slot.id);
                         }
                         break;
                     }
@@ -4429,7 +4445,18 @@ ProfileValidationResult validateProfileState(
             if (loot.definitionId == kFixedRaidOpticId &&
                 !fixedResourceOptic && recoveryRoot == nullptr)
                 return {false, "pending Raid optic is outside its fixed loot slot"};
+            if (nightVisionSlot && raid.hospitalNightVisionLoot)
+            {
+                if (regionalMissionCount != 0U || loot.definitionId != kHospitalNightVisionId ||
+                    loot.quantity != 1U || loot.requiresHighRisk || loot.sceneContainerAssetId)
+                    return {false, "pending hospital night vision slot is invalid"};
+                foundNightVisionSlot = true;
+            }
+            else if (loot.definitionId == kHospitalNightVisionId && recoveryRoot == nullptr)
+                return {false, "pending Raid night vision is outside its fixed loot slot"};
         }
+        if (raid.hospitalNightVisionLoot && !foundNightVisionSlot)
+            return {false, "pending hospital night vision slot is missing"};
         for (AssetInstanceId groundAssetId : groundAssetIds)
         {
             if (!snapshotLoot.contains(groundAssetId))
@@ -5271,6 +5298,11 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, 8U);
             hashInteger(hash, component->weaponAssetId);
         }
+        else if (const auto *mount = std::get_if<InstalledHelmetDeviceLocation>(&asset.location))
+        {
+            hashInteger(hash, 19U);
+            hashInteger(hash, mount->helmetAssetId);
+        }
         else if (const auto *ground =
                      std::get_if<RaidGroundAssetLocation>(&asset.location))
         {
@@ -5404,6 +5436,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashBytes(hash, raid.raidId);
         hashBytes(hash, raid.settlementId);
         hashBytes(hash, raid.rulesVersion);
+        if (raid.hospitalNightVisionLoot) hashBytes(hash, "hospital-night-vision-loot-v1");
         hashBytes(hash, raid.mapDefinitionId.value());
         hashInteger(hash, raid.seed);
         hashBytes(hash, raid.spawnExtractionPairId);

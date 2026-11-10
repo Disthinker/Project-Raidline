@@ -87,7 +87,7 @@ private:
     mutable std::array<std::optional<VerifiedEnvelope>, 4> verifiedEnvelopes_;
     mutable std::size_t nextVerifiedEnvelope_{};
     [[nodiscard]] SaveWriteResult preserveLayoutMigrationSources(
-        SaveLoadStatus loadedFrom, std::string_view marker) const;
+        SaveLoadStatus loadedFrom, std::string_view marker, bool onlyBackup = false) const;
     std::filesystem::path directory_;
     std::filesystem::path primaryPath_;
     std::filesystem::path backupPath_;
@@ -98,7 +98,7 @@ private:
 [[nodiscard]] std::string serializeProfileEnvelope(
     const ProfileState &profile,
     std::string_view contentVersion,
-    std::uint32_t schemaVersion = 60);
+    std::uint32_t schemaVersion = 61);
 
 [[nodiscard]] SaveLoadResult deserializeProfileEnvelope(
     std::string_view text,

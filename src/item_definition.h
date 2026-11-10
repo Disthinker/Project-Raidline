@@ -351,6 +351,19 @@ struct WeaponLightDefinition
     std::uint32_t lowBatteryPercent{20}, lowOutputIntervalMs{25000}, flickerDurationMs{150};
 };
 
+struct NightVisionOutputDefinition
+{
+    static constexpr std::uint32_t lowBatteryPercent = 20;
+    float outdoorAngleDegrees{}, outdoorDistance{}, indoorAngleDegrees{}, indoorDistance{};
+    std::uint32_t fullOutputSeconds{};
+};
+
+struct NightVisionDefinition
+{
+    ItemDefinitionId helmetDefinitionId;
+    NightVisionOutputDefinition output;
+};
+
 struct WeaponComponentDefinition
 {
     ItemDefinitionId weaponDefinitionId;
@@ -457,6 +470,7 @@ struct ItemDefinition
     std::optional<WeaponUseDefinition> weaponUse;
     std::optional<WeaponComponentDefinition> weaponComponent;
     std::optional<WeaponLightDefinition> weaponLight;
+    std::optional<NightVisionDefinition> nightVision;
     bool battery{};
 
     // Versioned content fact used by extraction and future encumbrance

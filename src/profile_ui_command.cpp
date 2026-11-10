@@ -286,6 +286,13 @@ ProfileUiPrepared prepareProfileUiCommand(ProfileState &candidate, const Content
                     facts.resetWeaponConfiguration = facts.clearWeaponOverrides = true;
                 return resultOf(std::move(receipt), facts, typed.weaponAssetId);
             }
+            else if constexpr (std::is_same_v<Command, HelmetDeviceCommand>)
+            {
+                if (!world || !world->canAccessStash())
+                    return resultOf(reject<InventoryReceipt>(candidate.revision,
+                        DomainErrorCode::IllegalDestination, "HELMET FITTING NEEDS BASE STORAGE"));
+                return resultOf(executeHelmetDeviceChange(candidate, content, typed, context), {}, typed.helmetAssetId);
+            }
             else if constexpr (std::is_same_v<Command, DeviceBatteryCommand>)
             {
                 if(!world) return resultOf(reject<InventoryReceipt>(candidate.revision,

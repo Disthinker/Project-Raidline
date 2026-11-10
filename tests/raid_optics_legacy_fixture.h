@@ -4,9 +4,25 @@
 #include <algorithm>
 #include <nlohmann/json.hpp>
 
-inline nlohmann::json contentBeforeAmmoLoopJson()
+inline nlohmann::json contentBeforeHospitalNightOperationsJson()
 {
     auto document = nlohmann::json::parse(publishedContentJson());
+    document["content_version"] = std::string{kAmmoLoopContentVersion};
+    auto &items = document["items"];
+    items.erase(std::remove_if(items.begin(), items.end(), [](const auto &item) {
+        return item.at("id") == std::string{kHospitalNightVisionId.value()};
+    }), items.end());
+    return document;
+}
+
+inline ContentRegistry contentBeforeHospitalNightOperations()
+{
+    return ContentRegistry::fromJson(contentBeforeHospitalNightOperationsJson().dump());
+}
+
+inline nlohmann::json contentBeforeAmmoLoopJson()
+{
+    auto document = contentBeforeHospitalNightOperationsJson();
     document["content_version"] = std::string{kOpticsContentVersion};
     auto &items = document["items"];
     items.erase(std::remove_if(items.begin(), items.end(), [](const auto &item) {

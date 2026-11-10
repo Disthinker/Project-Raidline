@@ -642,6 +642,7 @@ function(raidline_add_test target source module)
        OR target STREQUAL "NoiseDecoyTest" OR target STREQUAL "GrenadePerformanceTest"
        OR target STREQUAL "RunnerInfectedPerformanceTest"
        OR target STREQUAL "WeaponHandlingPerformanceTest"
+       OR target STREQUAL "NightVisionRuntimeTest"
        OR target STREQUAL "PlayerInventoryLatencyTest")
         # Timing gates need an isolated CPU/allocator, not competition with
         # the concurrent 128-seed map validation and other test processes.
@@ -1085,6 +1086,9 @@ set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
 
 raidline_add_test(WeaponComponentsTest tests/test_weapon_components.cpp raidline::services)
 raidline_add_test(WeaponLightTest tests/test_weapon_light.cpp raidline::services)
+raidline_add_test(NightVisionRuntimeTest tests/test_night_vision_runtime.cpp raidline::services)
+raidline_add_test(NightVisionUiTest tests/test_night_vision_ui.cpp raidline::sdl_client)
+raidline_add_test(NightVisionDomainTest tests/test_night_vision_domain.cpp raidline::services)
 raidline_add_test(NoiseDecoyTest tests/test_noise_decoy.cpp raidline::services)
 raidline_add_test(NoiseDecoyUiTest tests/test_noise_decoy_ui.cpp raidline::sdl_client)
 raidline_add_test(MeleeAttackTest tests/test_melee_attack.cpp raidline::services)

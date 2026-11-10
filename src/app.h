@@ -196,6 +196,7 @@ private:
     friend struct FortificationBuildUiTestAccess;
     friend struct WeaponInventoryUiTestAccess;
     friend struct TacticalDeviceUiTestAccess;
+    friend struct NightVisionUiTestAccess;
     friend struct MeleeUiTestAccess;
     friend struct NoiseDecoyUiTestAccess;
     friend struct DeveloperRangeUiTestAccess;
@@ -390,6 +391,12 @@ private:
     void executeBaseSupplyAction();
     void renderBaseSupplyImage(const ItemDefinitionId &, const SDL_FRect &);
     void renderQuickWheel(UiQuickWheelKind, const std::vector<AssetInstanceId> &, std::size_t);
+    void renderQuickWheelEntries(UiQuickWheelKind, const std::vector<UiQuickWheelEntry> &,
+                                 const UiQuickWheelLayout &);
+    void renderTacticalDeviceWheel();
+    void updateTacticalDeviceWheelInput(GameplayInput &);
+    [[nodiscard]] bool quickWheelOpen() const noexcept;
+    Vec2 tacticalDeviceReleasePointer_{};
     UiQuickWheelBackdrop quickWheelBackdrop_;
     UiQuickWheelProjection quickWheelProjection_;
     UiQuickWheelLayout quickWheelLayout_;
@@ -622,6 +629,7 @@ private:
     void executeProfileContextAction(AssetInstanceId, bool inRaid);
     void cycleProfileFireMode(AssetInstanceId);
     void changeInventoryBattery(DeviceBatteryCommand);
+    void changeInventoryHelmetDevice(HelmetDeviceCommand);
     template<class Callback> void submitWeaponAmmoUi(WeaponAmmoCommand command,std::string tx,Callback callback) {
         if(gameSession_.alphaRaidActive() || gameSession_.developerRangeActive())
             callback(gameSession_.executeProfileWeaponAmmo(command,std::move(tx)));
@@ -786,7 +794,7 @@ private:
     void renderProfileMeleeDetails(const AssetRecord &,const ItemDefinition &);
     void renderMeleeSwing(const WorldMeleeRuntime &);
     void renderMeleeStatus();
-    void handleWeaponLightDetailsPointer(const InventoryPointerEvent &, bool inRaid);
+    void handleProfileDetailsPointer(const InventoryPointerEvent &, bool inRaid);
     std::optional<ProfileDragSource> deviceBatteryDrag_;
     MousePosition deviceBatteryDragPosition_{};
     std::size_t deviceBatteryPage_{};

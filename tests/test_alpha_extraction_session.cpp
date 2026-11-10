@@ -81,6 +81,27 @@ std::uint64_t greylineWestSpawnSeed()
     throw std::logic_error{"no deterministic rescue test seed was found"};
 }
 
+std::uint64_t hospitalMedicalLootSeed(const ProfileState &profile)
+{
+    const auto &content = publishedContentRegistry();
+    const MapDefinitionId hospital{"map.raid.hospital_district"};
+    const RaidSpaceDefinitionId interior{"raid_space.hospital_district.main_building"};
+    for (std::uint64_t seed = 1; seed <= 16; ++seed)
+    {
+        auto probe = profile;
+        const auto deployed = executeDeploy(probe, content,
+            {"hospital-medical-probe", "hospital-medical-probe-end", seed, hospital},
+            {probe.revision, "hospital-medical-probe-deploy"});
+        if (!deployed.succeeded)
+            throw std::logic_error{deployed.message};
+        if (std::any_of(probe.pendingRaid->loot.begin(), probe.pendingRaid->loot.end(), [&](const auto &loot) {
+            return loot.spaceId == interior && content.item(loot.definitionId).medicalUse.has_value();
+        }))
+            return seed;
+    }
+    throw std::logic_error{"no deterministic hospital medical Loot seed was found"};
+}
+
 TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
 {
     GameSession session;
@@ -686,7 +707,8 @@ TEST(AlphaExtractionSessionTest, HospitalMedicineKeepsCarriedLocationAcrossDiskR
         const auto backpack = assets(session.profile(), alpha_content::backpack).front();
         ASSERT_TRUE(session.executeProfileInventory(
             InventoryEquipCommand{backpack, EquipmentSlotKind::Backpack}, "hospital-equip").succeeded);
-        ASSERT_TRUE(session.deployAlpha(42U, MapDefinitionId{"map.raid.hospital_district"}));
+        ASSERT_TRUE(session.deployAlpha(hospitalMedicalLootSeed(session.profile()),
+            MapDefinitionId{"map.raid.hospital_district"}));
         const auto interior = session.profile().pendingRaid->interiors.front();
         auto &player = const_cast<Player &>(session.world().player());
         ASSERT_TRUE(player.setPosition(interior.exteriorEntrance.position));
@@ -702,6 +724,7 @@ TEST(AlphaExtractionSessionTest, HospitalMedicineKeepsCarriedLocationAcrossDiskR
         medicalId = found->assetId;
         const auto position = found->position;
         ASSERT_TRUE(player.setPosition({position.x - 25, position.y - 25}));
+        interact.aimWorldPosition = {position.x + 60.0F, position.y};
         session.update(interact, 0);
         ASSERT_NE(session.profile().assets.find(medicalId), nullptr);
         carriedLocation = session.profile().assets.find(medicalId)->location;
@@ -736,6 +759,135 @@ TEST(AlphaExtractionSessionTest, HospitalMedicineKeepsCarriedLocationAcrossDiskR
     EXPECT_TRUE(after == nullptr || after->remainingCharges < before);
     EXPECT_EQ(profile.currency, currency);
     EXPECT_TRUE(validateProfileState(profile, content).valid);
+}
+
+TEST(AlphaExtractionSessionTest, HospitalNightVisionFollowsLootAssemblySecondSortieAndReopen)
+{
+    const auto &content = publishedContentRegistry();
+    const MapDefinitionId hospital{"map.raid.hospital_district"};
+    auto profile = makeNewPublishedProfile("hospital-night-loop", content);
+    profile.tutorial = TutorialProgress::Complete;
+    const auto bags = assets(profile, alpha_content::backpack);
+    ASSERT_FALSE(bags.empty());
+    ASSERT_TRUE(executeInventory(profile, content,
+        InventoryEquipCommand{bags.front(), EquipmentSlotKind::Backpack},
+        {profile.revision, "night-test-pack"}).succeeded);
+
+    const auto makeStored = [&](const ItemDefinitionId &id) {
+        const auto &definition = content.item(id);
+        const auto fit = findFirstProfileFit(profile, content, ProfileContainerId::stash(),
+            definition, ItemOrientation::Degrees0);
+        return fit ? profile.assets.create(definition,
+            StoredAssetLocation{ProfileContainerId::stash(), *fit}) : AssetInstanceId{};
+    };
+    const auto helmet = makeStored(ItemDefinitionId{"item.protective_gear.helmet_basic"});
+    const auto battery = makeStored(ItemDefinitionId{"item.battery.universal"});
+    ASSERT_NE(helmet, 0U);
+    ASSERT_NE(battery, 0U);
+    ASSERT_TRUE(executeInventory(profile, content,
+        InventoryEquipCommand{helmet, EquipmentSlotKind::Helmet},
+        {profile.revision, "night-test-helmet"}).succeeded);
+    const auto capacity = profile.assets.find(battery)->remainingCharges;
+
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-hospital-night-", "two-sorties");
+    ASSERT_TRUE(SaveRepository(directory.path()).save(profile, content.contentVersion()).succeeded);
+    BaseWorld base;
+    GameSession session;
+    session.configurePersistence(directory.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    const auto move = [&](Vec2 position) {
+        return const_cast<Player &>(session.world().player()).setPosition(position);
+    };
+    GameplayInput interact;
+    interact.interactJustPressed = true;
+    const auto pickUp = [&](const RaidLootSnapshot &loot) {
+        const float half = session.world().player().size() * 0.5F;
+        ASSERT_TRUE(move({loot.position.x - half, loot.position.y - half}));
+        auto action = interact;
+        action.aimWorldPosition = {loot.position.x + 60.0F, loot.position.y};
+        session.update(action, 0.0F);
+        ASSERT_TRUE(assetIsCarried(session.profile(), loot.assetId)) << session.persistenceMessage();
+    };
+    const auto extract = [&] {
+        ASSERT_TRUE(move(session.world().extractionPoint().bounds().position));
+        for (int frame = 0; frame < 45 && session.profile().pendingRaid; ++frame)
+            session.update({}, 0.1F);
+        ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+        ASSERT_FALSE(session.profile().pendingRaid);
+    };
+    ASSERT_TRUE(session.deployAlpha(42U, hospital)) << session.persistenceMessage();
+    EXPECT_EQ(session.worldClockProjection().timeOfDay, WorldTimeOfDay::Day);
+    const auto firstInterior = session.profile().pendingRaid->interiors.front();
+    ASSERT_TRUE(move(firstInterior.exteriorEntrance.position));
+    session.update(interact, 0.0F);
+    ASSERT_FALSE(session.world().inOutdoorRaidSpace());
+    const auto &firstLoot = session.profile().pendingRaid->loot;
+    const auto device = std::find_if(firstLoot.begin(), firstLoot.end(), [](const auto &loot) {
+        return loot.definitionId == kHospitalNightVisionId;
+    });
+    ASSERT_NE(device, firstLoot.end());
+    const RaidLootSnapshot foundDevice = *device;
+    ASSERT_NO_FATAL_FAILURE(pickUp(foundDevice));
+    ASSERT_TRUE(move(firstInterior.interiorExit.position));
+    session.update(interact, 0.0F);
+    ASSERT_TRUE(session.world().inOutdoorRaidSpace());
+    ASSERT_NO_FATAL_FAILURE(extract());
+
+    ASSERT_TRUE(base.canAccessStash());
+    session.bindBasePlayerWorld(&base);
+    const auto installed = session.requestProfileUiCommand(
+        HelmetDeviceCommand{helmet, foundDevice.assetId}, "night-loop-install");
+    ASSERT_TRUE(installed.accepted) << installed.message;
+    ASSERT_TRUE(waitForProfileUiDurability(session));
+    EXPECT_EQ(findNightVision(session.profile(), content, helmet).deviceAssetId, foundDevice.assetId);
+    const auto powered = session.changeDeviceBattery({foundDevice.assetId, battery}, "night-loop-power");
+    ASSERT_TRUE(powered.succeeded) << powered.message;
+    ASSERT_TRUE(session.executeBaseRest(6, "night-loop-rest").succeeded);
+    ASSERT_TRUE(waitForProfileUiDurability(session));
+    const auto travel = queryRaidTravel(session.profile(), content, content.map(hospital));
+    ASSERT_TRUE(travel.reachable);
+    EXPECT_EQ(travel.arrival.timeOfDay, WorldTimeOfDay::Night);
+    const auto isMedical = [&](const RaidLootSnapshot &loot) {
+        return loot.spaceId == firstInterior.id && content.item(loot.definitionId).medicalUse.has_value();
+    };
+    const auto medicalSeed = hospitalMedicalLootSeed(session.profile());
+    session.bindBasePlayerWorld(nullptr);
+    ASSERT_TRUE(session.deployAlpha(medicalSeed, hospital)) << session.persistenceMessage();
+
+    GameplayInput tap;
+    tap.lightJustPressed = tap.lightJustReleased = true;
+    session.update(tap, 0.0F);
+    ASSERT_TRUE(session.activeNightVision().output) << session.persistenceMessage();
+    session.update({}, 0.1F);
+    EXPECT_LT(session.activeNightVision().remainingCharges, capacity);
+    const auto secondInterior = session.profile().pendingRaid->interiors.front();
+    ASSERT_TRUE(move(secondInterior.exteriorEntrance.position));
+    session.update(interact, 0.0F);
+    ASSERT_FALSE(session.world().inOutdoorRaidSpace());
+    EXPECT_TRUE(session.activeNightVision().output);
+    const auto &secondLoot = session.profile().pendingRaid->loot;
+    const auto medical = std::find_if(secondLoot.begin(), secondLoot.end(), isMedical);
+    ASSERT_NE(medical, secondLoot.end());
+    const RaidLootSnapshot foundMedical = *medical;
+    ASSERT_NO_FATAL_FAILURE(pickUp(foundMedical));
+    ASSERT_TRUE(move(secondInterior.interiorExit.position));
+    session.update(interact, 0.0F);
+    ASSERT_TRUE(session.world().inOutdoorRaidSpace());
+    ASSERT_NO_FATAL_FAILURE(extract());
+
+    GameSession reopened;
+    reopened.configurePersistence(directory.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    const auto binding = findNightVision(reopened.profile(), content, helmet);
+    EXPECT_EQ(binding.deviceAssetId, foundDevice.assetId);
+    EXPECT_EQ(binding.batteryAssetId, battery);
+    const auto *cell = reopened.profile().assets.find(battery);
+    ASSERT_NE(cell, nullptr);
+    EXPECT_GT(cell->remainingCharges, 0U);
+    EXPECT_LT(cell->remainingCharges, capacity);
+    EXPECT_EQ(cell->remainingCharges, session.profile().assets.find(battery)->remainingCharges);
+    EXPECT_TRUE(assetIsCarried(reopened.profile(), foundMedical.assetId));
 }
 
 TEST(AlphaExtractionSessionTest, PublishedHospitalDeploysFreezesAndSettlesThroughRealSession)

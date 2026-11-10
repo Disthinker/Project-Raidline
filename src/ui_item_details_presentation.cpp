@@ -12,13 +12,24 @@ std::string label(UiLanguage language, const char *chinese, const char *english)
 }
 } // namespace
 
+bool supportsUiNightVisionMount(const ContentRegistry &content, const ItemDefinition &definition)
+{
+    if (definition.equipmentSlot != EquipmentSlotKind::Helmet) return false;
+    const auto &definitions = content.items();
+    return std::any_of(definitions.begin(), definitions.end(), [&](const ItemDefinition &device) {
+        return device.nightVision && device.nightVision->helmetDefinitionId == definition.definitionId;
+    });
+}
+
 std::optional<UiItemDetailsProjection> projectUiItemDetails(
     const ProfileState &profile, const ContentRegistry &content,
     AssetInstanceId id, UiLanguage language) {
     const auto *asset = profile.assets.find(id);
     if (!asset) return std::nullopt;
     const auto &definition = content.item(asset->definitionId);
-    if (!definition.weaponUse && !definition.meleeUse && !definition.noiseDecoyUse && !definition.grenadeUse)
+    const bool helmet = supportsUiNightVisionMount(content, definition);
+    if (!definition.weaponUse && !definition.meleeUse && !definition.noiseDecoyUse &&
+        !definition.grenadeUse && !definition.nightVision && !helmet)
         return std::nullopt;
     UiItemDetailsProjection result;
     result.instanceId = id;
@@ -78,6 +89,14 @@ std::optional<UiItemDetailsProjection> projectUiItemDetails(
             label(language, "右键或 Esc 取消；声音不穿墙、不跨空间。", "Right-click or Esc cancels; sound stays in the current space and does not cross walls."),
             label(language, "吸引未发现你的普通感染者；不会解除追击。", "Attracts unaware common infected; does not end an active pursuit."),
             label(language, "不造成伤害，不提供照明；使用不消耗电池。", "No damage or illumination; using a decoy consumes no battery.")};
+    } else if (helmet || definition.nightVision) {
+        result.kind = helmet ? UiItemDetailsKind::Helmet : UiItemDetailsKind::NightVision;
+        result.title = localizeUiText(language, helmet ? "HELMET DETAILS" : "NIGHT VISION DETAILS");
+        if (helmet)
+            metric("耐久", "Durability", fmt::format("{} / {}",
+                asset->currentDurability, asset->currentMaximumDurability));
+        metric("重量", "Weight", fmt::format("{} g", definition.unitWeightGrams));
+        metric("尺寸", "Size", fmt::format("{} × {}", definition.inventoryWidthCells, definition.inventoryHeightCells));
     } else {
         const auto use = effectiveWeaponUse(profile, content, id);
         result.title = label(language, "枪械详情", "WEAPON DETAILS");
@@ -101,10 +120,13 @@ SDL_FRect uiItemDetailsPanel() noexcept { return {40, 48, 1200, 656}; }
 SDL_FRect uiItemDetailsBack() noexcept { return {860, 92, 340, 32}; }
 SDL_FRect uiItemDetailsImage(UiItemDetailsKind kind) noexcept {
     if (kind == UiItemDetailsKind::Decoy || kind == UiItemDetailsKind::Grenade) return {80, 190, 490, 102};
-    return kind == UiItemDetailsKind::Weapon ? SDL_FRect{80, 190, 490, 124} : SDL_FRect{80, 190, 490, 246};
+    return kind == UiItemDetailsKind::Melee
+        ? SDL_FRect{80, 190, 490, 246}
+        : SDL_FRect{80, 190, 490, 124};
 }
 SDL_FRect uiItemDetailsMetric(UiItemDetailsKind kind, std::size_t index) noexcept {
-    if (kind == UiItemDetailsKind::Weapon)
+    if (kind == UiItemDetailsKind::Weapon || kind == UiItemDetailsKind::Helmet ||
+        kind == UiItemDetailsKind::NightVision)
         return {70.0F + static_cast<float>(index % 3) * 180.0F,
                 334.0F + static_cast<float>(index / 3) * 58.0F, 166, 48};
     return {640.0F + static_cast<float>(index % 2) * 282.0F,
@@ -115,19 +137,23 @@ SDL_FRect uiItemDetailsBattery(std::size_t index) noexcept {
 }
 SDL_FRect uiItemDetailsBatterySlot() noexcept { return {1090, 350, 96, 76}; }
 SDL_FRect uiItemDetailsRemoveBattery() noexcept { return {640, 420, 150, 30}; }
+SDL_FRect uiItemDetailsHelmetDeviceButton() noexcept { return {648, 270, 184, 32}; }
 SDL_FRect uiItemDetailsPrevious() noexcept { return {70, 602, 100, 32}; }
 SDL_FRect uiItemDetailsNext() noexcept { return {190, 602, 100, 32}; }
 SDL_FRect uiItemDetailsFeedback(UiItemDetailsKind kind) noexcept {
-    if (kind == UiItemDetailsKind::Weapon) return {70, 644, 1120, 52};
+    if (kind == UiItemDetailsKind::Weapon || kind == UiItemDetailsKind::Helmet ||
+        kind == UiItemDetailsKind::NightVision) return {70, 644, 1120, 52};
     if (kind == UiItemDetailsKind::Melee) return {70, 654, 1120, 42};
     return {70, 662, 1120, 34};
 }
 
 std::optional<UiItemDetailsControl> hitUiItemDetailsControl(
-    Vec2 point, bool isWeapon, std::size_t page, std::size_t batteries,
-    bool canRemove) noexcept {
+    Vec2 point, bool hasBatteryTray, std::size_t page, std::size_t batteries,
+    bool canRemove, bool canChangeHelmetDevice) noexcept {
     if (uiContains(uiItemDetailsBack(), point)) return UiItemDetailsControl::Back;
-    if (!isWeapon) return std::nullopt;
+    if (canChangeHelmetDevice && uiContains(uiItemDetailsHelmetDeviceButton(), point))
+        return UiItemDetailsControl::ChangeHelmetDevice;
+    if (!hasBatteryTray) return std::nullopt;
     if (page && uiContains(uiItemDetailsPrevious(), point)) return UiItemDetailsControl::Previous;
     if ((page + 1) * kUiDetailsBatteryPageSize < batteries && uiContains(uiItemDetailsNext(), point)) return UiItemDetailsControl::Next;
     if (canRemove && uiContains(uiItemDetailsRemoveBattery(), point)) return UiItemDetailsControl::RemoveBattery;

@@ -54,6 +54,11 @@ std::optional<std::string> lostRaidRecordForAsset(
             current = battery->deviceAssetId;
             continue;
         }
+        if (const auto *mount = std::get_if<InstalledHelmetDeviceLocation>(&asset->location))
+        {
+            current = mount->helmetAssetId;
+            continue;
+        }
         return std::nullopt;
     }
     return std::nullopt;

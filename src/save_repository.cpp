@@ -1145,6 +1145,11 @@ Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersi
             if (schemaVersion < 53) throw std::invalid_argument("device batteries require schema 53");
             location = {{"type", "installed_device_battery"}, {"device_asset_id", battery->deviceAssetId}};
         }
+        else if (const auto *mount = std::get_if<InstalledHelmetDeviceLocation>(&asset.location))
+        {
+            if (schemaVersion < 61) throw std::invalid_argument("helmet devices require schema 61");
+            location = {{"type", "installed_helmet_device"}, {"helmet_asset_id", mount->helmetAssetId}};
+        }
         else if (const auto *component = std::get_if<InstalledWeaponComponentLocation>(&asset.location))
         {
             if (schemaVersion < 49) throw std::invalid_argument("weapon components require schema 49");
@@ -1234,6 +1239,8 @@ Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersi
 
         if (schemaVersion < 53 && asset.definitionId == ItemDefinitionId{"item.battery.universal"})
             throw std::invalid_argument("battery item requires schema 53");
+        if (schemaVersion < 61 && asset.definitionId == kHospitalNightVisionId)
+            throw std::invalid_argument("night vision item requires schema 61");
         Json value{
             {"instance_id", asset.instanceId},
             {"definition_id", asset.definitionId.value()},
@@ -1328,6 +1335,8 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
             }
             if (schemaVersion < 54 && content.item(asset.definitionId).meleeUse)
                 return {SaveLoadStatus::Failed, std::nullopt, "melee equipment requires schema 54"};
+            if (schemaVersion < 61 && definition.nightVision)
+                return {SaveLoadStatus::Failed, std::nullopt, "night vision equipment requires schema 61"};
             if (schemaVersion < 53 && (content.item(asset.definitionId).battery || content.item(asset.definitionId).weaponLight || value.contains("device_state")))
                 return {SaveLoadStatus::Failed, std::nullopt, "electronic state requires schema 53"};
             asset.quantity = value.at("quantity").get<std::uint32_t>();
@@ -1502,6 +1511,8 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
                     RaidSpaceDefinitionId{location.at("space_id").get<std::string>()}, {location.at("x").get<float>(), location.at("y").get<float>()}};
             else if (schemaVersion >= 53 && locationType == "installed_device_battery")
                 asset.location = InstalledDeviceBatteryLocation{location.at("device_asset_id").get<AssetInstanceId>()};
+            else if (schemaVersion >= 61 && locationType == "installed_helmet_device")
+                asset.location = InstalledHelmetDeviceLocation{parseWeaponHandlingAssetId(location.at("helmet_asset_id"))};
             else if (schemaVersion >= 49 && locationType == "installed_weapon_component")
             {
                 asset.location = InstalledWeaponComponentLocation{location.at("weapon_asset_id").get<AssetInstanceId>()};
@@ -2205,6 +2216,12 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion)
             {"loot", std::move(loot)},
             {"carried_root_asset_ids", raid.carriedRootAssetIds},
             {"starting_health", raid.startingHealth}};
+        if (raid.hospitalNightVisionLoot)
+        {
+            if (schemaVersion < 61)
+                throw std::invalid_argument("hospital night vision Loot requires schema 61");
+            payload["pending_raid"]["hospital_night_vision_loot"] = true;
+        }
         if (schemaVersion >= 57)
         {
             Json credential = nullptr;
@@ -2952,7 +2969,10 @@ std::string serializeProfileEnvelope(
 {
     if (profile.pendingRaid && profile.pendingRaid->rulesVersion == kRaidRunnerRulesVersion &&
         !runnerCompatibleContent(contentVersion))
-        throw std::invalid_argument{"runner Raid requires compatible content 73 through 76"};
+        throw std::invalid_argument{"runner Raid requires compatible content 73 through 77"};
+    if (profile.pendingRaid && profile.pendingRaid->hospitalNightVisionLoot &&
+        contentVersion != kHospitalNightOperationsContentVersion)
+        throw std::invalid_argument{"hospital night vision Loot requires compatible content 77"};
     if (schemaVersion != 1 && schemaVersion != 2 &&
         schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 &&
         schemaVersion != 6 && schemaVersion != 7 && schemaVersion != 8 &&
@@ -2968,7 +2988,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -3148,7 +3168,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             (schemaVersion >= 57 && contentVersion == "raid-fragmentation-grenade-content-72") ||
             (schemaVersion >= 58 && contentVersion == "raid-runner-infected-content-73") ||
             (schemaVersion >= 59 && contentVersion == kWeaponHandlingContentVersion) ||
-            (schemaVersion >= 59 && contentVersion == kOpticsContentVersion);
+            (schemaVersion >= 59 && contentVersion == kOpticsContentVersion) ||
+            (schemaVersion >= 60 && contentVersion == kAmmoLoopContentVersion);
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -3170,7 +3191,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-               schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60) ||
+               schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3917,9 +3938,15 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             raid.raidId = value.at("raid_id").get<std::string>();
             raid.settlementId = value.at("settlement_id").get<std::string>();
             raid.rulesVersion = value.at("rules_version").get<std::string>();
+            if (value.contains("hospital_night_vision_loot"))
+            {
+                if (schemaVersion < 61 || contentVersion != kHospitalNightOperationsContentVersion)
+                    return {SaveLoadStatus::Failed, std::nullopt, "hospital night vision Loot requires schema 61 and content 77"};
+                raid.hospitalNightVisionLoot = value.at("hospital_night_vision_loot").get<bool>();
+            }
             if (raid.rulesVersion == kRaidRunnerRulesVersion &&
                 (schemaVersion < 58 || !runnerCompatibleContent(contentVersion)))
-                return {SaveLoadStatus::Failed, std::nullopt, "runner Raid requires schema 58+ and compatible content 73 through 76"};
+                return {SaveLoadStatus::Failed, std::nullopt, "runner Raid requires schema 58+ and compatible content 73 through 77"};
             raid.mapDefinitionId = MapDefinitionId{
                 value.at("map_definition_id").get<std::string>()};
             raid.seed = value.at("seed").get<std::uint64_t>();
@@ -5084,6 +5111,27 @@ SaveWriteResult SaveRepository::save(
     {
         return version == kWeaponHandlingContentVersion || opticsCompatibleContent(version);
     };
+    const auto isPreHospitalNightContentSource = [&](const std::filesystem::path &path, bool valid)
+    {
+        const auto &source = sourceMetadata(path);
+        return valid && contentVersion == kHospitalNightOperationsContentVersion &&
+            source && (source->schemaVersion < 61U ||
+                       source->contentVersion != kHospitalNightOperationsContentVersion);
+    };
+    const bool preHospitalNightPrimary = isPreHospitalNightContentSource(primaryPath_, validPrimary);
+    if (preHospitalNightPrimary || isPreHospitalNightContentSource(backupPath_, validBackup))
+    {
+        // An already upgraded primary may still have the former primary in
+        // the rolling backup. Archive only previously unpreserved old bytes.
+        const auto preserved = preserveLayoutMigrationSources(
+            validPrimary ? SaveLoadStatus::LoadedPrimary : SaveLoadStatus::RecoveredBackup,
+            "raid-hospital-night-operations-v1", validPrimary && !preHospitalNightPrimary);
+        if (!preserved.succeeded)
+        {
+            std::filesystem::remove(temporaryPath_, error);
+            return {false, preserved.message};
+        }
+    }
     const auto isPreAmmoLoopContentSource = [&](const std::filesystem::path &path, bool valid)
     {
         const auto &source = sourceMetadata(path);
@@ -5372,20 +5420,28 @@ SaveWriteResult SaveRepository::preserveStashMigrationSources(SaveLoadStatus sta
 SaveWriteResult SaveRepository::preserveChestRigMigrationSources(SaveLoadStatus status) const
 { return preserveLayoutMigrationSources(status, "chest-rig-v2"); }
 SaveWriteResult SaveRepository::preserveLayoutMigrationSources(
-    SaveLoadStatus loadedFrom, std::string_view marker) const
+    SaveLoadStatus loadedFrom, std::string_view marker, bool onlyBackup) const
 {
     if (loadedFrom != SaveLoadStatus::LoadedPrimary &&
         loadedFrom != SaveLoadStatus::RecoveredBackup)
         return {false, "migration has no loaded legacy source"};
 
-    const auto preserve = [&](const std::filesystem::path &source,
-                              std::string_view stem) -> SaveWriteResult
+    const std::string primaryStem = "profile.pre-" + std::string{marker} + ".";
+    const auto preserve = [&](const std::filesystem::path &source, std::string_view stem) -> SaveWriteResult
     {
         const auto bytes = readText(source);
         if (!bytes) return {false, "legacy migration source could not be read"};
-        const auto snapshot = directory_ /
-            (std::string{stem} + checksum(*bytes) + ".json");
+        const std::string suffix = checksum(*bytes) + ".json";
+        const auto snapshot = directory_ / (std::string{stem} + suffix);
         std::error_code error;
+        if (onlyBackup && std::filesystem::exists(directory_ / (primaryStem + suffix), error))
+        {
+            const auto existing = readText(directory_ / (primaryStem + suffix));
+            return existing && *existing == *bytes
+                ? SaveWriteResult{true, {}}
+                : SaveWriteResult{false, "immutable migration backup differs from source"};
+        }
+        if (error) return {false, "migration backup could not be inspected"};
         if (std::filesystem::exists(snapshot, error))
         {
             const auto existing = readText(snapshot);
@@ -5405,13 +5461,16 @@ SaveWriteResult SaveRepository::preserveLayoutMigrationSources(
     };
 
     std::error_code error;
-    if (std::filesystem::exists(primaryPath_, error))
+    if (!onlyBackup)
     {
-        const auto preserved = preserve(primaryPath_, "profile.pre-" + std::string{marker} + ".");
-        if (!preserved.succeeded) return preserved;
+        if (std::filesystem::exists(primaryPath_, error))
+        {
+            const auto preserved = preserve(primaryPath_, primaryStem);
+            if (!preserved.succeeded) return preserved;
+        }
+        else if (error || loadedFrom == SaveLoadStatus::LoadedPrimary)
+            return {false, "primary migration source could not be inspected"};
     }
-    else if (error || loadedFrom == SaveLoadStatus::LoadedPrimary)
-        return {false, "primary migration source could not be inspected"};
     error.clear();
     if (std::filesystem::exists(backupPath_, error))
         return preserve(backupPath_, "profile.backup.pre-" + std::string{marker} + ".");

@@ -98,7 +98,7 @@ TEST_F(WeaponHandlingSaveTest, Schema59RoundTripPreservesSelectedModeAndComplete
     const auto text = serializeProfileEnvelope(profile, content.contentVersion(), 59);
     auto envelope = Json::parse(text);
     EXPECT_EQ(envelope.at("schema_version"), 59U);
-    EXPECT_EQ(envelope.at("content_version").get<std::string>(), std::string{kAmmoLoopContentVersion});
+    EXPECT_EQ(envelope.at("content_version").get<std::string>(), kHospitalNightOperationsContentVersion);
     EXPECT_EQ(assetJson(envelope, rifle).at("fire_mode"), "three_round_burst");
     for (const auto &asset : envelope.at("payload").at("assets")) {
         ASSERT_TRUE(asset.contains("fire_mode"));
@@ -357,7 +357,7 @@ TEST_F(WeaponHandlingSaveTest, OpticContentKeepsSchema59And60FrozenLootAndArchiv
 }
 
 TEST_F(WeaponHandlingSaveTest, AmmoLoopUpgradeKeepsOldOrderAndPendingRaidAndArchivesBothSources) {
-    const auto &content = publishedContentRegistry();
+    const auto content = contentBeforeHospitalNightOperations();
     const auto historical = contentBeforeAmmoLoop();
     SaveRepository repository{directory.path()};
     auto source = makeNewAlphaProfile("ammo-loop-upgrade", historical);
@@ -380,10 +380,10 @@ TEST_F(WeaponHandlingSaveTest, AmmoLoopUpgradeKeepsOldOrderAndPendingRaidAndArch
     ASSERT_TRUE(source.pendingRaid);
     ASSERT_TRUE(source.baseManufacturing.activeOrder);
     const auto before = profileStateFingerprint(source);
-    const auto primary = serializeProfileEnvelope(source, historical.contentVersion());
+    const auto primary = serializeProfileEnvelope(source, historical.contentVersion(), 60);
     auto previousBackup = source;
     ++previousBackup.revision;
-    const auto backup = serializeProfileEnvelope(previousBackup, historical.contentVersion());
+    const auto backup = serializeProfileEnvelope(previousBackup, historical.contentVersion(), 60);
     writeBytes(repository.primaryPath(), primary);
     writeBytes(repository.backupPath(), backup);
 
@@ -403,7 +403,7 @@ TEST_F(WeaponHandlingSaveTest, AmmoLoopUpgradeKeepsOldOrderAndPendingRaidAndArch
     EXPECT_EQ(readBytes(archive(false, primary)), primary);
     EXPECT_EQ(readBytes(archive(true, backup)), backup);
     const auto upgraded = Json::parse(readBytes(repository.primaryPath()));
-    EXPECT_EQ(upgraded.at("schema_version"), 60U);
+    EXPECT_EQ(upgraded.at("schema_version"), 61U);
     EXPECT_EQ(upgraded.at("content_version").get<std::string>(), kAmmoLoopContentVersion);
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile) << reopened.message;
@@ -430,6 +430,43 @@ TEST_F(WeaponHandlingSaveTest, ArchiveConflictCannotReplaceEitherOriginalSlot) {
     EXPECT_EQ(readBytes(repository.backupPath()), backup);
     EXPECT_EQ(readBytes(blocked), "immutable unrelated bytes");
     EXPECT_FALSE(std::filesystem::exists(directory.path() / "profile.tmp.json"));
+}
+
+TEST_F(WeaponHandlingSaveTest, HospitalNightUpgradePreservesOldFrozenLootAndBothSourceSlots) {
+    const auto &content = publishedContentRegistry();
+    const auto historical = contentBeforeHospitalNightOperations();
+    SaveRepository repository{directory.path()};
+    auto source = makeNewAlphaProfile("old-hospital-night", historical);
+    const auto deployed = executeDeploy(source, historical,
+        {"hospital-old-raid", "hospital-old-end", 42U, MapDefinitionId{"map.raid.hospital_district"}},
+        {source.revision, "hospital-old-deploy"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(source.pendingRaid);
+    EXPECT_FALSE(source.pendingRaid->hospitalNightVisionLoot);
+    const auto primary = serializeProfileEnvelope(source, historical.contentVersion(), 60);
+    auto previousBackup = source;
+    ++previousBackup.revision;
+    const auto backup = serializeProfileEnvelope(previousBackup, historical.contentVersion(), 60);
+    writeBytes(repository.primaryPath(), primary);
+    writeBytes(repository.backupPath(), backup);
+    const auto loaded = repository.load(content);
+    ASSERT_TRUE(loaded.profile) << loaded.message;
+    ASSERT_TRUE(loaded.profile->pendingRaid);
+    EXPECT_EQ(loaded.profile->pendingRaid->loot, source.pendingRaid->loot);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(source));
+    const auto saved = repository.save(*loaded.profile, content.contentVersion());
+    ASSERT_TRUE(saved.succeeded) << saved.message;
+    const auto archive = [&](bool backupSlot, std::string_view bytes) {
+        return directory.path() / (std::string{backupSlot ? "profile.backup.pre-" : "profile.pre-"} +
+            "raid-hospital-night-operations-v1." + checksum(bytes) + ".json");
+    };
+    EXPECT_EQ(readBytes(archive(false, primary)), primary);
+    EXPECT_EQ(readBytes(archive(true, backup)), backup);
+    const auto reopened = repository.load(content);
+    ASSERT_TRUE(reopened.profile) << reopened.message;
+    ASSERT_TRUE(reopened.profile->pendingRaid);
+    EXPECT_FALSE(reopened.profile->pendingRaid->hospitalNightVisionLoot);
+    EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(source));
 }
 
 TEST_F(WeaponHandlingSaveTest, CorruptPrimaryRecoveryPreservesCorruptSourceAndValidSchema58Backup) {

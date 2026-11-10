@@ -9,6 +9,8 @@
 
 class UiTextRenderer;
 struct WeaponLightProjection;
+struct NightVisionProjection;
+[[nodiscard]] std::string_view uiNightVisionStateLabel(const NightVisionProjection &) noexcept;
 [[nodiscard]] std::string_view uiWeaponLightStateLabel(const WeaponLightProjection &) noexcept;
 [[nodiscard]] std::string_view uiWeaponFireModeName(WeaponFireMode, UiLanguage) noexcept;
 [[nodiscard]] std::string_view uiPlayerActionLabel(const RaidAction &) noexcept;
@@ -16,7 +18,7 @@ struct WeaponLightProjection;
 // inventory scan belongs to the painter; hidden map information has no field.
 struct UiRaidHudProjection {
     std::string health, armor, weapon, ammunition, condition, clock, phase;
-    std::string medical, objective, crisis, signal, action, feedback, light;
+    std::string medical, objective, crisis, signal, action, feedback, light, nightVision;
     std::array<std::string, 3> slots;
     std::size_t activeSlot{};
     float healthFraction{}, actionFraction{};

@@ -1832,12 +1832,41 @@ ContentRegistry ContentRegistry::fromJson(
             else if (definition.weaponComponent && definition.weaponComponent->slot == WeaponComponentSlot::Light)
                 fail("light slot requires light capability");
 
+            if (itemValue.contains("night_vision"))
+            {
+                const auto &value = itemValue.at("night_vision");
+                NightVisionDefinition nightVision{
+                    ItemDefinitionId{value.at("helmet").get<std::string>()},
+                    {value.at("outdoor_angle_degrees").get<float>(),
+                     value.at("outdoor_distance").get<float>(),
+                     value.at("indoor_angle_degrees").get<float>(),
+                     value.at("indoor_distance").get<float>(),
+                     requiredPositiveUint(value, "full_output_seconds")}};
+                const auto &output = nightVision.output;
+                const auto validSight = [](float angle, float distance) {
+                    return std::isfinite(angle) && angle > 0 && angle <= 180 &&
+                        std::isfinite(distance) && distance > 0 && distance <= 1500;
+                };
+                if (definition.category != ItemCategory::Loot || definition.maxStackSize != 1U ||
+                    definition.battery || definition.weaponLight || definition.weaponComponent ||
+                    definition.equipmentSlot || !definition.compatibleEquipmentSlots.empty() ||
+                    definition.marketBuyPrice || definition.marketRecyclePrice ||
+                    !validSight(output.outdoorAngleDegrees, output.outdoorDistance) ||
+                    !validSight(output.indoorAngleDegrees, output.indoorDistance) ||
+                    output.fullOutputSeconds < 30U || output.fullOutputSeconds > 600U)
+                    fail("invalid night vision capability");
+                definition.nightVision = std::move(nightVision);
+            }
+
             definition.baseContribution = parseBaseContribution(itemValue);
             definition.baseConstructionMaterialValue = optionalUint(
                 itemValue,
                 "base_construction_material");
             definition.unitWeightGrams =
                 requiredPositiveUint(itemValue, "unit_weight_grams");
+            if (definition.nightVision && (definition.baseContribution ||
+                definition.baseConstructionMaterialValue || definition.maximumCharges))
+                fail("invalid night vision resource capability");
             if (definition.baseConstructionMaterialValue >
                 registry.maximumBaseConstructionMaterials_)
             {
@@ -2212,6 +2241,20 @@ ContentRegistry ContentRegistry::fromJson(
                 definition.compatibleAmmunitionDefinitionId);
             requireItemReference(
                 definition.compatibleMagazineDefinitionId);
+            if (definition.nightVision)
+            {
+                const auto &helmetId = definition.nightVision->helmetDefinitionId;
+                const ItemDefinitionId batteryId{"item.battery.universal"};
+                if (!registry.itemIndex_.contains(helmetId))
+                    fail("night vision references an unknown helmet");
+                if (!registry.itemIndex_.contains(batteryId) || !registry.item(batteryId).battery)
+                    fail("night vision requires a universal battery");
+                const auto &helmet = registry.item(helmetId);
+                if (helmet.category != ItemCategory::ProtectiveGear ||
+                    helmet.equipmentSlot != EquipmentSlotKind::Helmet ||
+                    !helmet.armorProtection || helmet.armorProtection->coverage != HitRegion::Head)
+                    fail("night vision requires a helmet");
+            }
             for (const ItemDefinitionId &magazineId :
                  definition.compatibleMagazineDefinitionIds)
             {
@@ -4204,6 +4247,25 @@ ContentRegistry ContentRegistry::fromJson(
             }
         }
 
+        if (registry.contentVersion() == kHospitalNightOperationsContentVersion)
+        {
+            if (!registry.itemIndex_.contains(kHospitalNightVisionId) ||
+                !registry.item(kHospitalNightVisionId).nightVision ||
+                registry.item(kHospitalNightVisionId).nightVision->helmetDefinitionId.value() !=
+                    "item.protective_gear.helmet_basic")
+                fail("hospital night operations requires the basic helmet night vision device");
+            const MapDefinitionId hospitalId{"map.raid.hospital_district"};
+            if (registry.mapIndex_.contains(hospitalId))
+            {
+                const auto &hospital = registry.map(hospitalId);
+                const bool anchor = std::any_of(hospital.interiors.begin(), hospital.interiors.end(), [&](const auto &interior) {
+                    return std::any_of(interior.lootSlots.begin(), interior.lootSlots.end(), [&](const auto &slot) {
+                        return isHospitalNightVisionLootSlot(hospital.id, interior.id, slot.id);
+                    });
+                });
+                if (!anchor) fail("hospital night vision Loot anchor is missing");
+            }
+        }
         return registry;
     }
     catch (const ContentRegistryError &)
