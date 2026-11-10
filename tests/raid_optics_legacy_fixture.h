@@ -1,11 +1,32 @@
 #pragma once
 
 #include "content_registry.h"
+#include <algorithm>
 #include <nlohmann/json.hpp>
+
+inline nlohmann::json contentBeforeAmmoLoopJson()
+{
+    auto document = nlohmann::json::parse(publishedContentJson());
+    document["content_version"] = std::string{kOpticsContentVersion};
+    auto &items = document["items"];
+    items.erase(std::remove_if(items.begin(), items.end(), [](const auto &item) {
+        return item.at("id") == std::string{kExpanding545AmmunitionId.value()};
+    }), items.end());
+    auto &recipes = document["base_manufacturing"]["recipes"];
+    recipes.erase(std::remove_if(recipes.begin(), recipes.end(), [](const auto &recipe) {
+        return recipe.at("id") == "base_manufacturing.ammunition_5_45x39_expanding";
+    }), recipes.end());
+    return document;
+}
+
+inline ContentRegistry contentBeforeAmmoLoop()
+{
+    return ContentRegistry::fromJson(contentBeforeAmmoLoopJson().dump());
+}
 
 inline ContentRegistry contentBeforeOptics()
 {
-    auto document = nlohmann::json::parse(publishedContentJson());
+    auto document = contentBeforeAmmoLoopJson();
     document["content_version"] = std::string{kWeaponHandlingContentVersion};
     auto &items = document["items"];
     for (auto it = items.begin(); it != items.end();)

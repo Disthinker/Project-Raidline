@@ -15,6 +15,8 @@
 #include "weapon_component_domain.h"
 #include "profile_ui_test_wait.h"
 #include "medical_domain.h"
+#include "test_temp_directory.h"
+#include "weapon_handling_fixture.h"
 
 namespace
 {
@@ -103,6 +105,156 @@ TEST(AlphaExtractionSessionTest, ExplicitMapSelectionBuildsSelectedRaidWorld)
     EXPECT_EQ(
         session.profile().pendingRaid->rulesVersion,
         "procedural-playable-outdoor-layout-21");
+}
+
+TEST(AlphaExtractionSessionTest, ExpandingAmmoFollowsLootWorkshopMixedFireAndExtraction)
+{
+    const auto &content = publishedContentRegistry();
+    const MapDefinitionId frontier{"map.raid.frontier_exchange"};
+    const ItemDefinitionId precision{"item.loot.precision_components"};
+    const ItemDefinitionId expanding{"item.ammunition.5_45x39_expanding"};
+    const ItemDefinitionId standard{"item.ammunition.5_45x39_standard"};
+    const ItemDefinitionId enhanced{"item.ammunition.5_45x39_enhanced"};
+    auto profile = makeNewPublishedProfile("mixed-ammo-loop", content);
+    profile.tutorial = TutorialProgress::Complete;
+    for (const auto material : assets(profile, precision))
+        ASSERT_TRUE(profile.assets.erase(material));
+    const auto guns = assets(profile, ItemDefinitionId{"item.weapon.rifle_5_45_service"});
+    const auto magazines = assets(profile, ItemDefinitionId{"item.magazine.5_45x39_30"});
+    const auto backpacks = assets(profile, alpha_content::backpack);
+    ASSERT_FALSE(guns.empty());
+    ASSERT_FALSE(magazines.empty());
+    ASSERT_FALSE(backpacks.empty());
+    const auto gun = guns.front();
+    const auto magazine = magazines.front();
+    ASSERT_TRUE(executeInventory(profile, content,
+        InventoryEquipCommand{backpacks.front(), EquipmentSlotKind::Backpack},
+        {profile.revision, "ammo-loop-bag"}).succeeded);
+    ASSERT_TRUE(executeInventory(profile, content,
+        InventoryEquipCommand{gun, EquipmentSlotKind::PrimaryWeapon},
+        {profile.revision, "ammo-loop-rifle"}).succeeded);
+    EXPECT_TRUE(assets(profile, expanding).empty());
+
+    const auto isPrecisionLoot = [&](const RaidLootSnapshot &item) {
+        return item.definitionId == precision && item.sceneContainerAssetId == 0 &&
+            item.spaceId == outdoorRaidSpaceId() && !item.requiresHighRisk &&
+            (item.resourcePointInstanceId.starts_with("resource_point.frontier.fabrication_stock:") ||
+             item.resourcePointInstanceId.starts_with("resource_point.frontier.secured_cargo:"));
+    };
+    std::uint64_t lootSeed{};
+    for (std::uint64_t seed = 1; seed <= 32 && lootSeed == 0; ++seed)
+    {
+        auto probe = profile;
+        ASSERT_TRUE(executeDeploy(probe, content, {"ammo-loot-probe", "ammo-loot-probe-settlement",
+            seed, frontier}, {probe.revision, "ammo-loot-probe-deploy"}).succeeded);
+        if (std::any_of(probe.pendingRaid->loot.begin(), probe.pendingRaid->loot.end(), isPrecisionLoot))
+            lootSeed = seed;
+    }
+    ASSERT_NE(lootSeed, 0U);
+
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-ammo-loop-", "workshop-combat-extraction");
+    ASSERT_TRUE(SaveRepository(directory.path()).save(profile, content.contentVersion()).succeeded);
+    GameSession session;
+    session.configurePersistence(directory.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    ASSERT_TRUE(session.deployAlpha(lootSeed, frontier)) << session.persistenceMessage();
+    const auto &loot = session.profile().pendingRaid->loot;
+    const auto found = std::find_if(loot.begin(), loot.end(), isPrecisionLoot);
+    ASSERT_NE(found, loot.end());
+    const auto material = found->assetId;
+    const Vec2 lootPosition = found->position;
+    auto &player = const_cast<Player &>(session.world().player());
+    const float half = player.size() * 0.5F;
+    ASSERT_TRUE(player.setPosition({lootPosition.x - half, lootPosition.y - half}));
+    GameplayInput pickUp;
+    pickUp.aimWorldPosition = {lootPosition.x + 60.0F, lootPosition.y};
+    pickUp.interactJustPressed = true;
+    session.update(pickUp, 0.0F);
+    ASSERT_TRUE(assetIsCarried(session.profile(), material)) << session.persistenceMessage();
+
+    const auto extract = [&] {
+        ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(
+            session.world().extractionPoint().bounds().position));
+        for (int frame = 0; frame < 45 && session.profile().pendingRaid; ++frame)
+            session.update({}, 0.1F);
+        ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+        ASSERT_FALSE(session.profile().pendingRaid);
+    };
+    ASSERT_NO_FATAL_FAILURE(extract());
+    EXPECT_TRUE(assetIsCarried(session.profile(), material));
+    const auto stashCell = findFirstProfileFit(session.profile(), content, ProfileContainerId::stash(),
+        content.item(precision), ItemOrientation::Degrees0);
+    ASSERT_TRUE(stashCell);
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryMoveCommand{material, 0U, {ProfileContainerId::stash(), *stashCell}},
+        "ammo-loop-stash-precision").succeeded);
+    ASSERT_TRUE(waitForProfileUiDurability(session));
+    const auto order = session.executeStartBaseManufacturing(
+        BaseManufacturingRecipeDefinitionId{"base_manufacturing.ammunition_5_45x39_expanding"},
+        "ammo-loop-start");
+    ASSERT_TRUE(order.succeeded) << order.message;
+    ASSERT_TRUE(order.outputAssetId);
+    ASSERT_TRUE(session.profile().baseManufacturing.activeOrder);
+    EXPECT_EQ(session.profile().baseManufacturing.activeOrder->inputAssetIds,
+        std::vector<AssetInstanceId>{material});
+    const auto untilComplete = session.profile().baseManufacturing.activeOrder->completionWorldMinute -
+        session.profile().worldClock.elapsedWorldMinutes;
+    session.advanceBaseWorldClock(static_cast<float>(untilComplete));
+    ASSERT_TRUE(waitForProfileUiDurability(session));
+    ASSERT_FALSE(session.profile().baseManufacturing.activeOrder);
+    ASSERT_NE(session.profile().assets.find(*order.outputAssetId), nullptr);
+    EXPECT_EQ(session.profile().assets.find(*order.outputAssetId)->quantity, 18U);
+
+    const auto standardStacks = assets(session.profile(), standard);
+    const auto enhancedStacks = assets(session.profile(), enhanced);
+    ASSERT_FALSE(standardStacks.empty());
+    ASSERT_FALSE(enhancedStacks.empty());
+    ASSERT_TRUE(session.executeProfileWeaponAmmo(LoadMagazineCommand{magazine, standardStacks.front(), 1},
+        "ammo-loop-load-standard").succeeded);
+    ASSERT_TRUE(session.executeProfileWeaponAmmo(LoadMagazineCommand{magazine, *order.outputAssetId, 2},
+        "ammo-loop-load-expanding").succeeded);
+    ASSERT_TRUE(session.executeProfileWeaponAmmo(LoadMagazineCommand{magazine, enhancedStacks.front(), 1},
+        "ammo-loop-load-enhanced").succeeded);
+    ASSERT_TRUE(session.executeProfileWeaponAmmo(LoadMagazineCommand{magazine, *order.outputAssetId, 1},
+        "ammo-loop-load-last").succeeded);
+    ASSERT_TRUE(session.executeProfileWeaponAmmo(InstallMagazineAndChamberCommand{gun, magazine},
+        "ammo-loop-chamber").succeeded);
+    ASSERT_TRUE(session.executeProfileWeaponAmmo(SetWeaponFireModeCommand{gun, WeaponFireMode::Automatic},
+        "ammo-loop-auto").succeeded);
+    ASSERT_TRUE(waitForProfileUiDurability(session));
+    ASSERT_TRUE(session.deployAlpha(73U, frontier)) << session.persistenceMessage();
+    auto arena = handlingArena();
+    arena.worldSize = {4000.0F, 3000.0F};
+    arena.playerSpawn = {1900.0F, 1400.0F};
+    WeaponHandlingTestAccess::world(session, std::move(arena));
+    session.update({}, 0.0F);
+    GameplayInput fire;
+    fire.aimWorldPosition = {2380.0F, 1425.0F};
+    fire.firePressed = fire.fireJustPressed = true;
+    session.update(fire, 0.0F);
+    ASSERT_TRUE(session.world().shotFiredLastUpdate());
+    fire.fireJustPressed = false;
+    session.update(fire, 0.12F);
+    ASSERT_TRUE(session.world().shotFiredLastUpdate());
+    const auto shooting = WeaponHandlingTestAccess::shooting(session.world());
+    ASSERT_EQ(shooting.flights.size(), 2U);
+    EXPECT_EQ(shooting.flights[0].penetration, 4);
+    EXPECT_EQ(shooting.flights[0].unarmoredDamageBonus, 0);
+    EXPECT_EQ(shooting.flights[1].penetration, 2);
+    EXPECT_EQ(shooting.flights[1].unarmoredDamageBonus, 1);
+    ASSERT_NO_FATAL_FAILURE(extract());
+
+    GameSession reopened;
+    reopened.configurePersistence(directory.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    ASSERT_TRUE(reopened.profile().assets.find(gun)->chamberedRound);
+    EXPECT_EQ(reopened.profile().assets.find(gun)->chamberedRound->definitionId, expanding);
+    const auto &remaining = reopened.profile().assets.find(magazine)->magazineRounds;
+    ASSERT_EQ(remaining.size(), 2U);
+    EXPECT_EQ(remaining[0].definitionId, enhanced);
+    EXPECT_EQ(remaining[1].definitionId, expanding);
+    EXPECT_EQ(reopened.profile().assets.find(*order.outputAssetId)->quantity, 15U);
 }
 
 TEST(AlphaExtractionSessionTest, SignalCallIsExplicitFreeAndInventoryGated)

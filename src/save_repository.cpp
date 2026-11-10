@@ -2952,7 +2952,7 @@ std::string serializeProfileEnvelope(
 {
     if (profile.pendingRaid && profile.pendingRaid->rulesVersion == kRaidRunnerRulesVersion &&
         !runnerCompatibleContent(contentVersion))
-        throw std::invalid_argument{"runner Raid requires compatible content 73, 74 or 75"};
+        throw std::invalid_argument{"runner Raid requires compatible content 73 through 76"};
     if (schemaVersion != 1 && schemaVersion != 2 &&
         schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 &&
         schemaVersion != 6 && schemaVersion != 7 && schemaVersion != 8 &&
@@ -3147,7 +3147,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             (schemaVersion >= 57 && contentVersion == "weapon-suppressor-acoustics-content-71") ||
             (schemaVersion >= 57 && contentVersion == "raid-fragmentation-grenade-content-72") ||
             (schemaVersion >= 58 && contentVersion == "raid-runner-infected-content-73") ||
-            (schemaVersion >= 59 && contentVersion == kWeaponHandlingContentVersion);
+            (schemaVersion >= 59 && contentVersion == kWeaponHandlingContentVersion) ||
+            (schemaVersion >= 59 && contentVersion == kOpticsContentVersion);
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -3918,7 +3919,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             raid.rulesVersion = value.at("rules_version").get<std::string>();
             if (raid.rulesVersion == kRaidRunnerRulesVersion &&
                 (schemaVersion < 58 || !runnerCompatibleContent(contentVersion)))
-                return {SaveLoadStatus::Failed, std::nullopt, "runner Raid requires schema 58+ and compatible content 73 or 74"};
+                return {SaveLoadStatus::Failed, std::nullopt, "runner Raid requires schema 58+ and compatible content 73 through 76"};
             raid.mapDefinitionId = MapDefinitionId{
                 value.at("map_definition_id").get<std::string>()};
             raid.seed = value.at("seed").get<std::uint64_t>();
@@ -5081,13 +5082,33 @@ SaveWriteResult SaveRepository::save(
     { return path == primaryPath_ ? primaryMetadata : backupMetadata; };
     const auto usesWeaponHandling = [](std::string_view version)
     {
-        return version == kWeaponHandlingContentVersion || version == kOpticsContentVersion;
+        return version == kWeaponHandlingContentVersion || opticsCompatibleContent(version);
     };
+    const auto isPreAmmoLoopContentSource = [&](const std::filesystem::path &path, bool valid)
+    {
+        const auto &source = sourceMetadata(path);
+        return valid && contentVersion == kAmmoLoopContentVersion &&
+            source && source->contentVersion != kAmmoLoopContentVersion;
+    };
+    if (isPreAmmoLoopContentSource(primaryPath_, validPrimary) ||
+        isPreAmmoLoopContentSource(backupPath_, validBackup))
+    {
+        // Keep both exact source files before the new round/recipe can be
+        // written over either rolling slot. The save envelope stays schema 60.
+        const auto preserved = preserveLayoutMigrationSources(
+            validPrimary ? SaveLoadStatus::LoadedPrimary : SaveLoadStatus::RecoveredBackup,
+            "raid-5-45-ammo-loop-v1");
+        if (!preserved.succeeded)
+        {
+            std::filesystem::remove(temporaryPath_, error);
+            return {false, preserved.message};
+        }
+    }
     const auto isPreOpticsContentSource = [&](const std::filesystem::path &path, bool valid)
     {
         const auto &source = sourceMetadata(path);
-        return valid && contentVersion == kOpticsContentVersion &&
-            source && source->contentVersion != kOpticsContentVersion;
+        return valid && opticsCompatibleContent(contentVersion) &&
+            source && !opticsCompatibleContent(source->contentVersion);
     };
     if (isPreOpticsContentSource(primaryPath_, validPrimary) ||
         isPreOpticsContentSource(backupPath_, validBackup))

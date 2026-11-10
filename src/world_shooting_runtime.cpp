@@ -177,6 +177,7 @@ WorldShootingCheckpoint WorldShootingRuntime::checkpoint() const
     s.recoilRandomState = weaponAim_.recoilRandom_.state_;
     s.recoilRandomIncrement = weaponAim_.recoilRandom_.increment_;
     s.weaponDamage = weaponBaseDamage_; s.weaponPenetration = weaponPenetration_;
+    s.weaponUnarmoredDamageBonus = weaponUnarmoredDamageBonus_;
     s.maximumRange = weaponMaximumRange_; s.logicalSpeed = weaponLogicalBallisticSpeed_;
     s.tracerStyle = static_cast<std::uint32_t>(weaponTracerStyle_);
     s.tracerLength = weaponTracerLength_; s.tracerOpacity = weaponTracerOpacity_;
@@ -189,6 +190,8 @@ WorldShootingCheckpoint WorldShootingRuntime::checkpoint() const
         v.impact = checkpointPoint(flight.impactPosition_); v.speed = flight.speed_;
         v.extent = flight.collisionExtent_; v.travelled = flight.distanceTravelled_;
         v.maximumDistance = flight.maximumDistance_; v.damage = flight.damage_; v.penetration = flight.penetration_;
+        v.unarmoredDamageBonus = flight.unarmoredDamageBonus_;
+        v.unarmoredDamageRange = flight.unarmoredDamageRange_;
         if (flight.aimIntent_) {
             v.aimedTarget = flight.aimIntent_->targetId;
             v.aimedRegion = static_cast<std::uint32_t>(flight.aimIntent_->region);
@@ -253,6 +256,7 @@ bool WorldShootingRuntime::restoreCheckpoint(const WorldShootingCheckpoint &s)
     aim.recoilRandom_.increment_ = s.recoilRandomIncrement;
     candidate.nextShotId_ = s.nextShotId; candidate.weaponBaseDamage_ = s.weaponDamage;
     candidate.weaponPenetration_ = s.weaponPenetration; candidate.weaponMaximumRange_ = s.maximumRange;
+    candidate.weaponUnarmoredDamageBonus_ = s.weaponUnarmoredDamageBonus;
     candidate.weaponLogicalBallisticSpeed_ = s.logicalSpeed;
     candidate.weaponTracerStyle_ = static_cast<TracerStyle>(s.tracerStyle);
     candidate.weaponTracerLength_ = s.tracerLength; candidate.weaponTracerOpacity_ = s.tracerOpacity;
@@ -263,7 +267,8 @@ bool WorldShootingRuntime::restoreCheckpoint(const WorldShootingCheckpoint &s)
             static_cast<HitRegion>(vflight.aimedRegion), vflight.weakPoint};
         const auto resolution = resolveShotCommand(ShotCommand{vflight.id,
             runtimePoint(vflight.origin), runtimePoint(vflight.direction), vflight.speed,
-            vflight.extent, vflight.damage, vflight.maximumDistance, intent, vflight.penetration});
+            vflight.extent, vflight.damage, vflight.maximumDistance, intent, vflight.penetration,
+            vflight.unarmoredDamageBonus, vflight.unarmoredDamageRange});
         if (!resolution.accepted()) return false;
         LogicalBallisticFlight flight{resolution, static_cast<TracerStyle>(vflight.tracerStyle),
             vflight.tracerLength, vflight.tracerOpacity, vflight.tracerLifetime};
@@ -543,7 +548,9 @@ WorldShootingAdvance WorldShootingRuntime::advanceShots(
             maximumDistance,
             aimIntentAt(
                 weaponAim_.actualWorldPosition(), shotOrigin, targets),
-            weaponPenetration_});
+            weaponPenetration_,
+            weaponUnarmoredDamageBonus_,
+            weaponUnarmoredDamageBonus_ > 0 ? weaponAim_.config_.effectiveRange : 0.0F});
         if (!resolution.accepted())
         {
             throw std::logic_error{"World shooting produced an invalid shot"};
@@ -613,7 +620,10 @@ WorldShootingAdvance WorldShootingRuntime::advanceShots(
             flight.collisionExtent(),
             flight.damage(),
             flight.aimIntent(),
-            flight.penetration()});
+            flight.penetration(),
+            flight.origin(),
+            flight.unarmoredDamageBonus(),
+            flight.unarmoredDamageRange()});
     }
 
     HitResolutionResult resolved = resolveShotHits(
@@ -755,9 +765,11 @@ void WorldShootingRuntime::configureWeapon(
     configureWeapon(definition, deriveWeaponHandling(definition), false);
 }
 
-void WorldShootingRuntime::configureAmmunition(int penetration) noexcept
+void WorldShootingRuntime::configureAmmunition(int penetration, int unarmoredDamageBonus) noexcept
 {
     weaponPenetration_ = std::max(0, penetration);
+    weaponUnarmoredDamageBonus_ = validUnarmoredDamageBonus(unarmoredDamageBonus)
+        ? unarmoredDamageBonus : 0;
 }
 
 void WorldShootingRuntime::reanchor(

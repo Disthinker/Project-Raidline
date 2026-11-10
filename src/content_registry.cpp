@@ -1952,12 +1952,17 @@ ContentRegistry ContentRegistry::fromJson(
                 {
                     fail("ammunition_use must be an object");
                 }
+                const std::uint32_t unarmoredDamageBonus =
+                    optionalUint(*ammunition, "unarmored_damage_bonus");
+                if (unarmoredDamageBonus > 1U)
+                    fail("ammunition unarmored damage bonus must be zero or one");
                 definition.ammunitionUse = AmmunitionUseDefinition{
                     CaliberDefinitionId{
                         requiredString(*ammunition, "caliber")},
                     parseAmmunitionTier(
                         requiredString(*ammunition, "tier")),
-                    requiredPositiveInt(*ammunition, "penetration")};
+                    requiredPositiveInt(*ammunition, "penetration"),
+                    static_cast<int>(unarmoredDamageBonus)};
             }
             if (const auto caliber = optionalString(itemValue, "caliber"))
             {
@@ -2183,7 +2188,7 @@ ContentRegistry ContentRegistry::fromJson(
             }
         }
 
-        if (registry.contentVersion_ == kOpticsContentVersion)
+        if (opticsCompatibleContent(registry.contentVersion_))
         {
             const auto &fixedOptic = registry.item(kFixedRaidOpticId);
             if (!fixedOptic.weaponComponent ||

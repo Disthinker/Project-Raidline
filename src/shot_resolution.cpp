@@ -113,6 +113,15 @@ ShotResolution resolveShotCommand(
         return result;
     }
 
+    if (!validUnarmoredDamageBonus(command.unarmoredDamageBonus) ||
+        (command.unarmoredDamageBonus > 0
+             ? !std::isfinite(command.unarmoredDamageRange) || command.unarmoredDamageRange <= 0.0F
+             : command.unarmoredDamageRange != 0.0F))
+    {
+        result.status = ShotResolutionStatus::RejectedInvalidUnarmoredDamage;
+        return result;
+    }
+
     const float inverseDirectionLength =
         1.0F / std::sqrt(directionLengthSquared);
     result.status = ShotResolutionStatus::Accepted;
@@ -128,6 +137,8 @@ ShotResolution resolveShotCommand(
     result.penetration = command.penetration;
     result.maximumDistance = command.maximumDistance;
     result.aimIntent = command.aimIntent;
+    result.unarmoredDamageBonus = command.unarmoredDamageBonus;
+    result.unarmoredDamageRange = command.unarmoredDamageRange;
     result.impactPosition = Vec2{
         result.origin.x +
             result.direction.x * result.maximumDistance,
@@ -167,6 +178,8 @@ const char *shotResolutionStatusName(
         return "RejectedInvalidMaximumDistance";
     case ShotResolutionStatus::RejectedInvalidAimIntent:
         return "RejectedInvalidAimIntent";
+    case ShotResolutionStatus::RejectedInvalidUnarmoredDamage:
+        return "RejectedInvalidUnarmoredDamage";
     }
 
     return "Unknown";

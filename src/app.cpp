@@ -14255,7 +14255,8 @@ void App::renderProfileWeaponDetails()
     renderFoundationButton(21003, uiItemDetailsNext(), choose("下一页", "NEXT"), (deviceBatteryPage_ + 1) * kUiDetailsBatteryPageSize < batteries.size(), false, false, {}, 12);
     uiFinalTextAt(renderer_, uiTextRenderer_, 330, 608,
         fmt::format("{} / {}", deviceBatteryPage_ + 1, std::max<std::size_t>(1, (batteries.size() + kUiDetailsBatteryPageSize - 1) / kUiDetailsBatteryPageSize)), 300, 14);
-    renderUiItemDetailsFeedback(renderer_, uiTextRenderer_, itemDetailsInteraction_, model->kind, uiMessage_);
+    renderUiItemDetailsFeedback(renderer_, uiTextRenderer_, itemDetailsInteraction_, model->kind, uiMessage_,
+        projectUiAmmoInspectionLines(profile, content, asset, uiTextRenderer_.language()));
     if (deviceBatteryDrag_) {
         const SDL_FRect ghost{deviceBatteryDragPosition_.x - 16, deviceBatteryDragPosition_.y - 12, 32, 24};
         SDL_SetRenderDrawColor(renderer_, 113, 191, 179, 210);
@@ -14926,13 +14927,18 @@ void App::renderProfileItemCard(bool includeStash, bool inRaid) {
     if (!asset) return;
     if (!profileItemCardValid_ || profileItemCardRevision_ != profile.revision ||
         profileItemCardWeaponSlot_ != gameSession_.activeAlphaWeaponSlot()) {
-        const auto &definition = publishedContentRegistry().item(asset->definitionId);
+        const auto &content = publishedContentRegistry();
+        const auto &definition = content.item(asset->definitionId);
+        const auto language = uiTextRenderer_.language();
         const auto summary = projectUiItemSummary(*asset, definition);
-        const auto supply = definition.weaponUse
-            ? weaponSupplyTooltipLines(asset->instanceId, includeStash, inRaid)
-            : std::vector<std::string>{};
+        auto supply = projectUiAmmoInspectionLines(profile, content, *asset, language);
+        if (definition.weaponUse) {
+            auto readiness = weaponSupplyTooltipLines(asset->instanceId, includeStash, inRaid);
+            supply.insert(supply.end(), std::make_move_iterator(readiness.begin()),
+                std::make_move_iterator(readiness.end()));
+        }
         profileItemCard_ = layoutUiItemCard(profileItemHover_.anchor,
-            definition.displayName, summary, supply, uiTextRenderer_.language(),
+            definition.displayName, summary, supply, language,
             [&](auto text, int size) { return uiTextRenderer_.measure(text, size); });
         profileItemCardRevision_ = profile.revision;
         profileItemCardWeaponSlot_ = gameSession_.activeAlphaWeaponSlot();

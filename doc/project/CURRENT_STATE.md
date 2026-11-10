@@ -1,105 +1,208 @@
-# 当前 · 对局视角对齐 v4 已复验，正在交付
+# 当前 · 5.45 弹药工坊与混装战术 v1 已验收，正在交付
 
-收镜后普通对局恢复正确图层比例，场景轮廓与遮罩重新对齐。[修复记录](../exec-plans/active/raid-optics-loot-gunsmith-v1.md)
+从边境交换站带回精密组件，在工坊制成扩张弹。混装后用标准、增强和扩张弹应对不同目标，再撤离检查余量和供弹顺序。[开发方案](../exec-plans/active/raid-5-45-ammo-loop-v1.md)
 
-- task_id `raid-optics-loot-gunsmith-v1`，plan_version `RL-RAID-VIEW-ALIGNMENT-v4`，state `accepted_delivering`。
-- v4 approval_source 为 2026-11-08 主控会话用户明确同意 RL-RAID-VIEW-ALIGNMENT-v4，并要求保留开收镜手感、窗口准星锚点和 3ms 门槛，核对 HUD 裁切，暂不提交、推送或合并。candidate_id `RL-RAID-VIEW-ALIGNMENT-v4-local-e3fb3846b22b`。accepted_candidate_id `RL-RAID-VIEW-ALIGNMENT-v4-local-e3fb3846b22b`。acceptance_source 为 2026-11-08 主控会话用户明确回复“对局视角对齐 v4 复验通过，请完成提交、推送和合并。”
-- 基线 `origin/main@07714af5c5cacb6953171fe74bdae51f9f421f4d`。[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42374312459) 双平台各 3111/3111，原 10 项 3ms 检查全部通过。
-- 隔离工作树 `E:\WorkPlace\Projects\C\Project Raidline-raid-optics-loot-gunsmith-v1`，分支 `codex/raid-optics-loot-gunsmith-v1`，HEAD `07714af5c5cacb6953171fe74bdae51f9f421f4d`。
-- 固定桌面入口已指向 v4。Windows 3143/3143，3ms 检查 12/12。[四步复验](../acceptance/raid-optics-loot-gunsmith-v1.md)
+- task_id `raid-5-45-ammo-loop-v1`，plan_version `RL-RAID-5-45-AMMO-LOOP-v1`，state `accepted_delivering`。
+- 策划回复与请求 `MAIN-NEXT-STAGE-20261109-AFTER-OPTICS-01` 匹配。2026-11-09 用户授权协调与规划，approval_source 为 2026-11-10 用户明确批准 RL-RAID-5-45-AMMO-LOOP-v1，要求完成整阶段、保留已验收行为、原存档、固定入口和 12 项 3ms 门槛，验收前暂不提交、推送或合并。 candidate_id `RL-RAID-5-45-AMMO-LOOP-v1-local-c4a7f6c4fcd0`。accepted_candidate_id `RL-RAID-5-45-AMMO-LOOP-v1-local-c4a7f6c4fcd0`。acceptance_source 为 2026-11-10 用户明确回复“5.45 弹药工坊与混装战术 v1 验收通过，请完成提交、推送和合并。”
+- 已核对基线 `origin/main@01cfaa40d0d66539b14e33992e95a0046233c48f`。PR #201 已实机复验和合并，[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42490009396) 双平台各 3143/3143，原 12 项 3ms 检查通过。
+- 隔离工作树 `E:\WorkPlace\Projects\C\Project Raidline-raid-5-45-ammo-loop-v1`，固定入口已更新。Windows 3155/3155，3ms 检查 12/12。[联合验收](../acceptance/raid-5-45-ammo-loop-v1.md)
 
 ---
 
-# 当前：迅捷感染者 CI v2，正在验证双平台
+# 当前 · 对局视角对齐 v4 已合并
 
-**本地全量2882/2882通过，候选`b9344c8cd631`已冻结。按用户批准，先提交推送原PR #197验证准确HEAD的Windows／Ubuntu CI；通过后复验，复验前不合并。**
+收镜后普通对局恢复正确图层比例，场景轮廓与遮罩重新对齐。[修复记录](../exec-plans/active/raid-optics-loot-gunsmith-v1.md)
 
-- state：`ci_verification_pending`；task_id：`raid-runner-infected-v1`；fix_plan_version：`RL-RAID-RUNNER-INFECTED-CI-v2`。
-- candidate_id：`RL-RAID-RUNNER-INFECTED-CI-v2-local-b9344c8cd631`；新候选人工验收：无。approval_source：2026-10-28主控用户“同意v2，先验证CI再复验”。
-- 仅改观察候选筛选和精确角度排序；原逐位结果、玩法、存档、固定入口及3ms门槛保持。原CI失败与各版候选程序保留，其他未提交工作和玩家数据保全。
-- 桌面 **Project Raidline Debug** 为同一固定入口。双平台通过后使用[四步复验清单](../acceptance/raid-runner-infected-v1.md)，[技术与证据](../exec-plans/active/raid-runner-infected-v1.md)记录实际结果；代理未启动游戏、不开始下一项任务。
+- task_id `raid-optics-loot-gunsmith-v1`，plan_version `RL-RAID-VIEW-ALIGNMENT-v4`，state `merged`。
+- v4 approval_source 为 2026-11-08 主控会话用户明确同意 RL-RAID-VIEW-ALIGNMENT-v4，并要求保留开收镜手感、窗口准星锚点和 3ms 门槛，核对 HUD 裁切，暂不提交、推送或合并。candidate_id `RL-RAID-VIEW-ALIGNMENT-v4-local-e3fb3846b22b`。accepted_candidate_id `RL-RAID-VIEW-ALIGNMENT-v4-local-e3fb3846b22b`。acceptance_source 为 2026-11-08 主控会话用户明确回复“对局视角对齐 v4 复验通过，请完成提交、推送和合并。”
+- 基线 `origin/main@07714af5c5cacb6953171fe74bdae51f9f421f4d`。[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42374312459) 双平台各 3111/3111，原 10 项 3ms 检查全部通过。
+- 隔离工作树 `E:\WorkPlace\Projects\C\Project Raidline-raid-optics-loot-gunsmith-v1`，分支 `codex/raid-optics-loot-gunsmith-v1`，交付 HEAD `c32c404f5fdb5c664715ef75714f7d93369f8b64`。
+- 固定桌面入口已指向 v4。Windows 3143/3143，3ms 检查 12/12。[四步复验](../acceptance/raid-optics-loot-gunsmith-v1.md)
 
-<details>
-<summary>上一记录（完整HEAD历史）</summary>
+- 提交 `c32c404` 已推送，[PR #201](https://github.com/Disthinker/Project-Raidline/pull/201) 已合入 `main@01cfaa4`。[PR 双平台 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42484846603) 各 3143/3143，原 12 项 3ms 检查通过。[主线合并后 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42490009396) 双平台各 3143/3143，12 项 3ms 检查通过。
 
-# 当前：迅捷感染者 CI v1，正在验证双平台
+---
 
-**本地全量2876/2876通过，候选 `261634b9a2b8` 已冻结。按用户批准，先提交推送到原PR #197验证双平台CI；通过后复验，复验前不合并。**
+# 当前 · 基地性能收束 v2 已合并，主线 CI 通过
 
-- state：`ci_verification_pending`；task_id：`raid-runner-infected-v1`；fix_plan_version：`RL-RAID-RUNNER-INFECTED-CI-v1`。
-- candidate_id：`RL-RAID-RUNNER-INFECTED-CI-v1-local-261634b9a2b8`；accepted_candidate_id：无（原v3 `08178f45f1dd`仅作已验收基线）。
-- approval_source：2026-10-28用户“同意，先做CI再复验（推荐）”；只授权本修复预先提交和推送，未授权复验前合并。
-- 只优化既有视野计算、修正中文裁剪测试并补充等价回归。原玩法、旧档、固定入口、32/100目标负载和3ms门槛保留；原CI失败和旧程序有独立备份。
-- 桌面 **Project Raidline Debug** 仍为固定入口。代理未启动游戏，不开始下一任务；[复验清单](../acceptance/raid-runner-infected-v1.md)在双平台通过后使用，[技术记录](../exec-plans/active/raid-runner-infected-v1.md)记录实际证据。
+**Windows Debug 全量 3111/3111，原 3ms 检查 10/10。** 固定桌面 **Project Raidline Debug** 已指向当前程序。[四步复验](../acceptance/raid-weapon-handling-stage-v1.md)
 
-<details>
-<summary>上一记录（完整HEAD历史）</summary>
+- task_id：`raid-weapon-handling-stage-v1`；fix_id：`base-burst-hud-perf-v2`；plan_version：`RL-BASE-BURST-HUD-PERF-v2`；state：`delivered`。
+- 2026-11-07 用户明确批准本版本。隔离对照后纳入移动与队伍优化，视野变体未提速，留在隔离目录。
+- candidate：`RL-BASE-BURST-HUD-PERF-v2-local-e31efda35811`。程序 SHA256 为 `be38ace0507fda4faa5f4577f04b8347ce70c56080db342e9e569049715076d7`。旧档、固定入口与其他原有工作树改动均已核对。
+- 2026-11-07 用户明确确认“基地性能收束 v2 复验通过，请完成提交、推送和合并”。 已核对 175 个构建输入，与原有未提交内容无重叠。 提交 `664eab19c255585c15e1a0f62e2cf1631e487baf` 已推送。[PR #200](https://github.com/Disthinker/Project-Raidline/pull/200) Ubuntu 首轮在库存保存测试的数组断言处编译失败。仅调整该测试的数组声明，保持原断言和生产源码。兼容性提交 ed28678 的 Windows 本地全量 3111/3111，通过后已推送。双平台 CI 各通过 3111 项，原 10 项 3ms 门槛全部通过。已合并到 main 07714af，[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42374312459) 已通过。Windows 和 Ubuntu 各 3111/3111，原 10 项 3ms 门槛均通过。
 
-# 当前：迅捷感染者 v3 已验收，正在交付
+---
 
-**用户已验收候选 `08178f45f1dd`，并授权提交、推送和合并。** 本次只交付该候选，不开始下一任务。
+# 当前 · 基地性能收束 v2 实施中
 
-- state：`accepted_delivering`；task_id：`raid-runner-infected-v1`；plan_version：`RL-RAID-RUNNER-INFECTED-v3`。
-- candidate_id／accepted_candidate_id：`RL-RAID-RUNNER-INFECTED-v3-local-08178f45f1dd`；acceptance_source：2026-10-28本主控用户“迅捷感染者 v3 验收通过，请完成提交、推送和合并。”。
-- Windows Debug全量2874/2874、定向559/559通过；原六项及新增混合敌群3ms保持。准确PR及合并后main的双平台CI待执行。
-- 实际目录`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`，分支`codex/raid-runner-infected-v1`，交付基线`77b117d1492d975a2861357a04c60a652d9e73dc`。原已验收程序、固定入口、最新玩家数据及其他未提交工作保留，代理不启动游戏。
-- [交付记录](../exec-plans/active/raid-runner-infected-v1.md)；[已通过试玩清单](../acceptance/raid-runner-infected-v1.md)。pending_request：无；UI专项保持结束。
+**隔离对照已完成。** 移动与队伍优化有可复现收益，已纳入正式验证。视野实验保持等价但未提速，留在隔离目录。[任务记录](../exec-plans/active/raid-weapon-handling-stage-v1.md)
 
-<details>
-<summary>上一项及更早记录（HEAD原文历史）</summary>
+- task_id：`raid-weapon-handling-stage-v1`；fix_id：`base-burst-hud-perf-v2`；plan_version：`RL-BASE-BURST-HUD-PERF-v2`；state：`implementing`。
+- 2026-11-07 用户明确批准 v2 实施。先逐项隔离对照，只保留可复现收益且结果等价的改动。生产基线仍为 v1 源指纹 `9062d46ffbb9`。原 3ms 门槛、30 个玩家文件和固定入口均已核对。
+- 实际分支为 `codex/raid-weapon-handling-stage-v1`，HEAD `0b6f6bc75bb7ac2e6cbc9c20ad7e50c292acdc0c`。隔离采样属于诊断，本轮尚无复验候选。
 
-# 当前：破片手雷 v1 已验收，正在交付
+---
 
-**用户已验收候选`bd5b6011e799`，并授权提交、推送和合并。** 正按原门槛交付，不开始下一任务。
+# 当前 · 基地性能收束 v1 卡在 3ms
 
-- state：`accepted_delivering`；task_id：`raid-fragmentation-grenade-v1`；plan_version：`RL-RAID-FRAGMENTATION-GRENADE-v1`。
-- candidate_id / accepted_candidate_id：`RL-RAID-FRAGMENTATION-GRENADE-v1-local-bd5b6011e799`；acceptance_source：2026-10-27本主控用户“验收通过，请提交、推送然后合并”。
-- 本地全量2828/2828及原五项、新手雷3ms检查通过；准确PR双平台和合并后main CI待执行。
-- 实际目录`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`，分支`codex/raid-fragmentation-grenade-v1`，交付基线`0ce66ac`；同一已验收程序、固定入口、玩家最新数据和其他修改保留。代理不启动游戏。
-- [交付记录](../exec-plans/active/raid-fragmentation-grenade-v1.md)；[已通过试玩清单](../acceptance/raid-fragmentation-grenade-v1.md)。pending_request：无。
+**定向回归 326/326 通过，原 3ms 检查通过 8/10。** 手雷达标。100 目标的混合感染者为 3.3607ms，武器操控为 3.0649ms。全量检查暂未启动，当前无复验候选。[本轮任务记录](../exec-plans/active/raid-weapon-handling-stage-v1.md)
+
+- task_id：`raid-weapon-handling-stage-v1`；fix_id：`base-burst-hud-perf-v1`；plan_version：`RL-BASE-BURST-HUD-PERF-v1`；state：`validation_blocked`。
+- approval_source：2026-11-07 用户明确批准本版本，要求保留三连发与底部提示修复、已验收 UI 与玩法、原存档、固定入口和 3ms 门槛。全量通过后给四步复验清单，暂不提交、推送或合并。
+- 当前工作树保留最小三文件优化及一项手雷回归，源指纹 `9062d46ffbb9691372b0d0b6aef3688d3c531b959c6d005ffe307390d9c4d605`。未采用未能稳定提速的两处实验方案。
+- 桌面 **Project Raidline Debug** 仍指向原冻结版 `RL-BASE-BURST-HUD-FIX-v1-frozen-c58a110fa6ce`。30 个玩家文件、固定入口、冻结程序及各工作树原有无关改动均已逐字节核对。
+- 实际目录为 `E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`，分支 `codex/raid-weapon-handling-stage-v1`，HEAD `0b6f6bc75bb7ac2e6cbc9c20ad7e50c292acdc0c`。
 
 <details>
-<summary>上一项及更早记录（HEAD原文历史）</summary>
+<summary>本轮修复与此前状态（历史）</summary>
 
-# 当前：消音器与枪声取舍 v1 已通过人工验收
+# 当前：基地三连发与底部提示修复 v1 修复中
 
-**用户已验收候选`d0b4a091f1fa`，并明确授权提交、推送和合并。** 主控按原门槛交付，不开始下一任务。
+**v3候选未通过本轮复验。三连发原因已用隔离测试确认；左下角重叠为部分确认。用户已批准[两项修复方案](../exec-plans/active/raid-weapon-handling-stage-v1.md)，现连续实施；完成后给一个新候选复验。**
 
-- state：`accepted_delivering`；task_id：`weapon-suppressor-acoustics-v1`；plan_version：`RL-WEAPON-SUPPRESSOR-ACOUSTICS-v1`。
-- candidate_id / accepted_candidate_id：`RL-WEAPON-SUPPRESSOR-ACOUSTICS-v1-local-d0b4a091f1fa`；acceptance_source：2026-10-26本主控线程用户“验收通过，请提交、推送和合并”。
+**当前验证未通过：** `full-2`为3103/3107；基地流程测试目录清理失败，手雷／混合感染者／武器操控100目标p95分别3.2084／3.9842／3.36ms，超过原3ms。两项Bug的专项与20图审查已过，但不能交付。保持候选源码冻结，正在隔离对比原基线；只允许已获批范围内修正测试生命周期，不扩展生产性能范围。证据在`E:\CodexWorkspace\Temp\Raidline-base-burst-hud-fix-v1-20261104`。
+
+- task_id：`raid-weapon-handling-stage-v1`；fix_id：`base-burst-hud-fix-v1`；plan_version：`RL-BASE-BURST-HUD-FIX-v1`；state：`implementing`。
+- approval_source：2026-11-04人类“同意 RL-BASE-BURST-HUD-FIX-v1，请按方案修复”。用户反馈：基地首次点按三连发只有后坐力，若干次后正常；约1920宽度下左下“已保存”覆盖其他文字。
+- 诊断：射击编号撞旧账本可精确复现；普通保存成功未自动淡出已确认，用户那两框的确切组合尚未完整复现。
+- failed_candidate_id：`RL-WEAPON-HANDLING-FEEDBACK-v3-local-8fdef0f9be92`；accepted_candidate_id：无。旧程序与640份开工源文件已保全；新修复将单独编号和验证，不能沿用旧候选成绩。
+- 实际目录：`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`，分支`codex/raid-weapon-handling-stage-v1`，HEAD `0b6f6bc75bb7ac2e6cbc9c20ad7e50c292acdc0c`。桌面入口与玩家最新数据保留。
+- 本轮完成后等待用户复验；暂不提交、推送、合并或启动游戏，不改信任／权限／模型，不启动下一任务。
+
+<details>
+<summary>v3本地交付记录（历史，随后复验未通过）</summary>
+
+# 当前：基础玩法统一与无感操作修正 v3 待复验
+
+**获批开发已完成，Windows本地3095/3095通过。请使用桌面 Project Raidline Debug，按[七步清单](../acceptance/raid-weapon-handling-stage-v1.md)联合复验。**
+
+- task_id：`raid-weapon-handling-stage-v1`；fix_id：`player-systems-feedback-v3`；plan_version：`RL-WEAPON-HANDLING-FEEDBACK-v3`；state：`awaiting_user_verification`。
+- candidate_id：`RL-WEAPON-HANDLING-FEEDBACK-v3-local-8fdef0f9be92`；程序与源码已冻结，尚未通过人工验收。原未通过候选f704仅保留历史备份。
+- 已完成：后台确认保存、跨活动基本机制、基地B/R接线、紧急换弹与点按三发、紧凑提示和完整格框。经济、死亡规则及已验收玩法保持。
+- 原八项3ms通过，63张最终图像与已审查版本一致；原27个玩家文件和固定入口未改。测试场未开放灯电池领取，手电请在基地／普通对局复验。
+- approval_source：2026-11-04人类“请按照方案进行开发”；[完整任务和验证边界](../exec-plans/active/raid-weapon-handling-stage-v1.md)。未运行远端CI，代理未启动游戏。
+- 实际源码目录：`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`，分支`codex/raid-weapon-handling-stage-v1`，HEAD `0b6f6bc75bb7ac2e6cbc9c20ad7e50c292acdc0c`。
+- 不提交、推送、合并，不启动下一任务；不改信任／权限／模型，不生产新正式资源。独立室内双层方向不并入本次。
+
+<details>
+<summary>上一项破片手雷交付及更早记录（历史）</summary>
+
+# 当前：破片手雷 v1 已交付
+
+**[PR #196](https://github.com/Disthinker/Project-Raidline/pull/196)已合并，merge_commit为`77b117d1492d975a2861357a04c60a652d9e73dc`。准确PR及合并后main的Windows、Ubuntu各2828/2828，0失败/跳过；原五项及新增手雷3ms检查通过。**
+
+- state：`delivered`；task_id：`raid-fragmentation-grenade-v1`；plan_version：`RL-RAID-FRAGMENTATION-GRENADE-v1`。
+- 用户于2026-10-27验收候选`bd5b6011e799`并授权提交、推送和合并；feature_commit：`1a446c5b9ba0c357d09297b0a77e0ca1239e8c8f`。accepted_candidate_id：`RL-RAID-FRAGMENTATION-GRENADE-v1-local-bd5b6011e799`。
+- [PR CI 40532440080](https://github.com/Disthinker/Project-Raidline/actions/runs/40532440080)与[main CI 40536691754](https://github.com/Disthinker/Project-Raidline/actions/runs/40536691754)均已核对准确提交及完整测试，不以PR通过代替main结果。
+- 原桌面 **Project Raidline Debug** 和同一已验收程序保留；玩家最新数据与其他未提交修改保全通过，代理未启动游戏。本地仍为`codex/raid-fragmentation-grenade-v1`，不切换或覆盖其他工作区。
+- [任务记录](../exec-plans/active/raid-fragmentation-grenade-v1.md)；[已通过试玩清单](../acceptance/raid-fragmentation-grenade-v1.md)。策划已确认交付并等待下一条人类请求；不开始下一任务，不追加仅CI状态提交。
+
+<details>
+<summary>消音器已交付及更早历史</summary>
+
+# 当前：消音器与枪声取舍 v1 已交付
+
+**[PR #195](https://github.com/Disthinker/Project-Raidline/pull/195)已合并至main`0ce66acc8ae79d6e029a7ea50700b2e94adc6382`；准确PR及合并后main的Windows、Ubuntu各2765/2765，0失败/跳过，原五项3ms全部通过。**
+
+- state：`delivered`；task_id：`weapon-suppressor-acoustics-v1`；plan_version：`RL-WEAPON-SUPPRESSOR-ACOUSTICS-v1`。
+- 用户已验收候选`d0b4a091f1fa`并授权提交、推送和合并；feature_commit：`fbad164adcc9091daae19876260c090b7a381da8`。
 - [交付记录](../exec-plans/active/weapon-suppressor-acoustics-v1.md)；[已通过验收清单](../acceptance/weapon-suppressor-acoustics-v1.md)。原桌面入口和已验收程序保持。
-- 同一候选本地完整2765项与原五项3ms通过；准确PR双平台与合并后main CI尚未运行。
-- 实际目录`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`，分支`codex/weapon-suppressor-acoustics-v1`，交付基线`7ee8600`。其余未提交修改和验收后玩家数据保留，开发代理不启动游戏。
-- pending_request：无。不启动下一任务；不追加只为复制CI状态的提交。
+- 实际目录`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`，保留分支`codex/weapon-suppressor-acoustics-v1`与其他原未提交修改；玩家最新存档与固定快捷方式保留；CI等待期间主档和备份有外部更新，未回退。代理未启动游戏。
+- 后续选题：策划有效回复已收，详见上方新方案；没有实施批准。
 
 <details>
-<summary>上一项及更早交付记录（历史）</summary>
+<summary>本片批准前方案与上一项已交付历史</summary>
 
-# 当前：野战医疗补给分装 v1 已通过人工验收
+# 当前：制式5.45步枪消音器方案待批准
 
-**用户已验收此功能，并明确授权提交、推送与合并。** 本任务不继续开展UI专项，也不自动启动下一功能。
+**下一项建议：制式5.45步枪消音器与枪声取舍 v1。** [具体开发方案](../exec-plans/active/weapon-suppressor-acoustics-v1.md)已结合原策划回复与真实代码完成，尚未实施。
 
-- task_id：`base-field-medical-supplies-v1`；plan_version：`RL-BASE-FIELD-MEDICAL-SUPPLIES-v1`；state：`accepted`。
-- accepted_candidate_id：`RL-BASE-FIELD-MEDICAL-SUPPLIES-v1-local-598d86291dd7`。
-- acceptance_source：2026-10-24本主控线程用户：“野战医疗补给分装 v1 验收通过，请完成提交、推送和合并。”
-- [功能及交付记录](../exec-plans/active/base-field-medical-supplies-v1.md)；[已通过验收清单](../acceptance/base-field-medical-supplies-v1.md)。
-- 同一候选Windows本地完整2734项与原五项3ms通过，原存档、UI、玩法和固定入口保留。准确远端CI及合并状态以对应PR和主控后续记录为准。
-
-<details>
-<summary>上一项及更早记录（历史）</summary>
-
-# 当前：通行许可与凭证撤离已验收，正在交付
-
-**RL-RAID-CREDENTIAL-EXTRACTION-v1 已获用户验收，正在提交、推送并完成双平台CI后合并。** 已验收候选`1d3fae52cc99`保持；桌面 **Project Raidline Debug** 继续使用同一程序。
-
-- 人类直接授权：“通行许可与凭证撤离 v1 验收通过，请完成提交、推送和合并。”
-- 本地Windows Debug完整2699/2699及原五项3ms通过；源码和程序与验收候选逐项匹配。本次PR、准确HEAD双平台CI及合并尚未完成。
-- state：accepted_delivery_in_progress；task_id：raid-credential-extraction-v1；accepted_candidate_id：RL-RAID-CREDENTIAL-EXTRACTION-v1-local-1d3fae52cc99。
-- 已验收UI和玩法、原存档、固定入口及其他未提交修改保留；本轮不启动下一项开发。
-- [方案与交付记录](../exec-plans/active/raid-credential-extraction-v1.md)；[玩法回查](../acceptance/raid-credential-extraction-v1.md)。实际目录仍为`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`，分支`codex/raid-credential-extraction-v1`，基线main3818de0。
+- 仅制式5.45步枪新增枪口组件：听声半径减半，代价为350克和操控速度−8；240货币购买，也可从制造厂库存点搜获。
+- 复用现有改装、供给和保存；暂用已授权枪声的单发音量占位，不生产新资源。附近敌人和同组传播仍可响应。
+- 保留已验收UI与玩法、原存档、固定入口及原五项3ms门槛；UI专项保持结束。
+- state：`awaiting_plan_approval`；task_id：`weapon-suppressor-acoustics-v1`；plan_version：`RL-WEAPON-SUPPRESSOR-ACOUSTICS-v1`。
+- approval_source：无实施批准；本次人类仅请求安排功能任务与具体方案。candidate_id / accepted_candidate_id：无。
+- baseline：已验收main `7ee8600dc54d89195d44b3de6caa09133c9192b1`；当前仍为已交付分支和原程序，不切分支、不改游戏、不构建/测试/运行、不提交或发布。
+- 策划有效回复已核对目标与四元组；pending_request：无。等待人类批准本版本。
 
 <details>
-<summary>上一项及早期记录（历史）</summary>
+<summary>上一项医疗分装交付与更早历史</summary>
+
+# 当前：野战医疗补给分装 v1 已交付
+
+**[PR #194](https://github.com/Disthinker/Project-Raidline/pull/194)已合并，merge_commit为`7ee8600dc54d89195d44b3de6caa09133c9192b1`。准确PR及合并后main的Windows、Ubuntu各2734/2734，0失败/跳过，原五项3ms全部通过。**
+
+- state：`delivered`；task_id：`base-field-medical-supplies-v1`；plan_version：`RL-BASE-FIELD-MEDICAL-SUPPLIES-v1`。
+- 用户已验收候选`598d86291dd7`并授权提交、推送和合并；feature_commit：`127bfaec29f98b5b32f991588db6548d2e75b90d`。
+- [交付记录](../exec-plans/active/base-field-medical-supplies-v1.md)；[已通过验收清单](../acceptance/base-field-medical-supplies-v1.md)。原桌面 **Project Raidline Debug** 保留同一已验收程序。
+- 实际目录`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`；保留分支`codex/base-field-medical-supplies-v1`和原有未提交修改。玩家数据、程序、快捷方式保持；开发代理未启动游戏。
+- pending_request：无。策划已收到交付结果并确认等待后续人类请求。不开始下一项任务；当前记录更新不新增提交。
+
+<details>
+<summary>上一项已完成交付（历史）</summary>
+
+# 当前：通行许可与凭证撤离已交付
+
+**[PR #193](https://github.com/Disthinker/Project-Raidline/pull/193)已合并，通行许可与凭证撤离 v1 交付完成。** 准确PR与合并后main的Windows、Ubuntu各2699项及原五项3ms全部通过。
+
+- 用户已明确验收候选`1d3fae52cc99`并授权提交、推送和合并；提交`9c61b86745a886a1e410337e48eaf9a218d57cff`已推送，merge_commit：`77382fc60387cea0bd8849a6c6b23f1b426a72ea`。
+- [准确PR CI](https://github.com/Disthinker/Project-Raidline/actions/runs/40089887399)与[main CI](https://github.com/Disthinker/Project-Raidline/actions/runs/40091448321)均已核查准确提交，0失败/跳过。
+- 桌面 **Project Raidline Debug** 继续使用已验收程序；原存档、UI和玩法、其他未提交修改保留。开发代理未启动游戏。
+- state：delivered；task_id：raid-credential-extraction-v1；accepted_candidate_id：RL-RAID-CREDENTIAL-EXTRACTION-v1-local-1d3fae52cc99；pending_request：无。不启动下一任务。
+- [交付记录](../exec-plans/active/raid-credential-extraction-v1.md)；[玩法回查](../acceptance/raid-credential-extraction-v1.md)。本地实际目录仍为`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`，保留分支`codex/raid-credential-extraction-v1`与未提交记录。
+
+<details>
+<summary>批准前方案与上一项交付历史</summary>
+
+# 当前：通行许可与凭证撤离方案待批准
+
+**下一项建议：边境交换站通行许可与凭证撤离 v1。** [具体开发方案](../exec-plans/active/raid-credential-extraction-v1.md)已结合策划回复和真实代码完成，尚未实施。
+
+- 交易所办公室持续按F调查2秒；用原出口成功撤离后登记永久许可。
+- 从下次出击起，高危阶段可使用独立凭证出口，连续等待6秒；不限重、不收费、不消耗许可。
+- 只做边境交换站；保留已验收玩法、原存档、固定入口与原五项3ms门槛。UI专项已结束。
+- state：awaiting_plan_approval；task_id：raid-credential-extraction-v1；plan_version：RL-RAID-CREDENTIAL-EXTRACTION-v1。
+- approval_source：无实施批准；本次人类仅请求安排功能任务和具体方案。candidate_id / accepted_candidate_id：无。
+- baseline：已合并main `3818de00fb8d0cd1124e72570057a8c25086d1fb`；本次只读核查和文档更新，未切分支、改游戏、构建、提交、推送、合并或启动游戏。
+- 策划有效回复：main-next-function-20261024-after-ui192 / post-ui-next-function / RL-NEXT-FUNCTION-PLANNING-v1 / baseline3818；目标与四元组已匹配。pending_request：无，等待人类批准方案。
+
+<details>
+<summary>上一项交付：PR #192已合并，UI专项已结束</summary>
+
+以下为上一项交付事实与历史记录，不代表新功能已批准或已开发。
+
+# 当前：已提交、推送并合并，UI专项结束
+
+**已验收游戏程序保持不变。** 仅同步旧测试两处采样坐标后继续同一PR交付，没有新增UI或玩法任务。
+
+- [PR #192](https://github.com/Disthinker/Project-Raidline/pull/192)：准确PR的Windows、Ubuntu各2644项及原五项3ms检查已通过。
+- 合并后[main CI 40075775860](https://github.com/Disthinker/Project-Raidline/actions/runs/40075775860)的Windows、Ubuntu各2644项及原五项3ms也通过。
+- 原存档、固定入口与其他工作区修改保留。本轮交付结束UI专项，不启动下一任务。
+
+<details>
+<summary>提交、候选、授权和验证证据</summary>
+
+- state：delivered；task_id：ui-final-consolidation；fix_plan_version：RL-UI-BASE-DECLUTTER-v1；parent_plan_version：RL-UI-FINAL-CONSOLIDATION-v1。
+- 人类验收与交付授权：2026-10-24主控直接原文“基地显示减负 v1 复验通过，请完成提交、推送和合并。”；accepted_product_candidate_id：`RL-UI-BASE-DECLUTTER-v1-local-544b4a735d34`。
+- 产品提交`1aacebf1feb211490405d3916805bd5add0a864d`；仅测试坐标与原交付记录的追加提交`2eaa02b69f97fa51e2626bcafd1adc7d412bea32`，已推送。累计33文件：原32文件加1份旧测试，两处y坐标同步；原25份无关脏文档和预览未提交。
+- [准确PR CI 40074198238](https://github.com/Disthinker/Project-Raidline/actions/runs/40074198238)绑定HEAD `2eaa02b69f97fa51e2626bcafd1adc7d412bea32`。准确PR的Windows、Ubuntu各2644项及原五项3ms检查已通过。 合并后[main CI 40075775860](https://github.com/Disthinker/Project-Raidline/actions/runs/40075775860)的Windows、Ubuntu各2644项及原五项3ms也通过。
+- merge_commit：`3818de00fb8d0cd1124e72570057a8c25086d1fb`。为保护现有修改，实际开发目录`E:\WorkPlace\Projects\C\Project Raidline-ui-inventory-presentation-v1`保留当前开发分支，不切换或重置其他工作区。合并结果以远端main及PR实际记录为准。
+- 已验收程序SHA256始终`d4caf356cbe3374415b52d995614d014665c81bccf6769847ecb45d02ca7c5ee`，原固定桌面入口保持。CI兼容候选`RL-UI-BASE-DECLUTTER-v1-ci-test-621613274734`，源码/测试488文件指纹`621613274734167b1ce3de373ad65ad4b7357633c16d3cdf21d7d2bb7282e641`；原产品源码和CMake逐字节不变。
+- 原157份测试中156份字节不变；tests/test_developer_range_ui.cpp仅将采样y126→118、568→560，矩形面积、亮度/像素阈值、双语及其余断言不变。该普通CI测试兼容修正沿用已获批任务权限，没有新增/模拟人类批准或修改已验收游戏界面。
+- 首轮CI40071692174为失败：Windows2644通过，Ubuntu仅旧坐标采样失败；双方五项3ms通过。完整原日志和像素区域原因保留于delivery/first-ci-review及ubuntu-range-text-diagnosis.md，不把旧失败冒充通过。
+- 最新本地构建4仅重建测试程序；聚焦2/2、完整2644/2644通过，0失败/跳过，原五项3ms通过；UI专项50项为未改变的同一正式程序。157个可执行文件中仅DeveloperRangeUiTest变化，其余156个（含游戏程序）、74份资源、7份DLL和桌面入口保持。
+- 五工作区原有修改保留。Git钩子两次归一化4份未暂存文档换行，均据原备份逐字节恢复并核对事前指纹；未改钩子、配置、信任、权限、模型或外部GDD。
+- 本地交付进度补记不为复制CI状态新增提交。完整证据：`C:\Users\Administrator\Documents\美术资源生成\tmp\ui-base-declutter-v1-20261024\delivery`。没有读取真实存档、启动游戏、美术生产或下一任务。
+- 策划同步：request_id `main-ui-closeout-20261024-pr192`；status：received；仅同步交付和UI专项关闭，不请求新任务或GDD改写。
+- pending_request：无。
+
+</details>
+
+<details>
+<summary>提交时记录及前序方案、验收和检查历史</summary>
+
+以下旧待验收、待批准与正在交付字段为历史，当前以上方实际状态为准。
 
 # 当前：UI已验收，正在补齐CI验证
 
@@ -1947,6 +2050,12 @@ Core Extraction Alpha 到 Regional Operations 基础阶段、“首张可玩随�
 
 </details>
 
+
+</details>
+
+</details>
+
+</details>
 
 </details>
 

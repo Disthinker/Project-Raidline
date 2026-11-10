@@ -70,7 +70,7 @@ public:
         const WeaponHandlingParameters &handling,
         bool preserveTransientState);
     void configureWeapon(const WeaponUseDefinition &definition);
-    void configureAmmunition(int penetration) noexcept;
+    void configureAmmunition(int penetration, int unarmoredDamageBonus = 0) noexcept;
     void reanchor(Vec2 shooterCenter, Vec2 direction, Vec2 worldSize) noexcept;
     void relocate(
         Vec2 previousCenter, Vec2 nextCenter, Vec2 worldSize,
@@ -133,6 +133,7 @@ private:
     WeaponAimState weaponAim_;
     int weaponBaseDamage_{kDefaultWeaponDamage};
     int weaponPenetration_{};
+    int weaponUnarmoredDamageBonus_{};
     float weaponMaximumRange_{2048.0F};
     float weaponLogicalBallisticSpeed_{6000.0F};
     TracerStyle weaponTracerStyle_{TracerStyle::Weak};

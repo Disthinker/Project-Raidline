@@ -288,8 +288,9 @@ std::size_t populatePublishedWarehouseCatalog(
     definitions.reserve(content.items().size());
     for (const ItemDefinition &definition : content.items())
     {
-        // Manufactured medical supplies are not automatic catalog grants.
-        if (definition.definitionId.value() == "item.medical.bandage_roll_basic")
+        // Workshop-only outputs are not automatic or persistent developer grants.
+        if (definition.definitionId.value() == "item.medical.bandage_roll_basic" ||
+            definition.definitionId == kExpanding545AmmunitionId)
         {
             continue;
         }

@@ -127,7 +127,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        kOpticsContentVersion);
+        kAmmoLoopContentVersion);
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -231,7 +231,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(registry.baseWorkforce().generalFallbackDurationPercent, 150U);
     EXPECT_EQ(registry.baseWorkforce().workshopLevel2DurationPercent, 85U);
     EXPECT_EQ(registry.baseWorkforce().medicalLevel2DurationPercent, 85U);
-    ASSERT_EQ(registry.baseManufacturingRecipes().size(), 6U);
+    ASSERT_EQ(registry.baseManufacturingRecipes().size(), 7U);
     const BaseManufacturingRecipeDefinition &manufacturing =
         registry.baseManufacturingRecipe(
             BaseManufacturingRecipeDefinitionId{
@@ -259,7 +259,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.category, BaseSupplyCategory::Recreation);
     EXPECT_EQ(comfort.requiredContribution, 14U);
     EXPECT_FALSE(comfort.sourceHint.empty());
-    ASSERT_EQ(registry.items().size(), 63U);
+    ASSERT_EQ(registry.items().size(), 64U);
     const auto &light = registry.item(ItemDefinitionId{"item.component.weapon_flashlight_basic"});
     const auto &battery = registry.item(ItemDefinitionId{"item.battery.universal"});
     ASSERT_TRUE(light.weaponLight);
@@ -1993,7 +1993,9 @@ TEST(ContentRegistryTest, FieldMedicalRecipesPreserveExistingProductionAndSingle
         {"base_manufacturing.medkit_alpha_repack", "item.medical.medkit_alpha", 1, 120,
          {{ItemDefinitionId{"item.loot.first_aid_stock"}, 1}}},
         {"base_manufacturing.bandage_roll_basic_repack", "item.medical.bandage_roll_basic", 1, 60,
-         {{ItemDefinitionId{"item.loot.first_aid_stock"}, 1}}}};
+         {{ItemDefinitionId{"item.loot.first_aid_stock"}, 1}}},
+        {"base_manufacturing.ammunition_5_45x39_expanding", "item.ammunition.5_45x39_expanding", 18, 120,
+         {{ItemDefinitionId{"item.loot.precision_components"}, 1}}}};
     ASSERT_EQ(content.baseManufacturingRecipes().size(), std::size(expected));
     for (const auto &entry : expected)
     {
@@ -2205,7 +2207,7 @@ TEST(ContentRegistryTest, OpticDefinitionsSeparateTheReceiverMountAndOpticModes)
 TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDefinitions)
 {
     const auto original = hospitalContentCandidateJson();
-    ASSERT_EQ(original.at("content_version").get<std::string>(), kOpticsContentVersion);
+    ASSERT_EQ(original.at("content_version").get<std::string>(), kAmmoLoopContentVersion);
     for (const auto *required : {"fortifications", "enemy_combat_definitions"})
     {
         SCOPED_TRACE(required);
@@ -2223,7 +2225,12 @@ TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDe
 TEST(ContentRegistryTest, FieldMedicalContentRejectsBrokenRecipeReferencesAndInvalidCharges)
 {
     const auto original = hospitalContentCandidateJson();
-    const auto recipeIndex = original.at("base_manufacturing").at("recipes").size() - 1;
+    const auto &recipes = original.at("base_manufacturing").at("recipes");
+    const auto recipe = std::find_if(recipes.begin(), recipes.end(), [](const auto &entry) {
+        return entry.at("id") == "base_manufacturing.bandage_roll_basic_repack";
+    });
+    ASSERT_NE(recipe, recipes.end());
+    const auto recipeIndex = static_cast<std::size_t>(std::distance(recipes.begin(), recipe));
     auto invalid = original;
     invalid["base_manufacturing"]["recipes"][recipeIndex]["inputs"][0]["item"] = "item.loot.missing_first_aid_stock";
     EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid.dump())), ContentRegistryError);
@@ -2239,6 +2246,50 @@ TEST(ContentRegistryTest, FieldMedicalContentRejectsBrokenRecipeReferencesAndInv
     items.erase(std::remove_if(items.begin(), items.end(), [](const auto &item)
         { return item.at("id") == "item.medical.bandage_roll_basic"; }), items.end());
     EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid.dump())), ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, Expanding545RoundHasOnlyTheWorkshopSource)
+{
+    const auto &content = publishedContentRegistry();
+    const auto &expanding = content.item(kExpanding545AmmunitionId);
+    ASSERT_TRUE(expanding.ammunitionUse);
+    EXPECT_EQ(expanding.ammunitionUse->caliberDefinitionId, CaliberDefinitionId{"caliber.5_45x39"});
+    EXPECT_EQ(expanding.ammunitionUse->penetration, 2);
+    EXPECT_EQ(expanding.ammunitionUse->unarmoredDamageBonus, 1);
+    EXPECT_EQ(expanding.maxStackSize, 60U);
+    EXPECT_EQ(expanding.unitWeightGrams, 11U);
+    EXPECT_FALSE(expanding.visualAssetsPublished);
+    EXPECT_EQ(expanding.marketBuyPrice, 0U);
+    EXPECT_EQ(expanding.marketRecyclePrice, 2U);
+    EXPECT_EQ(std::count_if(content.baseManufacturingRecipes().begin(), content.baseManufacturingRecipes().end(),
+        [&](const auto &recipe) { return recipe.outputItemDefinitionId == expanding.definitionId; }), 1);
+    for (const auto &table : content.lootTables())
+        for (const auto &entry : table.entries)
+            EXPECT_NE(entry.itemDefinitionId, expanding.definitionId);
+    EXPECT_TRUE(content.ammunitionFitsMagazine(expanding.definitionId, ItemDefinitionId{"item.magazine.5_45x39_30"}));
+    for (const auto *weapon : {"item.weapon.rifle_5_45_service", "item.weapon.carbine_5_45_compact"})
+        EXPECT_TRUE(content.ammunitionFitsWeapon(expanding.definitionId, ItemDefinitionId{weapon}));
+    EXPECT_FALSE(content.ammunitionFitsWeapon(expanding.definitionId, alpha_content::pistol));
+    for (const auto &item : content.items())
+        if (item.ammunitionUse && item.definitionId != expanding.definitionId)
+            EXPECT_EQ(item.ammunitionUse->unarmoredDamageBonus, 0) << item.definitionId.value();
+}
+
+TEST(ContentRegistryTest, Expanding545DamageBonusRejectsMalformedOrOutOfBoundsValues)
+{
+    const auto original = hospitalContentCandidateJson();
+    for (const auto &invalid : nlohmann::json::array({-1, 2, 1.5, "1", true, nullptr}))
+    {
+        SCOPED_TRACE(invalid.dump());
+        auto changed = original;
+        auto &items = changed.at("items");
+        const auto item = std::find_if(items.begin(), items.end(), [](const auto &value) {
+            return value.at("id") == std::string{kExpanding545AmmunitionId.value()};
+        });
+        ASSERT_NE(item, items.end());
+        (*item)["ammunition_use"]["unarmored_damage_bonus"] = invalid;
+        EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(changed.dump())), ContentRegistryError);
+    }
 }
 
 TEST(ContentRegistryTest, FixedMapsPublishDistinctLootRoles)

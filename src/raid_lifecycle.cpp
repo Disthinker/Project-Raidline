@@ -352,7 +352,7 @@ bool hasFixedRaidResourceOptic(
     std::uint32_t localSlot) noexcept
 {
     return localSlot == 0U &&
-        content.contentVersion() == kOpticsContentVersion &&
+        opticsCompatibleContent(content.contentVersion()) &&
         raid.mapDefinitionId.value() == "map.raid.frontier_exchange" &&
         point.instanceId == "resource_point.frontier.fabrication_stock:0" &&
         point.definitionId == "resource_point.frontier.fabrication_stock" &&

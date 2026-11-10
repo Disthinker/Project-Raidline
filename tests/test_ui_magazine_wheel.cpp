@@ -764,6 +764,7 @@ TEST_F(UiMagazineWheelTest, ThreeSizesBothLanguagesKeepAcceptedRingAndShortModeT
         const auto &projection=A::projection(*app);
         ASSERT_EQ(projection.entries.size(),4U);
         EXPECT_EQ(A::layout(*app).markers.size(),8U);EXPECT_TRUE(A::layout(*app).rows.empty());
+        EXPECT_TRUE(A::layout(*app).count.text.empty());
         for(const auto mode:{WeaponFireMode::SemiAutomatic,WeaponFireMode::ThreeRoundBurst,WeaponFireMode::Automatic})
             EXPECT_LT(A::text(*app).measure(uiWeaponFireModeName(mode,language),15),110);
         ASSERT_TRUE(SDL_RenderPresent(renderer));
@@ -783,6 +784,69 @@ TEST_F(UiMagazineWheelTest, ThreeSizesBothLanguagesKeepAcceptedRingAndShortModeT
         A::open(*app);
     }
     EXPECT_EQ(profileStateFingerprint(profile()),before);
+}
+TEST_F(UiMagazineWheelTest, Mixed545SelectedSectorDistinguishesTopFromChamberAtThreeSizes) {
+    const auto &content = publishedContentRegistry();
+    auto seed = makeNewPublishedProfile("mixed-5-45-wheel", content);
+    seed.tutorial = TutorialProgress::Complete;
+    seed.homeFounding.hintsDismissed = true;
+    const ItemDefinitionId enhanced{"item.ammunition.5_45x39_enhanced"};
+    const auto rifle = seed.assets.create(content.item(ItemDefinitionId{"item.weapon.rifle_5_45_service"}),
+        EquippedAssetLocation{EquipmentSlotKind::PrimaryWeapon});
+    seed.assets.findMutable(rifle)->chamberedRound = MagazineRoundRecord{enhanced, std::nullopt};
+    equipDecoyTestRig(seed, content);
+    const auto rig = equippedAsset(seed, EquipmentSlotKind::ChestRig);
+    ASSERT_TRUE(rig);
+    const auto pocket = ProfileContainerId::compartment(*rig, 0);
+    const auto &magazineDefinition = content.item(ItemDefinitionId{"item.magazine.5_45x39_30"});
+    const auto fit = findFirstProfileFit(seed, content, pocket, magazineDefinition, ItemOrientation::Degrees0);
+    ASSERT_TRUE(fit);
+    const auto magazine = seed.assets.create(magazineDefinition, StoredAssetLocation{pocket, *fit});
+    seed.assets.findMutable(magazine)->magazineRounds = {
+        {kExpanding545AmmunitionId, std::nullopt}, {enhanced, std::nullopt},
+        {kExpanding545AmmunitionId, std::nullopt}, {kExpanding545AmmunitionId, std::nullopt}};
+    ASSERT_TRUE(validateProfileState(seed, content).valid);
+
+    const auto path = directory.path() / "mixed-5-45";
+    std::filesystem::create_directories(path);
+    ASSERT_TRUE(SaveRepository(path).save(seed, content.contentVersion()).succeeded);
+    app = std::make_unique<App>();
+    A::flow(*app).configurePersistence(path);
+    ASSERT_TRUE(A::flow(*app).continueGame()); ASSERT_TRUE(A::flow(*app).deploy());
+    A::frame(*app);
+    ASSERT_EQ(A::session(*app).activeAlphaWeapon(), rifle);
+    A::open(*app);
+    ASSERT_TRUE(A::open(std::as_const(*app)));
+    ASSERT_EQ(A::ids(*app), std::vector<AssetInstanceId>{magazine});
+    const auto before = profileStateFingerprint(profile());
+
+    for (const auto size : {UiWindowSize{1024, 576}, UiWindowSize{1280, 720}, UiWindowSize{1920, 1080}})
+        for (const auto language : {UiLanguage::SimplifiedChinese, UiLanguage::English}) {
+            detach(); attach(size); A::text(*app).setLanguage(language); A::draw(*app);
+            const auto &entries = A::projection(*app).entries;
+            ASSERT_EQ(entries.size(), 1U);
+            EXPECT_TRUE(entries.front().mixedAmmunition);
+            EXPECT_EQ(entries.front().magazineTopRound, "HP");
+            EXPECT_EQ(entries.front().chamberRound, "E");
+            const auto &layout = A::layout(*app);
+            EXPECT_EQ(layout.markers.size(), 8U);
+            EXPECT_TRUE(layout.rows.empty());
+            const auto &label = layout.count;
+            const bool chinese = language == UiLanguage::SimplifiedChinese;
+            EXPECT_TRUE(label.text.starts_with("4/30"));
+            EXPECT_TRUE(chinese ? label.text.ends_with("顶扩 膛强") :
+                label.text.ends_with("TOP:HP CH:E") || label.text.ends_with("T:HP C:E"));
+            EXPECT_EQ(localizeUiText(language, label.text), label.text);
+            EXPECT_LE(A::text(*app).measure(label.text, label.size), 110.0F);
+            ASSERT_TRUE(SDL_RenderPresent(renderer));
+            if (const auto output = std::getenv("RAIDLINE_MAGAZINE_WHEEL_QA_DIR")) {
+                std::filesystem::create_directories(output);
+                const auto name = std::string{"mixed-5-45-wheel-"} + std::to_string(size.width) + (chinese ? "-zh.png" : "-en.png");
+                const auto png = (std::filesystem::path{output} / name).u8string();
+                ASSERT_TRUE(IMG_SavePNG(surface, reinterpret_cast<const char *>(png.c_str()))) << SDL_GetError();
+            }
+        }
+    EXPECT_EQ(profileStateFingerprint(profile()), before);
 }
 TEST(UiWeaponModeMenuTest, BothActivitiesOfferLegalVariableModesAndFixedPistolNeverOffersCycle) {
     const auto &content=publishedContentRegistry();auto profile=makeNewPublishedProfile("mode-menu",content);

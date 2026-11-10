@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-optics-loot-gunsmith-content-75",
+  "content_version": "raid-5-45-ammo-loop-content-76",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -279,6 +279,16 @@
         "output": {"item": "item.medical.bandage_roll_basic", "quantity": 1},
         "worker_count": 1,
         "duration_minutes": 60
+      },
+      {
+        "id": "base_manufacturing.ammunition_5_45x39_expanding",
+        "display_name": "5.45x39 Expanding Ammunition Batch",
+        "inputs": [
+          {"item": "item.loot.precision_components", "quantity": 1}
+        ],
+        "output": {"item": "item.ammunition.5_45x39_expanding", "quantity": 18},
+        "worker_count": 1,
+        "duration_minutes": 120
       }
     ]
   },
@@ -927,6 +937,20 @@
       "world_texture": "items/world/unpublished_ammo_5_45_enhanced.png",
       "market_recycle_price": 3,
       "ammunition_use": {"caliber": "caliber.5_45x39", "tier": "enhanced", "penetration": 7}
+    },
+    {
+      "id": "item.ammunition.5_45x39_expanding",
+      "display_name": "5.45x39 Expanding Ball",
+      "category": "ammunition",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 60,
+      "unit_weight_grams": 11,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 32, "y": 32}, "pickup_size": {"x": 48, "y": 48}},
+      "inventory_texture": "items/inventory/unpublished_ammo_5_45_expanding.png",
+      "world_texture": "items/world/unpublished_ammo_5_45_expanding.png",
+      "market_recycle_price": 2,
+      "ammunition_use": {"caliber": "caliber.5_45x39", "tier": "standard", "penetration": 2, "unarmored_damage_bonus": 1}
     },
     {
       "id": "item.ammunition.7_62x51_standard",

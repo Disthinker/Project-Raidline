@@ -19,12 +19,20 @@ inline constexpr std::string_view kWeaponHandlingContentVersion{
     "raid-weapon-handling-content-74"};
 inline constexpr std::string_view kOpticsContentVersion{
     "raid-optics-loot-gunsmith-content-75"};
+inline constexpr std::string_view kAmmoLoopContentVersion{
+    "raid-5-45-ammo-loop-content-76"};
 inline const ItemDefinitionId kFixedRaidOpticId{"item.component.optic_4x_5_45"};
+inline const ItemDefinitionId kExpanding545AmmunitionId{"item.ammunition.5_45x39_expanding"};
+
+[[nodiscard]] inline bool opticsCompatibleContent(std::string_view version) noexcept
+{
+    return version == kOpticsContentVersion || version == kAmmoLoopContentVersion;
+}
 
 [[nodiscard]] inline bool runnerCompatibleContent(std::string_view version) noexcept
 {
     return version == "raid-runner-infected-content-73" ||
-        version == kWeaponHandlingContentVersion || version == kOpticsContentVersion;
+        version == kWeaponHandlingContentVersion || opticsCompatibleContent(version);
 }
 
 class ContentRegistryError : public std::runtime_error

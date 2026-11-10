@@ -12,6 +12,7 @@ struct UiQuickWheelEntry {
     ItemDefinitionId definitionId;
     std::uint64_t quantity{}, remainingUses{};
     bool mixedAmmunition{};
+    std::string_view magazineTopRound, chamberRound;
 };
 [[nodiscard]] std::vector<AssetInstanceId> quickWheelCandidates(
     const ProfileState &, const ContentRegistry &, UiQuickWheelKind,

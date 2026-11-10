@@ -2579,9 +2579,10 @@ void GameplayWorld::configureWeaponFire(
         definition, handling, preserveWeaponFireTransientState);
 }
 
-void GameplayWorld::configureWeaponAmmunition(int penetration) noexcept
+void GameplayWorld::configureWeaponAmmunition(
+    int penetration, int unarmoredDamageBonus) noexcept
 {
-    shooting_.configureAmmunition(penetration);
+    shooting_.configureAmmunition(penetration, unarmoredDamageBonus);
 }
 
 bool GameplayWorld::isAlphaRaidWorld() const noexcept

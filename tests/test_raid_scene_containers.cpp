@@ -4,6 +4,7 @@
 #include <map>
 #include "alpha_content_ids.h"
 #include "game_session.h"
+#include "raid_corpse_search.h"
 #include "raid_lifecycle.h"
 #include "raid_credential_legacy_fixture.h"
 #include "raid_runner_legacy_fixture.h"
@@ -53,6 +54,44 @@ protected:
         ASSERT_TRUE(fit); const auto r=move(id,ProfileContainerId::compartment(bag,0),*fit); ASSERT_TRUE(r.succeeded)<<r.message;
     }
 };
+TEST(RaidSceneContainerContentTest, AmmoLoopPreservesFixedOpticAndPrecisionMaterialRolls)
+{
+    const auto historical = contentBeforeAmmoLoop();
+    const ItemDefinitionId precision{"item.loot.precision_components"};
+    bool observedPrecision{};
+    for (const auto seed : {1U, 9917U})
+    {
+        SCOPED_TRACE(seed);
+        auto old = makeNewAlphaProfile("ammo-loop-loot-contract", historical);
+        auto current = makeNewAlphaProfile("ammo-loop-loot-contract", content);
+        const DeployCommand command{"ammo-loop-loot", "ammo-loop-loot-settlement", seed, frontier};
+        const auto oldReceipt = executeDeploy(old, historical, command, {old.revision, "ammo-loop-loot-deploy"});
+        ASSERT_TRUE(oldReceipt.succeeded) << oldReceipt.message;
+        const auto newReceipt = executeDeploy(current, content, command, {current.revision, "ammo-loop-loot-deploy"});
+        ASSERT_TRUE(newReceipt.succeeded) << newReceipt.message;
+        ASSERT_TRUE(old.pendingRaid);
+        ASSERT_TRUE(current.pendingRaid);
+        EXPECT_EQ(current.pendingRaid->spatialLayout, old.pendingRaid->spatialLayout);
+        EXPECT_EQ(current.pendingRaid->enemies, old.pendingRaid->enemies);
+        EXPECT_EQ(current.pendingRaid->rulesVersion, kRaidRunnerRulesVersion);
+        EXPECT_EQ(current.pendingRaid->loot, old.pendingRaid->loot);
+        std::size_t fixedOptics{};
+        for (const auto &loot : current.pendingRaid->loot)
+        {
+            EXPECT_NE(loot.definitionId, kExpanding545AmmunitionId);
+            if (loot.definitionId == precision && !loot.resourcePointInstanceId.empty())
+                observedPrecision = true;
+            if (loot.definitionId != kFixedRaidOpticId) continue;
+            ++fixedOptics;
+            EXPECT_EQ(loot.resourcePointInstanceId, "resource_point.frontier.fabrication_stock:0");
+            EXPECT_EQ(loot.resourcePointSlotIndex, 0U);
+            EXPECT_EQ(loot.quantity, 1U);
+        }
+        EXPECT_EQ(fixedOptics, 1U);
+    }
+    EXPECT_TRUE(observedPrecision);
+}
+
 TEST_F(RaidSceneContainerTest, FrozenRollsHaveOneOwnerAndNoAdditionalRewardsAcrossSeeds) {
     const auto oldContent=contentBeforeRunner();
     const auto preOptics=contentBeforeOptics();

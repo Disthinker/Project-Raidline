@@ -46,6 +46,8 @@ struct LogicalFlightCheckpoint
     std::uint32_t aimedRegion{}, tracerStyle{};
     bool weakPoint{};
     float tracerLength{}, tracerOpacity{}, tracerLifetime{};
+    int unarmoredDamageBonus{};
+    float unarmoredDamageRange{};
     friend bool operator==(const LogicalFlightCheckpoint &,
                            const LogicalFlightCheckpoint &) = default;
 };
@@ -72,6 +74,7 @@ struct WorldShootingCheckpoint
     float tracerLength{30}, tracerOpacity{0.42F}, tracerLifetime{0.055F};
     // The pre-start empty DTO is legal; live checkpoints always set initialized.
     bool initialized{};
+    int weaponUnarmoredDamageBonus{};
     friend bool operator==(const WorldShootingCheckpoint &,
                            const WorldShootingCheckpoint &) = default;
 };

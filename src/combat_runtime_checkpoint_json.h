@@ -135,14 +135,82 @@ inline void from_json(const nlohmann::json &j, EnemyRuntimeCheckpoint &v)
     scratchCooldown, specialChargeHold, searchRemaining, specialChargeArmed,
     hitConsumed, activeOpportunityPending, navigationTarget,
     navigationRefreshRemaining, torsoArmor, variant, visible_pursuit_move */
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(LogicalFlightCheckpoint, id, origin, position, direction, impact,
-                                   speed, extent, travelled, maximumDistance, damage, penetration,
-                                   aimedTarget, aimedRegion, tracerStyle, weakPoint, tracerLength,
-                                   tracerOpacity, tracerLifetime)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WorldShootingCheckpoint, nextShotId, flights, fireConfig,
-                                   fireState, spreadSeed, spreadRandomState, spreadRandomIncrement,
-                                   burstShotCount, aimConfig, aimVectors, aimDownSightsProgress,
-                                   recoilBendRemaining, aimControlMode, aimInitialized, recoilSeed,
-                                   recoilRandomState, recoilRandomIncrement, weaponDamage,
-                                   weaponPenetration, maximumRange, logicalSpeed, tracerStyle,
-                                   tracerLength, tracerOpacity, tracerLifetime, initialized)
+// Keep the legacy fields required and omit the new effect when absent.
+// The save envelope and defense checkpoint then retain their old payload
+// and hash for ordinary ammunition.
+#define RAIDLINE_FLIGHT_FIELDS(FIELD) \
+    FIELD(id); FIELD(origin); FIELD(position); FIELD(direction); FIELD(impact); \
+    FIELD(speed); FIELD(extent); FIELD(travelled); FIELD(maximumDistance); \
+    FIELD(damage); FIELD(penetration); FIELD(aimedTarget); FIELD(aimedRegion); \
+    FIELD(tracerStyle); FIELD(weakPoint); FIELD(tracerLength); \
+    FIELD(tracerOpacity); FIELD(tracerLifetime)
+
+inline int parseCheckpointUnarmoredDamageBonus(const nlohmann::json &value)
+{
+    if (!value.is_number_integer() || value.get<std::int64_t>() != 1)
+        throw std::invalid_argument("Invalid checkpoint unarmored damage bonus");
+    return 1;
+}
+
+inline void to_json(nlohmann::json &j, const LogicalFlightCheckpoint &v)
+{
+    j = nlohmann::json::object();
+#define FIELD(name) j[#name] = v.name
+    RAIDLINE_FLIGHT_FIELDS(FIELD);
+#undef FIELD
+    if (v.unarmoredDamageBonus > 0)
+    {
+        j["unarmoredDamageBonus"] = v.unarmoredDamageBonus;
+        j["unarmoredDamageRange"] = v.unarmoredDamageRange;
+    }
+}
+
+inline void from_json(const nlohmann::json &j, LogicalFlightCheckpoint &v)
+{
+#define FIELD(name) j.at(#name).get_to(v.name)
+    RAIDLINE_FLIGHT_FIELDS(FIELD);
+#undef FIELD
+    v.unarmoredDamageBonus = 0;
+    v.unarmoredDamageRange = 0.0F;
+    if (j.contains("unarmoredDamageBonus") || j.contains("unarmoredDamageRange"))
+    {
+        v.unarmoredDamageBonus = parseCheckpointUnarmoredDamageBonus(j.at("unarmoredDamageBonus"));
+        const auto &range = j.at("unarmoredDamageRange");
+        if (!range.is_number())
+            throw std::invalid_argument("Invalid checkpoint unarmored damage range");
+        v.unarmoredDamageRange = range.get<float>();
+        if (!std::isfinite(v.unarmoredDamageRange) || v.unarmoredDamageRange <= 0.0F)
+            throw std::invalid_argument("Invalid checkpoint unarmored damage range");
+    }
+}
+#undef RAIDLINE_FLIGHT_FIELDS
+
+#define RAIDLINE_SHOOTING_FIELDS(FIELD) \
+    FIELD(nextShotId); FIELD(flights); FIELD(fireConfig); FIELD(fireState); \
+    FIELD(spreadSeed); FIELD(spreadRandomState); FIELD(spreadRandomIncrement); \
+    FIELD(burstShotCount); FIELD(aimConfig); FIELD(aimVectors); \
+    FIELD(aimDownSightsProgress); FIELD(recoilBendRemaining); FIELD(aimControlMode); \
+    FIELD(aimInitialized); FIELD(recoilSeed); FIELD(recoilRandomState); \
+    FIELD(recoilRandomIncrement); FIELD(weaponDamage); FIELD(weaponPenetration); \
+    FIELD(maximumRange); FIELD(logicalSpeed); FIELD(tracerStyle); FIELD(tracerLength); \
+    FIELD(tracerOpacity); FIELD(tracerLifetime); FIELD(initialized)
+
+inline void to_json(nlohmann::json &j, const WorldShootingCheckpoint &v)
+{
+    j = nlohmann::json::object();
+#define FIELD(name) j[#name] = v.name
+    RAIDLINE_SHOOTING_FIELDS(FIELD);
+#undef FIELD
+    if (v.weaponUnarmoredDamageBonus > 0)
+        j["weaponUnarmoredDamageBonus"] = v.weaponUnarmoredDamageBonus;
+}
+
+inline void from_json(const nlohmann::json &j, WorldShootingCheckpoint &v)
+{
+#define FIELD(name) j.at(#name).get_to(v.name)
+    RAIDLINE_SHOOTING_FIELDS(FIELD);
+#undef FIELD
+    v.weaponUnarmoredDamageBonus = j.contains("weaponUnarmoredDamageBonus")
+        ? parseCheckpointUnarmoredDamageBonus(j.at("weaponUnarmoredDamageBonus")) : 0;
+}
+#undef RAIDLINE_SHOOTING_FIELDS

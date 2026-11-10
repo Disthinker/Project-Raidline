@@ -235,6 +235,8 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     simulationInput.quitRaidJustPressed = false;
 
     int ammunitionPenetration{};
+    int unarmoredDamageBonus{};
+    std::optional<ItemDefinitionId> chamberedRound;
     std::optional<WeaponHandlingParameters> weaponHandling;
     if (weapon.has_value())
     {
@@ -260,11 +262,11 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
                             effectiveWeaponUse(profile_, publishedContentRegistry(), weaponAsset->instanceId));
                     }
                 }
-                const std::optional<ItemDefinitionId> ammunitionId =
-                    weaponAsset->chamberedRound.has_value()
-                    ? std::optional<ItemDefinitionId>{
-                          weaponAsset->chamberedRound->definitionId}
-                    : definition.compatibleAmmunitionDefinitionId;
+                if (weaponAsset->chamberedRound)
+                    chamberedRound = weaponAsset->chamberedRound->definitionId;
+                const auto &ammunitionId =
+                    chamberedRound ? chamberedRound
+                                   : definition.compatibleAmmunitionDefinitionId;
                 if (ammunitionId.has_value())
                 {
                     const ItemDefinition &ammunition =
@@ -273,6 +275,8 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
                     {
                         ammunitionPenetration =
                             ammunition.ammunitionUse->penetration;
+                        unarmoredDamageBonus =
+                            ammunition.ammunitionUse->unarmoredDamageBonus;
                     }
                 }
             }
@@ -281,7 +285,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
             }
         }
     }
-    baseWorld.configureWeaponAmmunition(ammunitionPenetration);
+    baseWorld.configureWeaponAmmunition(ammunitionPenetration, unarmoredDamageBonus);
     baseWorld.setDaylight(worldClockProjection().timeOfDay == WorldTimeOfDay::Day);
     prepareWeaponTrigger(simulationInput,rawInput,weapon,
         !input.inventoryOpen && !input.freezeObservationDirection && !input.throwableModal &&
@@ -382,6 +386,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
                 profile_.revision,
                 *pendingFireTransaction});
         if (!committed.succeeded ||
+            committed.firedAmmunitionDefinitionId != chamberedRound ||
             (committed.result != WeaponAmmoResult::Fired &&
              committed.result != WeaponAmmoResult::FiredAndMalfunctioned))
         {
@@ -3870,6 +3875,8 @@ void GameSession::updateAlphaRaid(
     simulationInput.healJustPressed = false;
     simulationInput.quitRaidJustPressed = false;
     int ammunitionPenetration{};
+    int unarmoredDamageBonus{};
+    std::optional<ItemDefinitionId> chamberedRound;
     std::optional<WeaponHandlingParameters> weaponHandling;
     if (weapon.has_value())
     {
@@ -3885,17 +3892,11 @@ void GameSession::updateAlphaRaid(
                     weaponHandling = deriveWeaponHandling(
                         effectiveWeaponUse(profile_, publishedContentRegistry(), weaponAsset->instanceId));
                 }
-                std::optional<ItemDefinitionId> ammunitionId;
-                if (weaponAsset->chamberedRound.has_value())
-                {
-                    ammunitionId =
-                        weaponAsset->chamberedRound->definitionId;
-                }
-                else
-                {
-                    ammunitionId =
-                        definition.compatibleAmmunitionDefinitionId;
-                }
+                if (weaponAsset->chamberedRound)
+                    chamberedRound = weaponAsset->chamberedRound->definitionId;
+                const auto &ammunitionId =
+                    chamberedRound ? chamberedRound
+                                   : definition.compatibleAmmunitionDefinitionId;
                 if (ammunitionId.has_value())
                 {
                     const ItemDefinition &ammunition =
@@ -3904,6 +3905,8 @@ void GameSession::updateAlphaRaid(
                     {
                         ammunitionPenetration =
                             ammunition.ammunitionUse->penetration;
+                        unarmoredDamageBonus =
+                            ammunition.ammunitionUse->unarmoredDamageBonus;
                     }
                 }
             }
@@ -3912,7 +3915,7 @@ void GameSession::updateAlphaRaid(
             }
         }
     }
-    world_->configureWeaponAmmunition(ammunitionPenetration);
+    world_->configureWeaponAmmunition(ammunitionPenetration, unarmoredDamageBonus);
     prepareWeaponTrigger(simulationInput, rawInput, weapon,
         !input.inventoryOpen && !input.freezeObservationDirection && !input.throwableModal &&
         !world_->player().isControlled() &&
@@ -4073,6 +4076,7 @@ void GameSession::updateAlphaRaid(
                     profile_.revision,
                     *pendingFireTransaction});
             if (!committed.succeeded ||
+                committed.firedAmmunitionDefinitionId != chamberedRound ||
                 (committed.result != WeaponAmmoResult::Fired &&
                  committed.result !=
                      WeaponAmmoResult::FiredAndMalfunctioned))

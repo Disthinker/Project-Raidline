@@ -209,6 +209,7 @@ struct AmmunitionUseDefinition
     CaliberDefinitionId caliberDefinitionId;
     AmmunitionTier tier{AmmunitionTier::Standard};
     int penetration{};
+    int unarmoredDamageBonus{};
 
     friend bool operator==(
         const AmmunitionUseDefinition &,

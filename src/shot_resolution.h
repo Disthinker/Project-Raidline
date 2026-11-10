@@ -32,6 +32,8 @@ struct ShotCommand
     float maximumDistance{2048.0F};
     std::optional<ShotAimIntent> aimIntent;
     int penetration{};
+    int unarmoredDamageBonus{};
+    float unarmoredDamageRange{};
 };
 
 enum class ShotResolutionStatus
@@ -46,6 +48,7 @@ enum class ShotResolutionStatus
     RejectedInvalidPenetration,
     RejectedInvalidMaximumDistance,
     RejectedInvalidAimIntent,
+    RejectedInvalidUnarmoredDamage,
 };
 
 // A domain result produced at successful fire time. It freezes all values
@@ -64,6 +67,8 @@ struct ShotResolution
     float maximumDistance{};
     Vec2 impactPosition{};
     std::optional<ShotAimIntent> aimIntent;
+    int unarmoredDamageBonus{};
+    float unarmoredDamageRange{};
 
     [[nodiscard]]
     bool accepted() const noexcept;

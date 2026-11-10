@@ -25,6 +25,11 @@ struct ArmorProtectionView
     std::uint32_t durabilityLossBasisPoints{10000};
 };
 
+[[nodiscard]] constexpr bool validUnarmoredDamageBonus(int bonus) noexcept
+{
+    return bonus >= 0 && bonus <= 1;
+}
+
 struct CombatDamageCommand
 {
     int baseDamage{};
@@ -33,6 +38,7 @@ struct CombatDamageCommand
     int armorDamage{};
     bool weakPoint{};
     std::optional<ArmorProtectionView> armor;
+    int unarmoredDamageBonus{};
 };
 
 enum class CombatDamageStatus

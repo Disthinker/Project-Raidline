@@ -132,7 +132,12 @@ TEST_F(UiBaseWorkshopTest, EveryPublishedRecipeKeepsItsOutputAndInputQuantities)
     for(std::size_t i=0;i<content.baseManufacturingRecipes().size();++i){
         profile()=seed; A::refresh(*app);const auto &r=content.baseManufacturingRecipes()[i];
         for(const auto &s:r.inputs)create(s.itemDefinitionId,s.quantity);
-        pointer(center(uiWorkshopRecipeRect(i)),true);pointer(center(uiWorkshopRecipeRect(i)),false);A::frame(*app);
+        const auto page = i / kUiWorkshopPageSize;
+        if (A::state(*app).page < page) control(Control::Next);
+        ASSERT_EQ(A::state(*app).page, page);
+        const auto point = center(uiWorkshopRecipeRect(i % kUiWorkshopPageSize));
+        pointer(point, true); pointer(point, false); A::frame(*app);
+        ASSERT_EQ(A::state(*app).selection, r.id);
         const auto before=profile().worldClock.elapsedWorldMinutes;control(Control::Main);ASSERT_TRUE(profile().baseManufacturing.activeOrder);
         const auto &order=*profile().baseManufacturing.activeOrder;EXPECT_EQ(order.recipeDefinitionId,r.id);
         const auto *output=profile().assets.find(order.outputAssetId);ASSERT_NE(output,nullptr);EXPECT_EQ(output->definitionId,r.outputItemDefinitionId);EXPECT_EQ(output->quantity,r.outputQuantity);
