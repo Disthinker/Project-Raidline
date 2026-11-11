@@ -127,7 +127,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        kFuelExtractionContentVersion);
+        kArmorReadinessContentVersion);
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -231,7 +231,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(registry.baseWorkforce().generalFallbackDurationPercent, 150U);
     EXPECT_EQ(registry.baseWorkforce().workshopLevel2DurationPercent, 85U);
     EXPECT_EQ(registry.baseWorkforce().medicalLevel2DurationPercent, 85U);
-    ASSERT_EQ(registry.baseManufacturingRecipes().size(), 7U);
+    ASSERT_EQ(registry.baseManufacturingRecipes().size(), 8U);
     const BaseManufacturingRecipeDefinition &manufacturing =
         registry.baseManufacturingRecipe(
             BaseManufacturingRecipeDefinitionId{
@@ -259,7 +259,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.category, BaseSupplyCategory::Recreation);
     EXPECT_EQ(comfort.requiredContribution, 14U);
     EXPECT_FALSE(comfort.sourceHint.empty());
-    ASSERT_EQ(registry.items().size(), 67U);
+    ASSERT_EQ(registry.items().size(), 68U);
     const auto &light = registry.item(ItemDefinitionId{"item.component.weapon_flashlight_basic"});
     const auto &battery = registry.item(ItemDefinitionId{"item.battery.universal"});
     ASSERT_TRUE(light.weaponLight);
@@ -1905,6 +1905,9 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
     const auto &hospital = registry.map(MapDefinitionId{"map.raid.hospital_district"});
     const auto &riverside = registry.map(MapDefinitionId{"map.raid.riverside"});
     const auto &frontier = registry.map(kFreightCrateMapId);
+    const auto &ashworks = registry.map(kArmorRepairBlueprintMapId);
+    const bool blueprintSlot = std::any_of(ashworks.raidLootSlots.begin(), ashworks.raidLootSlots.end(),
+        [](const auto &slot) { return slot.route == "resource"; });
     const bool freightKeySlot = std::any_of(riverside.raidLootSlots.begin(), riverside.raidLootSlots.end(),
         [](const auto &slot) { return slot.route == "central"; });
     const bool fuelSlot = std::any_of(frontier.interiors.begin(), frontier.interiors.end(),
@@ -1948,7 +1951,8 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
             item.definitionId == kFixedRaidOpticId ||
             (item.definitionId == kHospitalNightVisionId && nightVisionSlot) ||
             (item.definitionId == kFreightCrateKeyId && freightKeySlot) ||
-            (item.definitionId == kRaidFuelCanId && fuelSlot);
+            (item.definitionId == kRaidFuelCanId && fuelSlot) ||
+            (item.definitionId == kArmorRepairBlueprintId && blueprintSlot);
         EXPECT_TRUE(
             item.marketBuyPrice > 0U || lootSource ||
             manufacturingSource || fixedResourceSource)
@@ -1972,6 +1976,7 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
             item.nightVision.has_value() ||
             item.definitionId == kFreightCrateKeyId ||
             item.definitionId == kRaidFuelCanId ||
+            item.definitionId == kArmorRepairBlueprintId ||
             item.baseContribution.has_value() ||
             item.baseConstructionMaterialValue > 0U;
         EXPECT_TRUE(
@@ -2018,7 +2023,9 @@ TEST(ContentRegistryTest, FieldMedicalRecipesPreserveExistingProductionAndSingle
         {"base_manufacturing.bandage_roll_basic_repack", "item.medical.bandage_roll_basic", 1, 60,
          {{ItemDefinitionId{"item.loot.first_aid_stock"}, 1}}},
         {"base_manufacturing.ammunition_5_45x39_expanding", "item.ammunition.5_45x39_expanding", 18, 120,
-         {{ItemDefinitionId{"item.loot.precision_components"}, 1}}}};
+         {{ItemDefinitionId{"item.loot.precision_components"}, 1}}},
+        {"base_manufacturing.armor_repair_tool", "item.maintenance.armor_kit_basic", 1, 240,
+         {{ItemDefinitionId{"item.loot.copper_wire_spool"}, 1}, {ItemDefinitionId{"item.loot.scrap_parts"}, 1}}}};
     ASSERT_EQ(content.baseManufacturingRecipes().size(), std::size(expected));
     for (const auto &entry : expected)
     {
@@ -2230,7 +2237,7 @@ TEST(ContentRegistryTest, OpticDefinitionsSeparateTheReceiverMountAndOpticModes)
 TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDefinitions)
 {
     const auto original = hospitalContentCandidateJson();
-    ASSERT_EQ(original.at("content_version").get<std::string>(), kFuelExtractionContentVersion);
+    ASSERT_EQ(original.at("content_version").get<std::string>(), kArmorReadinessContentVersion);
     for (const auto *required : {"fortifications", "enemy_combat_definitions"})
     {
         SCOPED_TRACE(required);

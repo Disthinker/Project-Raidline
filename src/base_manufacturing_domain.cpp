@@ -6,8 +6,10 @@
 #include "base_workforce_domain.h"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <set>
+#include <span>
 #include <utility>
 
 namespace
@@ -164,17 +166,43 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
     const ContentRegistry &content,
     const StartBaseManufacturingCommand &command)
 {
-    const BaseManufacturingRecipeDefinition *recipe{};
-    try
-    {
-        recipe = &content.baseManufacturingRecipe(
-            command.recipeDefinitionId);
-    }
-    catch (...)
+    const bool research = command.recipeDefinitionId == kArmorRepairResearchId;
+    const bool armorRepair = command.recipeDefinitionId == kArmorRepairRecipeId;
+    if ((research || armorRepair) &&
+        content.contentVersion() != kArmorReadinessContentVersion)
     {
         return startFailure(
             DomainErrorCode::IllegalDestination,
             "manufacturing recipe does not exist",
+            profile.revision);
+    }
+    const BaseManufacturingRecipeDefinition *recipe{};
+    if (!research)
+    {
+        try
+        {
+            recipe = &content.baseManufacturingRecipe(command.recipeDefinitionId);
+        }
+        catch (...)
+        {
+            return startFailure(
+                DomainErrorCode::IllegalDestination,
+                "manufacturing recipe does not exist",
+                profile.revision);
+        }
+    }
+    if (research && profile.baseManufacturing.armorRepairRecipeUnlocked)
+    {
+        return startFailure(
+            DomainErrorCode::IllegalDestination,
+            "the armor repair recipe is already unlocked",
+            profile.revision);
+    }
+    if (armorRepair && !profile.baseManufacturing.armorRepairRecipeUnlocked)
+    {
+        return startFailure(
+            DomainErrorCode::IllegalDestination,
+            "research the armor repair blueprint first",
             profile.revision);
     }
     if (profile.pendingRaid.has_value())
@@ -200,8 +228,23 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
             "the workshop is stored in the facility reserve",
             profile.revision);
     }
-    if (!profile.baseWorkforce.workshopWorker.has_value() ||
-        recipe->workerCount != 1U)
+    if ((research || armorRepair) && profile.baseConstruction.workshopLevel < 2U)
+    {
+        return startFailure(
+            DomainErrorCode::IllegalDestination,
+            "armor repair requires a level 2 workshop",
+            profile.revision);
+    }
+    if ((research || armorRepair) &&
+        profile.baseWorkforce.workshopWorker != BaseResidentProfession::Engineering)
+    {
+        return startFailure(
+            DomainErrorCode::Capacity,
+            "armor repair requires an assigned engineer",
+            profile.revision);
+    }
+    const std::uint32_t workerCount = research ? 1U : recipe->workerCount;
+    if (!profile.baseWorkforce.workshopWorker.has_value() || workerCount != 1U)
     {
         return startFailure(
             DomainErrorCode::Capacity,
@@ -221,7 +264,7 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
             profile.revision);
     }
     const std::uint32_t moraleDuration = applyBaseMoraleDurationPercent(
-        recipe->durationMinutes,
+        research ? kArmorRepairResearchDurationMinutes : recipe->durationMinutes,
         profile.baseMorale.tier,
         content.baseMorale());
     const std::uint32_t adjustedDuration = applyBaseFacilityTaskDuration(
@@ -244,8 +287,8 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
             adjustedDuration, profile, content);
     if (profile.nextBaseServiceJobId ==
             std::numeric_limits<BaseServiceJobId>::max() ||
-        profile.assets.nextAssetId() ==
-            std::numeric_limits<AssetInstanceId>::max() ||
+        (!research && profile.assets.nextAssetId() ==
+            std::numeric_limits<AssetInstanceId>::max()) ||
         profile.worldClock.elapsedWorldMinutes >
             std::numeric_limits<std::uint64_t>::max() -
                 finalDuration)
@@ -261,12 +304,17 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
         DomainErrorCode::None,
         {},
         profile.revision,
-        recipe->workerCount,
+        workerCount,
         workerProfession,
         finalDuration,
         siteDurationPercent};
+    static const std::array researchInputs{
+        BaseManufacturingInputDefinition{kArmorRepairBlueprintId, 1U}};
+    const std::span<const BaseManufacturingInputDefinition> inputs = research
+        ? std::span<const BaseManufacturingInputDefinition>{researchInputs}
+        : std::span<const BaseManufacturingInputDefinition>{recipe->inputs};
     std::set<AssetInstanceId> selected;
-    for (const BaseManufacturingInputDefinition &input : recipe->inputs)
+    for (const BaseManufacturingInputDefinition &input : inputs)
     {
         const auto found = std::find_if(
             profile.assets.records().begin(),
@@ -274,17 +322,29 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
             [&](const auto &entry)
             {
                 const AssetRecord &asset = entry.second;
-                return !selected.contains(asset.instanceId) &&
-                    asset.definitionId == input.itemDefinitionId &&
-                    asset.quantity == input.quantity &&
-                    assetIsBaseAccessible(profile, asset.instanceId) &&
+                if (selected.contains(asset.instanceId) ||
+                    asset.definitionId != input.itemDefinitionId ||
+                    asset.quantity != input.quantity)
+                {
+                    return false;
+                }
+                if (research)
+                {
+                    const auto *location =
+                        std::get_if<StoredAssetLocation>(&asset.location);
+                    return location != nullptr &&
+                        location->container.kind == ProfileContainerKind::Stash;
+                }
+                return assetIsBaseAccessible(profile, asset.instanceId) &&
                     !hasChildren(profile, asset.instanceId);
             });
         if (found == profile.assets.records().end())
         {
             return startFailure(
                 DomainErrorCode::MissingAsset,
-                "required manufacturing input is unavailable",
+                research
+                    ? "place the armor repair blueprint in the Stash"
+                    : "required manufacturing input is unavailable",
                 profile.revision);
         }
         selected.insert(found->first);
@@ -333,22 +393,25 @@ BaseManufacturingReceipt executeStartBaseManufacturing(
         asset->location = BaseServiceAssetLocation{jobId};
         inputIds.push_back(asset->instanceId);
     }
-    const BaseManufacturingRecipeDefinition &recipe =
-        content.baseManufacturingRecipe(command.recipeDefinitionId);
-    AssetInstanceId outputId{};
-    try
+    std::optional<AssetInstanceId> outputId;
+    if (command.recipeDefinitionId != kArmorRepairResearchId)
     {
-        outputId = candidate.assets.create(
-            content.item(recipe.outputItemDefinitionId),
-            BaseServiceAssetLocation{jobId},
-            recipe.outputQuantity);
-    }
-    catch (...)
-    {
-        return receiptFailure(
-            DomainErrorCode::RevisionOverflow,
-            "manufacturing output identity cannot be reserved",
-            profile);
+        const BaseManufacturingRecipeDefinition &recipe =
+            content.baseManufacturingRecipe(command.recipeDefinitionId);
+        try
+        {
+            outputId = candidate.assets.create(
+                content.item(recipe.outputItemDefinitionId),
+                BaseServiceAssetLocation{jobId},
+                recipe.outputQuantity);
+        }
+        catch (...)
+        {
+            return receiptFailure(
+                DomainErrorCode::RevisionOverflow,
+                "manufacturing output identity cannot be reserved",
+                profile);
+        }
     }
     candidate.baseManufacturing.activeOrder = BaseManufacturingOrder{
         jobId,
@@ -358,7 +421,7 @@ BaseManufacturingReceipt executeStartBaseManufacturing(
         candidate.worldClock.elapsedWorldMinutes,
         candidate.worldClock.elapsedWorldMinutes + plan.durationMinutes,
         std::move(inputIds),
-        outputId,
+        outputId.value_or(0),
         false};
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
@@ -448,7 +511,10 @@ BaseManufacturingReceipt executeCancelBaseManufacturing(
         }
         asset->location = selection.destination;
     }
-    static_cast<void>(candidate.assets.erase(order.outputAssetId));
+    if (order.outputAssetId != 0)
+    {
+        static_cast<void>(candidate.assets.erase(order.outputAssetId));
+    }
     candidate.baseManufacturing.activeOrder.reset();
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
@@ -570,6 +636,26 @@ BaseManufacturingAdvanceResult applyBaseManufacturingThrough(
         return {};
     }
     const BaseServiceJobId jobId = order.jobId;
+    if (order.recipeDefinitionId == kArmorRepairResearchId)
+    {
+        if (order.inputAssetIds.size() != 1U)
+        {
+            return {};
+        }
+        const AssetInstanceId blueprintId = order.inputAssetIds.front();
+        const AssetRecord *blueprint = profile.assets.find(blueprintId);
+        if (blueprint == nullptr ||
+            blueprint->definitionId != kArmorRepairBlueprintId ||
+            blueprint->quantity != 1U ||
+            blueprint->location != AssetLocation{BaseServiceAssetLocation{jobId}})
+        {
+            return {};
+        }
+        static_cast<void>(profile.assets.erase(blueprintId));
+        profile.baseManufacturing.armorRepairRecipeUnlocked = true;
+        profile.baseManufacturing.activeOrder.reset();
+        return {true, false, jobId, std::nullopt, true};
+    }
     const AssetInstanceId outputId = order.outputAssetId;
     AssetRecord *output = profile.assets.findMutable(outputId);
     if (output == nullptr)

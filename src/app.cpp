@@ -6361,6 +6361,12 @@ void App::consumePresentationAudioEvents()
                 BaseFacilityKind::Workshop);
             gameAudio_.play(SoundEventId::UiConfirm);
             break;
+        case GameSessionPresentationEvent::BaseArmorRepairResearchCompleted:
+            pushBaseOperationNotice(
+                BaseOperationNoticeKind::ArmorRepairResearch,
+                BaseFacilityKind::Workshop);
+            gameAudio_.play(SoundEventId::UiConfirm);
+            break;
         case GameSessionPresentationEvent::BaseResidentTreatmentCompleted:
             pushBaseOperationNotice(
                 BaseOperationNoticeKind::ResidentTreatment,
@@ -13156,6 +13162,7 @@ void App::renderBaseOperationNotices()
         uiFinalPanel(renderer_,row);
         const char *label="FACILITY UPGRADE COMPLETE";
         if(notice.kind==BaseOperationNoticeKind::Manufacturing)label="MANUFACTURING COMPLETE | OUTPUT READY";
+        else if(notice.kind==BaseOperationNoticeKind::ArmorRepairResearch)label="ARMOR REPAIR RECIPE UNLOCKED";
         else if(notice.kind==BaseOperationNoticeKind::ResidentTreatment)label="RESIDENT TREATMENT COMPLETE";
         uiFinalText(renderer_,uiTextRenderer_,{row.x+12,row.y+5,row.w-24,38},fmt::format("{} | {}",label,baseFacilityName(notice.facility)),12,2);
     }

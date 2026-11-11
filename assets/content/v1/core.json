@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-fuel-extraction-loop-content-79",
+  "content_version": "base-research-armor-readiness-content-80",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -289,6 +289,17 @@
         "output": {"item": "item.ammunition.5_45x39_expanding", "quantity": 18},
         "worker_count": 1,
         "duration_minutes": 120
+      },
+      {
+        "id": "base_manufacturing.armor_repair_tool",
+        "display_name": "Armor Repair Kit",
+        "inputs": [
+          {"item": "item.loot.copper_wire_spool", "quantity": 1},
+          {"item": "item.loot.scrap_parts", "quantity": 1}
+        ],
+        "output": {"item": "item.maintenance.armor_kit_basic", "quantity": 1},
+        "worker_count": 1,
+        "duration_minutes": 240
       }
     ]
   },
@@ -1826,6 +1837,21 @@
     {
       "id": "item.loot.freight_crate_key",
       "display_name": "Freight Crate Key",
+      "category": "loot",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 50,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 24, "y": 24},
+        "pickup_size": {"x": 32, "y": 32}
+      },
+      "inventory_texture": "items/inventory/unpublished_precision_components.png",
+      "world_texture": "items/world/unpublished_precision_components.png"
+    },
+    {
+      "id": "item.loot.armor_repair_blueprint",
+      "display_name": "Armor Repair Blueprint",
       "category": "loot",
       "inventory": {"width": 1, "height": 1, "can_rotate": false},
       "max_stack_size": 1,

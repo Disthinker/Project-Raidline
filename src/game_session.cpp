@@ -4020,8 +4020,9 @@ void GameSession::recordBaseCompletionEvents(
     }
     if (manufacturing.completed)
     {
-        events.push_back(
-            GameSessionPresentationEvent::BaseManufacturingCompleted);
+        events.push_back(manufacturing.researchCompleted
+            ? GameSessionPresentationEvent::BaseArmorRepairResearchCompleted
+            : GameSessionPresentationEvent::BaseManufacturingCompleted);
     }
     if (residentTreatment.completed)
     {

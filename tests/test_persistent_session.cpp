@@ -11,6 +11,7 @@
 #include "base_world.h"
 #include "game_session.h"
 #include "profile_ui_test_wait.h"
+#include "test_temp_directory.h"
 
 namespace
 {
@@ -1858,6 +1859,99 @@ TEST(PersistentSessionTest,
     EXPECT_FALSE(receipt.succeeded);
     EXPECT_EQ(profileStateFingerprint(session.profile()), before);
     EXPECT_FALSE(session.profile().baseManufacturing.activeOrder.has_value());
+}
+
+TEST(PersistentSessionTest, ArmorResearchSaveRetryUnlocksCraftingAndRaidRepair)
+{
+    raidline::test::TemporaryDirectory temporary;
+    temporary.claim("raidline-armor-readiness-", "research-retry");
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState initial = makeNewAlphaProfile("persistent-armor-research", content);
+    initial.baseConstruction.workshopLevel = 2U;
+    initial.tutorial = TutorialProgress::Complete;
+    const AssetInstanceId blueprint = addStashItem(initial, kArmorRepairBlueprintId);
+    addStashItem(initial, ItemDefinitionId{"item.loot.copper_wire_spool"});
+    addStashItem(initial, ItemDefinitionId{"item.loot.scrap_parts"});
+    const AssetInstanceId armor = findDefinition(initial, alpha_content::bodyArmor);
+    const AssetInstanceId backpack = findDefinition(initial, alpha_content::backpack);
+    ASSERT_NE(armor, 0U);
+    ASSERT_NE(backpack, 0U);
+    initial.assets.findMutable(armor)->currentDurability = 60U;
+    ASSERT_TRUE(SaveRepository{temporary.path()}.save(initial, content.contentVersion()).succeeded);
+
+    GameSession started;
+    started.configurePersistence(temporary.path());
+    ASSERT_TRUE(started.continueProfile()) << started.persistenceMessage();
+    const BaseManufacturingReceipt research = started.executeStartBaseManufacturing(
+        kArmorRepairResearchId, "persistent-start-armor-research");
+    ASSERT_TRUE(research.succeeded) << research.message;
+
+    GameSession processing;
+    processing.configurePersistence(temporary.path());
+    ASSERT_TRUE(processing.continueProfile()) << processing.persistenceMessage();
+    ASSERT_TRUE(processing.profile().baseManufacturing.activeOrder.has_value());
+    EXPECT_EQ(processing.profile().baseManufacturing.activeOrder->jobId, research.jobId);
+    ASSERT_NE(processing.profile().assets.find(blueprint), nullptr);
+    EXPECT_EQ(processing.profile().assets.find(blueprint)->location,
+              AssetLocation{BaseServiceAssetLocation{research.jobId}});
+    const std::uint64_t before = profileStateFingerprint(processing.profile());
+    const auto invalidDirectory = temporary.path() / "blocked-research-save";
+    {
+        std::ofstream file(invalidDirectory);
+        ASSERT_TRUE(file.is_open());
+        file << "occupied";
+    }
+    processing.configurePersistence(invalidDirectory);
+    EXPECT_FALSE(processing.executeBaseRest(6U, "complete-armor-research").succeeded);
+    EXPECT_EQ(profileStateFingerprint(processing.profile()), before);
+    EXPECT_FALSE(processing.profile().baseManufacturing.armorRepairRecipeUnlocked);
+    EXPECT_TRUE(processing.takePresentationEvents().empty());
+
+    processing.configurePersistence(temporary.path());
+    const BaseRestReceipt complete =
+        processing.executeBaseRest(6U, "complete-armor-research");
+    ASSERT_TRUE(complete.succeeded) << complete.message;
+    EXPECT_TRUE(complete.manufacturing.researchCompleted);
+    EXPECT_EQ(processing.profile().assets.find(blueprint), nullptr);
+    EXPECT_FALSE(processing.profile().baseManufacturing.activeOrder.has_value());
+
+    GameSession reopened;
+    reopened.configurePersistence(temporary.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    ASSERT_TRUE(reopened.profile().baseManufacturing.armorRepairRecipeUnlocked);
+    EXPECT_EQ(reopened.profile().assets.find(blueprint), nullptr);
+    EXPECT_TRUE(reopened.executeBaseRest(6U, "complete-armor-research").alreadyCommitted);
+    const BaseManufacturingReceipt order = reopened.executeStartBaseManufacturing(
+        kArmorRepairRecipeId, "persistent-manufacture-armor-tool");
+    ASSERT_TRUE(order.succeeded) << order.message;
+    ASSERT_TRUE(order.outputAssetId.has_value());
+    ASSERT_TRUE(reopened.executeBaseRest(4U, "finish-armor-tool").succeeded);
+    const AssetInstanceId kit = *order.outputAssetId;
+    ASSERT_NE(reopened.profile().assets.find(kit), nullptr);
+    EXPECT_EQ(reopened.profile().assets.find(kit)->remainingCharges, 5000U);
+
+    ASSERT_TRUE(reopened.executeProfileInventory(
+        InventoryEquipCommand{armor, EquipmentSlotKind::BodyArmor},
+        "equip-damaged-armor").succeeded);
+    ASSERT_TRUE(reopened.executeProfileInventory(
+        InventoryEquipCommand{backpack, EquipmentSlotKind::Backpack},
+        "equip-tool-backpack").succeeded);
+    ASSERT_TRUE(reopened.executeProfileInventory(
+        InventoryMoveCommand{kit, 0U,
+            StoredAssetLocation{ProfileContainerId::compartment(backpack, 0), {0, 0}}},
+        "carry-crafted-tool").succeeded);
+    ASSERT_TRUE(waitForProfileUiDurability(reopened)) << reopened.persistenceMessage();
+    ASSERT_TRUE(reopened.deployAlpha(90819U)) << reopened.persistenceMessage();
+    ASSERT_TRUE(reopened.startAlphaArmorMaintenance(kit, armor));
+    reopened.update({}, 5.0F);
+    ASSERT_TRUE(reopened.raidActionState().active().has_value());
+    EXPECT_EQ(reopened.profile().assets.find(armor)->currentDurability, 60U);
+    EXPECT_EQ(reopened.profile().assets.find(kit)->remainingCharges, 5000U);
+    reopened.update({}, 1.0F);
+    EXPECT_FALSE(reopened.raidActionState().active().has_value());
+    EXPECT_EQ(reopened.profile().assets.find(armor)->currentDurability, 110U);
+    EXPECT_EQ(reopened.profile().assets.find(armor)->currentMaximumDurability, 110U);
+    EXPECT_EQ(reopened.profile().assets.find(kit), nullptr);
 }
 
 TEST(PersistentSessionTest,

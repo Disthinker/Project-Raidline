@@ -69,6 +69,7 @@ struct BaseManufacturingAdvanceResult
     bool outputBlocked{};
     BaseServiceJobId jobId{};
     std::optional<AssetInstanceId> outputAssetId;
+    bool researchCompleted{};
 };
 
 [[nodiscard]] BaseManufacturingProjection projectBaseManufacturing(

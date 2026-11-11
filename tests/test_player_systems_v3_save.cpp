@@ -120,7 +120,7 @@ protected:
 TEST_F(PlayerSystemsV3SaveTest, CurrentSchemaRequiresAllThreeBaseFieldsAndLegacy59DefaultsEmpty)
 {
     const auto current=Json::parse(serializeProfileEnvelope(profile,content.contentVersion()));
-    EXPECT_EQ(current.at("schema_version"),63U);
+    EXPECT_EQ(current.at("schema_version"),64U);
     EXPECT_TRUE(current.at("payload").at("base_reload_recovery").is_null());
     EXPECT_TRUE(current.at("payload").at("base_player_effects").is_null());
     EXPECT_TRUE(current.at("payload").at("base_corpses").empty());
@@ -223,7 +223,7 @@ TEST_F(PlayerSystemsV3SaveTest, UpgradeArchivesExact59PrimaryAndBackupBeforeRota
     EXPECT_EQ(readBytes(archive(directory.path(),false,primary)),primary);EXPECT_EQ(readBytes(archive(directory.path(),true,backup)),backup);
     ++profile.revision;ASSERT_TRUE(repository.save(profile,content.contentVersion()).succeeded);
     EXPECT_EQ(readBytes(archive(directory.path(),false,primary)),primary);EXPECT_EQ(readBytes(archive(directory.path(),true,backup)),backup);
-    EXPECT_EQ(Json::parse(readBytes(repository.primaryPath()))["schema_version"],63U);
+    EXPECT_EQ(Json::parse(readBytes(repository.primaryPath()))["schema_version"],64U);
 }
 
 TEST_F(PlayerSystemsV3SaveTest, BackupRecoveryArchivesCorruptPrimaryAnd59BackupByteForByte)

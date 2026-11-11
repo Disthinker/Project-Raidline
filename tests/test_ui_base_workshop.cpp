@@ -128,7 +128,10 @@ TEST_F(UiBaseWorkshopTest, NativeStartReservesOnceOnReleaseAndOldRouteIsInert) {
     EXPECT_EQ(order.completionWorldMinute-order.startedWorldMinute,plan.durationMinutes);
 }
 TEST_F(UiBaseWorkshopTest, EveryPublishedRecipeKeepsItsOutputAndInputQuantities) {
-    const auto seed=profile();
+    auto seed=profile();
+    seed.baseConstruction.workshopLevel = 2;
+    seed.baseWorkforce.workshopWorker = BaseResidentProfession::Engineering;
+    seed.baseManufacturing.armorRepairRecipeUnlocked = true;
     for(std::size_t i=0;i<content.baseManufacturingRecipes().size();++i){
         profile()=seed; A::refresh(*app);const auto &r=content.baseManufacturingRecipes()[i];
         for(const auto &s:r.inputs)create(s.itemDefinitionId,s.quantity);
@@ -266,8 +269,9 @@ TEST_F(UiBaseWorkshopTest, MissingRequirementsRemainReadOnlyAndCannotStart) {
 TEST_F(UiBaseWorkshopTest, OffscreenMatrixPreservesPlansAcrossSizesAndLanguages) {
     supplies();const auto seed=profile();const char *output=std::getenv("RAIDLINE_WORKSHOP_PREVIEW_DIR");std::filesystem::path destination;
     if(output && *output){destination=std::filesystem::absolute(output).lexically_normal();ASSERT_TRUE(destination.filename().string().starts_with("raidline-workshop-review-"));std::filesystem::create_directories(destination);}
-    constexpr const char *names[]{"ready","missing","no-worker","active","output-full","reserve","upgrade","facilities","long-reason"};
-    for(int scenario=0;scenario<9;++scenario){
+    constexpr const char *names[]{"ready","missing","no-worker","active","output-full","reserve","upgrade","facilities","long-reason",
+        "research-ready","research-active","research-unlocked"};
+    for(int scenario=0;scenario<static_cast<int>(std::size(names));++scenario){
         profile()=seed;A::state(*app)={};A::message(*app).clear();
         if(scenario==1){const auto plan=queryStartBaseManufacturing(profile(),content,{content.baseManufacturingRecipes().front().id});ASSERT_TRUE(profile().assets.erase(plan.inputs.front().assetId));}
         if(scenario==2)profile().baseWorkforce.workshopWorker.reset();
@@ -275,6 +279,22 @@ TEST_F(UiBaseWorkshopTest, OffscreenMatrixPreservesPlansAcrossSizesAndLanguages)
         if(scenario==4){fill();profile().worldClock.elapsedWorldMinutes=profile().baseManufacturing.activeOrder->completionWorldMinute;ASSERT_TRUE(applyBaseManufacturingThrough(profile(),content).outputBlocked);}
         if(scenario==5){const BaseFacilityDefinitionId id{"base_facility.workshop"};profile().baseConstruction.facilities[id]=BaseConstructionState::FacilityPlacement::Reserve;profile().baseConstruction.facilityReserveStartedWorldMinutes[id]=profile().worldClock.elapsedWorldMinutes;}
         if(scenario==6){profile().baseConstruction.materialUnits=100;const auto projection=projectUiWorkshop(profile(),content,UiLanguage::English,{});ASSERT_TRUE(projection.upgradeId);ASSERT_TRUE(A::session(*app).executeStartBaseConstruction(*projection.upgradeId,"matrix-upgrade").succeeded);}
+        if(scenario>=9) {
+            profile().baseConstruction.workshopLevel=2;
+            profile().baseWorkforce.workshopWorker=BaseResidentProfession::Engineering;
+            profile().baseManufacturing.armorRepairRecipeUnlocked=scenario==11;
+            const auto selection=scenario==11?kArmorRepairRecipeId:kArmorRepairResearchId;
+            A::state(*app).selection=selection;
+            const auto projection=projectUiWorkshop(profile(),content,UiLanguage::English,selection);
+            const auto it=std::find_if(projection.recipes.begin(),projection.recipes.end(),
+                [&](const UiWorkshopRecipe &row){return row.id==selection;});
+            ASSERT_NE(it,projection.recipes.end());
+            A::state(*app).page=static_cast<std::size_t>(it-projection.recipes.begin())/kUiWorkshopPageSize;
+            if(scenario!=11)ASSERT_NE(create(kArmorRepairBlueprintId,1),0U);
+            if(scenario==10)ASSERT_TRUE(A::session(*app).executeStartBaseManufacturing(selection,"matrix-research").succeeded);
+            if(scenario==11)for(const auto &input:content.baseManufacturingRecipe(selection).inputs)
+                ASSERT_NE(create(input.itemDefinitionId,input.quantity),0U);
+        }
         ++profile().revision;
         for(auto size:kUiWindowSizes)for(auto language:{UiLanguage::SimplifiedChinese,UiLanguage::English}){
             detach();attach(size.width,size.height);A::text(*app).setLanguage(language);A::state(*app).facilities=scenario==6 || scenario==7;A::refresh(*app);
@@ -285,6 +305,50 @@ TEST_F(UiBaseWorkshopTest, OffscreenMatrixPreservesPlansAcrossSizesAndLanguages)
         }
     }
 }
+TEST_F(UiBaseWorkshopTest, ResearchUsesTheWorkshopControlsAndRevealsTheRecipe) {
+    profile().baseConstruction.workshopLevel = 2;
+    profile().baseWorkforce.workshopWorker = BaseResidentProfession::Engineering;
+    ++profile().revision;
+    A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+    const auto &initial = A::projection(*app);
+    const auto research = std::find_if(initial.recipes.begin(), initial.recipes.end(),
+        [](const UiWorkshopRecipe &r) { return r.id == kArmorRepairResearchId; });
+    ASSERT_NE(research, initial.recipes.end());
+    const auto index = static_cast<std::size_t>(research - initial.recipes.begin());
+    for (std::size_t page = 0; page < index / kUiWorkshopPageSize; ++page)
+        control(Control::Next);
+    const auto point = center(uiWorkshopRecipeRect(index % kUiWorkshopPageSize));
+    pointer(point, true);
+    pointer(point, false);
+    A::frame(*app);
+    ASSERT_EQ(A::projection(*app).selection, kArmorRepairResearchId);
+    EXPECT_FALSE(A::projection(*app).start.canCommit);
+    EXPECT_EQ(A::projection(*app).recipes[index].shortName, "防具维修研究");
+
+    const auto blueprint = create(kArmorRepairBlueprintId, 1U);
+    ASSERT_NE(blueprint, 0U);
+    control(Control::Main);
+    ASSERT_TRUE(profile().baseManufacturing.activeOrder);
+    EXPECT_EQ(profile().baseManufacturing.activeOrder->inputAssetIds,
+        std::vector<AssetInstanceId>{blueprint});
+    EXPECT_TRUE(uiWorkshopEnabled(Control::Cancel, A::projection(*app)));
+    EXPECT_FALSE(uiWorkshopEnabled(Control::Main, A::projection(*app)));
+    control(Control::Cancel);
+    ASSERT_FALSE(profile().baseManufacturing.activeOrder);
+    ASSERT_NE(profile().assets.find(blueprint), nullptr);
+
+    control(Control::Main);
+    ASSERT_TRUE(profile().baseManufacturing.activeOrder);
+    ASSERT_TRUE(A::session(*app).executeBaseRest(12, "finish-armor-research").succeeded);
+    EXPECT_FALSE(profile().baseManufacturing.activeOrder);
+    EXPECT_EQ(profile().assets.find(blueprint), nullptr);
+    EXPECT_TRUE(profile().baseManufacturing.armorRepairRecipeUnlocked);
+    EXPECT_EQ(A::projection(*app).selection, kArmorRepairRecipeId);
+    const auto reloaded = SaveRepository(path).load(content);
+    ASSERT_TRUE(reloaded.profile);
+    EXPECT_TRUE(reloaded.profile->baseManufacturing.armorRepairRecipeUnlocked);
+}
+
 TEST(UiWorkshopGeometryTest, PaginationAndStateActionsRemainSeparate) {
     EXPECT_EQ(uiWorkshopPageCount(0),1U);EXPECT_EQ(uiWorkshopPageCount(6),1U);EXPECT_EQ(uiWorkshopPageCount(7),2U);
     UiWorkshopState s;UiWorkshopProjection p;

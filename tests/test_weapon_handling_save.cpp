@@ -405,7 +405,7 @@ TEST_F(WeaponHandlingSaveTest, AmmoLoopUpgradeKeepsOldOrderAndPendingRaidAndArch
     EXPECT_EQ(readBytes(archive(false, primary)), primary);
     EXPECT_EQ(readBytes(archive(true, backup)), backup);
     const auto upgraded = Json::parse(readBytes(repository.primaryPath()));
-    EXPECT_EQ(upgraded.at("schema_version"), 63U);
+    EXPECT_EQ(upgraded.at("schema_version"), 64U);
     EXPECT_EQ(upgraded.at("content_version").get<std::string>(), kAmmoLoopContentVersion);
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile) << reopened.message;
@@ -509,7 +509,7 @@ TEST_F(WeaponHandlingSaveTest, FreightUpgradeKeepsFrozenSchema61CratesAndHospita
         const auto reopened = repository.load(content);
         ASSERT_TRUE(reopened.profile && reopened.profile->pendingRaid) << reopened.message;
         ASSERT_TRUE(reopened.sourceEnvelope);
-        EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 63U);
+        EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 64U);
         EXPECT_EQ(reopened.sourceEnvelope->contentVersion, kCrossMapFreightContentVersion);
         EXPECT_EQ(reopened.profile->pendingRaid->loot, oldProfile.pendingRaid->loot);
         EXPECT_FALSE(reopened.profile->pendingRaid->freightKeyLootSlotId);
@@ -571,7 +571,7 @@ TEST_F(WeaponHandlingSaveTest, FuelSchema63RoundTripsFrozenLootAndRejectsInvalid
     ASSERT_TRUE(deployed.succeeded) << deployed.message;
     ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->fuelExtractionLootAssetId);
     const auto fuelId = *profile.pendingRaid->fuelExtractionLootAssetId;
-    const auto bytes = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto bytes = serializeProfileEnvelope(profile, kFuelExtractionContentVersion, 63);
     const auto envelope = Json::parse(bytes);
     EXPECT_EQ(envelope.at("schema_version"), 63U);
     EXPECT_EQ(envelope.at("content_version").get<std::string>(), kFuelExtractionContentVersion);
@@ -710,19 +710,19 @@ TEST_F(WeaponHandlingSaveTest, FuelUpgradeKeepsFrozenSchema62FreightAndArchivesB
     const auto archivedPrimary = directory.path() / ("profile.pre-raid-fuel-extraction-loop-v1." + checksum(primary) + ".json");
     const auto archivedBackup = directory.path() / ("profile.backup.pre-raid-fuel-extraction-loop-v1." + checksum(backup) + ".json");
     writeBytes(archivedPrimary, "immutable conflicting bytes");
-    EXPECT_FALSE(repository.save(*loaded.profile, content.contentVersion()).succeeded);
+    EXPECT_FALSE(repository.save(*loaded.profile, kFuelExtractionContentVersion).succeeded);
     EXPECT_EQ(readBytes(repository.primaryPath()), primary);
     EXPECT_EQ(readBytes(repository.backupPath()), backup);
     EXPECT_EQ(readBytes(archivedPrimary), "immutable conflicting bytes");
     ASSERT_TRUE(std::filesystem::remove(archivedPrimary));
-    const auto upgraded = repository.save(*loaded.profile, content.contentVersion());
+    const auto upgraded = repository.save(*loaded.profile, kFuelExtractionContentVersion);
     ASSERT_TRUE(upgraded.succeeded) << upgraded.message;
     EXPECT_EQ(readBytes(archivedPrimary), primary);
     EXPECT_EQ(readBytes(archivedBackup), backup);
 
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile && reopened.profile->pendingRaid && reopened.sourceEnvelope) << reopened.message;
-    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 63U);
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 64U);
     EXPECT_EQ(reopened.sourceEnvelope->contentVersion, kFuelExtractionContentVersion);
     EXPECT_FALSE(reopened.profile->pendingRaid->fuelExtractionLootAssetId);
     EXPECT_EQ(reopened.profile->pendingRaid->loot, profile.pendingRaid->loot);
@@ -732,6 +732,102 @@ TEST_F(WeaponHandlingSaveTest, FuelUpgradeKeepsFrozenSchema62FreightAndArchivesB
     EXPECT_EQ(reopenedCrate.containerAssetId, originalCrate.containerAssetId);
     EXPECT_EQ(reopenedCrate.unlocked, originalCrate.unlocked);
     EXPECT_EQ(profileStateFingerprint(*reopened.profile), fingerprint);
+}
+
+TEST_F(WeaponHandlingSaveTest, ArmorReadinessUpgradePreservesFrozenFuelAndActiveOrder)
+{
+    const auto &content = publishedContentRegistry();
+    const auto old = contentBeforeArmorReadiness();
+    auto profile = makeNewAlphaProfile("armor-research-upgrade", old);
+    const ItemDefinitionId scrap{"item.loot.scrap_parts"};
+    const ItemDefinitionId electronics{"item.loot.electronics"};
+    for (const auto &id : {scrap, electronics})
+    {
+        const auto &item = old.item(id);
+        const auto position = findFirstProfileFit(profile, old, ProfileContainerId::stash(),
+            item, ItemOrientation::Degrees0);
+        ASSERT_TRUE(position);
+        profile.assets.create(item, StoredAssetLocation{ProfileContainerId::stash(), *position});
+    }
+    const auto order = executeStartBaseManufacturing(profile, old,
+        {BaseManufacturingRecipeDefinitionId{"base_manufacturing.weapon_maintenance_kit"}},
+        {profile.revision, "freeze-old-workshop-order"});
+    ASSERT_TRUE(order.succeeded) << order.message;
+    const auto deployed = executeDeploy(profile, old,
+        {"frozen-fuel", "frozen-fuel-end", 42U, kFreightCrateMapId},
+        {profile.revision, "freeze-old-fuel-deploy"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->fuelExtractionLootAssetId);
+    const auto primary = serializeProfileEnvelope(profile, old.contentVersion(), 63);
+    auto previous = profile;
+    ++previous.revision;
+    const auto backup = serializeProfileEnvelope(previous, old.contentVersion(), 63);
+    SaveRepository repository{directory.path()};
+    writeBytes(repository.primaryPath(), primary);
+    writeBytes(repository.backupPath(), backup);
+
+    const auto loaded = repository.load(content);
+    ASSERT_TRUE(loaded.profile && loaded.sourceEnvelope) << loaded.message;
+    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 63U);
+    EXPECT_FALSE(loaded.profile->baseManufacturing.armorRepairRecipeUnlocked);
+    const auto fingerprint = profileStateFingerprint(profile);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+
+    const auto upgraded = repository.save(*loaded.profile, content.contentVersion());
+    ASSERT_TRUE(upgraded.succeeded) << upgraded.message;
+    EXPECT_EQ(readBytes(directory.path() /
+        ("profile.pre-base-research-armor-readiness-v1." + checksum(primary) + ".json")), primary);
+    EXPECT_EQ(readBytes(directory.path() /
+        ("profile.backup.pre-base-research-armor-readiness-v1." + checksum(backup) + ".json")), backup);
+    const auto reopened = repository.load(content);
+    ASSERT_TRUE(reopened.profile && reopened.sourceEnvelope && reopened.profile->pendingRaid)
+        << reopened.message;
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 64U);
+    EXPECT_EQ(reopened.sourceEnvelope->contentVersion, kArmorReadinessContentVersion);
+    EXPECT_EQ(reopened.profile->baseManufacturing, profile.baseManufacturing);
+    EXPECT_EQ(reopened.profile->pendingRaid->fuelExtractionLootAssetId,
+        profile.pendingRaid->fuelExtractionLootAssetId);
+    EXPECT_EQ(profileStateFingerprint(*reopened.profile), fingerprint);
+}
+
+TEST_F(WeaponHandlingSaveTest, ArmorResearchSaveRejectsWrongOwnershipAndLegacyEnvelope)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = fresh();
+    profile.baseConstruction.workshopLevel = 2U;
+    const auto &item = content.item(kArmorRepairBlueprintId);
+    const auto position = findFirstProfileFit(profile, content, ProfileContainerId::stash(),
+        item, ItemOrientation::Degrees0);
+    ASSERT_TRUE(position);
+    const auto blueprint = profile.assets.create(item,
+        StoredAssetLocation{ProfileContainerId::stash(), *position});
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, kFuelExtractionContentVersion, 63)),
+        std::invalid_argument);
+    const auto start = executeStartBaseManufacturing(profile, content, {kArmorRepairResearchId},
+        {profile.revision, "start-saved-research"});
+    ASSERT_TRUE(start.succeeded) << start.message;
+    EXPECT_FALSE(start.outputAssetId);
+    const auto text = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto loaded = deserializeProfileEnvelope(text, content);
+    ASSERT_TRUE(loaded.profile && loaded.profile->baseManufacturing.activeOrder) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+    EXPECT_EQ(loaded.profile->baseManufacturing.activeOrder->inputAssetIds,
+        std::vector<AssetInstanceId>{blueprint});
+
+    auto changed = Json::parse(text);
+    changed["payload"]["base_manufacturing"]["armor_repair_recipe_unlocked"] = true;
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(changed), content).profile);
+    changed = Json::parse(text);
+    changed["payload"]["base_manufacturing"]["active_order"]["output_asset_id"] = blueprint;
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(changed), content).profile);
+    changed = Json::parse(text);
+    assetJson(changed, blueprint)["location"]["job_id"] = start.jobId + 1U;
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(changed), content).profile);
+    changed = Json::parse(text);
+    changed["payload"]["base_manufacturing"].erase("armor_repair_recipe_unlocked");
+    changed["schema_version"] = 63U;
+    changed["content_version"] = kFuelExtractionContentVersion;
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(changed), content).profile);
 }
 
 TEST_F(WeaponHandlingSaveTest, CorruptPrimaryRecoveryPreservesCorruptSourceAndValidSchema58Backup) {

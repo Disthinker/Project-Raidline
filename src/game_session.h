@@ -130,6 +130,7 @@ enum class GameSessionPresentationEvent
     PlayerHurtHeavy,
     WeaponMagazineRemoved,
     WeaponMagazineInserted,
+    BaseArmorRepairResearchCompleted,
 };
 
 struct DeveloperWeaponTuningSnapshot
