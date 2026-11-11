@@ -23,6 +23,7 @@ enum class RaidExtractionRoute
     EmergencySignal,
     EmergencyConditional,
     Credential,
+    Fuel,
 };
 
 struct HighRiskRaidSessionConfig
@@ -31,6 +32,7 @@ struct HighRiskRaidSessionConfig
     float regularPhaseDurationSeconds{};
     float emergencyExtractionDurationSeconds{};
     float conditionalExtractionDurationSeconds{};
+    bool fuelExtraction{};
 };
 
 struct RaidSessionConfig
@@ -76,6 +78,7 @@ public:
 
     [[nodiscard]] bool interruptSignalExtraction() noexcept;
     [[nodiscard]] bool interruptCredentialExtraction() noexcept;
+    [[nodiscard]] bool interruptFuelExtraction() noexcept;
 
     [[nodiscard]]
     bool markPlayerDead() noexcept;
@@ -116,6 +119,8 @@ public:
     [[nodiscard]] bool emergencyExtractionOpen() const noexcept;
 
     [[nodiscard]] bool conditionalExtractionOpen() const noexcept;
+    [[nodiscard]] bool usesFuelExtraction() const noexcept
+    { return config_.highRisk.fuelExtraction; }
     [[nodiscard]] bool credentialExtractionOpen() const noexcept;
 
     [[nodiscard]] bool enteredHighRiskLastUpdate() const noexcept;

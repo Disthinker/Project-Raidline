@@ -80,7 +80,7 @@ struct UiDeploymentProjection {
     std::vector<UiDeploymentMap> maps;
     MapDefinitionId selectedMapId;
     std::size_t selectedMapIndex{}, mapPage{}, interiorPage{};
-    bool mapValid{};
+    bool mapValid{}, fuelExit{};
     std::optional<bool> credentialUnlocked;
     std::string mapName, difficulty, warning, routeProfile, routeName;
     RaidTravelPreview travel;

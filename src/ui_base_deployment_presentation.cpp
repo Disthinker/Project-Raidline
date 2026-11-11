@@ -43,6 +43,7 @@ std::string contextKey(const ProfileState &profile, const UiDeploymentProjection
     key.number(p.language);
     key.add(p.selectedMapId.value());
     key.number(p.mapValid);
+    key.number(p.fuelExit);
     key.number(p.credentialUnlocked.has_value());
     if (p.credentialUnlocked) key.number(*p.credentialUnlocked);
     key.number(p.currency);
@@ -189,6 +190,8 @@ UiDeploymentProjection projectUiDeployment(
         result.difficulty = selectedMap->operationBriefing.difficulty;
         result.warning = selectedMap->operationBriefing.warning;
         result.routeProfile = selectedMap->routeProfile;
+        result.fuelExit = !recoveryRecordId && selectedMap->id == kFreightCrateMapId &&
+            content.contentVersion() == kFuelExtractionContentVersion;
         if (selectedMap->credentialExtraction && !recoveryRecordId)
             result.credentialUnlocked = profile.raidExtractionPermissions.contains(
                 selectedMap->credentialExtraction->permissionId);

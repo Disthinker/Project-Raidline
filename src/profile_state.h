@@ -1205,6 +1205,7 @@ struct PendingRaidSnapshot
     bool hospitalNightVisionLoot{};
     std::optional<std::string> freightKeyLootSlotId;
     std::optional<RaidSealedFreightCrateSnapshot> sealedFreightCrate;
+    std::optional<AssetInstanceId> fuelExtractionLootAssetId;
 };
 
 struct LastRaidResult
@@ -1220,6 +1221,7 @@ struct LastRaidResult
     std::uint32_t baseThreatReducedUnits{};
     std::optional<BaseWishReturnSummary> wishReturn;
     std::vector<RaidExtractionPermissionDefinitionId> unlockedExtractionPermissions;
+    bool fuelExtractionPaid{};
 };
 
 struct ProfileState

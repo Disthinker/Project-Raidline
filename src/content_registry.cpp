@@ -4266,7 +4266,7 @@ ContentRegistry ContentRegistry::fromJson(
                 if (!anchor) fail("hospital night vision Loot anchor is missing");
             }
         }
-        if (registry.contentVersion() == kCrossMapFreightContentVersion)
+        if (crossMapFreightCompatibleContent(registry.contentVersion()))
         {
             if (!registry.itemIndex_.contains(kFreightCrateKeyId))
                 fail("cross-map freight requires a crate key");
@@ -4301,7 +4301,36 @@ ContentRegistry ContentRegistry::fromJson(
                 if (bay == interiors.end() || bay->lootSlots.size() < 4U ||
                     bay->lootSlots[3].id != kFreightCrateSlotId)
                     fail("freight crate requires the fourth service bay Loot slot");
+                if (registry.contentVersion() == kFuelExtractionContentVersion &&
+                    bay->lootSlots[2].id != kRaidFuelLootSlotId)
+                    fail("extraction fuel requires the third service bay Loot slot");
             }
+        }
+        if (registry.contentVersion() == kFuelExtractionContentVersion)
+        {
+            if (!registry.itemIndex_.contains(kRaidFuelCanId))
+                fail("fuel extraction requires a fuel can");
+            const auto &fuel = registry.item(kRaidFuelCanId);
+            if (fuel.category != ItemCategory::Loot || fuel.inventoryWidthCells != 2 ||
+                fuel.inventoryHeightCells != 2 || fuel.maxStackSize != 1 ||
+                fuel.unitWeightGrams != 3000 || fuel.marketBuyPrice || fuel.marketRecyclePrice ||
+                fuel.baseContribution || fuel.baseConstructionMaterialValue)
+                fail("extraction fuel definition is invalid");
+            const auto inLootTable = [](const LootTableDefinition &table) {
+                return std::any_of(table.entries.begin(), table.entries.end(), [](const auto &entry) {
+                    return entry.itemDefinitionId == kRaidFuelCanId;
+                });
+            };
+            const auto inMapGroundItems = [](const MapDefinition &map) {
+                return std::any_of(map.groundItems.begin(), map.groundItems.end(), [](const auto &item) {
+                    return item.itemDefinitionId == kRaidFuelCanId;
+                });
+            };
+            if (std::any_of(registry.lootTables_.begin(), registry.lootTables_.end(), inLootTable) ||
+                std::any_of(registry.maps_.begin(), registry.maps_.end(), inMapGroundItems) ||
+                std::any_of(registry.baseManufacturingRecipes_.begin(), registry.baseManufacturingRecipes_.end(),
+                    [](const auto &recipe) { return recipe.outputItemDefinitionId == kRaidFuelCanId; }))
+                fail("extraction fuel requires its fixed field source");
         }
         return registry;
     }

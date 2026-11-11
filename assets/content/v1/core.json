@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-cross-map-freight-access-content-78",
+  "content_version": "raid-fuel-extraction-loop-content-79",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -1834,6 +1834,21 @@
       "world": {
         "render_size": {"x": 24, "y": 24},
         "pickup_size": {"x": 32, "y": 32}
+      },
+      "inventory_texture": "items/inventory/unpublished_precision_components.png",
+      "world_texture": "items/world/unpublished_precision_components.png"
+    },
+    {
+      "id": "item.loot.extraction_fuel_can",
+      "display_name": "Fuel Can",
+      "category": "loot",
+      "inventory": {"width": 2, "height": 2, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 3000,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 36, "y": 36},
+        "pickup_size": {"x": 40, "y": 40}
       },
       "inventory_texture": "items/inventory/unpublished_precision_components.png",
       "world_texture": "items/world/unpublished_precision_components.png"

@@ -739,11 +739,17 @@ GameSession::conditionalExtractionWeightLimitGrams() const noexcept
         : world_->conditionalExtractionMaximumWeightGrams();
 }
 
-bool GameSession::conditionalExtractionEligible() const noexcept
+bool GameSession::conditionalExtractionEligible() const
 {
+    if (raidFuelExtractionEnabled()) return findCarriedRaidFuel(profile_).has_value();
     const std::uint64_t limit = conditionalExtractionWeightLimitGrams();
     return alphaRaidActive_ && limit > 0U &&
            currentRaidCarriedWeightGrams() <= limit;
+}
+
+bool GameSession::raidFuelExtractionEnabled() const noexcept
+{
+    return alphaRaidActive_ && world_ && world_->raidSession().usesFuelExtraction();
 }
 
 bool GameSession::raidWorldInteractionAvailable(bool inventoryOpen) const noexcept
@@ -761,13 +767,19 @@ bool GameSession::canCallSignalExtraction(bool inventoryOpen) const noexcept
         return false;
     GameplayInput input;
     input.inventoryOpen = inventoryOpen;
-    input.conditionalExtractionEligible = conditionalExtractionEligible();
+    input.conditionalExtractionEligible =
+        !raidFuelExtractionEnabled() && conditionalExtractionEligible();
     return world_->canCallSignalExtraction(input);
 }
 
 void GameSession::cancelRaidCredentialInteraction() noexcept
 {
     if (world_) world_->interruptCredentialInteraction();
+}
+
+void GameSession::cancelRaidFuelExtraction() noexcept
+{
+    if (world_) world_->interruptFuelExtraction();
 }
 
 GameSessionState GameSession::state() const noexcept
@@ -4110,8 +4122,9 @@ void GameSession::updateAlphaRaid(
     const auto weapon = activeAlphaWeapon();
 
     GameplayInput simulationInput = input;
+    const bool usesFuel = raidFuelExtractionEnabled();
     simulationInput.conditionalExtractionEligible =
-        conditionalExtractionEligible();
+        !usesFuel && conditionalExtractionEligible();
     simulationInput.reloadJustPressed = false;
     simulationInput.healJustPressed = false;
     simulationInput.quitRaidJustPressed = false;
@@ -4273,12 +4286,20 @@ void GameSession::updateAlphaRaid(
         raidActionState_.active() &&
         (std::holds_alternative<ReloadRaidAction>(*raidActionState_.active()) ||
          std::holds_alternative<ChamberRaidAction>(*raidActionState_.active()));
+    GameplayWorld::RaidFuelSelector selectFuel;
+    if (usesFuel)
+    {
+        selectFuel = [this](std::optional<AssetInstanceId> bound) {
+            if (!bound) return findCarriedRaidFuel(profile_);
+            return isCarriedRaidFuel(profile_, *bound) ? bound : std::nullopt;
+        };
+    }
     world_->update(simulationInput, deltaTime, [this]{return processGrenadeExplosion();},
         [this] {
             if (cancelActiveRaidAction()) return true;
             state_ = GameSessionState::SettlementBlocked;
             return false;
-        }, weaponActionPortal);
+        }, weaponActionPortal, selectFuel);
     if(!world_->raidSession().isActive())world_->commitNoiseDecoy({});
     const bool meleeFrame=world_->melee().result().attempted;
     if(meleeFrame)
@@ -4752,11 +4773,25 @@ bool GameSession::prepareRaidSettlementCandidate(RaidResultOutcome outcome,Profi
         candidate.pendingRaid->basePerimeterSweep->objectiveSecured =
             basePerimeterSweepObjectiveSecured_;
     }
+    std::optional<RaidFuelExtractionCompletion> fuelCompletion;
+    if (outcome == RaidResultOutcome::Extracted &&
+        world_->raidSession().extractionRoute() == RaidExtractionRoute::Fuel)
+    {
+        const auto fuel = world_->completedFuelExtractionAsset();
+        if (!fuel)
+        {
+            persistenceMessage_ = "FUEL EXTRACTION PAYMENT UNAVAILABLE";
+            state_ = GameSessionState::SettlementBlocked;
+            return false;
+        }
+        fuelCompletion = RaidFuelExtractionCompletion{candidate.pendingRaid->raidId, *fuel};
+    }
     const RaidSettlementReceipt receipt = settlePendingRaid(
         candidate,
         publishedContentRegistry(),
         candidate.pendingRaid->settlementId,
-        outcome);
+        outcome,
+        fuelCompletion);
     if (!receipt.succeeded)
     {
         persistenceMessage_ = receipt.message;

@@ -1,4 +1,6 @@
 #include "app.h"
+#include "alpha_content_ids.h"
+#include "inventory_domain.h"
 #include "test_temp_directory.h"
 #include "developer_test_range.h"
 #include "raid_lifecycle.h"
@@ -17,9 +19,10 @@ struct UiRaidHudTestAccess {
     static auto &session(App &a){return a.gameSession_;}
     static auto &text(App &a){return a.uiTextRenderer_;}
     static bool attach(App &a,SDL_Renderer *r,float scale){a.renderer_=r;if(!a.uiTextRenderer_.initialize(r))return false;a.uiTextRenderer_.setRasterScale(scale);return true;}
-    static void detach(App &a){a.uiTextRenderer_.shutdown();a.renderer_=nullptr;}
+    static void detach(App &a){a.indoorInformationLayer_.reset();a.indoorShadowMask_.reset();a.uiTextRenderer_.shutdown();a.renderer_=nullptr;}
     static void clearPanels(App &a){a.developerWeaponPanelOpen_=false;a.developerRangePanelOpen_=false;a.developerPerformanceOverlayOpen_=false;a.tacticalMapOpen_=false;}
     static void hud(App &a){a.renderDebugText();a.renderMeleeStatus();a.renderThrowableUi();}
+    static void raid(App &a){a.renderRaidScreen();}
     static void range(App &a){a.developerRangePanelOpen_=true;a.renderDeveloperRangePanel();a.developerRangePanelOpen_=false;}
     static void developer(App &a){a.developerWeaponPanelOpen_=true;a.renderDeveloperWeaponPanel();a.developerWeaponPanelOpen_=false;}
     static void performance(App &a){a.developerPerformanceOverlayOpen_=true;a.framePerformance_.record({.21F,2.40F,3.20F,10.86F,16.67F});a.refreshDeveloperPerformanceOverlay();a.renderDeveloperPerformanceOverlay();a.developerPerformanceOverlayOpen_=false;}
@@ -211,6 +214,81 @@ TEST_F(UiRaidHudTest, TacticalMapsKeepUnknownInteriorClippedAndPreserveIntellige
         EXPECT_GT(black,static_cast<std::size_t>(chart.w*chart.h/40));
         position(room.interiorExit);interact();ASSERT_TRUE(session.world().inOutdoorRaidSpace());
     }
+}
+
+TEST_F(UiRaidHudTest, FuelExitStatusRequiresMapDiscoveryAndPaintsLiveProgress) {
+    auto &session = A::session(*app);
+    auto &profile = const_cast<ProfileState &>(session.profile());
+    const auto &content = publishedContentRegistry();
+    const auto backpack = std::find_if(profile.assets.records().begin(), profile.assets.records().end(),
+        [](const auto &entry) { return entry.second.definitionId == alpha_content::backpack; });
+    ASSERT_NE(backpack, profile.assets.records().end());
+    const auto backpackId = backpack->first;
+    ASSERT_TRUE(executeInventory(profile, content, InventoryEquipCommand{backpackId, EquipmentSlotKind::Backpack},
+        {profile.revision, "equip-fuel-ui-backpack"}).succeeded);
+    ASSERT_TRUE(A::flow(*app).deploy(kFreightCrateMapId));
+    ASSERT_TRUE(session.raidFuelExtractionEnabled());
+    const auto &world = session.world();
+    const auto &map = world.tacticalMap();
+    const auto kind = RaidMapExtractionKind::EmergencyConditional;
+    ASSERT_FALSE(map.extractionVisible(kind));
+    clear(); A::tactical(*app); ASSERT_TRUE(SDL_RenderPresent(renderer));
+    EXPECT_EQ(bright({674, 622, 462, 16}), 0U);
+
+    const auto &exit = world.conditionalExtractionPoint();
+    ASSERT_TRUE(exit);
+    const auto bounds = exit->bounds();
+    const float half = world.player().size() * 0.5F;
+    ASSERT_TRUE(const_cast<Player &>(world.player()).setPosition({
+        bounds.position.x + bounds.size.x * 0.5F - half,
+        bounds.position.y + bounds.size.y * 0.5F - half}));
+    session.update({}, 0.0F);
+    ASSERT_TRUE(map.extractionVisible(kind));
+
+    std::filesystem::path destination;
+    if (const auto *env = std::getenv("RAIDLINE_UI_FINAL_REVIEW_DIR")) {
+        destination = std::filesystem::path(env);
+        ASSERT_TRUE(destination.is_absolute());
+        std::filesystem::create_directories(destination);
+    }
+    const auto renderAndCheck = [&](const char *name, bool tactical) {
+        const auto fingerprint = profileStateFingerprint(profile);
+        for (const auto size : kUiWindowSizes)
+            for (const auto language : {UiLanguage::English, UiLanguage::SimplifiedChinese}) {
+                detach(); attach(size.width, size.height); A::text(*app).setLanguage(language);
+                clear();
+                if (tactical) A::tactical(*app);
+                else A::raid(*app);
+                ASSERT_TRUE(SDL_RenderPresent(renderer));
+                const float scale = size.width / 1280.0F;
+                const auto pixels = [scale](SDL_Rect r) {
+                    return SDL_Rect{static_cast<int>(r.x * scale), static_cast<int>(r.y * scale),
+                                    static_cast<int>(r.w * scale), static_cast<int>(r.h * scale)};
+                };
+                EXPECT_GT(bright(pixels(tactical ? SDL_Rect{674, 622, 462, 16}
+                                                  : SDL_Rect{446, 485, 388, 23})), 20U);
+                EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+                if (!destination.empty()) ASSERT_TRUE(IMG_SavePNG(surface,
+                    (destination / (std::string("fuel-exit-") + name + "-" +
+                        std::to_string(size.width) + "-" + uiLanguageCode(language) + ".png")).string().c_str()));
+            }
+    };
+    renderAndCheck("wait-map", true);
+    ASSERT_TRUE(session.triggerDeveloperHighRisk());
+    EXPECT_FALSE(session.conditionalExtractionEligible());
+    renderAndCheck("missing-hud", false);
+
+    const auto container = ProfileContainerId::compartment(backpackId, 0);
+    const auto &fuel = content.item(kRaidFuelCanId);
+    const auto origin = findFirstProfileFit(profile, content, container, fuel, ItemOrientation::Degrees0);
+    ASSERT_TRUE(origin);
+    static_cast<void>(profile.assets.create(fuel, StoredAssetLocation{container, *origin}));
+    EXPECT_TRUE(session.conditionalExtractionEligible());
+    renderAndCheck("ready-map", true);
+    session.update({}, 0.5F);
+    ASSERT_EQ(world.raidSession().extractionRoute(), RaidExtractionRoute::Fuel);
+    ASSERT_GT(world.raidSession().extractionProgress(), 0.0F);
+    renderAndCheck("progress-hud", false);
 }
 
 TEST(UiRaidHudTextTest, InteriorPermissionIsTranslatedBeforeCompositeLabels){

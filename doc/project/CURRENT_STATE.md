@@ -1,11 +1,23 @@
-# 当前 · 跨图后勤钥匙与封存补给 v1 已验收，正在交付
+# 当前 · 边境交换站燃油撤离与携装取舍 v1 已验收，正在交付
+
+在边境交换站搜油，带回基地备装，或在高危用一桶油完成重装撤离。[具体开发方案](../exec-plans/active/raid-fuel-extraction-loop-v1.md)
+
+- task_id `raid-fuel-extraction-loop-v1`，plan_version `RL-RAID-FUEL-EXTRACTION-LOOP-v1`，state `accepted_delivering`。approval_source 为 2026-11-11 用户明确回复“确认该方案，请你按照方案进行开发”，对应 RL-RAID-FUEL-EXTRACTION-LOOP-v1。candidate_id `RL-RAID-FUEL-EXTRACTION-LOOP-v1-local-c4ebdc1427f9`。accepted_candidate_id `RL-RAID-FUEL-EXTRACTION-LOOP-v1-local-c4ebdc1427f9`。acceptance_source 为 2026-11-11 用户明确回复“验收通过，请提交合并”，对应燃油撤离 v1。
+- 基线 `origin/main@ac2c7a58d1a2ef0b08639a5c356ee603f631acd0`，PR #204 已验收合并。[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42809233105) 双平台各 3187/3187，13 项 3ms 检查通过。
+- 原策划线程已回复 `MAIN-NEXT-STAGE-20261111-AFTER-FREIGHT-01`，协调任务 `raid-next-stage-after-freight`，协议 `RL-NEXT-STAGE-REQUEST-v1`，基线一致。2026-11-11 用户要求给出更大步长的方案，确认后实施。
+- 固定入口已更新。Windows 3201/3201，3ms 检查 13/13。[联合验收](../acceptance/raid-fuel-extraction-loop-v1.md)
+
+---
+
+# 当前 · 跨图后勤钥匙与封存补给 v1 已验收并合并
 
 从河畔检查站带回钥匙，下一趟开边境交换站货运装卸间的封存器材箱，将精密组件带回工坊。[具体开发方案](../exec-plans/active/raid-cross-map-freight-access-v1.md)
 
-- task_id `raid-cross-map-freight-access-v1`，plan_version `RL-RAID-CROSS-MAP-FREIGHT-ACCESS-v1`，state `accepted_delivering`。approval_source 为 2026-11-10 用户明确批准 RL-RAID-CROSS-MAP-FREIGHT-ACCESS-v1，要求一次性完成整阶段，保留已验收 UI 和玩法、原存档、固定入口和 13 项 3ms 门槛，暂不提交、推送或合并。 candidate_id `RL-RAID-CROSS-MAP-FREIGHT-ACCESS-v1-local-e359892b5d99`。accepted_candidate_id `RL-RAID-CROSS-MAP-FREIGHT-ACCESS-v1-local-e359892b5d99`。acceptance_source 为 2026-11-10 用户明确回复“跨图后勤钥匙与封存补给 v1 验收通过，请完成提交、推送和合并。”
+- task_id `raid-cross-map-freight-access-v1`，plan_version `RL-RAID-CROSS-MAP-FREIGHT-ACCESS-v1`，state `merged`。approval_source 为 2026-11-10 用户明确批准 RL-RAID-CROSS-MAP-FREIGHT-ACCESS-v1，要求一次性完成整阶段，保留已验收 UI 和玩法、原存档、固定入口和 13 项 3ms 门槛，暂不提交、推送或合并。 candidate_id `RL-RAID-CROSS-MAP-FREIGHT-ACCESS-v1-local-e359892b5d99`。accepted_candidate_id `RL-RAID-CROSS-MAP-FREIGHT-ACCESS-v1-local-e359892b5d99`。acceptance_source 为 2026-11-10 用户明确回复“跨图后勤钥匙与封存补给 v1 验收通过，请完成提交、推送和合并。”
 - 基线 `origin/main@692e6689d821bc1177b03dfe51b852ede8df2f08`。PR #203 已验收合并，[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42781670873) 双平台各 3172/3172，原 12 项及新增双设备 3ms 检查通过。
 - 原策划线程已回复 `MAIN-NEXT-STAGE-20261110-AFTER-HOSPITAL-NIGHT-01`，协调任务 `raid-next-stage-after-hospital-night`，协议 `RL-NEXT-STAGE-REQUEST-v1`，回复基线一致，状态 `proposal_ready_awaiting_human_approval`。已从同一主线建立隔离工作树 E:\WorkPlace\Projects\C\Project Raidline-raid-cross-map-freight-access-v1。
 - 固定入口已更新。Windows 3187/3187，3ms 检查 13/13。[联合验收](../acceptance/raid-cross-map-freight-access-v1.md)
+- 提交 `69fb83a` 已推送。[PR #204](https://github.com/Disthinker/Project-Raidline/pull/204) 已合入 `main@ac2c7a5`。[PR 双平台 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42804160075) 各 3187/3187，13 项 3ms 检查通过。 [合并后主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42809233105) 双平台各 3187/3187，13 项 3ms 检查通过。 Windows 首轮一项既有基地真实存盘测试 p95 为 8.30 ms，门槛 8 ms。原 13 项 3ms 检查全过，同一提交仅重跑 Windows 后通过。
 
 ---
 

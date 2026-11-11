@@ -5,6 +5,7 @@
 #include <limits>
 
 #include "game_session.h"
+#include "raid_lifecycle.h"
 
 namespace {
 std::string seconds(float value) {
@@ -95,7 +96,10 @@ FirstRaidRiskGuidanceProjection projectFirstRaidRiskGuidance(
                                 RaidMapExtractionKind::EmergencyConditional);
   result.conditionalOpen =
       result.conditionalKnown && raid.conditionalExtractionOpen();
-  if (result.conditionalKnown) {
+  const bool fuelExit = profile.pendingRaid->fuelExtractionLootAssetId.has_value();
+  if (result.conditionalOpen && fuelExit)
+    result.conditionalEligible = findCarriedRaidFuel(profile).has_value();
+  else if (result.conditionalKnown && !fuelExit) {
     result.carriedWeightGrams = carriedWeightGrams;
     result.conditionalWeightLimitGrams = conditionalWeightLimitGrams;
     result.conditionalEligible =
@@ -122,7 +126,10 @@ FirstRaidRiskGuidanceProjection projectFirstRaidRiskGuidance(
   if (result.signalOpen)
     result.lines.emplace_back(
         "SIGNAL EXTRACTION AVAILABLE; EXPECT ENEMY PRESSURE");
-  if (result.conditionalOpen)
+  if (result.conditionalKnown && fuelExit)
+    result.lines.emplace_back(
+        raidFuelExitStatusText(result.conditionalOpen, result.conditionalEligible));
+  else if (result.conditionalOpen)
     result.lines.emplace_back(
         std::string{result.conditionalEligible
                         ? "LIGHT EXTRACTION: READY | CARRY "
@@ -135,10 +142,19 @@ FirstRaidRiskGuidanceProjection projectFirstRaidRiskGuidance(
   return result;
 }
 
+const char *raidFuelExitStatusText(bool highRisk, bool hasFuel) noexcept {
+  if (!highRisk)
+    return "FUEL EXIT | WAIT FOR HIGH RISK";
+  return hasFuel ? "FUEL EXIT | READY" : "FUEL EXIT | MISSING FUEL";
+}
+
 FirstRaidRiskGuidanceProjection
 projectFirstRaidRiskGuidance(const GameSession &session) {
   if (!session.alphaRaidActive())
     return {};
+  if (session.raidFuelExtractionEnabled())
+    return projectFirstRaidRiskGuidance(session.profile(), session.world().raidSession(),
+                                       session.world().tacticalMap(), 0U, 0U);
   return projectFirstRaidRiskGuidance(
       session.profile(), session.world().raidSession(),
       session.world().tacticalMap(), session.currentRaidCarriedWeightGrams(),

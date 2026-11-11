@@ -22,6 +22,9 @@ projectFirstRaidReturnGuidance(const ProfileState &profile);
 [[nodiscard]] std::vector<std::string>
 projectFirstRaidMapBriefing(const MapDefinition &map);
 
+[[nodiscard]] const char *raidFuelExitStatusText(bool highRisk,
+                                                bool hasFuel) noexcept;
+
 struct FirstRaidRiskGuidanceProjection {
   bool visible{};
   bool highRisk{};

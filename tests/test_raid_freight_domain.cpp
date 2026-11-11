@@ -117,15 +117,16 @@ TEST(RaidFreightDomainTest, RiversideReplacesOnlyFirstSelectedCentralLootAcrossS
 
 TEST(RaidFreightDomainTest, FrontierAddsOnlySealedFourthSlotAndPreservesLegacyBoxes)
 {
+    const auto freightContent = contentBeforeFuelExtraction();
     const auto historical = contentBeforeCrossMapFreight();
     for (const auto seed : {1U, 9917U})
     {
         SCOPED_TRACE(seed);
         auto old = makeNewAlphaProfile("frontier-freight", historical);
-        auto current = makeNewAlphaProfile("frontier-freight", content);
+        auto current = makeNewAlphaProfile("frontier-freight", freightContent);
         const auto oldResult = deploy(old, historical, kFreightCrateMapId, seed);
         ASSERT_TRUE(oldResult.succeeded) << oldResult.message;
-        const auto result = deploy(current, content, kFreightCrateMapId, seed);
+        const auto result = deploy(current, freightContent, kFreightCrateMapId, seed);
         ASSERT_TRUE(result.succeeded) << result.message;
         ASSERT_TRUE(current.pendingRaid && old.pendingRaid);
         ASSERT_TRUE(current.pendingRaid->sealedFreightCrate);

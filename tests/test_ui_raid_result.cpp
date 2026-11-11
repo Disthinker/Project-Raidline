@@ -372,6 +372,24 @@ TEST(UiRaidResultProjectionTest, RescueThreatTravelAndCurrencyComeDirectlyFromTh
     EXPECT_TRUE(contains(p.summaryLines, "40")); EXPECT_TRUE(contains(p.summaryLines, "12"));
 }
 
+TEST(UiRaidResultProjectionTest, FuelPaymentComesFromSettlementAndKeepsAnySpareReturnedCan) {
+    auto r = result(RaidResultOutcome::Extracted);
+    r.returnedItemDefinitionIds = {kRaidFuelCanId};
+    const auto ordinary = project(r);
+    EXPECT_FALSE(contains(ordinary.summaryLines, "FUEL CAN USED"));
+
+    r.fuelExtractionPaid = true;
+    const auto paid = project(r, {}, UiLanguage::SimplifiedChinese);
+    ASSERT_FALSE(paid.summaryLines.empty());
+    EXPECT_EQ(paid.summaryLines.front(), "燃油撤离 · 已消耗 1 桶燃油");
+    ASSERT_EQ(paid.returned.size(), 1U);
+    EXPECT_EQ(paid.returned.front().definitionId, kRaidFuelCanId);
+    EXPECT_EQ(paid.returned.front().name, "燃油罐");
+
+    r.outcome = RaidResultOutcome::PlayerDead;
+    EXPECT_FALSE(contains(project(r).summaryLines, "FUEL CAN USED"));
+}
+
 TEST(UiRaidResultProjectionTest, WishSufficientInsufficientAndExpiredHaveDifferentReadOnlyAdvice) {
     auto r = result();
     r.wishReturn = BaseWishReturnSummary{{{3, BasePriorityDefinitionId{"base_priority.test"}},
@@ -395,6 +413,7 @@ TEST(UiRaidResultProjectionTest, ContextKeyTracksEveryHistoricalFieldWithoutDepe
     copy = r; copy.rescuedOrdinaryResidents = 1; changed.push_back(copy);
     copy = r; copy.rescuedInjuredResidents = 1; changed.push_back(copy);
     copy = r; copy.baseThreatReducedUnits = 40; changed.push_back(copy);
+    copy = r; copy.fuelExtractionPaid = true; changed.push_back(copy);
     copy = r; copy.lostRaidRecordId = "lost"; changed.push_back(copy);
     copy = r; copy.wishReturn = BaseWishReturnSummary{}; changed.push_back(copy);
     for (const auto &different : changed)
@@ -793,7 +812,7 @@ TEST_F(UiRaidResultTest, CriticalStatesActuallyPaintAtEveryPublishedWindowSizeAn
     }
     constexpr std::array names{"success", "second-page", "details", "empty-success", "death-lost-record",
         "abandoned-no-record", "rescued-with-threat", "wish-ready", "wish-expired", "no-result",
-        "test-session", "long-name", "long-feedback"};
+        "test-session", "long-name", "long-feedback", "fuel-paid"};
     for (const auto size : kUiWindowSizes) for (const auto language : {UiLanguage::SimplifiedChinese, UiLanguage::English}) {
         detach(); attach(size.width, size.height); A::text(*app).setLanguage(language);
         for (std::size_t scenario = 0; scenario < names.size(); ++scenario) {
@@ -814,6 +833,7 @@ TEST_F(UiRaidResultTest, CriticalStatesActuallyPaintAtEveryPublishedWindowSizeAn
                 state.details = true;
             }
             if (scenario == 9) r.reset();
+            if (scenario == 13) r->fuelExtractionPaid = true;
             auto p = project(r, state, language, scenario == 10);
             if (scenario == 11) {
                 ASSERT_FALSE(p.returned.empty());
@@ -828,6 +848,7 @@ TEST_F(UiRaidResultTest, CriticalStatesActuallyPaintAtEveryPublishedWindowSizeAn
             const auto layout = layoutUiRaidResult();
             EXPECT_GT(bright(layout.title), 20); EXPECT_GT(bright(layout.status), 20);
             EXPECT_GT(bright(layout.returnButton), 20); EXPECT_GT(bright(layout.recordHeading), 20);
+            if (scenario == 13) EXPECT_GT(bright(layout.summary), 20);
             if (!destination.empty()) ASSERT_TRUE(IMG_SavePNG(surface,
                 (destination / (std::string(names[scenario]) + "-" + std::to_string(size.width) + "-" + uiLanguageCode(language) + ".png")).string().c_str()));
         }

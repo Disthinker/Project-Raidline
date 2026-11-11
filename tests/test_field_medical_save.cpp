@@ -116,7 +116,7 @@ TEST(FieldMedicalSaveTest, FieldMedicalContent69PreservesExistingItemsUsesAndAut
     EXPECT_EQ(loaded.profile->baseSupplyPolicy.assignments, profile.baseSupplyPolicy.assignments);
     EXPECT_EQ(loaded.profile->assets.nextAssetId(), profile.assets.nextAssetId());
     EXPECT_EQ(nlohmann::json::parse(serializeProfileEnvelope(
-        *loaded.profile, content.contentVersion())).at("schema_version"), 62U);
+        *loaded.profile, content.contentVersion())).at("schema_version"), 63U);
     for (const auto &[id, asset] : loaded.profile->assets.records())
     {
         static_cast<void>(id);
@@ -179,7 +179,7 @@ TEST(FieldMedicalSaveTest, FieldMedicalContent70RoundTripsPartialMedicalChargesW
     ASSERT_FALSE(profile.baseSupplyPolicy.assignments.contains(
         ItemDefinitionId{"item.medical.bandage_roll_basic"}));
     const auto envelope = serializeProfileEnvelope(profile, content.contentVersion());
-    EXPECT_EQ(nlohmann::json::parse(envelope).at("schema_version"), 62U);
+    EXPECT_EQ(nlohmann::json::parse(envelope).at("schema_version"), 63U);
     const auto loaded = deserializeProfileEnvelope(envelope, content);
     ASSERT_TRUE(loaded.profile) << loaded.message;
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));

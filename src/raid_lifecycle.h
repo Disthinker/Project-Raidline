@@ -98,6 +98,12 @@ struct RaidSettlementReceipt
     RaidResultOutcome outcome{RaidResultOutcome::PlayerDead};
 };
 
+struct RaidFuelExtractionCompletion
+{
+    std::string_view raidId;
+    AssetInstanceId fuelAssetId{};
+};
+
 struct RaidRollbackReceipt
 {
     bool succeeded{};
@@ -136,7 +142,11 @@ struct RaidTravelPreview
     ProfileState &profile,
     const ContentRegistry &content,
     std::string_view settlementId,
-    RaidResultOutcome outcome);
+    RaidResultOutcome outcome,
+    std::optional<RaidFuelExtractionCompletion> fuel = std::nullopt);
+
+[[nodiscard]] std::optional<AssetInstanceId> findCarriedRaidFuel(const ProfileState &profile);
+[[nodiscard]] bool isCarriedRaidFuel(const ProfileState &profile, AssetInstanceId assetId);
 
 // Compatibility recovery for saves written by builds that persisted a
 // pending Raid. New deployments keep the exact pre-Raid Profile on disk.
