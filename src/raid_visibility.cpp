@@ -87,7 +87,8 @@ RaidSightParameters raidOpticSightParameters(
 RaidObservationKey RaidVisibilityProjection::key() const
 {
     return {spaceId,         observer,    direction,       angleDegrees,
-            maximumDistance, environment, geometryRevision, lightAssetId, lightBatteryId, lightAngleDegrees, lightDistance};
+            maximumDistance, environment, geometryRevision, lightAssetId, lightBatteryId,
+            lightAngleDegrees, lightDistance, illuminationKey};
 }
 
 bool RaidVisibilityProjection::hasSameParameters(
@@ -101,7 +102,8 @@ bool RaidVisibilityProjection::hasSameParameters(
            maximumDistance == current.maximumDistance &&
            environment == current.environment &&
            geometryRevision == current.geometryRevision && lightAssetId == current.lightAssetId && lightBatteryId == current.lightBatteryId &&
-           lightAngleDegrees == current.lightAngleDegrees && lightDistance == current.lightDistance;
+           lightAngleDegrees == current.lightAngleDegrees && lightDistance == current.lightDistance &&
+           illuminationKey == current.illumination;
 }
 
 bool RaidVisibilityProjection::matches(
@@ -286,9 +288,33 @@ bool validateFan(const RaidVisibilityProjection &view, PrepareTriangle prepare)
 
 } // namespace
 
+namespace
+{
+bool validIllumination(const RaidVisibilityProjection &view) noexcept
+{
+    if (!view.illumination)
+        return true;
+    const auto &enhanced = *view.illumination;
+    const auto &observer = enhanced.observer;
+    if (!enhanced.source || enhanced.key() != view.illuminationKey ||
+        observer.illumination || observer.spaceId != view.spaceId ||
+        observer.geometryRevision != view.geometryRevision ||
+        observer.observer.x != view.observer.x || observer.observer.y != view.observer.y)
+        return false;
+    const auto &source = enhanced.source->fans.front();
+    return source.spaceId == view.spaceId && source.geometryRevision == view.geometryRevision;
+}
+
+Vec2 observationCenter(Rect rect) noexcept
+{
+    return {rect.position.x + rect.size.x * 0.5F,
+            rect.position.y + rect.size.y * 0.5F};
+}
+}
+
 bool RaidVisibilityProjection::validGeometry() const noexcept
 {
-    return validFanHeader(*this) && validateFan(*this, nullptr);
+    return validFanHeader(*this) && validIllumination(*this) && validateFan(*this, nullptr);
 }
 
 bool RaidVisibilityProjection::matches(const RaidSpaceDefinitionId &space,
@@ -303,7 +329,7 @@ bool RaidVisibilityProjection::pointVisible(Vec2 p) const noexcept
     if (!validGeometry() || !finite(p) || !finite(observer) || p.x < 0 ||
         p.y < 0 || p.x > worldSize.x || p.y > worldSize.y)
         return false;
-    return pointInBoundary(*this, p);
+    return pointInBoundary(*this, p) || (illumination && illumination->pointVisible(p));
 }
 
 std::vector<Vec2> clipRaidVisibilityTriangle(Vec2 a, Vec2 b, Vec2 c, Rect rect)
@@ -350,6 +376,9 @@ bool RaidVisibilityProjection::boundsVisible(Rect rect) const
     if (!finite(rect.position) || !finite(rect.size) || rect.size.x <= 0 ||
         rect.size.y <= 0)
         return false;
+    if (illumination && illumination->pointVisible(observationCenter(rect)) &&
+        validGeometry())
+        return true;
     if (maximumDistance > 0 && finite(observer) && finite(direction) &&
         std::isfinite(angleDegrees))
     {
@@ -425,7 +454,7 @@ bool RaidVisibilityBoundsQuery::Edge::overlaps(Vec2 center, float hx, float hy,
 RaidVisibilityBoundsQuery::RaidVisibilityBoundsQuery(
     const RaidVisibilityProjection &view)
 {
-    if (!validFanHeader(view))
+    if (!validFanHeader(view) || !validIllumination(view))
         return;
     const Vec2 observer = view.observer;
     const auto pointCount = view.boundary.size();
@@ -502,9 +531,18 @@ RaidVisibilityBoundsQuery::RaidVisibilityBoundsQuery(
     rightDirection_ = {view.direction.x * c - view.direction.y * s,
                        view.direction.y * c + view.direction.x * s};
     valid_ = true;
+    illumination_ = view.illumination;
 }
 
 bool RaidVisibilityBoundsQuery::boundsVisible(Rect rect) const noexcept
+{
+    return ordinaryBoundsVisible(rect) ||
+        (illumination_ && finite(rect.position) && finite(rect.size) &&
+            rect.size.x > 0 && rect.size.y > 0 &&
+            illumination_->pointVisible(observationCenter(rect)));
+}
+
+bool RaidVisibilityBoundsQuery::ordinaryBoundsVisible(Rect rect) const noexcept
 {
     if (!valid_ || !finite(rect.position) || !finite(rect.size) ||
         rect.size.x <= 0 || rect.size.y <= 0)
@@ -586,4 +624,50 @@ bool RaidVisibilityBoundsQuery::boundsVisible(Rect rect) const noexcept
             return true;
     }
     return false;
+}
+
+bool RaidVisibilityBoundsQuery::pointVisible(Vec2 point) const noexcept
+{
+    if (!valid_ || !finite(point))
+        return false;
+    const auto contains = [point](Vec2 minimum, Vec2 maximum) {
+        return point.x >= minimum.x && point.x <= maximum.x &&
+            point.y >= minimum.y && point.y <= maximum.y;
+    };
+    const auto inTriangle = [&](const Triangle &triangle) {
+        return contains(triangle.minimum, triangle.maximum) &&
+            triangle.edges[0].overlaps(point, 0, 0, triangle.sign) &&
+            triangle.edges[1].overlaps(point, 0, 0, triangle.sign) &&
+            triangle.edges[2].overlaps(point, 0, 0, triangle.sign);
+    };
+    if (!triangleGroups_.empty())
+    {
+        for (const auto &group : triangleGroups_)
+            if (contains(group.minimum, group.maximum) &&
+                std::any_of(triangles_.begin() + group.first,
+                    triangles_.begin() + group.end, inTriangle))
+                return true;
+        return false;
+    }
+    return std::any_of(triangles_.begin(), triangles_.end(), inTriangle);
+}
+
+RaidIlluminatedObservation::RaidIlluminatedObservation(
+    RaidVisibilityProjection extendedObserver, RaidIlluminationObservationKey light)
+    : observer(std::move(extendedObserver)), source(light.source),
+      key_(std::move(light)), observerQuery_(observer)
+{
+}
+
+bool RaidIlluminatedObservation::pointVisible(Vec2 point) const noexcept
+{
+    if (!source || !finite(point) || !key_.insideLens(point))
+        return false;
+    const auto &light = source->fans.front();
+    const Vec2 fromLight{point.x - light.observer.x, point.y - light.observer.y};
+    if (fromLight.x * fromLight.x + fromLight.y * fromLight.y >
+        light.maximumDistance * light.maximumDistance)
+        return false;
+    return observerQuery_.pointVisible(point) &&
+        (source->queries[0].pointVisible(point) || source->queries[1].pointVisible(point));
 }

@@ -293,7 +293,8 @@ std::size_t populatePublishedWarehouseCatalog(
             definition.definitionId == kExpanding545AmmunitionId ||
             definition.definitionId == kFreightCrateKeyId ||
             definition.definitionId == kRaidFuelCanId ||
-            definition.definitionId == kArmorRepairBlueprintId)
+            definition.definitionId == kArmorRepairBlueprintId ||
+            definition.definitionId == kThrownIlluminationItemId)
         {
             continue;
         }
@@ -2368,7 +2369,7 @@ ProfileValidationResult validateProfileState(
     }
 
     const bool armorReadinessContent =
-        content.contentVersion() == kArmorReadinessContentVersion;
+        supportsArmorReadinessContent(content.contentVersion());
     if (profile.baseManufacturing.armorRepairRecipeUnlocked && !armorReadinessContent)
     {
         return {false, "Armor repair unlock requires compatible content"};
@@ -4552,6 +4553,8 @@ ProfileValidationResult validateProfileState(
             {
                 return {false, "legacy Raid Loot has resource point metadata"};
             }
+            if (loot.definitionId == kThrownIlluminationItemId && recoveryRoot == nullptr)
+                return {false, "pending Raid field flare is outside its self-recovery source"};
             if (loot.definitionId == kArmorRepairBlueprintId && recoveryRoot == nullptr)
             {
                 if (!blueprintRaid || blueprintSlot || loot.quantity != 1U ||

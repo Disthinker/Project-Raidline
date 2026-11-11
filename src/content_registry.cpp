@@ -1716,7 +1716,34 @@ ContentRegistry ContentRegistry::fromJson(
                     fail("invalid grenade capability");
                 definition.grenadeUse = use;
             }
-            if (definition.category == ItemCategory::Throwable && !definition.noiseDecoyUse && !definition.grenadeUse)
+            if (itemValue.contains("thrown_illumination_use"))
+            {
+                const auto &flare = requiredObject(itemValue, "thrown_illumination_use");
+                ThrownIlluminationUseDefinition use{
+                    requiredFiniteFloat(flare, "range", true),
+                    requiredFiniteFloat(flare, "flight_seconds", true),
+                    requiredFiniteFloat(flare, "radius", true),
+                    requiredFiniteFloat(flare, "duration_seconds", true)};
+                if (!use.valid() || definition.category != ItemCategory::Throwable ||
+                    definition.noiseDecoyUse || definition.grenadeUse ||
+                    definition.equipmentSlot || !definition.compatibleEquipmentSlots.empty() ||
+                    !definition.containerCompartments.empty() || definition.basePlacement ||
+                    definition.weaponUse || definition.medicalUse || definition.armorProtection ||
+                    definition.weaponCondition || definition.weaponMaintenance || definition.armorMaintenance ||
+                    definition.maximumCharges || definition.magazineCapacity ||
+                    definition.inventoryWidthCells != 1 || definition.inventoryHeightCells != 1 ||
+                    definition.maxStackSize != 2U ||
+                    itemValue.contains("melee_use") || itemValue.contains("weapon_component") ||
+                    itemValue.contains("weapon_light") || itemValue.contains("night_vision") ||
+                    itemValue.contains("ammunition_use") || itemValue.contains("magazine_use") ||
+                    itemValue.contains("compatible_ammunition") || itemValue.contains("compatible_magazine") ||
+                    itemValue.contains("compatible_magazines") || itemValue.contains("base_contribution") ||
+                    itemValue.contains("base_construction_material") || itemValue.value("battery", false))
+                    fail("invalid thrown illumination capability");
+                definition.thrownIlluminationUse = use;
+            }
+            if (definition.category == ItemCategory::Throwable && !definition.noiseDecoyUse &&
+                !definition.grenadeUse && !definition.thrownIlluminationUse)
                 fail("throwable requires exactly one supported capability");
             if (itemValue.contains("melee_use"))
             {
@@ -4333,7 +4360,7 @@ ContentRegistry ContentRegistry::fromJson(
                     [](const auto &recipe) { return recipe.outputItemDefinitionId == kRaidFuelCanId; }))
                 fail("extraction fuel requires its fixed field source");
         }
-        if (registry.contentVersion() == kArmorReadinessContentVersion)
+        if (supportsArmorReadinessContent(registry.contentVersion()))
         {
             if (!registry.itemIndex_.contains(kArmorRepairBlueprintId) ||
                 !registry.baseManufacturingRecipeIndex_.contains(kArmorRepairRecipeId))
@@ -4366,6 +4393,30 @@ ContentRegistry ContentRegistry::fromJson(
                 std::none_of(source.raidLootSlots.begin(), source.raidLootSlots.end(),
                     [](const auto &slot) { return slot.route == "resource"; }))
                 fail("armor repair blueprint requires a selected resource Loot slot");
+        }
+        if (supportsThrownIlluminationContent(registry.contentVersion()))
+        {
+            if (!registry.itemIndex_.contains(kThrownIlluminationItemId) ||
+                !registry.baseManufacturingRecipeIndex_.contains(kThrownIlluminationRecipeId))
+                fail("thrown illumination requires a field flare and recipe");
+            const auto &flare = registry.item(kThrownIlluminationItemId);
+            const auto &recipe = registry.baseManufacturingRecipe(kThrownIlluminationRecipeId);
+            if (!flare.thrownIlluminationUse || flare.marketBuyPrice || flare.marketRecyclePrice ||
+                recipe.outputItemDefinitionId != kThrownIlluminationItemId || recipe.outputQuantity != 2U)
+                fail("field flare must be produced by its workshop recipe");
+            if (std::any_of(registry.lootTables_.begin(), registry.lootTables_.end(), [](const auto &table) {
+                    return std::any_of(table.entries.begin(), table.entries.end(), [](const auto &entry) {
+                        return entry.itemDefinitionId == kThrownIlluminationItemId;
+                    });
+                }) || std::any_of(registry.maps_.begin(), registry.maps_.end(), [](const auto &map) {
+                    return std::any_of(map.groundItems.begin(), map.groundItems.end(), [](const auto &item) {
+                        return item.itemDefinitionId == kThrownIlluminationItemId;
+                    });
+                }) || std::count_if(registry.baseManufacturingRecipes_.begin(),
+                    registry.baseManufacturingRecipes_.end(), [](const auto &entry) {
+                        return entry.outputItemDefinitionId == kThrownIlluminationItemId;
+                    }) != 1)
+                fail("field flare is workshop-only");
         }
         return registry;
     }

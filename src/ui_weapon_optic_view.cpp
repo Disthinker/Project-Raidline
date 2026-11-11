@@ -1,4 +1,5 @@
 #include "ui_weapon_optic_view.h"
+#include "ui_raid_illumination.h"
 
 #include <algorithm>
 #include <array>
@@ -119,6 +120,8 @@ bool drawUiWeaponOpticObservation(SDL_Renderer *renderer, SDL_Texture *texture,
             visibility.boundary[(i + 1) % visibility.boundary.size()], visible);
         appendPolygon(vertices, polygon, view, shade, true);
     }
+    for (const auto &triangle : clipUiIlluminatedObservation(visibility, visible))
+        appendPolygon(vertices, triangle, view, shade, true);
     return drawTexturedFan(renderer, texture, vertices);
 }
 

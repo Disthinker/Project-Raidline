@@ -7,7 +7,8 @@ Vec2 center(const Enemy &e) { return {e.position().x+e.size().x/2,e.position().y
 std::optional<NoiseDecoyLanding> GameplayWorld::previewNoiseDecoy(Vec2 aim,const NoiseDecoyUseDefinition &use) const
 {
     if(!noiseDecoyEnabled_ || !raidSession_.isActive() || player_.isControlled() || player_.isDead() ||
-        noiseDecoy_.flight() || grenade_.active() || melee_.recoverySeconds()>0)return std::nullopt;
+        noiseDecoy_.flight() || grenade_.active() || thrownIllumination_.flight() ||
+        melee_.recoverySeconds()>0)return std::nullopt;
     const auto p=player_.position();const float s=player_.size();
     return queryNoiseDecoyLanding({p.x+s/2,p.y+s/2},aim,activeRaidSpaceId(),use,activeBlockerIndex());
 }

@@ -4,10 +4,12 @@
 #include "raid_camera.h"
 #include "save_repository.h"
 #include "ui_localization.h"
+#include "ui_raid_illumination.h"
 
 #include <gtest/gtest.h>
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 
@@ -24,18 +26,26 @@ struct NoiseDecoyUiTestAccess
     static bool capture(const App &a) { return a.shouldCaptureWorldPointer(); }
     static void sector(App &a, std::size_t sector) { a.throwableWheelSelected_=sector; }
     static void attach(App &a, SDL_Renderer *renderer) { a.renderer_=renderer; EXPECT_TRUE(a.uiTextRenderer_.initialize(renderer)); }
-    static void detach(App &a) { a.uiTextRenderer_.shutdown(); a.renderer_=nullptr; }
+    static void detach(App &a) {
+        a.indoorInformationLayer_.reset();
+        a.indoorShadowMask_.reset();
+        a.uiTextRenderer_.shutdown();
+        a.renderer_=nullptr;
+    }
     static void aim(App &a) {
         GameplayInput input; input.aimWorldPosition={550,160}; a.gameSession_.world().update(input,0);
         a.worldAimPointerAnchor_=raidWorldToScreen(a.gameSession_.world().weaponAimWorldPosition(),a.raidWorldCameraOffset());
     }
     static void details(App &a, AssetInstanceId id) { a.profileDetailsAsset_=id; a.renderProfileWeaponDetails(); }
-    static void drawWorld(App &a) { EXPECT_TRUE(a.renderIndoorInformationLayer({0,0,1280,720})); }
-    static void visibilityWorld(App &a) {
+    static void drawWorld(App &a) { EXPECT_TRUE(a.renderIndoorInformationLayer({0,0,1280,720})) << SDL_GetError(); }
+    static void visibilityWorld(App &a, bool withWall = false) {
         RaidWorldConfig config; config.noiseDecoyEnabled=true; config.grenadeEnabled=true;
         config.lightConeObservationEnabled=true; config.worldSize={1280,720};config.playerSpawn={375,165};
         config.extractionPoint={{1100,600},{100,100}};
+        if (withWall)
+            config.ballisticBlockers.push_back({1, {{910, 205}, {26, 165}}});
         a.gameSession_.world_=std::make_unique<GameplayWorld>(config);
+        a.gameSession_.world().setRaidDaylight(!withWall);
         GameplayInput input; input.aimWorldPosition={650,181}; a.gameSession_.world().update(input,0);
     }
     static void fuse(App &a, Vec2 point) {
@@ -190,6 +200,132 @@ TEST_F(GrenadeUiTest, DecoySelectionStillUsesOriginalRuntimeAndInventory)
     EXPECT_TRUE(session().world().noiseDecoy().flight());EXPECT_FALSE(session().world().grenade().active());
     EXPECT_EQ(session().profile().assets.find(decoyId)->quantity,2U);
     EXPECT_EQ(session().profile().assets.find(grenadeId)->quantity,2U);
+}
+
+TEST_F(GrenadeUiTest, IlluminationUsesTheExistingWheelAndOnlyConsumesOnClick)
+{
+    auto &profile = const_cast<ProfileState &>(session().profile());
+    const auto flare = addRigItem(profile, kThrownIlluminationItemId, 2);
+    ASSERT_NE(flare, 0U);
+    ++profile.revision;
+    const auto &content = publishedContentRegistry();
+    const auto model = projectUiItemDetails(profile, content, flare, UiLanguage::SimplifiedChinese);
+    ASSERT_TRUE(model);
+    EXPECT_EQ(model->name, "照明弹");
+    EXPECT_EQ(model->title, "照明弹详情");
+    clear();
+    Access::details(*app, flare);
+    EXPECT_TRUE(SDL_RenderPresent(renderer));
+
+    choose();
+    ASSERT_EQ(Access::aiming(*app), flare);
+    mouse(SDL_BUTTON_RIGHT, true);
+    Access::frame(*app);
+    EXPECT_FALSE(Access::aiming(*app));
+    EXPECT_EQ(profile.assets.find(flare)->quantity, 2U);
+    EXPECT_EQ(Access::message(*app), "ILLUMINATION CANCELLED");
+    mouse(SDL_BUTTON_RIGHT, false);
+    Access::frame(*app);
+
+    choose();
+    mouse(SDL_BUTTON_LEFT, true);
+    Access::frame(*app);
+    EXPECT_TRUE(session().world().thrownIllumination().flight());
+    ASSERT_NE(profile.assets.find(flare), nullptr);
+    EXPECT_EQ(profile.assets.find(flare)->quantity, 1U);
+    EXPECT_EQ(Access::message(*app), "ILLUMINATION THROWN");
+    EXPECT_FALSE(session().world().shotFiredLastUpdate());
+}
+
+TEST_F(GrenadeUiTest, IlluminationCompositingIntersectsPlayerAndSourceFans)
+{
+    const Rect screen{{0, 0}, {1280, 720}};
+    const auto fan = [](Vec2 center, std::vector<Vec2> boundary) {
+        RaidVisibilityProjection view;
+        view.valid = true;
+        view.observer = center;
+        view.boundary = std::move(boundary);
+        view.maximumDistance = 300.0F;
+        return view;
+    };
+    const auto observer = fan({200, 260}, {{200, 200}, {520, 200}, {520, 320}, {200, 320}});
+    auto source = std::make_shared<RaidIlluminationCoverage>();
+    source->fans[0] = fan({450, 275}, {{370, 220}, {650, 220}, {650, 340}, {370, 340}});
+    auto view = observer;
+    view.illumination = std::make_shared<RaidIlluminatedObservation>(
+        observer, RaidIlluminationObservationKey{source});
+    const auto triangles = clipUiIlluminatedObservation(view, screen);
+    ASSERT_FALSE(triangles.empty());
+    for (const auto &triangle : triangles)
+        for (const auto p : triangle) {
+            EXPECT_GE(p.x, 369.99F);
+            EXPECT_LE(p.x, 520.01F);
+            EXPECT_GE(p.y, 219.99F);
+            EXPECT_LE(p.y, 320.01F);
+        }
+
+    clear();
+    drawUiThrownIllumination(renderer, source->fans, screen);
+    ASSERT_TRUE(SDL_RenderPresent(renderer));
+    Uint8 outside{}, outsideG{}, outsideB{}, outsideA{};
+    Uint8 center{}, centerG{}, centerB{}, centerA{};
+    ASSERT_TRUE(SDL_ReadSurfacePixel(surface, 449, 275, &center, &centerG, &centerB, &centerA));
+    ASSERT_TRUE(SDL_ReadSurfacePixel(surface, 700, 275, &outside, &outsideG, &outsideB, &outsideA));
+    EXPECT_GT(center, outside + 35);
+    EXPECT_GT(centerG, outsideG + 20);
+}
+
+TEST_F(GrenadeUiTest, IlluminationWorldShowsTheLitOpeningAcrossWindowSizes)
+{
+    Access::visibilityWorld(*app, true);
+    auto &world = session().world();
+    ASSERT_FLOAT_EQ(world.raidObservation().maximumDistance, 600);
+    const Rect lit{{1076, 176}, {8, 8}};
+    const Rect blocked{{1046, 276}, {8, 8}};
+    ASSERT_FALSE(world.raidBoundsObservable(lit));
+    ASSERT_FALSE(world.raidBoundsObservable(blocked));
+    const auto &use = *publishedContentRegistry().item(kThrownIlluminationItemId).thrownIlluminationUse;
+    auto landing = world.previewThrownIllumination({835, 181}, use);
+    ASSERT_TRUE(landing);
+    landing->effectIdentity = "offscreen-flare";
+    ThrownIlluminationRuntime runtime;
+    ASSERT_TRUE(runtime.start(*landing));
+    runtime.advance(use.flightSeconds);
+    world.commitThrownIllumination(std::move(runtime));
+    EXPECT_TRUE(world.raidBoundsObservable(lit));
+    EXPECT_FALSE(world.raidBoundsObservable(blocked));
+
+    for (const auto size : kUiWindowSizes)
+    {
+        Access::detach(*app);
+        SDL_DestroyRenderer(renderer);
+        renderer = nullptr;
+        SDL_DestroySurface(surface);
+        surface = SDL_CreateSurface(size.width, size.height, SDL_PIXELFORMAT_RGBA32);
+        ASSERT_NE(surface, nullptr);
+        renderer = SDL_CreateSoftwareRenderer(surface);
+        ASSERT_NE(renderer, nullptr);
+        ASSERT_TRUE(SDL_SetRenderLogicalPresentation(renderer, 1280, 720, SDL_LOGICAL_PRESENTATION_LETTERBOX));
+        Access::attach(*app, renderer);
+        clear();
+        Access::drawWorld(*app);
+        ASSERT_TRUE(SDL_RenderPresent(renderer));
+        const auto readRed = [&](int x, int y) {
+            Uint8 red{}, green{}, blue{}, alpha{};
+            EXPECT_TRUE(SDL_ReadSurfacePixel(surface, x * size.width / 1280,
+                y * size.height / 720, &red, &green, &blue, &alpha));
+            return red;
+        };
+        EXPECT_GT(readRed(1080, 180), readRed(1050, 280));
+        if (const char *folder = std::getenv("RAIDLINE_FLARE_PREVIEW_DIR"))
+        {
+            const std::filesystem::path output{folder};
+            ASSERT_TRUE(output.filename().string().starts_with("raidline-flare-review-"));
+            std::filesystem::create_directories(output);
+            const auto image = output / ("world-" + std::to_string(size.width) + ".bmp");
+            EXPECT_TRUE(SDL_SaveBMP(surface, image.string().c_str()));
+        }
+    }
 }
 
 TEST_F(GrenadeUiTest, HiddenGrenadeFuseDoesNotRevealPixelsOutsideTheExistingCone)

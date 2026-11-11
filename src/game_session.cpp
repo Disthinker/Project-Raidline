@@ -296,7 +296,7 @@ std::optional<BaseFacilityKind> GameSession::updateBaseWorld(
     prepareWeaponTrigger(simulationInput,rawInput,weapon,
         !input.inventoryOpen && !input.freezeObservationDirection && !input.throwableModal &&
         !baseWorld.playerControlled() && !fireSuppressedUntilRelease_ && !decoyFireSuppressedUntilRelease_ &&
-        !baseWorld.noiseDecoy().flight() && !baseWorld.grenade().active());
+        !playerThrowFlightActive() && !baseWorld.grenade().active());
     if(raidActionState_.active()) {
         weaponTriggerGate_.cancelPending();simulationInput.firePressed=simulationInput.fireJustPressed=false;
         simulationInput.interactPressed=simulationInput.interactJustPressed=false;
@@ -1171,9 +1171,7 @@ bool GameSession::beginAlphaReload(
     const auto context = playerGameplayContext();
     if(profileUiCommitPending())return false;
     if(inventoryPersistencePending()){requestInventoryPersistenceBarrier();persistenceMessage_="INVENTORY SAVE PENDING";return false;}
-    const bool flying = alphaRaidActive_ ? (world_->noiseDecoy().flight().has_value() || world_->grenade().flight().has_value())
-        : basePlayerWorld_ && (basePlayerWorld_->noiseDecoy().flight().has_value() || basePlayerWorld_->grenade().flight().has_value());
-    if (!context.available || context.dead || context.controlled || flying ||
+    if (!context.available || context.dead || context.controlled || playerThrowFlightActive() ||
         raidActionState_.active().has_value() ||
         activeAlphaWeapon() != std::optional<AssetInstanceId>{weaponAssetId})
     {
@@ -3051,8 +3049,10 @@ WeaponAmmoReceipt GameSession::executeProfileWeaponAmmo(
     const WeaponAmmoCommand &command,
     std::string transactionId)
 {
-    if (alphaRaidActive_ && world_ && (world_->noiseDecoy().flight() || world_->grenade().flight()))
-        return {false,false,DomainErrorCode::IllegalDestination,"DECOY UNAVAILABLE HERE",profile_.revision,WeaponAmmoResult::Dry,std::nullopt};
+    if (alphaRaidActive_ && playerThrowFlightActive())
+        return {false,false,DomainErrorCode::IllegalDestination,
+            world_->thrownIllumination().flight() ? "THROWABLE UNAVAILABLE HERE" : "DECOY UNAVAILABLE HERE",
+            profile_.revision,WeaponAmmoResult::Dry,std::nullopt};
     const auto weaponId = std::visit([](const auto &typed) -> std::optional<AssetInstanceId> {
         if constexpr (requires { typed.weaponAssetId; }) return typed.weaponAssetId;
         else return std::nullopt;
@@ -4175,7 +4175,7 @@ void GameSession::updateAlphaRaid(
         !input.inventoryOpen && !input.freezeObservationDirection && !input.throwableModal &&
         !world_->player().isControlled() &&
         !fireSuppressedUntilRelease_ && !decoyFireSuppressedUntilRelease_ &&
-        !world_->noiseDecoy().flight() && !world_->grenade().flight());
+        !playerThrowFlightActive());
     if (input.inventoryOpen || raidActionState_.active().has_value())
     {
         if (raidActionState_.active()) weaponTriggerGate_.cancelPending();

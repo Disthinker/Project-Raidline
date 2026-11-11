@@ -29,6 +29,8 @@ inline constexpr std::string_view kFuelExtractionContentVersion{
     "raid-fuel-extraction-loop-content-79"};
 inline constexpr std::string_view kArmorReadinessContentVersion{
     "base-research-armor-readiness-content-80"};
+inline constexpr std::string_view kThrownIlluminationContentVersion{
+    "raid-thrown-illumination-content-81"};
 inline const ItemDefinitionId kFixedRaidOpticId{"item.component.optic_4x_5_45"};
 inline const ItemDefinitionId kExpanding545AmmunitionId{"item.ammunition.5_45x39_expanding"};
 inline const ItemDefinitionId kHospitalNightVisionId{"item.device.night_vision_basic"};
@@ -40,6 +42,9 @@ inline const BaseManufacturingRecipeDefinitionId kArmorRepairResearchId{
     "base_manufacturing.research_armor_repair"};
 inline const BaseManufacturingRecipeDefinitionId kArmorRepairRecipeId{
     "base_manufacturing.armor_repair_tool"};
+inline const ItemDefinitionId kThrownIlluminationItemId{"item.throwable.field_flare"};
+inline const BaseManufacturingRecipeDefinitionId kThrownIlluminationRecipeId{
+    "base_manufacturing.field_flare"};
 inline constexpr std::uint32_t kArmorRepairResearchDurationMinutes{360U};
 inline const MapDefinitionId kArmorRepairBlueprintMapId{"map.raid.industrial"};
 inline const MapDefinitionId kFreightKeySourceMapId{"map.raid.riverside"};
@@ -56,9 +61,19 @@ inline constexpr std::string_view kRaidFuelLootSlotId{"freight_manifest"};
         slotId == "hospital_service";
 }
 
+[[nodiscard]] inline bool supportsThrownIlluminationContent(std::string_view version) noexcept
+{
+    return version == kThrownIlluminationContentVersion;
+}
+
+[[nodiscard]] inline bool supportsArmorReadinessContent(std::string_view version) noexcept
+{
+    return version == kArmorReadinessContentVersion || supportsThrownIlluminationContent(version);
+}
+
 [[nodiscard]] inline bool supportsFuelExtractionContent(std::string_view version) noexcept
 {
-    return version == kFuelExtractionContentVersion || version == kArmorReadinessContentVersion;
+    return version == kFuelExtractionContentVersion || supportsArmorReadinessContent(version);
 }
 
 [[nodiscard]] inline bool crossMapFreightCompatibleContent(std::string_view version) noexcept

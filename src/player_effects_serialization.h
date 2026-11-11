@@ -4,6 +4,7 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 #include <nlohmann/json.hpp>
 
 // Value-only schema60 codec. The Profile validator owns semantic legality.
@@ -157,6 +158,25 @@ inline GrenadeLanding parseGrenadeLanding(const Json &j)
 {return {parsePoint(j.at("origin")),parsePoint(j.at("point")),RaidSpaceDefinitionId{text(j.at("space_id"))},parseGrenadeUse(j.at("use")),text(j.at("effect_identity"))};}
 inline NoiseDecoyLanding parseNoiseLanding(const Json &j)
 {return {parsePoint(j.at("origin")),parsePoint(j.at("point")),RaidSpaceDefinitionId{text(j.at("space_id"))},parseNoiseUse(j.at("use")),text(j.at("effect_identity"))};}
+inline Json illuminationLanding(const ThrownIlluminationLanding &value)
+{
+    return {{"origin", point(value.origin)}, {"point", point(value.point)},
+        {"space_id", value.space.value()}, {"effect_identity", value.effectIdentity},
+        {"use", {{"maximum_range", value.use.maximumRange},
+                 {"flight_seconds", value.use.flightSeconds},
+                 {"radius", value.use.radius}, {"duration_seconds", value.use.durationSeconds}}}};
+}
+
+inline ThrownIlluminationLanding parseIlluminationLanding(const Json &value)
+{
+    const auto &use = value.at("use");
+    return {parsePoint(value.at("origin")), parsePoint(value.at("point")),
+        RaidSpaceDefinitionId{text(value.at("space_id"))},
+        {real(use.at("maximum_range")), real(use.at("flight_seconds")),
+         real(use.at("radius")), real(use.at("duration_seconds"))},
+        text(value.at("effect_identity"))};
+}
+
 inline std::string medicalEffect(MedicalUseEffect e)
 {
     switch(e){case MedicalUseEffect::RestoreHealth:return "restore_health";case MedicalUseEffect::StopLightBleeding:return "stop_light_bleeding";case MedicalUseEffect::StopAnyBleeding:return "stop_any_bleeding";case MedicalUseEffect::SuppressPain:return "suppress_pain";}
@@ -177,7 +197,7 @@ inline EquipmentSlotKind parseActiveSlot(const Json &j)
     const auto s=text(j);if(s=="primary_weapon")return EquipmentSlotKind::PrimaryWeapon;if(s=="secondary_weapon")return EquipmentSlotKind::SecondaryWeapon;if(s=="sidearm")return EquipmentSlotKind::Sidearm;
     throw std::invalid_argument("invalid active weapon recovery slot");
 }
-inline Json effects(const BasePlayerEffectsRecovery &r)
+inline Json effects(const BasePlayerEffectsRecovery &r, bool illuminationContract)
 {
     Json medical=nullptr;
     if(r.medical){const auto&m=*r.medical;medical={{"medical_asset_id",m.medicalAssetId},{"effect",medicalEffect(m.effect)},{"charge_consumed",m.chargeConsumed},
@@ -191,14 +211,31 @@ inline Json effects(const BasePlayerEffectsRecovery &r)
     if(n.source)decoy["source"]={{"id",n.source->id},{"landing",landing(n.source->landing)},{"elapsed",n.source->elapsed},{"pulses",n.source->pulses}};
     for(const auto &entry:n.investigations){const auto&i=entry.investigation;decoy["investigations"].push_back({{"target_id",entry.targetId},
         {"space_id",i.space.value()},{"source_id",i.source},{"point",point(i.point)},{"home",point(i.home)},{"returning",i.returning}});}
-    return {{"scope",scope(r.scope)},{"world_size",point(r.worldSize)},{"player_position",point(r.playerPosition)},{"facing_direction",point(r.facingDirection)},
+    Json payload = {{"scope",scope(r.scope)},{"world_size",point(r.worldSize)},{"player_position",point(r.playerPosition)},{"facing_direction",point(r.facingDirection)},
         {"control_remaining_seconds",r.controlRemainingSeconds},{"impact_slow_remaining_seconds",r.impactSlowRemainingSeconds},
         {"medical_tick_accumulator_seconds",r.medicalTickAccumulatorSeconds},{"daily_damage_protection_seconds",r.dailyDamageProtectionSeconds},
         {"medical",medical},{"grenade",grenade},{"noise_decoy",decoy},{"daily_command_sequence",r.dailyCommandSequence},
         {"daily_weapon_fault_sequence",r.dailyWeaponFaultSequence},{"daily_medical_random_sequence",r.dailyMedicalRandomSequence},
         {"daily_wound_random_sequence",r.dailyWoundRandomSequence},{"daily_active_weapon_slot",activeSlot(r.dailyActiveWeaponSlot)}};
+    const auto &illumination = r.thrownIllumination;
+    if (illumination.flight || illumination.source)
+    {
+        if (!illuminationContract)
+            throw std::invalid_argument("Base illumination recovery requires schema 65 and content 81");
+        Json flight = nullptr;
+        Json source = nullptr;
+        if (illumination.flight)
+            flight = {{"landing", illuminationLanding(illumination.flight->landing)},
+                {"elapsed", illumination.flight->elapsed}};
+        if (illumination.source)
+            source = {{"landing", illuminationLanding(illumination.source->landing)},
+                {"elapsed", illumination.source->elapsed},
+                {"night_vision_glare_triggered", illumination.source->nightVisionGlareTriggered}};
+        payload["thrown_illumination"] = {{"flight", std::move(flight)}, {"source", std::move(source)}};
+    }
+    return payload;
 }
-inline BasePlayerEffectsRecovery parseEffects(const Json &j)
+inline BasePlayerEffectsRecovery parseEffects(const Json &j, bool illuminationContract)
 {
     BasePlayerEffectsRecovery r;r.scope=parseScope(j.at("scope"));r.worldSize=parsePoint(j.at("world_size"));r.playerPosition=parsePoint(j.at("player_position"));r.facingDirection=parsePoint(j.at("facing_direction"));
     r.controlRemainingSeconds=real(j.at("control_remaining_seconds"));r.impactSlowRemainingSeconds=real(j.at("impact_slow_remaining_seconds"));
@@ -215,11 +252,29 @@ inline BasePlayerEffectsRecovery parseEffects(const Json &j)
     if(!n.at("investigations").is_array())throw std::invalid_argument("decoy investigations must be an array");
     for(const auto &i:n.at("investigations"))r.noiseDecoy.investigations.push_back({integer(i.at("target_id"),true),
         {RaidSpaceDefinitionId{text(i.at("space_id"))},integer(i.at("source_id"),true),parsePoint(i.at("point")),parsePoint(i.at("home")),i.at("returning").get<bool>()}});
+    if (j.contains("thrown_illumination"))
+    {
+        if (!illuminationContract)
+            throw std::invalid_argument("Base illumination recovery requires schema 65 and content 81");
+        const auto &illumination = j.at("thrown_illumination");
+        const auto &flight = illumination.at("flight");
+        const auto &source = illumination.at("source");
+        if (flight.is_null() == source.is_null())
+            throw std::invalid_argument("Base illumination recovery requires exactly one phase");
+        if (!flight.is_null())
+            r.thrownIllumination.flight = ThrownIlluminationFlight{
+                parseIlluminationLanding(flight.at("landing")), number(flight.at("elapsed"))};
+        if (!source.is_null())
+            r.thrownIllumination.source = ThrownIlluminationSource{
+                parseIlluminationLanding(source.at("landing")), number(source.at("elapsed")),
+                source.at("night_vision_glare_triggered").get<bool>()};
+    }
     r.dailyCommandSequence=integer(j.at("daily_command_sequence"));r.dailyWeaponFaultSequence=integer(j.at("daily_weapon_fault_sequence"));
     r.dailyMedicalRandomSequence=integer(j.at("daily_medical_random_sequence"));r.dailyWoundRandomSequence=integer(j.at("daily_wound_random_sequence"));r.dailyActiveWeaponSlot=parseActiveSlot(j.at("daily_active_weapon_slot"));
     return r;
 }
-inline void writePlayerState(Json &payload,const ProfileState &profile,unsigned schema)
+inline void writePlayerState(Json &payload,const ProfileState &profile,unsigned schema,
+    bool illuminationContract)
 {
     if(schema<60)
     {
@@ -227,10 +282,11 @@ inline void writePlayerState(Json &payload,const ProfileState &profile,unsigned 
         return;
     }
     payload["base_reload_recovery"]=profile.baseReloadRecovery?reload(*profile.baseReloadRecovery):Json(nullptr);
-    payload["base_player_effects"]=profile.basePlayerEffects?effects(*profile.basePlayerEffects):Json(nullptr);
+    payload["base_player_effects"]=profile.basePlayerEffects?effects(*profile.basePlayerEffects, illuminationContract):Json(nullptr);
     payload["base_corpses"]=Json::array();for(const auto &c:profile.baseCorpses)payload["base_corpses"].push_back(corpse(c));
 }
-inline void parsePlayerState(const Json &payload,ProfileState &profile,unsigned schema)
+inline void parsePlayerState(const Json &payload,ProfileState &profile,unsigned schema,
+    bool illuminationContract)
 {
     if(schema<60)
     {
@@ -238,7 +294,7 @@ inline void parsePlayerState(const Json &payload,ProfileState &profile,unsigned 
         return;
     }
     if(!payload.at("base_reload_recovery").is_null())profile.baseReloadRecovery=parseReload(payload.at("base_reload_recovery"));
-    if(!payload.at("base_player_effects").is_null())profile.basePlayerEffects=parseEffects(payload.at("base_player_effects"));
+    if(!payload.at("base_player_effects").is_null())profile.basePlayerEffects=parseEffects(payload.at("base_player_effects"), illuminationContract);
     if(!payload.at("base_corpses").is_array())throw std::invalid_argument("Base corpses must be an array");
     for(const auto &c:payload.at("base_corpses"))profile.baseCorpses.push_back(parseCorpse(c));
 }

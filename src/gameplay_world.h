@@ -38,6 +38,7 @@
 #include "world_melee_runtime.h"
 #include "raid_noise_decoy_runtime.h"
 #include "raid_grenade_runtime.h"
+#include "thrown_illumination_runtime.h"
 
 struct RaidSimulationWorkload
 {
@@ -298,6 +299,9 @@ public:
     [[nodiscard]] float weaponLightBackgroundRadius() const noexcept { return weaponLightBackgroundRadius_; }
     [[nodiscard]] const std::array<RaidVisibilityProjection,2> &weaponLightBackgroundObservations() const
     { static_cast<void>(raidObservation()); return weaponLightBackgroundCache_; }
+    [[nodiscard]] const std::array<RaidVisibilityProjection, 2> &
+        thrownIlluminationBackgroundObservations() const;
+    [[nodiscard]] float thrownIlluminationGlareSeconds() const noexcept;
     [[nodiscard]] RaidObservationWork observationWork() const noexcept { return observationWork_; }
     [[nodiscard]] bool raidBoundsObservable(Rect bounds) const;
     [[nodiscard]] bool raidEnemyObservable(CombatTargetId id) const;
@@ -471,6 +475,10 @@ public:
     void commitNoiseDecoy(RaidNoiseDecoyRuntime prepared) noexcept { noiseDecoy_ = std::move(prepared); }
     [[nodiscard]] bool grenadeEnabled() const noexcept { return grenadeEnabled_; }
     [[nodiscard]] const RaidGrenadeRuntime &grenade() const noexcept { return grenade_; }
+    [[nodiscard]] const ThrownIlluminationRuntime &thrownIllumination() const noexcept { return thrownIllumination_; }
+    [[nodiscard]] std::optional<ThrownIlluminationLanding> previewThrownIllumination(
+        Vec2, const ThrownIlluminationUseDefinition &) const;
+    void commitThrownIllumination(ThrownIlluminationRuntime prepared) noexcept { thrownIllumination_ = std::move(prepared); }
     [[nodiscard]] std::optional<GrenadeLanding> previewGrenade(Vec2, const GrenadeUseDefinition &) const;
     void commitGrenade(RaidGrenadeRuntime prepared) noexcept;
     [[nodiscard]] std::optional<GrenadeExplosionPlan> prepareGrenadeExplosion() const;
@@ -646,6 +654,12 @@ private:
     mutable std::uint64_t enemyObservationSolveCount_{};
     mutable RaidObservationWork observationWork_;
     mutable std::array<RaidVisibilityProjection,2> weaponLightBackgroundCache_;
+    mutable std::shared_ptr<const RaidIlluminationCoverage> thrownIlluminationCoverage_;
+    float thrownIlluminationGlareSeconds_{};
+    [[nodiscard]] const std::shared_ptr<const RaidIlluminationCoverage> &
+        activeThrownIlluminationCoverage() const;
+    [[nodiscard]] RaidIlluminationObservationKey currentThrownIlluminationObservation() const;
+    void updateThrownIlluminationGlare(float seconds);
     std::uint64_t weaponLightDevice_{}, weaponLightBattery_{};
     float weaponLightAngle_{}, weaponLightDistance_{}, weaponLightBackgroundRadius_{};
     bool raidDaylight_{true};
@@ -731,6 +745,7 @@ private:
     friend struct RunnerInfectedTestAccess;
     bool grenadeEnabled_{};
     RaidGrenadeRuntime grenade_;
+    ThrownIlluminationRuntime thrownIllumination_;
     std::optional<GrenadeExplosion> lastGrenadeExplosion_;
     bool grenadeExplodedLastUpdate_{};
     float grenadeFlashSeconds_{};

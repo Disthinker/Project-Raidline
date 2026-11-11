@@ -390,6 +390,25 @@ struct NoiseDecoyUseDefinition
     float pulseIntervalSeconds{1.0F};
 };
 
+struct ThrownIlluminationUseDefinition
+{
+    float maximumRange{450.0F};
+    float flightSeconds{0.35F};
+    float radius{300.0F};
+    float durationSeconds{20.0F};
+
+    [[nodiscard]] bool valid() const noexcept
+    {
+        return std::isfinite(maximumRange) && maximumRange > 0.0F && maximumRange <= 450.0F &&
+            std::isfinite(flightSeconds) && flightSeconds > 0.0F && flightSeconds <= 5.0F &&
+            std::isfinite(radius) && radius > 0.0F && radius <= 300.0F &&
+            std::isfinite(durationSeconds) && durationSeconds > 0.0F && durationSeconds <= 20.0F;
+    }
+
+    friend bool operator==(const ThrownIlluminationUseDefinition &,
+                           const ThrownIlluminationUseDefinition &) = default;
+};
+
 struct GrenadeUseDefinition
 {
     float range{450.0F};
@@ -488,6 +507,7 @@ struct ItemDefinition
     std::optional<MeleeUseDefinition> meleeUse;
     std::optional<NoiseDecoyUseDefinition> noiseDecoyUse;
     std::optional<GrenadeUseDefinition> grenadeUse;
+    std::optional<ThrownIlluminationUseDefinition> thrownIlluminationUse;
 };
 
 [[nodiscard]] bool itemCanEquipInSlot(

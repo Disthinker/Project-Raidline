@@ -221,6 +221,7 @@ add_library(raidline_domain STATIC
     src/grenade_explosion_plan.h
     src/grenade_domain.cpp
     src/grenade_domain.h
+    src/thrown_illumination_domain.h
     src/grenade_damage.cpp
     src/grenade_damage.h
     src/noise_decoy_domain.cpp
@@ -370,6 +371,8 @@ add_library(raidline_simulation STATIC
     src/base_world_player_effects.cpp
     src/raid_grenade_runtime.cpp
     src/raid_grenade_runtime.h
+    src/thrown_illumination_runtime.cpp
+    src/thrown_illumination_runtime.h
     src/gameplay_world_grenade.cpp
     src/gameplay_world_noise_decoy.cpp
     src/raid_noise_decoy_runtime.cpp
@@ -498,6 +501,8 @@ add_library(raidline_sdl_client STATIC
     src/app_weapon_optics.cpp
     src/ui_weapon_optic_view.cpp
     src/ui_weapon_optic_view.h
+    src/ui_raid_illumination.cpp
+    src/ui_raid_illumination.h
     src/app_developer_range.cpp
     src/first_raid_ui.cpp
     src/app.h
@@ -1134,6 +1139,7 @@ raidline_add_test(WeaponSuppressorAcousticsTest tests/test_weapon_suppressor_aco
 raidline_add_test(WeaponSuppressorSaveTest tests/test_weapon_suppressor_save.cpp raidline::services)
 raidline_add_test(WeaponSuppressorRuntimeTest tests/test_weapon_suppressor_runtime.cpp raidline::services)
 raidline_add_test(GrenadeDomainTest tests/test_grenade_domain.cpp raidline::services)
+raidline_add_test(ThrownIlluminationTest tests/test_thrown_illumination.cpp raidline::services)
 raidline_add_test(GrenadeRuntimeTest tests/test_grenade_runtime.cpp raidline::services)
 raidline_add_test(GrenadeSessionTest tests/test_grenade_session.cpp raidline::services)
 raidline_add_test(GrenadePerformanceTest tests/test_grenade_performance.cpp raidline::services)

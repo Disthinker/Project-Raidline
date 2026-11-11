@@ -30,6 +30,7 @@ struct BasePlayerEffectsRecovery
     std::optional<BaseMedicalActionRecovery> medical;
     GrenadeRuntimeCheckpoint grenade;
     NoiseDecoyRuntimeCheckpoint noiseDecoy;
+    ThrownIlluminationCheckpoint thrownIllumination;
     // Defense already has these in its coherent checkpoint; these fields are
     // Daily-only and zero during Defense, so there is never a second truth.
     std::uint64_t dailyCommandSequence{}, dailyWeaponFaultSequence{};

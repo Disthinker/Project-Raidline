@@ -26,6 +26,23 @@ bool landing(const NoiseDecoyLanding &v, const BasePlayerEffectsRecovery &r, con
         point(v.origin, r.worldSize) && point(v.point, r.worldSize) &&
         std::any_of(content.items().begin(), content.items().end(), [&](const auto &item) { return item.noiseDecoyUse && sameNoise(*item.noiseDecoyUse, v.use); });
 }
+bool validIlluminationLanding(const ThrownIlluminationLanding &value,
+    const BasePlayerEffectsRecovery &recovery, const ProfileState &profile,
+    const ContentRegistry &content)
+{
+    if (!supportsThrownIlluminationContent(content.contentVersion()) || !value.valid() ||
+        !profile.committedTransactions.contains(value.effectIdentity) ||
+        value.space != RaidSpaceDefinitionId{
+            "base_space." + std::string{recovery.scope.baseSiteDefinitionId.value()}} ||
+        !point(value.origin, recovery.worldSize) || !point(value.point, recovery.worldSize))
+        return false;
+
+    return std::any_of(content.items().begin(), content.items().end(), [&](const auto &item) {
+        return item.definitionId == kThrownIlluminationItemId &&
+            item.thrownIlluminationUse && *item.thrownIlluminationUse == value.use;
+    });
+}
+
 struct Hash
 {
     std::uint64_t v{1469598103934665603ULL};
@@ -42,6 +59,17 @@ struct Hash
     void land(const NoiseDecoyLanding &x) noexcept {
         pos(x.origin);pos(x.point);text(x.space.value());text(x.effectIdentity);
         const auto &u=x.use;number(u.range);number(u.flightSeconds);number(u.radius);number(u.durationSeconds);number(u.pulseIntervalSeconds);
+    }
+    void land(const ThrownIlluminationLanding &value) noexcept
+    {
+        pos(value.origin);
+        pos(value.point);
+        text(value.space.value());
+        text(value.effectIdentity);
+        number(value.use.maximumRange);
+        number(value.use.flightSeconds);
+        number(value.use.radius);
+        number(value.use.durationSeconds);
     }
 };
 }
@@ -83,6 +111,25 @@ ProfileValidationResult validateBasePlayerEffectsRecovery(const BasePlayerEffect
     if (n.flight && (!landing(n.flight->landing,r,content) || !nonnegative(n.flight->elapsed,n.flight->landing.use.flightSeconds))) return fail("invalid Base decoy flight recovery");
     if (n.source && (!landing(n.source->landing,r,content) || !n.source->id || n.source->id >= n.nextSourceId ||
         !nonnegative(n.source->elapsed,n.source->landing.use.durationSeconds) || !n.source->pulses || n.source->pulses>32)) return fail("invalid Base decoy source recovery");
+    const auto &illumination = r.thrownIllumination;
+    if (illumination.flight && illumination.source)
+        return fail("invalid Base illumination recovery phases");
+    if (illumination.flight)
+    {
+        const auto &flight = *illumination.flight;
+        if (!validIlluminationLanding(flight.landing, r, profile, content) ||
+            !nonnegative(flight.elapsed, flight.landing.use.flightSeconds) ||
+            flight.elapsed >= flight.landing.use.flightSeconds)
+            return fail("invalid Base illumination flight recovery");
+    }
+    if (illumination.source)
+    {
+        const auto &source = *illumination.source;
+        if (!validIlluminationLanding(source.landing, r, profile, content) ||
+            !nonnegative(source.elapsed, source.landing.use.durationSeconds) ||
+            source.elapsed >= source.landing.use.durationSeconds)
+            return fail("invalid Base illumination source recovery");
+    }
     std::set<CombatTargetId> ids;
     for (const auto &item:n.investigations)
         if (!item.targetId || !ids.insert(item.targetId).second || !item.investigation.source || item.investigation.source>=n.nextSourceId ||
@@ -99,5 +146,19 @@ std::uint64_t basePlayerEffectsFingerprint(const BasePlayerEffectsRecovery &r) n
     h.integer(r.medical.has_value());if(r.medical){const auto&m=*r.medical;h.integer(m.medicalAssetId);h.integer(static_cast<unsigned>(m.effect));h.integer(m.chargeConsumed);h.integer(m.healedAmount);h.integer(m.maximumHealing);h.number(m.elapsedSeconds);h.number(m.durationSeconds);}
     const auto &g=r.grenade;h.integer(g.nextExplosionId);h.integer(g.flight.has_value());if(g.flight){h.land(g.flight->landing);h.number(g.flight->elapsed);}h.integer(g.fuse.has_value());if(g.fuse){h.land(g.fuse->landing);h.number(g.fuse->elapsed);}h.integer(g.explosion.has_value());if(g.explosion){h.integer(g.explosion->id);h.land(g.explosion->landing);}
     const auto &n=r.noiseDecoy;h.integer(n.nextSourceId);h.integer(n.flight.has_value());if(n.flight){h.land(n.flight->landing);h.number(n.flight->elapsed);}h.integer(n.source.has_value());if(n.source){h.integer(n.source->id);h.land(n.source->landing);h.number(n.source->elapsed);h.integer(n.source->pulses);}h.integer(n.investigations.size());for(const auto&i:n.investigations){h.integer(i.targetId);h.text(i.investigation.space.value());h.integer(i.investigation.source);h.pos(i.investigation.point);h.pos(i.investigation.home);h.integer(i.investigation.returning);}
-    h.integer(r.dailyCommandSequence);h.integer(r.dailyWeaponFaultSequence);h.integer(r.dailyMedicalRandomSequence);h.integer(r.dailyWoundRandomSequence);h.integer(static_cast<unsigned>(r.dailyActiveWeaponSlot));return h.v;
+    h.integer(r.dailyCommandSequence);h.integer(r.dailyWeaponFaultSequence);h.integer(r.dailyMedicalRandomSequence);h.integer(r.dailyWoundRandomSequence);h.integer(static_cast<unsigned>(r.dailyActiveWeaponSlot));
+    if (const auto &flight = r.thrownIllumination.flight)
+    {
+        h.text("base-illumination-flight");
+        h.land(flight->landing);
+        h.number(flight->elapsed);
+    }
+    if (const auto &source = r.thrownIllumination.source)
+    {
+        h.text("base-illumination-source");
+        h.land(source->landing);
+        h.number(source->elapsed);
+        h.integer(source->nightVisionGlareTriggered);
+    }
+    return h.v;
 }

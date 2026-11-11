@@ -108,6 +108,8 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
     const std::size_t number = profile_.committedSettlements.size() + 1U;
     recoveryProfile = profile_;
     if (!prepareBaseBoundaryInCandidate(recoveryProfile,true)) return {};
+    if (recoveryProfile.basePlayerEffects)
+        recoveryProfile.basePlayerEffects->thrownIllumination = {};
     // Reopening after a committed result may skip its result-screen button.
     // A second deployment acknowledges that guide in the same clean Base
     // checkpoint as deployment; rejection or save failure commits neither.
@@ -438,6 +440,8 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     if(!prepared)return;
     if(prepared->kind==PreparedPlayerTransition::Kind::Deploy) {
     freightUnlock_ = {};
+    if (basePlayerWorld_)
+        basePlayerWorld_->commitThrownIllumination({});
     world_=std::move(prepared->world);
     world_->setRaidDaylight(worldClockProjection().timeOfDay == WorldTimeOfDay::Day);
     activeRaidRecoveryProfile_ = std::move(prepared->raidRecoveryProfile);
@@ -476,6 +480,7 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     cancelWeaponLightInput();
     world_->commitNoiseDecoy({});
     world_->commitGrenade({});
+    world_->commitThrownIllumination({});
     decoyFireSuppressedUntilRelease_=false;
     raidActionState_.cancel();
     weaponTriggerGate_.reset();

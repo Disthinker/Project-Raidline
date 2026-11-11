@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <span>
+#include <string_view>
 #include <cstdint>
 #include <vector>
 
@@ -21,6 +22,20 @@ struct RaidObservationWork
 [[nodiscard]] RaidVisibilityProjection buildRaidSpaceConeVisibility(
     const RaidSpaceBlockerIndex &, const RaidObservationKey &,
     RaidObservationWork *work = nullptr);
+
+[[nodiscard]] const std::shared_ptr<const RaidIlluminationCoverage> &
+    getRaidIlluminationCoverage(std::shared_ptr<const RaidIlluminationCoverage> &,
+        const RaidSpaceBlockerIndex &, const RaidSpaceDefinitionId &,
+        std::uint64_t geometryRevision, std::string_view effectIdentity,
+        Vec2 source, float radius);
+void addRaidIlluminatedObservation(RaidVisibilityProjection &,
+    const RaidSpaceBlockerIndex &, const RaidObservationKey &,
+    RaidObservationWork *work = nullptr);
+
+struct WeaponOpticViewProjection;
+[[nodiscard]] RaidIlluminationObservationKey raidIlluminationObservationKey(
+    const std::shared_ptr<const RaidIlluminationCoverage> &,
+    const WeaponOpticViewProjection *, Vec2 aim);
 
 struct RaidSpaceNavigationQuery
 {

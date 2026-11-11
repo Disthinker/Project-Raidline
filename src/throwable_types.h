@@ -2,6 +2,7 @@
 
 #include "combat_target.h"
 #include "item_definition.h"
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -60,4 +61,36 @@ struct NoiseDecoyRuntimeCheckpoint
     std::optional<NoiseDecoySource> source;
     std::uint64_t nextSourceId{1};
     std::vector<NoiseInvestigationCheckpoint> investigations;
+};
+
+struct ThrownIlluminationLanding
+{
+    Vec2 origin{}, point{};
+    RaidSpaceDefinitionId space;
+    ThrownIlluminationUseDefinition use;
+    std::string effectIdentity;
+
+    [[nodiscard]] bool valid() const noexcept
+    {
+        if (!space.valid() || !use.valid() || effectIdentity.empty() ||
+            effectIdentity.size() > 512U ||
+            !std::isfinite(origin.x) || !std::isfinite(origin.y) ||
+            !std::isfinite(point.x) || !std::isfinite(point.y))
+            return false;
+        const float distance = std::hypot(point.x - origin.x, point.y - origin.y);
+        // Endpoints from the indexed ray are stored in world-coordinate floats.
+        return distance >= 3.999F && distance <= use.maximumRange + 0.002F;
+    }
+};
+struct ThrownIlluminationFlight { ThrownIlluminationLanding landing; double elapsed{}; };
+struct ThrownIlluminationSource
+{
+    ThrownIlluminationLanding landing;
+    double elapsed{};
+    bool nightVisionGlareTriggered{};
+};
+struct ThrownIlluminationCheckpoint
+{
+    std::optional<ThrownIlluminationFlight> flight;
+    std::optional<ThrownIlluminationSource> source;
 };

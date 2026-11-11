@@ -79,18 +79,42 @@ void BaseWorld::setWeaponLight(std::uint64_t device, std::uint64_t battery,
   if (background != lightBackgroundRadius_) observationCache_ = {};
   lightBackgroundRadius_ = background;
 }
+const std::shared_ptr<const RaidIlluminationCoverage> &
+BaseWorld::activeThrownIlluminationCoverage() const {
+  static const std::shared_ptr<const RaidIlluminationCoverage> inactive;
+  const auto &source = thrownIllumination_.source();
+  if (!source || source->landing.space != spaceId_) return inactive;
+  const auto &landing = source->landing;
+  const auto &geometry = playerEffectsGeometry();
+  return getRaidIlluminationCoverage(thrownIlluminationCoverage_, geometry, spaceId_,
+      playerEffectsGeometryKey_, landing.effectIdentity, landing.point, landing.use.radius);
+}
+const std::array<RaidVisibilityProjection, 2> &BaseWorld::thrownIlluminationBackgroundObservations() const {
+  static const std::array<RaidVisibilityProjection, 2> inactive;
+  const auto &coverage = activeThrownIlluminationCoverage();
+  return coverage ? coverage->fans : inactive;
+}
 RaidObservationKey BaseWorld::observationKey() const {
   static_cast<void>(playerEffectsGeometry());
   const auto environment = daylight_ ? RaidLightEnvironment::DayOutdoor : RaidLightEnvironment::NightOutdoor;
   const auto parameters = raidOpticSightParameters(raidSightParameters(environment), environment, activeWeaponOptic());
+  RaidIlluminationObservationKey illumination;
+  if (!daylight_) {
+    const auto &optic = weaponOpticView();
+    illumination = raidIlluminationObservationKey(activeThrownIlluminationCoverage(),
+        optic ? &*optic : nullptr, weaponAimWorldPosition());
+  }
   return {spaceId_, {playerPosition_.x + playerSize_.x / 2, playerPosition_.y + playerSize_.y / 2},
           observationDirection_, parameters.angleDegrees, parameters.maximumDistance, environment,
-          playerEffectsGeometryKey_, lightDevice_, lightBattery_, lightAngle_, lightDistance_};
+          playerEffectsGeometryKey_, lightDevice_, lightBattery_, lightAngle_, lightDistance_,
+          std::move(illumination)};
 }
 const RaidVisibilityProjection &BaseWorld::observation() const {
   const auto key = observationKey();
   if (!observationCache_.valid || !observationCache_.hasSameParameters(key)) {
     observationCache_ = buildRaidSpaceConeVisibility(playerEffectsGeometry(), key);
+    if (key.illumination.source)
+      addRaidIlluminatedObservation(observationCache_, playerEffectsGeometry(), key);
     observationBounds_ = RaidVisibilityBoundsQuery{observationCache_};
     enemyObservationCache_.clear();
     lightBackgroundCache_ = {};
@@ -101,6 +125,7 @@ const RaidVisibilityProjection &BaseWorld::observation() const {
         near.angleDegrees = 180; near.maximumDistance = lightBackgroundRadius_;
         near.lightAssetId = near.lightBatteryId = 0;
         near.lightAngleDegrees = near.lightDistance = 0;
+        near.illumination = {};
         lightBackgroundCache_[side] = buildRaidSpaceConeVisibility(playerEffectsGeometry(), near);
       }
   }
@@ -119,7 +144,8 @@ bool BaseWorld::enemyObservable(CombatTargetId id) const {
 
 std::optional<NoiseDecoyLanding> BaseWorld::previewNoiseDecoy(Vec2 aim, const NoiseDecoyUseDefinition &use) const {
   const Vec2 origin{playerPosition_.x + playerSize_.x / 2, playerPosition_.y + playerSize_.y / 2};
-  if (playerControlled() || noiseDecoy_.flight() || grenade_.active() || melee_.recoverySeconds() > 0 ||
+  if (playerControlled() || noiseDecoy_.flight() || grenade_.active() ||
+      thrownIllumination_.flight() || melee_.recoverySeconds() > 0 ||
       queryHomeRegionSafetyZone(origin, layout_.baseParcel) == HomeRegionSafetyZone::SafeCore) return {};
   auto landing = queryNoiseDecoyLanding(origin, aim, spaceId_, use, playerEffectsGeometry());
   if (landing && queryHomeRegionSafetyZone(landing->point, layout_.baseParcel) == HomeRegionSafetyZone::SafeCore) return {};
@@ -127,9 +153,21 @@ std::optional<NoiseDecoyLanding> BaseWorld::previewNoiseDecoy(Vec2 aim, const No
 }
 std::optional<GrenadeLanding> BaseWorld::previewGrenade(Vec2 aim, const GrenadeUseDefinition &use) const {
   const Vec2 origin{playerPosition_.x + playerSize_.x / 2, playerPosition_.y + playerSize_.y / 2};
-  if (playerControlled() || noiseDecoy_.flight() || grenade_.active() || melee_.recoverySeconds() > 0 ||
+  if (playerControlled() || noiseDecoy_.flight() || grenade_.active() ||
+      thrownIllumination_.flight() || melee_.recoverySeconds() > 0 ||
       queryHomeRegionSafetyZone(origin, layout_.baseParcel) == HomeRegionSafetyZone::SafeCore) return {};
   auto landing = queryGrenadeLanding(origin, aim, spaceId_, use, playerEffectsGeometry());
+  if (landing && queryHomeRegionSafetyZone(landing->point, layout_.baseParcel) == HomeRegionSafetyZone::SafeCore) return {};
+  return landing;
+}
+
+std::optional<ThrownIlluminationLanding> BaseWorld::previewThrownIllumination(
+    Vec2 aim, const ThrownIlluminationUseDefinition &use) const {
+  const Vec2 origin{playerPosition_.x + playerSize_.x / 2, playerPosition_.y + playerSize_.y / 2};
+  if (playerControlled() || noiseDecoy_.flight() || grenade_.active() ||
+      thrownIllumination_.active() || melee_.recoverySeconds() > 0 ||
+      queryHomeRegionSafetyZone(origin, layout_.baseParcel) == HomeRegionSafetyZone::SafeCore) return {};
+  auto landing = queryThrownIlluminationLanding(origin, aim, spaceId_, use, playerEffectsGeometry());
   if (landing && queryHomeRegionSafetyZone(landing->point, layout_.baseParcel) == HomeRegionSafetyZone::SafeCore) return {};
   return landing;
 }
@@ -139,6 +177,8 @@ void BaseWorld::advanceThrowables(float seconds) {
   grenadeFlashSeconds_ = std::max(0.0F, grenadeFlashSeconds_ - std::max(0.0F, seconds));
   grenade_.advance(spaceId_, seconds);
   noiseDecoy_.advance(spaceId_, seconds);
+  if (thrownIllumination_.active() || thrownIllumination_.expiredLastAdvance())
+    thrownIllumination_.advance(seconds);
   const bool pulse = noiseDecoy_.pulsesLastUpdate() > 0;
   const bool bound = !noiseDecoy_.investigations().empty();
   if (!pulse && !bound) return;

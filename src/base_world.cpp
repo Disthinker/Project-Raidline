@@ -154,6 +154,7 @@ void BaseWorld::configureSite(
     if (normalized != siteDefinitionId_ || overrides != facilityOverrides_ || plotId != plotId_)
     {
         const bool sameSite = normalized == siteDefinitionId_;
+        if (!sameSite || plotId != plotId_) thrownIllumination_.clear();
         const Vec2 previousPlayerPosition = playerPosition_;
         facilityOverrides_ = std::move(overrides);
         plotId_ = std::move(plotId);
@@ -799,7 +800,7 @@ void BaseWorld::clearSpatialCombatState() noexcept
 
 void BaseWorld::resetCombatForProfileLoad() noexcept
 {
-    noiseDecoy_.clear(); grenade_.clear(); lastGrenadeExplosion_.reset();
+    noiseDecoy_.clear(); grenade_.clear(); thrownIllumination_.clear(); lastGrenadeExplosion_.reset();
     grenadeExplodedLastUpdate_ = false; grenadeFlashSeconds_ = 0;
     playerControlRemaining_ = playerImpactSlowRemaining_ = 0;
     clearBaseDefense();

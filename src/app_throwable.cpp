@@ -11,10 +11,12 @@ void App::cancelThrowableUi()
 void App::updateThrowableInput(GameplayInput &input)
 {
     const bool wasModal=throwableWheelOpen_ || selectedThrowable_.has_value();
-    const bool selectingGrenade=[&]{
-        const auto *selected=selectedThrowable_ ? gameSession_.profile().assets.find(*selectedThrowable_) : nullptr;
-        return selected && publishedContentRegistry().item(selected->definitionId).grenadeUse.has_value();
-    }();
+    const auto *selected = selectedThrowable_
+        ? gameSession_.profile().assets.find(*selectedThrowable_) : nullptr;
+    const auto *selectedDefinition = selected
+        ? &publishedContentRegistry().item(selected->definitionId) : nullptr;
+    const bool selectingGrenade = selectedDefinition && selectedDefinition->grenadeUse;
+    const bool selectingIllumination = selectedDefinition && selectedDefinition->thrownIlluminationUse;
     const bool right=input_.isSecondaryPointerPressed();
     const bool cancel= input_.wasActionJustPressed(GameAction::InventoryCancel) || (right && !throwableRightWasDown_);
     throwableRightWasDown_=right;
@@ -28,7 +30,11 @@ void App::updateThrowableInput(GameplayInput &input)
             uiMessage_="LIVE GRENADE | WAIT FOR EXPLOSION";
         cancelThrowableUi();
     }
-    else if(wasModal && cancel){cancelThrowableUi();uiMessage_=selectingGrenade?"GRENADE CANCELLED":"DECOY CANCELLED";}
+    else if (wasModal && cancel) {
+        cancelThrowableUi();
+        if (selectingIllumination) uiMessage_ = "ILLUMINATION CANCELLED";
+        else uiMessage_ = selectingGrenade ? "GRENADE CANCELLED" : "DECOY CANCELLED";
+    }
     else if(input_.wasActionJustPressed(GameAction::SelectThrowable) && !wasModal){
         if(gameSession_.beginThrowableSelection()){
             throwableWheelOptions_=quickWheelCandidates(gameSession_.profile(),publishedContentRegistry(),UiQuickWheelKind::Throwable);
@@ -52,7 +58,9 @@ void App::updateThrowableInput(GameplayInput &input)
             ? gameFlow_.baseWorld().weaponAimWorldPosition():gameSession_.world().weaponAimWorldPosition();
         const auto receipt=gameSession_.throwThrowable(id,aim,
             {gameSession_.profile().revision,nextProfileTransactionId("throwable-ui")});
-        uiMessage_=receipt.succeeded ? (selectingGrenade?"GRENADE THROWN":"DECOY THROWN") : receipt.message;
+        if (!receipt.succeeded) uiMessage_ = receipt.message;
+        else if (selectingIllumination) uiMessage_ = "ILLUMINATION THROWN";
+        else uiMessage_ = selectingGrenade ? "GRENADE THROWN" : "DECOY THROWN";
         cancelThrowableUi();
     }
     input.throwableModal=input.throwableModal || wasModal || throwableWheelOpen_ || selectedThrowable_.has_value();
@@ -146,6 +154,28 @@ void App::renderNoiseDecoyWorld()
         grenadeMarker(f->landing.point,7+static_cast<float>(std::fmod(f->elapsed,0.3))*15,210);
     if(const auto &e=world.lastGrenadeExplosion();e && e->landing.space==space)
         grenadeMarker(e->landing.point,e->landing.use.radius,world.grenadeExplodedLastUpdate()?95:55);
+    const auto &illumination = world.thrownIllumination();
+    if (const auto &flight = illumination.flight(); flight && flight->landing.space == space) {
+        const float progress = static_cast<float>(flight->elapsed / flight->landing.use.flightSeconds);
+        const Vec2 point{
+            flight->landing.origin.x + (flight->landing.point.x - flight->landing.origin.x) * progress,
+            flight->landing.origin.y + (flight->landing.point.y - flight->landing.origin.y) * progress};
+        if (grenadeVisible(point)) {
+            SDL_SetRenderDrawColor(renderer_, 255, 219, 153, 218);
+            const SDL_FRect flare{point.x - 2, point.y - 2, 4, 4};
+            SDL_RenderFillRect(renderer_, &flare);
+        }
+    }
+    if (const auto &source = illumination.source();
+        source && source->landing.space == space && grenadeVisible(source->landing.point)) {
+        const auto point = source->landing.point;
+        SDL_SetRenderDrawColor(renderer_, 255, 223, 166, 250);
+        const SDL_FRect flare{point.x - 3, point.y - 3, 6, 6};
+        SDL_RenderFillRect(renderer_, &flare);
+        const int seconds = static_cast<int>(std::ceil(source->landing.use.durationSeconds - source->elapsed));
+        uiFinalWorldLabel(renderer_, uiTextRenderer_, point.x + 8, point.y + 4,
+            fmt::format("{} s", seconds));
+    }
     if(selectedThrowable_){
         const auto *asset=gameSession_.profile().assets.find(*selectedThrowable_);
         if(asset){const auto &definition=publishedContentRegistry().item(asset->definitionId);
@@ -155,6 +185,16 @@ void App::renderNoiseDecoyWorld()
                     SDL_SetRenderDrawColor(renderer_,220,166,103,130);
                     SDL_RenderLine(renderer_,landing->origin.x,landing->origin.y,landing->point.x,landing->point.y);
                     grenadeMarker(landing->point,12,170);
+                }
+            } else if (definition.thrownIlluminationUse) {
+                const auto landing = world.previewThrownIllumination(
+                    world.weaponAimWorldPosition(), *definition.thrownIlluminationUse);
+                if (landing && grenadeVisible(landing->point)) {
+                    SDL_SetRenderDrawColor(renderer_, 250, 208, 142, 155);
+                    SDL_RenderLine(renderer_, landing->origin.x, landing->origin.y,
+                        landing->point.x, landing->point.y);
+                    const SDL_FRect mark{landing->point.x - 5, landing->point.y - 5, 10, 10};
+                    SDL_RenderRect(renderer_, &mark);
                 }
             }else{
                 const auto &use=definition.noiseDecoyUse;
