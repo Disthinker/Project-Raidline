@@ -58,6 +58,7 @@ std::string uiRaidResultContextKey(const std::string &profileId,
         key.number(result->lostRaidRecordId.has_value());
         if (result->lostRaidRecordId) key.add(*result->lostRaidRecordId);
         key.number(result->baseThreatReducedUnits);
+        key.number(result->fuelExtractionPaid);
         key.number(result->unlockedExtractionPermissions.size());
         for (const auto &id : result->unlockedExtractionPermissions) key.add(id.value());
         key.number(result->wishReturn.has_value());
@@ -123,6 +124,8 @@ UiRaidResultProjection projectUiRaidResult(const std::string &profileId,
 
     const auto rescued = static_cast<std::uint64_t>(p.rescuedOrdinaryResidents) +
         static_cast<std::uint64_t>(p.rescuedInjuredResidents);
+    if (p.extracted && result.fuelExtractionPaid)
+        p.summaryLines.push_back(text("FUEL EXIT | 1 FUEL CAN USED"));
     if (rescued > 0U)
         p.summaryLines.push_back(text("SECURED RESIDENTS") + ": " + std::to_string(rescued));
     if (p.baseThreatReducedUnits > 0U)

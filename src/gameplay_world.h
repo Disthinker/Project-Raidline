@@ -96,6 +96,7 @@ struct HighRiskWorldConfig
     ContentRect conditionalExtractionPoint;
     float conditionalExtractionDurationSeconds{};
     std::uint64_t conditionalExtractionMaximumWeightGrams{};
+    bool fuelExtraction{};
 };
 
 struct RaidInteriorWorldConfig
@@ -235,12 +236,15 @@ public:
         InventoryGridSize inventorySize,
         ItemInstanceId firstItemInstanceId);
 
+    using RaidFuelSelector = std::function<std::optional<AssetInstanceId>(std::optional<AssetInstanceId>)>;
+
     void update(
         const GameplayInput &input,
         float deltaTime,
         const std::function<bool()> &commitGrenade = {},
         const std::function<bool()> &beforeSpaceTransition = {},
-        bool portalInteractionRequested = false);
+        bool portalInteractionRequested = false,
+        const RaidFuelSelector &selectFuel = {});
 
     [[nodiscard]]
     const Player &player() const;
@@ -373,6 +377,8 @@ public:
     // Pause can stop simulation updates entirely. Its service hook interrupts
     // only the new credential interactions; existing routes retain their rules.
     void interruptCredentialInteraction() noexcept;
+    void interruptFuelExtraction() noexcept;
+    [[nodiscard]] std::optional<AssetInstanceId> completedFuelExtractionAsset() const noexcept;
 
     [[nodiscard]]
     const RaidSession &raidSession() const noexcept;
@@ -684,6 +690,7 @@ private:
     float signalInterruptedSeconds_{};
     std::optional<ExtractionPoint> conditionalExtractionPoint_;
     std::uint64_t conditionalExtractionMaximumWeightGrams_{};
+    std::optional<AssetInstanceId> fuelExtractionAsset_;
     std::optional<ExtractionPoint> credentialExtractionPoint_;
     std::optional<RaidCredentialExtractionSnapshot> credentialExtraction_;
     float credentialInvestigationElapsedSeconds_{};

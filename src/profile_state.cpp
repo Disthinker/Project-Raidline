@@ -288,10 +288,11 @@ std::size_t populatePublishedWarehouseCatalog(
     definitions.reserve(content.items().size());
     for (const ItemDefinition &definition : content.items())
     {
-        // Workshop-only outputs and the field key are earned in play.
+        // Workshop-only outputs and fixed field loot are earned in play.
         if (definition.definitionId.value() == "item.medical.bandage_roll_basic" ||
             definition.definitionId == kExpanding545AmmunitionId ||
-            definition.definitionId == kFreightCrateKeyId)
+            definition.definitionId == kFreightCrateKeyId ||
+            definition.definitionId == kRaidFuelCanId)
         {
             continue;
         }
@@ -4200,12 +4201,18 @@ ProfileValidationResult validateProfileState(
         std::set<std::uint32_t> snapshotSlots;
         bool foundNightVisionSlot{};
         bool foundSealedCrateLoot{};
+        bool foundFuelLoot{};
         std::optional<std::uint32_t> firstSelectedFreightKeySlot;
         if ((raid.freightKeyLootSlotId &&
              (raid.mapDefinitionId != kFreightKeySourceMapId || resourceEcologyRules || regionalMissionCount != 0U)) ||
             (raid.sealedFreightCrate &&
              (raid.mapDefinitionId != kFreightCrateMapId || regionalMissionCount != 0U)))
             return {false, "pending Raid freight snapshot is outside ordinary activity"};
+        if (raid.fuelExtractionLootAssetId &&
+            (content.contentVersion() != kFuelExtractionContentVersion ||
+             raid.mapDefinitionId != kFreightCrateMapId || regionalMissionCount != 0U ||
+             !raid.sealedFreightCrate))
+            return {false, "pending Raid fuel extraction is outside ordinary Frontier activity"};
         for (std::size_t lootIndex{};
              lootIndex < raid.loot.size(); ++lootIndex)
         {
@@ -4221,6 +4228,7 @@ ProfileValidationResult validateProfileState(
             bool nightVisionSlot{};
             bool freightKeySlot{};
             bool sealedFreightSlot{};
+            bool fuelSlot{};
             const RaidSelfRecoveryRootSnapshot *recoveryRoot{};
             if (raid.selfRecovery.has_value())
             {
@@ -4398,6 +4406,8 @@ ProfileValidationResult validateProfileState(
                             nightVisionSlot = isHospitalNightVisionLootSlot(raid.mapDefinitionId, interior.id, slot.id);
                             sealedFreightSlot = raid.sealedFreightCrate && interior.id == kFreightCrateSpaceId &&
                                 slot.id == kFreightCrateSlotId;
+                            fuelSlot = raid.fuelExtractionLootAssetId && interior.id == kFreightCrateSpaceId &&
+                                slot.id == kRaidFuelLootSlotId;
                         }
                         break;
                     }
@@ -4515,6 +4525,16 @@ ProfileValidationResult validateProfileState(
                     return {false, "pending Raid sealed freight Loot is invalid"};
                 foundSealedCrateLoot = true;
             }
+            if (fuelSlot)
+            {
+                if (loot.assetId != *raid.fuelExtractionLootAssetId ||
+                    loot.definitionId != kRaidFuelCanId || loot.quantity != 1U ||
+                    loot.sceneContainerAssetId)
+                    return {false, "pending Raid extraction fuel Loot is invalid"};
+                foundFuelLoot = true;
+            }
+            else if (loot.definitionId == kRaidFuelCanId && recoveryRoot == nullptr)
+                return {false, "pending Raid extraction fuel is outside its fixed loot slot"};
         }
         if (raid.hospitalNightVisionLoot && !foundNightVisionSlot)
             return {false, "pending hospital night vision slot is missing"};
@@ -4523,6 +4543,8 @@ ProfileValidationResult validateProfileState(
             return {false, "pending Raid freight key source is not its first selected central slot"};
         if (raid.sealedFreightCrate && !foundSealedCrateLoot)
             return {false, "pending Raid sealed freight Loot is missing"};
+        if (raid.fuelExtractionLootAssetId && !foundFuelLoot)
+            return {false, "pending Raid extraction fuel Loot is missing"};
         for (AssetInstanceId groundAssetId : groundAssetIds)
         {
             if (!snapshotLoot.contains(groundAssetId))
@@ -4892,6 +4914,10 @@ ProfileValidationResult validateProfileState(
     }
     if (profile.lastRaidResult)
     {
+        if (profile.lastRaidResult->fuelExtractionPaid &&
+            (profile.lastRaidResult->outcome != RaidResultOutcome::Extracted ||
+             !profile.committedSettlements.contains(profile.lastRaidResult->settlementId)))
+            return {false, "last Raid fuel extraction payment is invalid"};
         std::set<RaidExtractionPermissionDefinitionId> resultPermissions;
         for (const auto &id : profile.lastRaidResult->unlockedExtractionPermissions)
             if (profile.lastRaidResult->outcome != RaidResultOutcome::Extracted ||
@@ -5514,6 +5540,11 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, raid.sealedFreightCrate->containerAssetId);
             hashInteger(hash, raid.sealedFreightCrate->unlocked ? 1U : 0U);
         }
+        if (raid.fuelExtractionLootAssetId)
+        {
+            hashBytes(hash, "fuel-extraction-loot-v1");
+            hashInteger(hash, *raid.fuelExtractionLootAssetId);
+        }
         hashBytes(hash, raid.mapDefinitionId.value());
         hashInteger(hash, raid.seed);
         hashBytes(hash, raid.spawnExtractionPairId);
@@ -6035,6 +6066,8 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     }
     if (profile.lastRaidResult.has_value())
     {
+        if (profile.lastRaidResult->fuelExtractionPaid)
+            hashBytes(hash, "fuel-extraction-paid-v1");
         for (const auto &id : profile.lastRaidResult->unlockedExtractionPermissions)
             hashBytes(hash, id.value());
         hashBytes(hash, profile.lastRaidResult->settlementId);

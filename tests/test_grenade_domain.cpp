@@ -227,7 +227,7 @@ TEST(GrenadeContentTest, WrongCategoryMixedUseAndOversizedStacksAreRejected)
 TEST(GrenadeContentTest, NewContentStillRequiresTheAcceptedEnemyAndFortificationContracts)
 {
     const auto original = nlohmann::json::parse(publishedContentJson());
-    ASSERT_EQ(original.at("content_version").get<std::string>(), kCrossMapFreightContentVersion);
+    ASSERT_EQ(original.at("content_version").get<std::string>(), kFuelExtractionContentVersion);
     for (const auto *field : {"enemy_combat_definitions", "fortifications"})
     {
         auto root = original;

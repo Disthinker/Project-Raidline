@@ -855,6 +855,8 @@ raidline_add_test(
 raidline_add_test(RaidSceneContainerTest tests/test_raid_scene_containers.cpp raidline::services)
 raidline_add_test(RaidFreightRuntimeTest tests/test_raid_freight_runtime.cpp raidline::services)
 raidline_add_test(RaidFreightDomainTest tests/test_raid_freight_domain.cpp raidline::services)
+raidline_add_test(RaidFuelRuntimeTest tests/test_raid_fuel_runtime.cpp raidline::services)
+raidline_add_test(RaidFuelDomainTest tests/test_raid_fuel_domain.cpp raidline::services)
 raidline_add_test(RaidCorpseSearchTest tests/test_raid_corpse_search.cpp raidline::services)
 raidline_add_test(RaidCredentialDataTest tests/test_raid_credential_data.cpp raidline::services)
 raidline_add_test(RaidCredentialRuntimeTest tests/test_raid_credential_runtime.cpp raidline::services)

@@ -93,6 +93,7 @@ void RaidSession::update(
             remainsInRoute = playerInEmergencyExtractionPoint;
             break;
         case RaidExtractionRoute::EmergencyConditional:
+        case RaidExtractionRoute::Fuel:
             remainsInRoute = playerInConditionalExtractionPoint;
             break;
         case RaidExtractionRoute::Credential:
@@ -118,7 +119,9 @@ void RaidSession::update(
                  playerInConditionalExtractionPoint)
         {
             state_ = RaidSessionState::Extracting;
-            extractionRoute_ = RaidExtractionRoute::EmergencyConditional;
+            extractionRoute_ = usesFuelExtraction()
+                ? RaidExtractionRoute::Fuel
+                : RaidExtractionRoute::EmergencyConditional;
         }
         else if (credentialExtractionOpen() &&
                  playerInCredentialExtractionPoint)
@@ -217,6 +220,15 @@ bool RaidSession::interruptCredentialExtraction() noexcept
 {
     if (state_ != RaidSessionState::Extracting ||
         extractionRoute_ != RaidExtractionRoute::Credential)
+        return false;
+    cancelExtraction();
+    return true;
+}
+
+bool RaidSession::interruptFuelExtraction() noexcept
+{
+    if (state_ != RaidSessionState::Extracting ||
+        extractionRoute_ != RaidExtractionRoute::Fuel)
         return false;
     cancelExtraction();
     return true;
@@ -353,6 +365,7 @@ float RaidSession::activeExtractionDuration() const noexcept
     case RaidExtractionRoute::EmergencySignal:
         return config_.highRisk.emergencyExtractionDurationSeconds;
     case RaidExtractionRoute::EmergencyConditional:
+    case RaidExtractionRoute::Fuel:
         return config_.highRisk.conditionalExtractionDurationSeconds;
     case RaidExtractionRoute::Credential:
         return config_.credentialExtractionDurationSeconds;

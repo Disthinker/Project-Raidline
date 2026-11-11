@@ -259,7 +259,8 @@ public:
     [[nodiscard]] std::uint64_t
     conditionalExtractionWeightLimitGrams() const noexcept;
 
-    [[nodiscard]] bool conditionalExtractionEligible() const noexcept;
+    [[nodiscard]] bool conditionalExtractionEligible() const;
+    [[nodiscard]] bool raidFuelExtractionEnabled() const noexcept;
     [[nodiscard]] bool canCallSignalExtraction(bool inventoryOpen = false) const noexcept;
 
     [[nodiscard]]
@@ -384,6 +385,7 @@ public:
     [[nodiscard]] InventoryReceipt toggleWeaponLight();
     void cancelWeaponLightInput() noexcept;
     void cancelRaidCredentialInteraction() noexcept;
+    void cancelRaidFuelExtraction() noexcept;
     [[nodiscard]] bool alphaRaidActive() const noexcept;
     [[nodiscard]] bool recoveredAbandonedRaid() const noexcept;
 

@@ -127,7 +127,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        kCrossMapFreightContentVersion);
+        kFuelExtractionContentVersion);
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -259,7 +259,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.category, BaseSupplyCategory::Recreation);
     EXPECT_EQ(comfort.requiredContribution, 14U);
     EXPECT_FALSE(comfort.sourceHint.empty());
-    ASSERT_EQ(registry.items().size(), 66U);
+    ASSERT_EQ(registry.items().size(), 67U);
     const auto &light = registry.item(ItemDefinitionId{"item.component.weapon_flashlight_basic"});
     const auto &battery = registry.item(ItemDefinitionId{"item.battery.universal"});
     ASSERT_TRUE(light.weaponLight);
@@ -1904,8 +1904,15 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
     const ContentRegistry &registry = publishedContentRegistry();
     const auto &hospital = registry.map(MapDefinitionId{"map.raid.hospital_district"});
     const auto &riverside = registry.map(MapDefinitionId{"map.raid.riverside"});
+    const auto &frontier = registry.map(kFreightCrateMapId);
     const bool freightKeySlot = std::any_of(riverside.raidLootSlots.begin(), riverside.raidLootSlots.end(),
         [](const auto &slot) { return slot.route == "central"; });
+    const bool fuelSlot = std::any_of(frontier.interiors.begin(), frontier.interiors.end(),
+        [](const auto &interior) {
+            return interior.id == kFreightCrateSpaceId &&
+                std::any_of(interior.lootSlots.begin(), interior.lootSlots.end(),
+                    [](const auto &slot) { return slot.id == kRaidFuelLootSlotId; });
+        });
     const bool nightVisionSlot = std::any_of(hospital.interiors.begin(), hospital.interiors.end(),
         [&](const auto &interior) {
             return std::any_of(interior.lootSlots.begin(), interior.lootSlots.end(), [&](const auto &slot) {
@@ -1940,7 +1947,8 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
         const bool fixedResourceSource =
             item.definitionId == kFixedRaidOpticId ||
             (item.definitionId == kHospitalNightVisionId && nightVisionSlot) ||
-            (item.definitionId == kFreightCrateKeyId && freightKeySlot);
+            (item.definitionId == kFreightCrateKeyId && freightKeySlot) ||
+            (item.definitionId == kRaidFuelCanId && fuelSlot);
         EXPECT_TRUE(
             item.marketBuyPrice > 0U || lootSource ||
             manufacturingSource || fixedResourceSource)
@@ -1963,6 +1971,7 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
             item.category != ItemCategory::Loot ||
             item.nightVision.has_value() ||
             item.definitionId == kFreightCrateKeyId ||
+            item.definitionId == kRaidFuelCanId ||
             item.baseContribution.has_value() ||
             item.baseConstructionMaterialValue > 0U;
         EXPECT_TRUE(
@@ -2221,7 +2230,7 @@ TEST(ContentRegistryTest, OpticDefinitionsSeparateTheReceiverMountAndOpticModes)
 TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDefinitions)
 {
     const auto original = hospitalContentCandidateJson();
-    ASSERT_EQ(original.at("content_version").get<std::string>(), kCrossMapFreightContentVersion);
+    ASSERT_EQ(original.at("content_version").get<std::string>(), kFuelExtractionContentVersion);
     for (const auto *required : {"fortifications", "enemy_combat_definitions"})
     {
         SCOPED_TRACE(required);

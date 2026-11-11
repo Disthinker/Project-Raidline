@@ -95,10 +95,10 @@ TEST_F(WeaponHandlingSaveTest, Schema59RoundTripPreservesSelectedModeAndComplete
     ASSERT_TRUE(executeWeaponAmmo(profile, content,
         SetWeaponFireModeCommand{rifle, WeaponFireMode::ThreeRoundBurst},
         {profile.revision, "save-burst-mode"}).succeeded);
-    const auto text = serializeProfileEnvelope(profile, content.contentVersion(), 59);
+    const auto text = serializeProfileEnvelope(profile, kWeaponHandlingContentVersion, 59);
     auto envelope = Json::parse(text);
     EXPECT_EQ(envelope.at("schema_version"), 59U);
-    EXPECT_EQ(envelope.at("content_version").get<std::string>(), kCrossMapFreightContentVersion);
+    EXPECT_EQ(envelope.at("content_version").get<std::string>(), kWeaponHandlingContentVersion);
     EXPECT_EQ(assetJson(envelope, rifle).at("fire_mode"), "three_round_burst");
     for (const auto &asset : envelope.at("payload").at("assets")) {
         ASSERT_TRUE(asset.contains("fire_mode"));
@@ -405,7 +405,7 @@ TEST_F(WeaponHandlingSaveTest, AmmoLoopUpgradeKeepsOldOrderAndPendingRaidAndArch
     EXPECT_EQ(readBytes(archive(false, primary)), primary);
     EXPECT_EQ(readBytes(archive(true, backup)), backup);
     const auto upgraded = Json::parse(readBytes(repository.primaryPath()));
-    EXPECT_EQ(upgraded.at("schema_version"), 62U);
+    EXPECT_EQ(upgraded.at("schema_version"), 63U);
     EXPECT_EQ(upgraded.at("content_version").get<std::string>(), kAmmoLoopContentVersion);
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile) << reopened.message;
@@ -473,7 +473,7 @@ TEST_F(WeaponHandlingSaveTest, HospitalNightUpgradePreservesOldFrozenLootAndBoth
 
 TEST_F(WeaponHandlingSaveTest, FreightUpgradeKeepsFrozenSchema61CratesAndHospitalNightLoot)
 {
-    const auto &content = publishedContentRegistry();
+    const auto content = contentBeforeFuelExtraction();
     const auto historical = contentBeforeCrossMapFreight();
     for (const bool hospital : {false, true})
     {
@@ -509,7 +509,8 @@ TEST_F(WeaponHandlingSaveTest, FreightUpgradeKeepsFrozenSchema61CratesAndHospita
         const auto reopened = repository.load(content);
         ASSERT_TRUE(reopened.profile && reopened.profile->pendingRaid) << reopened.message;
         ASSERT_TRUE(reopened.sourceEnvelope);
-        EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 62U);
+        EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 63U);
+        EXPECT_EQ(reopened.sourceEnvelope->contentVersion, kCrossMapFreightContentVersion);
         EXPECT_EQ(reopened.profile->pendingRaid->loot, oldProfile.pendingRaid->loot);
         EXPECT_FALSE(reopened.profile->pendingRaid->freightKeyLootSlotId);
         EXPECT_FALSE(reopened.profile->pendingRaid->sealedFreightCrate);
@@ -521,12 +522,13 @@ TEST_F(WeaponHandlingSaveTest, FreightUpgradeKeepsFrozenSchema61CratesAndHospita
 TEST_F(WeaponHandlingSaveTest, FreightSchema62RoundTripsStableIdentityAndRejectsMislabelledMetadata)
 {
     const auto &content = publishedContentRegistry();
+    const auto historical = contentBeforeFuelExtraction();
     for (const bool target : {false, true})
     {
         SCOPED_TRACE(target);
-        auto profile = fresh();
+        auto profile = makeNewAlphaProfile("freight-schema62", historical);
         const MapDefinitionId map{target ? "map.raid.frontier_exchange" : "map.raid.riverside"};
-        const auto deployed = executeDeploy(profile, content, {"freight-save", "freight-save-end", 42U, map},
+        const auto deployed = executeDeploy(profile, historical, {"freight-save", "freight-save-end", 42U, map},
             {profile.revision, "freight-save-deploy"});
         ASSERT_TRUE(deployed.succeeded) << deployed.message;
         ASSERT_TRUE(profile.pendingRaid);
@@ -538,7 +540,7 @@ TEST_F(WeaponHandlingSaveTest, FreightSchema62RoundTripsStableIdentityAndRejects
         else
             ASSERT_TRUE(profile.pendingRaid->freightKeyLootSlotId);
 
-        const auto text = serializeProfileEnvelope(profile, content.contentVersion());
+        const auto text = serializeProfileEnvelope(profile, historical.contentVersion(), 62);
         auto envelope = Json::parse(text);
         EXPECT_EQ(envelope.at("schema_version"), 62U);
         const auto loaded = deserializeProfileEnvelope(text, content);
@@ -550,7 +552,7 @@ TEST_F(WeaponHandlingSaveTest, FreightSchema62RoundTripsStableIdentityAndRejects
             std::invalid_argument);
         envelope["content_version"] = kHospitalNightOperationsContentVersion;
         EXPECT_FALSE(deserializeProfileEnvelope(checked(envelope), content).profile);
-        envelope["content_version"] = content.contentVersion();
+        envelope["content_version"] = historical.contentVersion();
         auto &pending = envelope["payload"]["pending_raid"];
         if (target)
             pending["sealed_freight_crate"]["container_asset_id"] = 0;
@@ -558,6 +560,178 @@ TEST_F(WeaponHandlingSaveTest, FreightSchema62RoundTripsStableIdentityAndRejects
             pending["freight_key_loot_slot_id"] = "perimeter_1";
         EXPECT_FALSE(deserializeProfileEnvelope(checked(envelope), content).profile);
     }
+}
+
+TEST_F(WeaponHandlingSaveTest, FuelSchema63RoundTripsFrozenLootAndRejectsInvalidIdentityOrVersion)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = fresh();
+    const auto deployed = executeDeploy(profile, content, {"fuel-save", "fuel-save-end", 42U, kFreightCrateMapId},
+        {profile.revision, "fuel-save-deploy"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->fuelExtractionLootAssetId);
+    const auto fuelId = *profile.pendingRaid->fuelExtractionLootAssetId;
+    const auto bytes = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto envelope = Json::parse(bytes);
+    EXPECT_EQ(envelope.at("schema_version"), 63U);
+    EXPECT_EQ(envelope.at("content_version").get<std::string>(), kFuelExtractionContentVersion);
+    EXPECT_EQ(envelope.at("payload").at("pending_raid").at("fuel_extraction_loot_asset_id"), fuelId);
+    const auto loaded = deserializeProfileEnvelope(bytes, content);
+    ASSERT_TRUE(loaded.profile && loaded.profile->pendingRaid) << loaded.message;
+    EXPECT_EQ(loaded.profile->pendingRaid->fuelExtractionLootAssetId, fuelId);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, content.contentVersion(), 62)),
+        std::invalid_argument);
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, kCrossMapFreightContentVersion)),
+        std::invalid_argument);
+    auto changed = envelope;
+    changed["schema_version"] = 62U;
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(changed), content).profile);
+    changed = envelope;
+    changed["content_version"] = kCrossMapFreightContentVersion;
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(changed), content).profile);
+    for (const auto &invalid : std::vector<Json>{0, -1, true, nullptr, "1", 1.5, profile.assets.nextAssetId()})
+    {
+        SCOPED_TRACE(invalid.dump());
+        changed = envelope;
+        changed["payload"]["pending_raid"]["fuel_extraction_loot_asset_id"] = invalid;
+        EXPECT_FALSE(deserializeProfileEnvelope(checked(changed), content).profile);
+    }
+    changed = envelope;
+    changed["payload"]["pending_raid"].erase("fuel_extraction_loot_asset_id");
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(changed), content).profile);
+}
+
+TEST_F(WeaponHandlingSaveTest, FuelSchema63PaymentRoundTripsAndRequiresSuccessfulExtraction)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = fresh();
+    profile.lastRaidResult = LastRaidResult{};
+    auto &result = *profile.lastRaidResult;
+    result.settlementId = "fuel-paid-result";
+    result.outcome = RaidResultOutcome::Extracted;
+    result.fuelExtractionPaid = true;
+    profile.committedSettlements.insert(result.settlementId);
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+    const auto text = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto envelope = Json::parse(text);
+    EXPECT_EQ(envelope.at("payload").at("last_raid_result").at("fuel_extraction_paid"), true);
+    const auto loaded = deserializeProfileEnvelope(text, content);
+    ASSERT_TRUE(loaded.profile && loaded.profile->lastRaidResult) << loaded.message;
+    EXPECT_TRUE(loaded.profile->lastRaidResult->fuelExtractionPaid);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, content.contentVersion(), 62)),
+        std::invalid_argument);
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, kCrossMapFreightContentVersion)),
+        std::invalid_argument);
+
+    auto changed = envelope;
+    changed["schema_version"] = 62U;
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(changed), content).profile);
+    changed = envelope;
+    changed["payload"]["last_raid_result"]["fuel_extraction_paid"] = "true";
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(changed), content).profile);
+    changed = envelope;
+    changed["payload"]["committed_settlements"] = Json::array();
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(changed), content).profile);
+    changed = envelope;
+    changed["content_version"] = kCrossMapFreightContentVersion;
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(changed), content).profile);
+    result.outcome = RaidResultOutcome::PlayerDead;
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, content.contentVersion())),
+        std::invalid_argument);
+    result.fuelExtractionPaid = false;
+    changed = Json::parse(serializeProfileEnvelope(profile, content.contentVersion()));
+    EXPECT_FALSE(changed.at("payload").at("last_raid_result").contains("fuel_extraction_paid"));
+    changed["payload"]["last_raid_result"]["fuel_extraction_paid"] = true;
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(changed), content).profile);
+}
+
+TEST_F(WeaponHandlingSaveTest, FuelSchema63GuardsAssetsInStashAndRollbackRegistry)
+{
+    const auto &content = publishedContentRegistry();
+    const auto old = contentBeforeFuelExtraction();
+    auto profile = makeNewAlphaProfile("fuel-stash", old);
+    const auto fuel = profile.assets.create(content.item(kRaidFuelCanId),
+        StoredAssetLocation{ProfileContainerId::legacyOverflow(), {0, 0}});
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, content.contentVersion(), 62)),
+        std::invalid_argument);
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, old.contentVersion())),
+        std::invalid_argument);
+    auto bytes = serializeProfileEnvelope(profile, content.contentVersion());
+    auto envelope = Json::parse(bytes);
+    envelope["schema_version"] = 62U;
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(envelope), content).profile);
+    const auto fuelValue = assetJson(envelope, fuel);
+
+    auto pending = makeNewAlphaProfile("fuel-rollback", old);
+    const auto deployed = executeDeploy(pending, old, {"rollback-save", "rollback-end", 42U, kFreightCrateMapId},
+        {pending.revision, "rollback-deploy"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(pending.pendingRaid && pending.pendingRaid->startingAssets);
+    const auto oldBytes = serializeProfileEnvelope(pending, old.contentVersion(), 62);
+    const auto previousId = pending.pendingRaid->startingAssets->create(content.item(kRaidFuelCanId),
+        StoredAssetLocation{ProfileContainerId::legacyOverflow(), {0, 0}});
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(pending, old.contentVersion(), 62)),
+        std::invalid_argument);
+    envelope = Json::parse(oldBytes);
+    auto &starting = envelope["payload"]["pending_raid"]["starting_assets"];
+    starting["assets"].push_back(fuelValue);
+    starting["assets"].back()["instance_id"] = previousId;
+    starting["next_asset_id"] = pending.pendingRaid->startingAssets->nextAssetId();
+    const auto rejected = deserializeProfileEnvelope(checked(envelope), content);
+    EXPECT_FALSE(rejected.profile);
+    EXPECT_NE(rejected.message.find("fuel can requires schema 63"), std::string::npos);
+}
+
+TEST_F(WeaponHandlingSaveTest, FuelUpgradeKeepsFrozenSchema62FreightAndArchivesBothByteSources)
+{
+    const auto &content = publishedContentRegistry();
+    const auto old = contentBeforeFuelExtraction();
+    auto profile = makeNewAlphaProfile("fuel-upgrade", old);
+    const auto deployed = executeDeploy(profile, old, {"frozen-freight", "frozen-freight-end", 42U, kFreightCrateMapId},
+        {profile.revision, "freeze-freight-deploy"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->sealedFreightCrate);
+    ASSERT_FALSE(profile.pendingRaid->fuelExtractionLootAssetId);
+    const auto primary = serializeProfileEnvelope(profile, old.contentVersion(), 62);
+    auto previous = profile;
+    ++previous.revision;
+    const auto backup = serializeProfileEnvelope(previous, old.contentVersion(), 62);
+    SaveRepository repository{directory.path()};
+    writeBytes(repository.primaryPath(), primary);
+    writeBytes(repository.backupPath(), backup);
+    const auto loaded = repository.load(content);
+    ASSERT_TRUE(loaded.profile && loaded.profile->pendingRaid) << loaded.message;
+    const auto fingerprint = profileStateFingerprint(profile);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
+
+    const auto archivedPrimary = directory.path() / ("profile.pre-raid-fuel-extraction-loop-v1." + checksum(primary) + ".json");
+    const auto archivedBackup = directory.path() / ("profile.backup.pre-raid-fuel-extraction-loop-v1." + checksum(backup) + ".json");
+    writeBytes(archivedPrimary, "immutable conflicting bytes");
+    EXPECT_FALSE(repository.save(*loaded.profile, content.contentVersion()).succeeded);
+    EXPECT_EQ(readBytes(repository.primaryPath()), primary);
+    EXPECT_EQ(readBytes(repository.backupPath()), backup);
+    EXPECT_EQ(readBytes(archivedPrimary), "immutable conflicting bytes");
+    ASSERT_TRUE(std::filesystem::remove(archivedPrimary));
+    const auto upgraded = repository.save(*loaded.profile, content.contentVersion());
+    ASSERT_TRUE(upgraded.succeeded) << upgraded.message;
+    EXPECT_EQ(readBytes(archivedPrimary), primary);
+    EXPECT_EQ(readBytes(archivedBackup), backup);
+
+    const auto reopened = repository.load(content);
+    ASSERT_TRUE(reopened.profile && reopened.profile->pendingRaid && reopened.sourceEnvelope) << reopened.message;
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 63U);
+    EXPECT_EQ(reopened.sourceEnvelope->contentVersion, kFuelExtractionContentVersion);
+    EXPECT_FALSE(reopened.profile->pendingRaid->fuelExtractionLootAssetId);
+    EXPECT_EQ(reopened.profile->pendingRaid->loot, profile.pendingRaid->loot);
+    ASSERT_TRUE(reopened.profile->pendingRaid->sealedFreightCrate);
+    const auto &reopenedCrate = *reopened.profile->pendingRaid->sealedFreightCrate;
+    const auto &originalCrate = *profile.pendingRaid->sealedFreightCrate;
+    EXPECT_EQ(reopenedCrate.containerAssetId, originalCrate.containerAssetId);
+    EXPECT_EQ(reopenedCrate.unlocked, originalCrate.unlocked);
+    EXPECT_EQ(profileStateFingerprint(*reopened.profile), fingerprint);
 }
 
 TEST_F(WeaponHandlingSaveTest, CorruptPrimaryRecoveryPreservesCorruptSourceAndValidSchema58Backup) {

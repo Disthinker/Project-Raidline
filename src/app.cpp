@@ -4746,6 +4746,7 @@ void App::processEvents()
             {
                 gameSession_.cancelPlayerControlIntent();
                 gameSession_.cancelRaidFreightUnlock();
+                gameSession_.cancelRaidFuelExtraction();
                 windowHasInputFocus_ = false;
                 homeFoundingPrompt_.reset();
                 static_cast<void>(
@@ -5664,6 +5665,7 @@ void App::update(float deltaTime)
     if(pendingInventoryBarrierAction_ || profileUiBusy()) {
         gameSession_.cancelPlayerControlIntent();
         gameSession_.cancelRaidFreightUnlock();
+        gameSession_.cancelRaidFuelExtraction();
         if (gameSession_.tacticalDeviceWheelOpen()) gameSession_.cancelWeaponLightInput();
         pendingBaseClicks_.clear();pendingBaseRightClicks_.clear();pendingInventoryUiEvents_.clear();
         return;
@@ -5675,7 +5677,10 @@ void App::update(float deltaTime)
          developerWeaponPanelOpen_ || developerRangePanelOpen_ || raidSaveProtectionVisible()))
         gameSession_.cancelWeaponLightInput();
     if (raidSaveProtectionVisible())
+    {
         gameSession_.cancelRaidFreightUnlock();
+        gameSession_.cancelRaidFuelExtraction();
+    }
     if(pauseMenu_.isOpen() || !windowHasInputFocus_ || developerWeaponPanelOpen_ || developerRangePanelOpen_ ||
        developerWeaponPanelBlocksGameplayThisFrame_ || medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_ || selectedThrowable_ ||
        inventoryOverlayState_.isOpen() || tacticalMapOpen_ || baseConstructionPanelOpen_ ||
@@ -5684,6 +5689,7 @@ void App::update(float deltaTime)
     {
         gameSession_.cancelPlayerControlIntent();
         gameSession_.cancelRaidFreightUnlock();
+        gameSession_.cancelRaidFuelExtraction();
     }
     updateBasePresentation(deltaTime);
     if (gameFlow_.state() == GameFlowState::RaidResult &&
@@ -5842,6 +5848,7 @@ void App::update(float deltaTime)
     {
         gameSession_.cancelWeaponLightInput();
         gameSession_.cancelRaidCredentialInteraction();
+        gameSession_.cancelRaidFuelExtraction();
         if (escapePressed)
         {
             static_cast<void>(pauseMenu_.handleEscape());
@@ -5873,6 +5880,7 @@ void App::update(float deltaTime)
         pauseMenu_.open();
         gameSession_.cancelWeaponLightInput();
         gameSession_.cancelRaidCredentialInteraction();
+        gameSession_.cancelRaidFuelExtraction();
         input_.suppressPrimaryPointerUntilRelease();
         return;
     }
@@ -6498,7 +6506,25 @@ void App::renderDebugText()
             p.action = freight->hasKey ? "HOLD F TO UNLOCK SEALED CRATE"
                                        : "SEALED CRATE | CARRY THE KEY";
     }
-    if(raid.state()==RaidSessionState::Extracting || raid.state()==RaidSessionState::Extracted){p.actionActive=true;p.actionFraction=raid.extractionProgress();p.action=fmt::format("{} {:.0f}%",tr("撤离中","EXTRACTING"),p.actionFraction*100);}
+    if (raid.state() == RaidSessionState::Extracting || raid.state() == RaidSessionState::Extracted)
+    {
+        p.actionActive = true;
+        p.actionFraction = raid.extractionProgress();
+        const char *label = raid.extractionRoute() == RaidExtractionRoute::Fuel
+            ? tr("燃油撤离中", "FUEL EXTRACTION") : tr("撤离中", "EXTRACTING");
+        p.action = fmt::format("{} {:.0f}%", label, p.actionFraction * 100.0F);
+    }
+    else if (p.action.empty() && !highOptic && gameSession_.raidFuelExtractionEnabled() &&
+             world.inOutdoorRaidSpace())
+    {
+        const Vec2 center{player.position().x + player.size() * 0.5F,
+                          player.position().y + player.size() * 0.5F};
+        if (const auto &exit = world.conditionalExtractionPoint(); exit && exit->contains(center))
+        {
+            const bool open = raid.conditionalExtractionOpen();
+            p.action = raidFuelExitStatusText(open, open && gameSession_.conditionalExtractionEligible());
+        }
+    }
     const auto light = gameSession_.activeWeaponLight();
     const auto vision = gameSession_.activeNightVision();
     const bool tapVision = vision.binding.deviceAssetId && (!light.binding.deviceAssetId ||
@@ -7995,29 +8021,45 @@ void App::renderExtractionPoint()
             gameSession_.world().conditionalExtractionPoint();
         conditional.has_value())
     {
-        const std::uint64_t weight =
-            gameSession_.currentRaidCarriedWeightGrams();
-        const std::uint64_t limit =
-            gameSession_.conditionalExtractionWeightLimitGrams();
         const bool phaseOpen = raidSession.conditionalExtractionOpen();
-        const bool eligible = gameSession_.conditionalExtractionEligible();
-        const std::string label = fmt::format(
-            "LIGHT EXIT {:.1f}/{:.1f} KG",
-            static_cast<double>(weight) / 1000.0,
-            static_cast<double>(limit) / 1000.0);
-        const std::string closedLabel = phaseOpen
-            ? fmt::format(
-                  "TOO HEAVY {:.1f}/{:.1f} KG",
-                  static_cast<double>(weight) / 1000.0,
-                  static_cast<double>(limit) / 1000.0)
-            : "LIGHT EXTRACTION LOCKED";
-        renderZone(
-            *conditional,
-            RaidExtractionRoute::EmergencyConditional,
-            phaseOpen && eligible,
-            label.c_str(),
-            false,
-            closedLabel.c_str());
+        if (gameSession_.raidFuelExtractionEnabled())
+        {
+            const Rect &bounds = conditional->bounds();
+            const Vec2 camera = raidWorldCameraOffset();
+            const Vec2 shake = raidWorldScreenShakePixels();
+            SDL_FRect viewport{camera.x - shake.x, camera.y - shake.y, kWindowWidth, kWindowHeight};
+            if (const auto *optic = visibleWeaponOpticView())
+            {
+                const Rect visible = optic->worldBounds();
+                viewport = {visible.position.x, visible.position.y, visible.size.x, visible.size.y};
+            }
+            const SDL_FRect zoneAndLabel{bounds.position.x, bounds.position.y - 22.0F,
+                std::max(bounds.size.x, 300.0F), bounds.size.y + 22.0F};
+            if (SDL_HasRectIntersectionFloat(&viewport, &zoneAndLabel))
+            {
+                const bool eligible = phaseOpen && gameSession_.conditionalExtractionEligible();
+                const char *status = raidFuelExitStatusText(phaseOpen, eligible);
+                renderZone(*conditional, RaidExtractionRoute::Fuel, eligible, status, false, status);
+            }
+        }
+        else
+        {
+            const std::uint64_t weight = gameSession_.currentRaidCarriedWeightGrams();
+            const std::uint64_t limit = gameSession_.conditionalExtractionWeightLimitGrams();
+            const bool eligible = gameSession_.conditionalExtractionEligible();
+            const std::string label = fmt::format(
+                "LIGHT EXIT {:.1f}/{:.1f} KG",
+                static_cast<double>(weight) / 1000.0,
+                static_cast<double>(limit) / 1000.0);
+            const std::string closedLabel = phaseOpen
+                ? fmt::format(
+                      "TOO HEAVY {:.1f}/{:.1f} KG",
+                      static_cast<double>(weight) / 1000.0,
+                      static_cast<double>(limit) / 1000.0)
+                : "LIGHT EXTRACTION LOCKED";
+            renderZone(*conditional, RaidExtractionRoute::EmergencyConditional,
+                phaseOpen && eligible, label.c_str(), false, closedLabel.c_str());
+        }
     }
 
     if (const auto &credential = gameSession_.world().credentialExtractionPoint(); credential)
@@ -13468,10 +13510,11 @@ void App::renderRaidTacticalMap()
         map.emergencyExtraction(),
         "S",
         230, 168, 76);
+    const bool fuelExit = gameSession_.raidFuelExtractionEnabled();
     renderExtraction(
         RaidMapExtractionKind::EmergencyConditional,
         map.conditionalExtraction(),
-        "L",
+        fuelExit ? (uiTextRenderer_.language() == UiLanguage::SimplifiedChinese ? "油" : "F") : "L",
         104, 180, 230);
     renderExtraction(
         RaidMapExtractionKind::Credential,
@@ -13685,18 +13728,29 @@ void App::renderRaidTacticalMap()
             [](const RaidEnemySnapshot &enemy) { return enemy.torsoArmor.has_value(); }))
         uiFinalTextAt(renderer_,uiTextRenderer_,144,622,"ENEMY INTEL: SOME RESOURCE GUARDS WEAR TORSO ARMOR",500,11,1);
 
+    if (fuelExit && map.conditionalExtraction() &&
+        map.extractionVisible(RaidMapExtractionKind::EmergencyConditional))
+    {
+        const bool open = gameSession_.world().raidSession().conditionalExtractionOpen();
+        const bool eligible = open && gameSession_.conditionalExtractionEligible();
+        const auto language = uiTextRenderer_.language();
+        const auto status = fmt::format("{} · {}",
+            localizeUiText(language, raidFuelExitStatusText(open, eligible)),
+            localizeUiText(language, "1 CAN · 6s"));
+        uiFinalTextAt(renderer_, uiTextRenderer_, 674, 622, status.c_str(), 462, 11, 1);
+    }
     if (map.hasIntelligence(RaidIntelligenceCategory::Transport))
     {
         const RaidSession &raidSession =
             gameSession_.world().raidSession();
-        const std::string exitStatus = fmt::format(
-            "EXITS | NORMAL {} | SIGNAL {} | LIGHT {}",
+        std::string exitStatus = fmt::format(
+            "EXITS | NORMAL {} | SIGNAL {}",
             (raidSession.normalExtractionOpen() ||
              raidSession.normalExtractionGraceActive())
                 ? "OPEN" : "CLOSED",
-            raidSession.emergencyExtractionOpen()
-                ? "OPEN" : "LOCKED",
-            raidSession.conditionalExtractionOpen() &&
+            raidSession.emergencyExtractionOpen() ? "OPEN" : "LOCKED");
+        if (!fuelExit)
+            exitStatus += fmt::format(" | LIGHT {}", raidSession.conditionalExtractionOpen() &&
                     gameSession_.conditionalExtractionEligible()
                 ? "OPEN" : "LOCKED");
         uiFinalTextAt(renderer_,uiTextRenderer_,674,640,exitStatus.c_str(),462,11,1);

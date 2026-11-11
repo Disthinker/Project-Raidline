@@ -737,7 +737,8 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
             config.highRisk.enabled,
             config.highRisk.regularPhaseDurationSeconds,
             config.highRisk.emergencyExtractionDurationSeconds,
-            config.highRisk.conditionalExtractionDurationSeconds},
+            config.highRisk.conditionalExtractionDurationSeconds,
+            config.highRisk.fuelExtraction},
         credentialExtraction_ && credentialExtraction_->unlockedAtDeploy
             ? credentialExtraction_->definition.extractionDurationSeconds
             : 0.0F}};
@@ -1099,7 +1100,8 @@ void GameplayWorld::update(
     float deltaTime,
     const std::function<bool()> &commitGrenade,
     const std::function<bool()> &beforeSpaceTransition,
-    bool portalInteractionRequested)
+    bool portalInteractionRequested,
+    const RaidFuelSelector &selectFuel)
 {
     spaceTransitionedLastUpdate_ = false;
     grenadeExplodedLastUpdate_=false;
@@ -1180,11 +1182,24 @@ void GameplayWorld::update(
         inOutdoorRaidSpace() &&
         emergencyExtractionPoint_.has_value() &&
         emergencyExtractionPoint_->contains(playerCenter(player_));
-    const bool playerInConditionalExtraction =
+    const bool usesFuel = raidSession_.usesFuelExtraction();
+    const bool playerInConditionalZone =
         inOutdoorRaidSpace() &&
         conditionalExtractionPoint_.has_value() &&
-        input.conditionalExtractionEligible &&
+        (usesFuel || input.conditionalExtractionEligible) &&
         conditionalExtractionPoint_->contains(playerCenter(player_));
+    std::optional<AssetInstanceId> eligibleFuel;
+    if (usesFuel && playerInConditionalZone &&
+        raidSession_.conditionalExtractionOpen() && input.extractionEligible &&
+        !grenade_.active() && !controlsSuppressedAtFrameStart &&
+        !player_.isControlled() && !input.inventoryOpen && !input.throwableModal &&
+        !input.freezeObservationDirection && !spaceTransitionedLastUpdate_ && selectFuel)
+    {
+        // An interrupted countdown cannot switch to a different fuel can.
+        eligibleFuel = selectFuel(fuelExtractionAsset_);
+    }
+    const bool playerInConditionalExtraction =
+        playerInConditionalZone && (!usesFuel || eligibleFuel.has_value());
     const bool wasCallingSignal =
         raidSession_.extractionRoute() == RaidExtractionRoute::EmergencySignal;
     const bool playerInCredentialExtraction =
@@ -1213,6 +1228,11 @@ void GameplayWorld::update(
         input.interactJustPressed && !controlsSuppressedAtFrameStart &&
             !spaceTransitionedLastUpdate_ && canCallSignalExtraction(input),
         playerInCredentialExtraction);
+    if (usesFuel)
+    {
+        fuelExtractionAsset_ = raidSession_.extractionRoute() == RaidExtractionRoute::Fuel
+            ? eligibleFuel : std::nullopt;
+    }
     if (wasCallingSignal && raidSession_.isActive() &&
         raidSession_.extractionRoute() != RaidExtractionRoute::EmergencySignal)
     {
@@ -1590,6 +1610,7 @@ void GameplayWorld::update(
                 if (raidSession_.interruptSignalExtraction())
                     signalInterruptedSeconds_ = 3.0F;
                 static_cast<void>(raidSession_.interruptCredentialExtraction());
+                if (raidSession_.usesFuelExtraction()) interruptFuelExtraction();
             }
         }
     }
@@ -2327,6 +2348,19 @@ void GameplayWorld::interruptCredentialInteraction() noexcept
 {
     cancelCredentialInvestigationInteraction();
     static_cast<void>(raidSession_.interruptCredentialExtraction());
+}
+
+void GameplayWorld::interruptFuelExtraction() noexcept
+{
+    if (raidSession_.interruptFuelExtraction()) fuelExtractionAsset_.reset();
+}
+
+std::optional<AssetInstanceId> GameplayWorld::completedFuelExtractionAsset() const noexcept
+{
+    if (raidSession_.state() != RaidSessionState::Extracted ||
+        raidSession_.extractionRoute() != RaidExtractionRoute::Fuel)
+        return std::nullopt;
+    return fuelExtractionAsset_;
 }
 
 const RaidSession &

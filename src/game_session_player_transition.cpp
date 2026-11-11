@@ -341,7 +341,8 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
             frozenRegion(kRaidAnchorConditionalExtraction,
                          map.highRisk.conditionalExtractionPoint),
             map.highRisk.conditionalExtractionDurationSeconds,
-            map.highRisk.conditionalExtractionMaximumWeightGrams};
+            map.highRisk.conditionalExtractionMaximumWeightGrams,
+            snapshot.fuelExtractionLootAssetId.has_value()};
         if (map.highRisk.enabled)
         {
             worldConfig.tacticalObjectives.push_back(

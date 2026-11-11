@@ -952,7 +952,7 @@ DeployReceipt executeDeploy(
     const LootTableDefinition &lootTable =
         content.lootTable(map->raidLootTableId);
     const bool freightAccessRules = regionalMissionCount == 0U &&
-        content.contentVersion() == kCrossMapFreightContentVersion;
+        crossMapFreightCompatibleContent(content.contentVersion());
     const bool freightKeySource = freightAccessRules && map->id == kFreightKeySourceMapId;
     if (!resourceEcologyRules)
     {
@@ -1029,6 +1029,8 @@ DeployReceipt executeDeploy(
     const bool nightVisionLootRules = regionalMissionCount == 0U &&
         hospitalNightCompatibleContent(content.contentVersion());
     const bool sealedFreightRules = freightAccessRules && map->id == kFreightCrateMapId;
+    const bool fuelExtractionRules = sealedFreightRules &&
+        content.contentVersion() == kFuelExtractionContentVersion;
     std::optional<AssetInstanceId> freightSupplyAssetId;
     for (std::size_t interiorIndex{};
          interiorIndex < map->interiors.size(); ++interiorIndex)
@@ -1045,21 +1047,21 @@ DeployReceipt executeDeploy(
                 entry.maximumQuantity - entry.minimumQuantity + 1U;
             std::uint32_t quantity = entry.minimumQuantity +
                 interiorLootRandom.bounded(range);
-            // Keep both original random draws so this fixed reward changes
-            // only the existing hospital service-corridor slot.
+            // Keep both original random draws for fixed rewards.
             const bool nightVisionSlot = nightVisionLootRules &&
                 isHospitalNightVisionLootSlot(map->id, interior.id, slot.id);
             const bool sealedFreightSlot = sealedFreightRules && interior.id == kFreightCrateSpaceId &&
                 slot.id == kFreightCrateSlotId;
+            const bool fuelSlot = fuelExtractionRules && interior.id == kFreightCrateSpaceId &&
+                slot.id == kRaidFuelLootSlotId;
             const ItemDefinitionId &item = nightVisionSlot
                 ? kHospitalNightVisionId
-                : sealedFreightSlot ? kFreightCrateSupplyId : entry.itemDefinitionId;
+                : sealedFreightSlot ? kFreightCrateSupplyId
+                : fuelSlot ? kRaidFuelCanId : entry.itemDefinitionId;
             if (nightVisionSlot)
-            {
-                quantity = 1U;
                 snapshot.hospitalNightVisionLoot = true;
-            }
-            if (sealedFreightSlot) quantity = 1U;
+            if (nightVisionSlot || sealedFreightSlot || fuelSlot)
+                quantity = 1U;
             const AssetInstanceId assetId = candidate.assets.create(
                 content.item(item),
                 RaidGroundAssetLocation{
@@ -1076,9 +1078,13 @@ DeployReceipt executeDeploy(
                 false,
                 interior.id});
             if (sealedFreightSlot) freightSupplyAssetId = assetId;
+            if (fuelSlot) snapshot.fuelExtractionLootAssetId = assetId;
             ++interiorSlotIndex;
         }
     }
+    if (fuelExtractionRules && !snapshot.fuelExtractionLootAssetId)
+        return deployFailure(RaidLifecycleError::InvalidProfile,
+            "fuel extraction requires the fixed service bay Loot slot", profile.revision);
 
     if (selfRecoveryRecord.has_value())
     {
@@ -1909,11 +1915,29 @@ DeployReceipt executeDeploy(
     return {true, false, RaidLifecycleError::None, {}, profile.revision};
 }
 
+bool isCarriedRaidFuel(const ProfileState &profile, AssetInstanceId assetId)
+{
+    const AssetRecord *asset = profile.assets.find(assetId);
+    return asset != nullptr && asset->definitionId == kRaidFuelCanId &&
+        asset->quantity == 1U && std::holds_alternative<StoredAssetLocation>(asset->location) &&
+        assetIsCarried(profile, assetId);
+}
+
+std::optional<AssetInstanceId> findCarriedRaidFuel(const ProfileState &profile)
+{
+    // AssetRegistry records are ordered by their stable instance ID.
+    for (const auto &[id, asset] : profile.assets.records())
+        if (asset.definitionId == kRaidFuelCanId && isCarriedRaidFuel(profile, id))
+            return id;
+    return std::nullopt;
+}
+
 RaidSettlementReceipt settlePendingRaid(
     ProfileState &profile,
     const ContentRegistry &content,
     std::string_view settlementId,
-    RaidResultOutcome outcome)
+    RaidResultOutcome outcome,
+    std::optional<RaidFuelExtractionCompletion> fuel)
 {
     const std::string id{settlementId};
     if (id.empty())
@@ -1946,6 +1970,12 @@ RaidSettlementReceipt settlePendingRaid(
             profile.revision,
             outcome);
     }
+    if (fuel && (outcome != RaidResultOutcome::Extracted ||
+                 !profile.pendingRaid->fuelExtractionLootAssetId ||
+                 fuel->raidId != profile.pendingRaid->raidId ||
+                 !isCarriedRaidFuel(profile, fuel->fuelAssetId)))
+        return settlementFailure(RaidLifecycleError::InvalidCommand,
+            "fuel extraction requires its bound carried fuel", profile.revision, outcome);
     if (profile.revision == std::numeric_limits<ProfileRevision>::max())
     {
         return settlementFailure(
@@ -1964,7 +1994,7 @@ RaidSettlementReceipt settlePendingRaid(
     for (auto id : abandonedCells) static_cast<void>(candidate.assets.erase(id));
 
     const PendingRaidSnapshot raidSnapshot = *candidate.pendingRaid;
-    if (raidSnapshot.credentialExtraction)
+    if (raidSnapshot.credentialExtraction || fuel)
     {
         // Pending is removed before final validation below. Validate its
         // credential contract while it still exists so forged facts cannot
@@ -1976,6 +2006,8 @@ RaidSettlementReceipt settlePendingRaid(
                 RaidLifecycleError::InvalidProfile,
                 validation.message, profile.revision, outcome);
     }
+    if (fuel)
+        static_cast<void>(candidate.assets.erase(fuel->fuelAssetId));
     std::vector<RaidExtractionPermissionDefinitionId> newlyUnlockedPermissions;
     if (outcome == RaidResultOutcome::Extracted &&
         raidSnapshot.credentialExtraction &&
@@ -2167,6 +2199,7 @@ RaidSettlementReceipt settlePendingRaid(
         baseThreatReducedUnits};
     candidate.lastRaidResult->unlockedExtractionPermissions =
         std::move(newlyUnlockedPermissions);
+    candidate.lastRaidResult->fuelExtractionPaid = fuel.has_value();
     if (raidSnapshot.wishFocus)
         candidate.lastRaidResult->wishReturn = summarizeBaseWishReturn(
             candidate, content, *raidSnapshot.wishFocus,
