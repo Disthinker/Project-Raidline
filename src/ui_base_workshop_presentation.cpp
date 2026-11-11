@@ -9,7 +9,17 @@ UiWorkshopProjection projectUiWorkshop(const ProfileState &p, const ContentRegis
     r.installed=baseFacilityInstalled(p,BaseFacilityDefinitionId{"base_facility.workshop"});
     r.level=p.baseConstruction.workshopLevel; r.order=p.baseManufacturing.activeOrder;
     r.production=projectBaseManufacturing(p); r.workforce=projectBaseWorkforce(p);
+    if (p.baseManufacturing.armorRepairRecipeUnlocked && selected == kArmorRepairResearchId)
+        selected = kArmorRepairRecipeId;
     for(const auto &recipe:c.baseManufacturingRecipes()) {
+        if (recipe.id == kArmorRepairRecipeId && !p.baseManufacturing.armorRepairRecipeUnlocked) {
+            r.recipes.push_back({
+                kArmorRepairResearchId, kArmorRepairBlueprintId, 1U,
+                localizeUiText(language, "ARMOR REPAIR RESEARCH"),
+                localizeUiText(language, "RESEARCH ARMOR REPAIR BLUEPRINT"),
+                localizeUiText(language, "Armor Repair Blueprint") + "  x1", 1U});
+            continue;
+        }
         const auto &d=c.item(recipe.outputItemDefinitionId);
         UiWorkshopRecipe row{recipe.id,d.definitionId,recipe.outputQuantity,compactUiItemName(d,language),localizeUiText(language,recipe.displayName),{}};
         row.workers=recipe.workerCount;

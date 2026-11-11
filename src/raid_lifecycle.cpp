@@ -105,6 +105,33 @@ std::vector<std::size_t> selectLootSlots(
     return selected;
 }
 
+bool blueprintRecoverableInBase(
+    const ProfileState &profile,
+    const AssetRecord &blueprint)
+{
+    if (assetIsBaseAccessible(profile, blueprint.instanceId))
+        return true;
+
+    const AssetRecord *asset = &blueprint;
+    std::set<AssetInstanceId> visited;
+    while (asset != nullptr && visited.insert(asset->instanceId).second)
+    {
+        if (const auto *ground = std::get_if<BaseGroundAssetLocation>(&asset->location))
+        {
+            return ground->baseSiteDefinitionId ==
+                profile.regionalOperations.technologyCore.baseSiteDefinitionId;
+        }
+        const auto *stored = std::get_if<StoredAssetLocation>(&asset->location);
+        if (stored == nullptr ||
+            stored->container.kind != ProfileContainerKind::AssetCompartment)
+        {
+            return false;
+        }
+        asset = profile.assets.find(stored->container.ownerAssetId);
+    }
+    return false;
+}
+
 std::vector<ProfileContainerId> carriedContainers(
     const ProfileState &profile,
     const ContentRegistry &content,
@@ -954,6 +981,19 @@ DeployReceipt executeDeploy(
     const bool freightAccessRules = regionalMissionCount == 0U &&
         crossMapFreightCompatibleContent(content.contentVersion());
     const bool freightKeySource = freightAccessRules && map->id == kFreightKeySourceMapId;
+    const auto &workshop = candidate.baseManufacturing;
+    const bool blueprintSource = regionalMissionCount == 0U &&
+        content.contentVersion() == kArmorReadinessContentVersion &&
+        map->id == kArmorRepairBlueprintMapId &&
+        !workshop.armorRepairRecipeUnlocked &&
+        (!workshop.activeOrder || workshop.activeOrder->recipeDefinitionId != kArmorRepairResearchId) &&
+        std::none_of(candidate.assets.records().begin(), candidate.assets.records().end(),
+            [&candidate](const auto &entry) {
+                const auto &asset = entry.second;
+                return asset.definitionId == kArmorRepairBlueprintId &&
+                    blueprintRecoverableInBase(candidate, asset);
+            });
+    bool blueprintPlaced = false;
     if (!resourceEcologyRules)
     {
         for (const std::size_t slotIndex : selectLootSlots(*map, lootRandom))
@@ -964,16 +1004,20 @@ DeployReceipt executeDeploy(
             const auto &slot = map->raidLootSlots[slotIndex];
             std::uint32_t quantity = entry.minimumQuantity +
                 lootRandom.bounded(range);
-            // Slot selection is already sorted. Keep both original draws even
-            // when the first selected central slot supplies the freight key.
+            // Replace the first selected slot of the corresponding route
+            // after drawing both item and quantity from the original stream.
             const bool freightKeySlot = freightKeySource && slot.route == "central" &&
                 !snapshot.freightKeyLootSlotId;
-            const ItemDefinitionId &item = freightKeySlot ? kFreightCrateKeyId : entry.itemDefinitionId;
-            if (freightKeySlot)
-            {
+            const bool blueprintSlot = blueprintSource && !blueprintPlaced &&
+                slot.route == "resource";
+            const ItemDefinitionId &item = freightKeySlot ? kFreightCrateKeyId
+                : blueprintSlot ? kArmorRepairBlueprintId : entry.itemDefinitionId;
+            if (freightKeySlot || blueprintSlot)
                 quantity = 1U;
+            if (freightKeySlot)
                 snapshot.freightKeyLootSlotId = slot.id;
-            }
+            if (blueprintSlot)
+                blueprintPlaced = true;
             const AssetInstanceId assetId = candidate.assets.create(
                 content.item(item),
                 RaidGroundAssetLocation{
@@ -993,6 +1037,10 @@ DeployReceipt executeDeploy(
     if (freightKeySource && !snapshot.freightKeyLootSlotId)
         return deployFailure(RaidLifecycleError::InvalidProfile,
             "freight crate key source slot was not selected", profile.revision);
+
+    if (blueprintSource && !blueprintPlaced)
+        return deployFailure(RaidLifecycleError::InvalidProfile,
+            "armor repair blueprint source slot was not selected", profile.revision);
 
     const LootTableDefinition &advancedLootTable = content.lootTable(
         highRiskCrisis != nullptr
@@ -1030,7 +1078,7 @@ DeployReceipt executeDeploy(
         hospitalNightCompatibleContent(content.contentVersion());
     const bool sealedFreightRules = freightAccessRules && map->id == kFreightCrateMapId;
     const bool fuelExtractionRules = sealedFreightRules &&
-        content.contentVersion() == kFuelExtractionContentVersion;
+        supportsFuelExtractionContent(content.contentVersion());
     std::optional<AssetInstanceId> freightSupplyAssetId;
     for (std::size_t interiorIndex{};
          interiorIndex < map->interiors.size(); ++interiorIndex)

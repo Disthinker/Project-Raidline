@@ -191,7 +191,7 @@ UiDeploymentProjection projectUiDeployment(
         result.warning = selectedMap->operationBriefing.warning;
         result.routeProfile = selectedMap->routeProfile;
         result.fuelExit = !recoveryRecordId && selectedMap->id == kFreightCrateMapId &&
-            content.contentVersion() == kFuelExtractionContentVersion;
+            supportsFuelExtractionContent(content.contentVersion());
         if (selectedMap->credentialExtraction && !recoveryRecordId)
             result.credentialUnlocked = profile.raidExtractionPermissions.contains(
                 selectedMap->credentialExtraction->permissionId);

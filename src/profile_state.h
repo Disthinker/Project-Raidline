@@ -866,6 +866,7 @@ struct BaseManufacturingOrder
 struct BaseManufacturingState
 {
     std::optional<BaseManufacturingOrder> activeOrder;
+    bool armorRepairRecipeUnlocked{};
 
     friend bool operator==(
         const BaseManufacturingState &,

@@ -27,12 +27,21 @@ inline constexpr std::string_view kCrossMapFreightContentVersion{
     "raid-cross-map-freight-access-content-78"};
 inline constexpr std::string_view kFuelExtractionContentVersion{
     "raid-fuel-extraction-loop-content-79"};
+inline constexpr std::string_view kArmorReadinessContentVersion{
+    "base-research-armor-readiness-content-80"};
 inline const ItemDefinitionId kFixedRaidOpticId{"item.component.optic_4x_5_45"};
 inline const ItemDefinitionId kExpanding545AmmunitionId{"item.ammunition.5_45x39_expanding"};
 inline const ItemDefinitionId kHospitalNightVisionId{"item.device.night_vision_basic"};
 inline const ItemDefinitionId kFreightCrateKeyId{"item.loot.freight_crate_key"};
 inline const ItemDefinitionId kFreightCrateSupplyId{"item.loot.precision_components"};
 inline const ItemDefinitionId kRaidFuelCanId{"item.loot.extraction_fuel_can"};
+inline const ItemDefinitionId kArmorRepairBlueprintId{"item.loot.armor_repair_blueprint"};
+inline const BaseManufacturingRecipeDefinitionId kArmorRepairResearchId{
+    "base_manufacturing.research_armor_repair"};
+inline const BaseManufacturingRecipeDefinitionId kArmorRepairRecipeId{
+    "base_manufacturing.armor_repair_tool"};
+inline constexpr std::uint32_t kArmorRepairResearchDurationMinutes{360U};
+inline const MapDefinitionId kArmorRepairBlueprintMapId{"map.raid.industrial"};
 inline const MapDefinitionId kFreightKeySourceMapId{"map.raid.riverside"};
 inline const MapDefinitionId kFreightCrateMapId{"map.raid.frontier_exchange"};
 inline const RaidSpaceDefinitionId kFreightCrateSpaceId{"raid_space.frontier_exchange.freight_service_bay"};
@@ -47,9 +56,14 @@ inline constexpr std::string_view kRaidFuelLootSlotId{"freight_manifest"};
         slotId == "hospital_service";
 }
 
+[[nodiscard]] inline bool supportsFuelExtractionContent(std::string_view version) noexcept
+{
+    return version == kFuelExtractionContentVersion || version == kArmorReadinessContentVersion;
+}
+
 [[nodiscard]] inline bool crossMapFreightCompatibleContent(std::string_view version) noexcept
 {
-    return version == kCrossMapFreightContentVersion || version == kFuelExtractionContentVersion;
+    return version == kCrossMapFreightContentVersion || supportsFuelExtractionContent(version);
 }
 
 [[nodiscard]] inline bool hospitalNightCompatibleContent(std::string_view version) noexcept

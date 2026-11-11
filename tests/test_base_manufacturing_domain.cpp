@@ -418,3 +418,160 @@ TEST(BaseManufacturingDomainTest,
     EXPECT_EQ(profile.baseManufacturing.activeOrder->completionWorldMinute,
               frozenCompletion);
 }
+
+TEST(BaseManufacturingDomainTest, ArmorResearchRequiresWorkshopEngineerAndStash)
+{
+    ProfileState profile = makeProfile();
+    const ContentRegistry &content = publishedContentRegistry();
+    const AssetInstanceId blueprint = addToStash(profile, kArmorRepairBlueprintId);
+    const auto query = [&]
+    {
+        return queryStartBaseManufacturing(
+            profile, content, StartBaseManufacturingCommand{kArmorRepairResearchId});
+    };
+
+    EXPECT_FALSE(query().canCommit);
+    profile.baseConstruction.workshopLevel = 2U;
+    profile.baseWorkforce.workshopWorker = BaseResidentProfession::General;
+    EXPECT_FALSE(query().canCommit);
+    profile.baseWorkforce.workshopWorker = BaseResidentProfession::Engineering;
+    const auto engineeringIndex =
+        static_cast<std::size_t>(BaseResidentProfession::Engineering);
+    profile.basePopulation.injuredByProfession[engineeringIndex] =
+        profile.basePopulation.professionResidents[engineeringIndex];
+    EXPECT_FALSE(query().canCommit);
+    profile.basePopulation.injuredByProfession[engineeringIndex] = 0U;
+
+    AssetRecord *asset = profile.assets.findMutable(blueprint);
+    const AssetLocation stashLocation = asset->location;
+    asset->location = StoredAssetLocation{ProfileContainerId::baseIntake(), {0, 0}};
+    EXPECT_EQ(query().error, DomainErrorCode::MissingAsset);
+    asset->location = stashLocation;
+    const auto before = profileStateFingerprint(profile);
+    const BaseManufacturingStartPlan plan = query();
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    ASSERT_EQ(plan.inputs.size(), 1U);
+    EXPECT_EQ(plan.inputs.front().assetId, blueprint);
+    EXPECT_EQ(plan.durationMinutes, 306U);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+
+    const BaseManufacturingStartPlan locked = queryStartBaseManufacturing(
+        profile, content, StartBaseManufacturingCommand{kArmorRepairRecipeId});
+    EXPECT_FALSE(locked.canCommit);
+    EXPECT_EQ(locked.message, "research the armor repair blueprint first");
+}
+
+TEST(BaseManufacturingDomainTest, ArmorResearchOccupiesSlotAndReturnsOriginalBlueprint)
+{
+    ProfileState profile = makeProfile();
+    const ContentRegistry &content = publishedContentRegistry();
+    profile.baseConstruction.workshopLevel = 2U;
+    const AssetInstanceId blueprint = addToStash(profile, kArmorRepairBlueprintId);
+    const AssetInstanceId spare = addToStash(profile, kArmorRepairBlueprintId);
+    addToStash(profile, ItemDefinitionId{"item.loot.scrap_parts"});
+    addToStash(profile, ItemDefinitionId{"item.loot.electronics"});
+    ASSERT_TRUE(startOrder(profile).succeeded);
+    const StartBaseManufacturingCommand research{kArmorRepairResearchId};
+    EXPECT_FALSE(queryStartBaseManufacturing(profile, content, research).canCommit);
+    ASSERT_TRUE(executeCancelBaseManufacturing(
+        profile, content, CommandContext{profile.revision, "cancel-production"}).succeeded);
+
+    const AssetInstanceId nextAsset = profile.assets.nextAssetId();
+    const CommandContext start{profile.revision, "begin-armor-research"};
+    const BaseManufacturingReceipt started = executeStartBaseManufacturing(
+        profile, content, research, start);
+    ASSERT_TRUE(started.succeeded) << started.message;
+    EXPECT_FALSE(started.outputAssetId.has_value());
+    EXPECT_EQ(profile.assets.nextAssetId(), nextAsset);
+    ASSERT_TRUE(profile.baseManufacturing.activeOrder.has_value());
+    EXPECT_EQ(profile.baseManufacturing.activeOrder->inputAssetIds,
+              (std::vector<AssetInstanceId>{blueprint}));
+    EXPECT_EQ(profile.assets.find(blueprint)->location,
+              AssetLocation{BaseServiceAssetLocation{started.jobId}});
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(
+        profile.assets.find(spare)->location));
+    EXPECT_TRUE(executeStartBaseManufacturing(profile, content, research, start)
+                    .alreadyCommitted);
+    EXPECT_FALSE(queryStartBaseManufacturing(
+        profile, content, StartBaseManufacturingCommand{kWeaponKitRecipe}).canCommit);
+    EXPECT_FALSE(queryCollectBaseManufacturing(profile, content).canCommit);
+
+    const std::vector<AssetInstanceId> filler = fillStash(profile);
+    ASSERT_FALSE(filler.empty());
+    static_cast<void>(advanceWorldClock(profile.worldClock, 1U));
+    const auto elapsed = profile.worldClock.elapsedWorldMinutes;
+    const auto before = profileStateFingerprint(profile);
+    EXPECT_EQ(executeCancelBaseManufacturing(
+        profile, content, CommandContext{profile.revision, "cancel-full"}).error,
+        DomainErrorCode::Capacity);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+    ASSERT_TRUE(profile.assets.erase(filler.front()));
+    const BaseManufacturingReceipt cancelled = executeCancelBaseManufacturing(
+        profile, content, CommandContext{profile.revision, "cancel-open"});
+    ASSERT_TRUE(cancelled.succeeded) << cancelled.message;
+    EXPECT_EQ(cancelled.jobId, started.jobId);
+    EXPECT_FALSE(profile.baseManufacturing.activeOrder.has_value());
+    EXPECT_FALSE(profile.baseManufacturing.armorRepairRecipeUnlocked);
+    EXPECT_EQ(profile.worldClock.elapsedWorldMinutes, elapsed);
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(
+        profile.assets.find(blueprint)->location));
+}
+
+TEST(BaseManufacturingDomainTest, ArmorResearchUnlocksOnceAndManufacturesRepairTool)
+{
+    ProfileState profile = makeProfile();
+    const ContentRegistry &content = publishedContentRegistry();
+    profile.baseConstruction.workshopLevel = 2U;
+    const AssetInstanceId blueprint = addToStash(profile, kArmorRepairBlueprintId);
+    const StartBaseManufacturingCommand research{kArmorRepairResearchId};
+    const BaseManufacturingReceipt started = executeStartBaseManufacturing(
+        profile, content, research, CommandContext{profile.revision, "armor-research"});
+    ASSERT_TRUE(started.succeeded) << started.message;
+    const auto duration = projectBaseManufacturing(profile).remainingMinutes;
+    ASSERT_GT(duration, 0U);
+    static_cast<void>(advanceWorldClock(profile.worldClock, duration - 1U));
+    EXPECT_FALSE(applyBaseManufacturingThrough(profile, content).completed);
+    static_cast<void>(advanceWorldClock(profile.worldClock, 1U));
+    const BaseManufacturingAdvanceResult result =
+        applyBaseManufacturingThrough(profile, content);
+    EXPECT_TRUE(result.completed);
+    EXPECT_TRUE(result.researchCompleted);
+    EXPECT_EQ(result.jobId, started.jobId);
+    EXPECT_FALSE(result.outputAssetId.has_value());
+    EXPECT_TRUE(profile.baseManufacturing.armorRepairRecipeUnlocked);
+    EXPECT_EQ(profile.assets.find(blueprint), nullptr);
+    EXPECT_FALSE(profile.baseManufacturing.activeOrder.has_value());
+    EXPECT_FALSE(applyBaseManufacturingThrough(profile, content).completed);
+    EXPECT_FALSE(queryStartBaseManufacturing(profile, content, research).canCommit);
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
+
+    const AssetInstanceId copper = addToStash(
+        profile, ItemDefinitionId{"item.loot.copper_wire_spool"});
+    const AssetInstanceId scrap = addToStash(
+        profile, ItemDefinitionId{"item.loot.scrap_parts"});
+    const StartBaseManufacturingCommand production{kArmorRepairRecipeId};
+    profile.baseWorkforce.workshopWorker = BaseResidentProfession::General;
+    EXPECT_FALSE(queryStartBaseManufacturing(profile, content, production).canCommit);
+    profile.baseWorkforce.workshopWorker = BaseResidentProfession::Engineering;
+    const BaseManufacturingStartPlan plan =
+        queryStartBaseManufacturing(profile, content, production);
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_EQ(plan.durationMinutes, 204U);
+    const BaseManufacturingReceipt produced = executeStartBaseManufacturing(
+        profile, content, production, CommandContext{profile.revision, "armor-tool"});
+    ASSERT_TRUE(produced.succeeded) << produced.message;
+    ASSERT_TRUE(produced.outputAssetId.has_value());
+    static_cast<void>(advanceWorldClock(profile.worldClock, plan.durationMinutes));
+    const BaseManufacturingAdvanceResult finished =
+        applyBaseManufacturingThrough(profile, content);
+    EXPECT_TRUE(finished.completed);
+    EXPECT_FALSE(finished.researchCompleted);
+    EXPECT_EQ(profile.assets.find(copper), nullptr);
+    EXPECT_EQ(profile.assets.find(scrap), nullptr);
+    const AssetRecord *output = profile.assets.find(*produced.outputAssetId);
+    ASSERT_NE(output, nullptr);
+    EXPECT_EQ(output->definitionId, ItemDefinitionId{"item.maintenance.armor_kit_basic"});
+    EXPECT_EQ(output->remainingCharges, content.item(output->definitionId).maximumCharges);
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(output->location));
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
+}

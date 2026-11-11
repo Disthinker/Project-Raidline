@@ -26,6 +26,7 @@
 #include "economy_domain.h"
 #include "raid_lifecycle.h"
 #include "raid_corpse_legacy_fixture.h"
+#include "raid_optics_legacy_fixture.h"
 #include "raid_credential_legacy_fixture.h"
 #include "raid_runner_legacy_fixture.h"
 #include "raid_map_generation.h"
@@ -2788,9 +2789,10 @@ TEST(SaveRepositoryTest,
     const std::uint64_t reserveStartedWorldMinute =
         profile.worldClock.elapsedWorldMinutes;
     ASSERT_TRUE(validateProfileState(profile, content).valid);
+    const ContentRegistry legacyLoot = contentBeforeArmorReadiness();
     ASSERT_TRUE(executeDeploy(
         profile,
-        content,
+        legacyLoot,
         DeployCommand{
             "save-v30-raid",
             "save-v30-settlement",
@@ -3899,7 +3901,7 @@ TEST(SaveRepositoryTest, Schema55RoundTripsIndependentPagesOverflowAndOwnedSubtr
     ASSERT_TRUE(validateProfileState(profile, content).valid);
     const auto text = serializeProfileEnvelope(profile, content.contentVersion());
     const auto envelope = nlohmann::json::parse(text);
-    EXPECT_EQ(envelope.at("schema_version"), 63U);
+    EXPECT_EQ(envelope.at("schema_version"), 64U);
     EXPECT_EQ(envelope.at("payload").at("stash_layout_version"), 1U);
     const auto loaded = deserializeProfileEnvelope(text, content);
     ASSERT_TRUE(loaded.profile) << loaded.message;

@@ -2434,6 +2434,7 @@ ContentRegistry ContentRegistry::fromJson(
             definition.durationMinutes = requiredPositiveUint(
                 recipeValue, "duration_minutes");
             if (!hasPrefix(definition.id.value(), "base_manufacturing.") ||
+                definition.id == kArmorRepairResearchId ||
                 definition.displayName.empty() ||
                 definition.workerCount > 1000U ||
                 definition.durationMinutes > 30U * 24U * 60U)
@@ -4301,12 +4302,12 @@ ContentRegistry ContentRegistry::fromJson(
                 if (bay == interiors.end() || bay->lootSlots.size() < 4U ||
                     bay->lootSlots[3].id != kFreightCrateSlotId)
                     fail("freight crate requires the fourth service bay Loot slot");
-                if (registry.contentVersion() == kFuelExtractionContentVersion &&
+                if (supportsFuelExtractionContent(registry.contentVersion()) &&
                     bay->lootSlots[2].id != kRaidFuelLootSlotId)
                     fail("extraction fuel requires the third service bay Loot slot");
             }
         }
-        if (registry.contentVersion() == kFuelExtractionContentVersion)
+        if (supportsFuelExtractionContent(registry.contentVersion()))
         {
             if (!registry.itemIndex_.contains(kRaidFuelCanId))
                 fail("fuel extraction requires a fuel can");
@@ -4331,6 +4332,40 @@ ContentRegistry ContentRegistry::fromJson(
                 std::any_of(registry.baseManufacturingRecipes_.begin(), registry.baseManufacturingRecipes_.end(),
                     [](const auto &recipe) { return recipe.outputItemDefinitionId == kRaidFuelCanId; }))
                 fail("extraction fuel requires its fixed field source");
+        }
+        if (registry.contentVersion() == kArmorReadinessContentVersion)
+        {
+            if (!registry.itemIndex_.contains(kArmorRepairBlueprintId) ||
+                !registry.baseManufacturingRecipeIndex_.contains(kArmorRepairRecipeId))
+                fail("armor repair research requires a blueprint and recipe");
+            const auto &blueprint = registry.item(kArmorRepairBlueprintId);
+            if (blueprint.category != ItemCategory::Loot || blueprint.inventoryWidthCells != 1 ||
+                blueprint.inventoryHeightCells != 1 || blueprint.maxStackSize != 1 ||
+                blueprint.marketBuyPrice || blueprint.marketRecyclePrice ||
+                blueprint.baseContribution || blueprint.baseConstructionMaterialValue)
+                fail("armor repair blueprint definition is invalid");
+
+            const auto inLootTable = [](const LootTableDefinition &table) {
+                return std::any_of(table.entries.begin(), table.entries.end(), [](const auto &entry) {
+                    return entry.itemDefinitionId == kArmorRepairBlueprintId;
+                });
+            };
+            const auto inMapGroundItems = [](const MapDefinition &map) {
+                return std::any_of(map.groundItems.begin(), map.groundItems.end(), [](const auto &item) {
+                    return item.itemDefinitionId == kArmorRepairBlueprintId;
+                });
+            };
+            if (std::any_of(registry.lootTables_.begin(), registry.lootTables_.end(), inLootTable) ||
+                std::any_of(registry.maps_.begin(), registry.maps_.end(), inMapGroundItems) ||
+                std::any_of(registry.baseManufacturingRecipes_.begin(), registry.baseManufacturingRecipes_.end(),
+                    [](const auto &recipe) { return recipe.outputItemDefinitionId == kArmorRepairBlueprintId; }))
+                fail("armor repair blueprint requires its fixed field source");
+
+            const auto &source = registry.map(kArmorRepairBlueprintMapId);
+            if ((source.proceduralOutdoor.enabled && source.proceduralOutdoor.layoutVersion >= 4U) ||
+                std::none_of(source.raidLootSlots.begin(), source.raidLootSlots.end(),
+                    [](const auto &slot) { return slot.route == "resource"; }))
+                fail("armor repair blueprint requires a selected resource Loot slot");
         }
         return registry;
     }

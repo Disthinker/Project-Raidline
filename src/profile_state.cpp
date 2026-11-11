@@ -292,7 +292,8 @@ std::size_t populatePublishedWarehouseCatalog(
         if (definition.definitionId.value() == "item.medical.bandage_roll_basic" ||
             definition.definitionId == kExpanding545AmmunitionId ||
             definition.definitionId == kFreightCrateKeyId ||
-            definition.definitionId == kRaidFuelCanId)
+            definition.definitionId == kRaidFuelCanId ||
+            definition.definitionId == kArmorRepairBlueprintId)
         {
             continue;
         }
@@ -2366,26 +2367,53 @@ ProfileValidationResult validateProfileState(
         claimedServiceAssetIds.insert(job.weaponAssetId);
     }
 
+    const bool armorReadinessContent =
+        content.contentVersion() == kArmorReadinessContentVersion;
+    if (profile.baseManufacturing.armorRepairRecipeUnlocked && !armorReadinessContent)
+    {
+        return {false, "Armor repair unlock requires compatible content"};
+    }
     if (profile.baseManufacturing.activeOrder.has_value())
     {
         const BaseManufacturingOrder &order =
             *profile.baseManufacturing.activeOrder;
+        const bool research = order.recipeDefinitionId == kArmorRepairResearchId;
+        const bool armorRepair = order.recipeDefinitionId == kArmorRepairRecipeId;
+        if ((research || armorRepair) &&
+            (!armorReadinessContent ||
+             profile.baseManufacturing.armorRepairRecipeUnlocked != armorRepair ||
+             order.workerProfession != BaseResidentProfession::Engineering ||
+             profile.baseConstruction.workshopLevel < 2U))
+        {
+            return {false, "Armor repair workshop order is invalid"};
+        }
         const BaseManufacturingRecipeDefinition *recipe{};
-        try
+        if (!research)
         {
-            recipe = &content.baseManufacturingRecipe(
-                order.recipeDefinitionId);
+            try
+            {
+                recipe = &content.baseManufacturingRecipe(order.recipeDefinitionId);
+            }
+            catch (...)
+            {
+                return {false, "Base manufacturing recipe is unknown"};
+            }
         }
-        catch (...)
+        const std::uint32_t baseDuration =
+            research ? kArmorRepairResearchDurationMinutes : recipe->durationMinutes;
+        const std::uint32_t workerCount = research ? 1U : recipe->workerCount;
+        std::set<ItemDefinitionId> expectedInputDefinitions;
+        if (research)
         {
-            return {false, "Base manufacturing recipe is unknown"};
+            expectedInputDefinitions.insert(kArmorRepairBlueprintId);
         }
-        const AssetRecord *output = profile.assets.find(order.outputAssetId);
-        const ItemDefinition &outputDefinition = content.item(
-            recipe->outputItemDefinitionId);
-        const auto *outputService = output != nullptr
-            ? std::get_if<BaseServiceAssetLocation>(&output->location)
-            : nullptr;
+        else
+        {
+            for (const BaseManufacturingInputDefinition &input : recipe->inputs)
+            {
+                expectedInputDefinitions.insert(input.itemDefinitionId);
+            }
+        }
         const std::uint64_t frozenDuration =
             order.completionWorldMinute - order.startedWorldMinute;
         const std::optional<std::uint64_t> workshopReserveStarted =
@@ -2400,10 +2428,11 @@ ProfileValidationResult validateProfileState(
         {
             const std::uint32_t moraleDuration =
                 applyBaseMoraleDurationPercent(
-                    recipe->durationMinutes,
+                    baseDuration,
                     tier,
                     content.baseMorale());
-            for (std::uint32_t facilityLevel : {1U, 2U})
+            for (std::uint32_t facilityLevel = research || armorRepair ? 2U : 1U;
+                 facilityLevel <= 2U; ++facilityLevel)
             {
                 const std::uint32_t staffedDuration =
                     applyBaseFacilityTaskDuration(
@@ -2434,12 +2463,12 @@ ProfileValidationResult validateProfileState(
                 profile.worldClock.elapsedWorldMinutes &&
             publishedDuration;
         const bool phaseValid = order.outputReady
-            ? order.committedWorkers == 0U &&
+            ? !research && order.committedWorkers == 0U &&
                 order.inputAssetIds.empty() &&
                 order.completionWorldMinute <=
                     profile.worldClock.elapsedWorldMinutes
-            : order.committedWorkers == recipe->workerCount &&
-                order.inputAssetIds.size() == recipe->inputs.size() &&
+            : order.committedWorkers == workerCount &&
+                order.inputAssetIds.size() == expectedInputDefinitions.size() &&
                 (order.completionWorldMinute >
                      workshopReserveStarted.value_or(
                          profile.worldClock.elapsedWorldMinutes) ||
@@ -2449,21 +2478,35 @@ ProfileValidationResult validateProfileState(
             !baseFacilityAcceptsProfession(
                 BaseFacilityStaffingKind::Workshop,
                 order.workerProfession) ||
-            !timingValid || !phaseValid || output == nullptr ||
-            outputService == nullptr ||
-            outputService->jobId != order.jobId ||
-            output->definitionId != recipe->outputItemDefinitionId ||
-            output->quantity != recipe->outputQuantity ||
-            (outputDefinition.medicalUse.has_value() &&
-             output->remainingCharges != outputDefinition.maximumCharges) ||
-            !claimedServiceAssetIds.insert(order.outputAssetId).second)
+            !timingValid || !phaseValid)
         {
             return {false, "Base manufacturing order is invalid"};
         }
-        std::set<ItemDefinitionId> expectedInputDefinitions;
-        for (const BaseManufacturingInputDefinition &input : recipe->inputs)
+        if (research)
         {
-            expectedInputDefinitions.insert(input.itemDefinitionId);
+            if (order.outputAssetId != 0U)
+            {
+                return {false, "Armor repair research cannot reserve an output"};
+            }
+        }
+        else
+        {
+            const AssetRecord *output = profile.assets.find(order.outputAssetId);
+            const ItemDefinition &outputDefinition = content.item(
+                recipe->outputItemDefinitionId);
+            const auto *outputService = output != nullptr
+                ? std::get_if<BaseServiceAssetLocation>(&output->location)
+                : nullptr;
+            if (outputService == nullptr ||
+                outputService->jobId != order.jobId ||
+                output->definitionId != recipe->outputItemDefinitionId ||
+                output->quantity != recipe->outputQuantity ||
+                ((outputDefinition.medicalUse.has_value() || armorRepair) &&
+                 output->remainingCharges != outputDefinition.maximumCharges) ||
+                !claimedServiceAssetIds.insert(order.outputAssetId).second)
+            {
+                return {false, "Base manufacturing output is invalid"};
+            }
         }
         for (AssetInstanceId inputId : order.inputAssetIds)
         {
@@ -4203,13 +4246,18 @@ ProfileValidationResult validateProfileState(
         bool foundSealedCrateLoot{};
         bool foundFuelLoot{};
         std::optional<std::uint32_t> firstSelectedFreightKeySlot;
+        std::optional<std::uint32_t> firstSelectedBlueprintResourceSlot;
+        std::optional<std::uint32_t> blueprintSlot;
+        const bool blueprintRaid = armorReadinessContent &&
+            raid.mapDefinitionId == kArmorRepairBlueprintMapId &&
+            !resourceEcologyRules && regionalMissionCount == 0U;
         if ((raid.freightKeyLootSlotId &&
              (raid.mapDefinitionId != kFreightKeySourceMapId || resourceEcologyRules || regionalMissionCount != 0U)) ||
             (raid.sealedFreightCrate &&
              (raid.mapDefinitionId != kFreightCrateMapId || regionalMissionCount != 0U)))
             return {false, "pending Raid freight snapshot is outside ordinary activity"};
         if (raid.fuelExtractionLootAssetId &&
-            (content.contentVersion() != kFuelExtractionContentVersion ||
+            (!supportsFuelExtractionContent(content.contentVersion()) ||
              raid.mapDefinitionId != kFreightCrateMapId || regionalMissionCount != 0U ||
              !raid.sealedFreightCrate))
             return {false, "pending Raid fuel extraction is outside ordinary Frontier activity"};
@@ -4258,6 +4306,13 @@ ProfileValidationResult validateProfileState(
                     : loot.slotIndex < regularSlotCount;
                 if (validSlot)
                 {
+                    if (blueprintRaid && !loot.requiresHighRisk &&
+                        raidMap->raidLootSlots[loot.slotIndex].route == "resource" &&
+                        (!firstSelectedBlueprintResourceSlot ||
+                         loot.slotIndex < *firstSelectedBlueprintResourceSlot))
+                    {
+                        firstSelectedBlueprintResourceSlot = loot.slotIndex;
+                    }
                     if (raid.freightKeyLootSlotId && !loot.requiresHighRisk)
                     {
                         const auto &slot = raidMap->raidLootSlots[loot.slotIndex];
@@ -4497,6 +4552,14 @@ ProfileValidationResult validateProfileState(
             {
                 return {false, "legacy Raid Loot has resource point metadata"};
             }
+            if (loot.definitionId == kArmorRepairBlueprintId && recoveryRoot == nullptr)
+            {
+                if (!blueprintRaid || blueprintSlot || loot.quantity != 1U ||
+                    loot.requiresHighRisk || loot.sceneContainerAssetId ||
+                    loot.spaceId != outdoorRaidSpaceId())
+                    return {false, "pending Raid armor repair blueprint is invalid"};
+                blueprintSlot = loot.slotIndex;
+            }
             if (loot.definitionId == kFixedRaidOpticId &&
                 !fixedResourceOptic && recoveryRoot == nullptr)
                 return {false, "pending Raid optic is outside its fixed loot slot"};
@@ -4545,6 +4608,8 @@ ProfileValidationResult validateProfileState(
             return {false, "pending Raid sealed freight Loot is missing"};
         if (raid.fuelExtractionLootAssetId && !foundFuelLoot)
             return {false, "pending Raid extraction fuel Loot is missing"};
+        if (blueprintSlot && blueprintSlot != firstSelectedBlueprintResourceSlot)
+            return {false, "pending Raid armor repair blueprint is outside its selected resource slot"};
         for (AssetInstanceId groundAssetId : groundAssetIds)
         {
             if (!snapshotLoot.contains(groundAssetId))
@@ -5209,6 +5274,10 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             treatment.patientProfession));
         hashInteger(hash, static_cast<std::uint32_t>(
             treatment.workerProfession));
+    }
+    if (profile.baseManufacturing.armorRepairRecipeUnlocked)
+    {
+        hashBytes(hash, kArmorRepairRecipeId.value());
     }
     if (profile.baseManufacturing.activeOrder.has_value())
     {

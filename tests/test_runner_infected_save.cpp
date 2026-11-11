@@ -205,6 +205,7 @@ TEST(RunnerInfectedSaveTest, NewTypesAndNewRuleCannotBeDowngradedToSchema57)
     auto profile = deployed(contentBeforeOptics());
     // Isolate the runner rejection; freight metadata must not fail first.
     auto json = Json::parse(serializeProfileEnvelope(profile, content.contentVersion()));
+    const auto currentVersion = json.at("schema_version").get<std::uint64_t>();
     EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, content.contentVersion(), 57)), std::invalid_argument);
     EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, oldContent, 58)), std::invalid_argument);
     for (auto &enemy : profile.pendingRaid->enemies) enemy.variant.reset();
@@ -214,7 +215,7 @@ TEST(RunnerInfectedSaveTest, NewTypesAndNewRuleCannotBeDowngradedToSchema57)
     EXPECT_FALSE(deserializeProfileEnvelope(checkedEnvelope(json), content).profile);
     json["schema_version"] = 58U;
     EXPECT_FALSE(deserializeProfileEnvelope(checkedEnvelope(json), content).profile);
-    for (const auto version : {64ULL, 4294967354ULL})
+    for (const auto version : {currentVersion + 1U, std::uint64_t{4294967354ULL}})
     {
         json = Json::parse(serializeProfileEnvelope(deployed(), content.contentVersion()));
         json["schema_version"] = version;

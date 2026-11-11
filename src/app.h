@@ -145,6 +145,7 @@ enum class BaseOperationNoticeKind
 {
     FacilityUpgrade,
     Manufacturing,
+    ArmorRepairResearch,
     ResidentTreatment,
 };
 

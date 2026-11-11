@@ -174,7 +174,7 @@ TEST(WeaponSuppressorSaveTest, Content70UpgradeKeepsBothSourcesImmutableAcrossRo
     EXPECT_EQ(readBytes(archivePath(temporary.path(), false, primary)), primary);
     EXPECT_EQ(readBytes(archivePath(temporary.path(), true, backup)), backup);
     const auto current = nlohmann::json::parse(readBytes(repository.primaryPath()));
-    EXPECT_EQ(current.at("schema_version"), 63U);
+    EXPECT_EQ(current.at("schema_version"), 64U);
     EXPECT_EQ(current.at("content_version"), content.contentVersion());
 }
 

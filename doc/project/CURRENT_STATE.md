@@ -1,11 +1,23 @@
-# 当前 · 边境交换站燃油撤离与携装取舍 v1 已验收，正在交付
+# 当前 · 工坊蓝图研究与防具整备 v1 已验收，正在交付
+
+从灰烬工场带回蓝图，在基地研究和制造防具维修工具，再带进下一场对局。 [具体开发方案](../exec-plans/active/base-research-armor-readiness-v1.md)
+
+- task_id `base-research-armor-readiness-v1`，plan_version `RL-BASE-RESEARCH-ARMOR-READINESS-v1`，state `accepted_delivering`。approval_source 为 2026-11-11 用户对 RL-BASE-RESEARCH-ARMOR-READINESS-v1 明确回复“批准”。candidate_id `RL-BASE-RESEARCH-ARMOR-READINESS-v1-local-1caaec01cc66`。accepted_candidate_id `RL-BASE-RESEARCH-ARMOR-READINESS-v1-local-1caaec01cc66`。acceptance_source 为 2026-11-11 用户明确回复“工坊蓝图研究与防具整备 v1 验收通过，请完成提交、推送和合并。”2026-11-11 用户要求主线 CI 通过后协调策划，给出更大步长的具体方案，确认后实施。
+- 基线 `origin/main@adacf3830c879609a6227aeef46273d3008b0e72`。燃油撤离 PR #205 已合并，Windows 和 Ubuntu 各 3201/3201，13 项 3ms 检查通过。 [主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42957445265)
+- 原策划线程 `019feff4-477c-75c2-bf31-3f09ff1e3891` 已回复 `MAIN-NEXT-STAGE-20261111-AFTER-FUEL-01`，协调任务 `raid-next-stage-after-fuel`，协议 `RL-NEXT-STAGE-REQUEST-v1`，回复基线一致，状态 `proposal_ready_awaiting_human_approval`。隔离工作树 E:\WorkPlace\Projects\C\Project Raidline-base-research-armor-readiness-v1，分支 `codex/base-research-armor-readiness-v1`。
+- 固定入口已更新。Windows 全量 3212/3212，原 13 项 3ms 检查通过。玩家旧档副本迁移回读一致。[联合验收](../acceptance/base-research-armor-readiness-v1.md)
+
+---
+
+# 当前 · 边境交换站燃油撤离与携装取舍 v1 已验收并合并
 
 在边境交换站搜油，带回基地备装，或在高危用一桶油完成重装撤离。[具体开发方案](../exec-plans/active/raid-fuel-extraction-loop-v1.md)
 
-- task_id `raid-fuel-extraction-loop-v1`，plan_version `RL-RAID-FUEL-EXTRACTION-LOOP-v1`，state `accepted_delivering`。approval_source 为 2026-11-11 用户明确回复“确认该方案，请你按照方案进行开发”，对应 RL-RAID-FUEL-EXTRACTION-LOOP-v1。candidate_id `RL-RAID-FUEL-EXTRACTION-LOOP-v1-local-c4ebdc1427f9`。accepted_candidate_id `RL-RAID-FUEL-EXTRACTION-LOOP-v1-local-c4ebdc1427f9`。acceptance_source 为 2026-11-11 用户明确回复“验收通过，请提交合并”，对应燃油撤离 v1。
+- task_id `raid-fuel-extraction-loop-v1`，plan_version `RL-RAID-FUEL-EXTRACTION-LOOP-v1`，state `merged`。approval_source 为 2026-11-11 用户明确回复“确认该方案，请你按照方案进行开发”，对应 RL-RAID-FUEL-EXTRACTION-LOOP-v1。candidate_id `RL-RAID-FUEL-EXTRACTION-LOOP-v1-local-c4ebdc1427f9`。accepted_candidate_id `RL-RAID-FUEL-EXTRACTION-LOOP-v1-local-c4ebdc1427f9`。acceptance_source 为 2026-11-11 用户明确回复“验收通过，请提交合并”，对应燃油撤离 v1。
 - 基线 `origin/main@ac2c7a58d1a2ef0b08639a5c356ee603f631acd0`，PR #204 已验收合并。[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42809233105) 双平台各 3187/3187，13 项 3ms 检查通过。
 - 原策划线程已回复 `MAIN-NEXT-STAGE-20261111-AFTER-FREIGHT-01`，协调任务 `raid-next-stage-after-freight`，协议 `RL-NEXT-STAGE-REQUEST-v1`，基线一致。2026-11-11 用户要求给出更大步长的方案，确认后实施。
 - 固定入口已更新。Windows 3201/3201，3ms 检查 13/13。[联合验收](../acceptance/raid-fuel-extraction-loop-v1.md)
+- 提交 `1a2aee8` 已推送。[PR #205](https://github.com/Disthinker/Project-Raidline/pull/205) 已合入 `main@adacf38`。[PR 双平台 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42953113733) 各 3201/3201，13 项 3ms 检查通过。 [合并后主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42957445265) 双平台各 3201/3201，13 项 3ms 检查通过。
 
 ---
 

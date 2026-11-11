@@ -18,6 +18,7 @@
 #include "base_morale_domain.h"
 #include "base_resource_domain.h"
 #include "base_siege_domain.h"
+#include "economy_domain.h"
 #include "raid_lifecycle.h"
 #include "raid_corpse_legacy_fixture.h"
 #include "raid_credential_legacy_fixture.h"
@@ -904,6 +905,8 @@ TEST(RaidLifecycleTest,
         CommandContext{profile.revision, "deploy:base-site-clearance"});
     ASSERT_TRUE(deployed.succeeded) << deployed.message;
     ASSERT_TRUE(profile.pendingRaid->baseSiteClearance.has_value());
+    EXPECT_TRUE(std::none_of(profile.pendingRaid->loot.begin(), profile.pendingRaid->loot.end(),
+        [](const auto &loot) { return loot.definitionId == kArmorRepairBlueprintId; }));
     EXPECT_EQ(
         profile.pendingRaid->rulesVersion,
         "procedural-playable-outdoor-layout-21");
@@ -2377,4 +2380,166 @@ TEST(RaidLifecycleTest, LegacyUnassignedReturnsDoNotBlockDeploy)
         assetsInContainer(
             profile, ProfileContainerId::baseIntake()).size(),
         1U);
+}
+
+TEST(RaidLifecycleTest, ArmorBlueprintOnlyReplacesFirstSelectedResourceRoll)
+{
+    const auto &content = publishedContentRegistry();
+    const auto previous = contentBeforeArmorReadiness();
+    const auto &map = content.map(kArmorRepairBlueprintMapId);
+    for (const auto seed : {1U, 3U, 6U, 10U, 17U, 24U, 33U, 128U})
+    {
+        SCOPED_TRACE(seed);
+        auto old = makeNewAlphaProfile("armor-blueprint-seed", previous);
+        auto current = makeNewAlphaProfile("armor-blueprint-seed", content);
+        const DeployCommand command{"armor-blueprint-raid", "armor-blueprint-return", seed, map.id};
+        const auto oldResult = executeDeploy(old, previous, command, {old.revision, "armor-old-deploy"});
+        const auto result = executeDeploy(current, content, command, {current.revision, "armor-deploy"});
+        ASSERT_TRUE(oldResult.succeeded) << oldResult.message;
+        ASSERT_TRUE(result.succeeded) << result.message;
+        const auto &oldRaid = *old.pendingRaid;
+        const auto &raid = *current.pendingRaid;
+        EXPECT_TRUE(validateProfileState(old, content).valid);
+        EXPECT_EQ(raid.spatialLayout, oldRaid.spatialLayout);
+        EXPECT_EQ(raid.enemies, oldRaid.enemies);
+        EXPECT_EQ(current.assets.nextAssetId(), old.assets.nextAssetId());
+        auto expected = oldRaid.loot;
+        const auto source = std::find_if(expected.begin(), expected.end(), [&](const auto &loot) {
+            return loot.slotIndex < map.raidLootSlots.size() &&
+                map.raidLootSlots[loot.slotIndex].route == "resource";
+        });
+        ASSERT_NE(source, expected.end());
+        source->definitionId = kArmorRepairBlueprintId;
+        source->quantity = 1U;
+        EXPECT_EQ(raid.loot, expected);
+    }
+}
+
+TEST(RaidLifecycleTest, ArmorBlueprintUsesOrdinaryRollsWhenRecoverableResearchingOrUnlocked)
+{
+    const auto &content = publishedContentRegistry();
+    const auto previous = contentBeforeArmorReadiness();
+    const auto &blueprint = content.item(kArmorRepairBlueprintId);
+    auto control = makeNewAlphaProfile("armor-blueprint-availability", previous);
+    const DeployCommand command{
+        "armor-blueprint-raid", "armor-blueprint-return", 371U, kArmorRepairBlueprintMapId};
+    const auto controlResult = executeDeploy(
+        control, previous, command, {control.revision, "armor-control-deploy"});
+    ASSERT_TRUE(controlResult.succeeded) << controlResult.message;
+
+    for (const auto state : {"stash", "carried", "ground", "crate", "researching", "unlocked"})
+    {
+        SCOPED_TRACE(state);
+        auto profile = makeNewAlphaProfile("armor-blueprint-availability", content);
+        const std::string_view mode{state};
+        const auto site = profile.regionalOperations.technologyCore.baseSiteDefinitionId;
+        const auto addStoredBlueprint = [&](ProfileContainerId container) {
+            const auto fit = findFirstProfileFit(
+                profile, content, container, blueprint, ItemOrientation::Degrees0);
+            EXPECT_TRUE(fit);
+            if (fit)
+                profile.assets.create(blueprint, StoredAssetLocation{container, *fit});
+        };
+
+        if (mode == "stash" || mode == "researching")
+            addStoredBlueprint(ProfileContainerId::stash());
+        if (mode == "researching")
+        {
+            profile.baseConstruction.workshopLevel = 2U;
+            const auto started = executeStartBaseManufacturing(
+                profile, content, {kArmorRepairResearchId}, {profile.revision, "armor-research"});
+            ASSERT_TRUE(started.succeeded) << started.message;
+        }
+        if (mode == "carried")
+        {
+            const auto bag = profile.assets.create(
+                content.item(alpha_content::backpack), EquippedAssetLocation{EquipmentSlotKind::Backpack});
+            addStoredBlueprint(ProfileContainerId::compartment(bag, 0));
+        }
+        if (mode == "ground")
+            profile.assets.create(blueprint, BaseGroundAssetLocation{site, {1000.0F, 1000.0F}});
+        if (mode == "crate")
+        {
+            const auto crate = profile.assets.create(
+                content.item(ItemDefinitionId{"item.container.base_storage_crate"}),
+                BaseGroundAssetLocation{site, {1000.0F, 1000.0F}});
+            addStoredBlueprint(ProfileContainerId::compartment(crate, 0));
+        }
+        if (mode == "unlocked")
+            profile.baseManufacturing.armorRepairRecipeUnlocked = true;
+
+        const auto result = executeDeploy(
+            profile, content, command, {profile.revision, "armor-availability-deploy"});
+        ASSERT_TRUE(result.succeeded) << result.message;
+        const auto &loot = profile.pendingRaid->loot;
+        ASSERT_EQ(loot.size(), control.pendingRaid->loot.size());
+        for (std::size_t index = 0; index < loot.size(); ++index)
+        {
+            auto expected = control.pendingRaid->loot[index];
+            expected.assetId = loot[index].assetId;
+            EXPECT_EQ(loot[index], expected);
+        }
+    }
+}
+
+TEST(RaidLifecycleTest, ArmorBlueprintCanBeFoundAgainAfterDeath)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("armor-blueprint-loss", content);
+    equipAlphaLoadout(profile);
+    const auto first = deploy(profile, 161U, kArmorRepairBlueprintMapId);
+    ASSERT_TRUE(first.succeeded) << first.message;
+    const auto &loot = profile.pendingRaid->loot;
+    const auto drop = std::find_if(loot.begin(), loot.end(),
+        [](const auto &entry) { return entry.definitionId == kArmorRepairBlueprintId; });
+    ASSERT_NE(drop, loot.end());
+    const auto lostId = drop->assetId;
+    const auto picked = pickupObservedRaidLoot(
+        profile, content, lostId, {profile.revision, "armor-pickup"});
+    ASSERT_TRUE(picked.succeeded) << picked.message;
+    const auto dead = settlePendingRaid(
+        profile, content, "settlement-alpha-test", RaidResultOutcome::PlayerDead);
+    ASSERT_TRUE(dead.succeeded) << dead.message;
+    ASSERT_TRUE(profile.lastRaidResult->lostRaidRecordId);
+    ASSERT_NE(profile.assets.find(lostId), nullptr);
+    EXPECT_FALSE(assetIsBaseAccessible(profile, lostId));
+
+    auto recovery = profile;
+    const auto recoveryResult = executeDeploy(recovery, content,
+        {"armor-recovery", "armor-recovery-return", 161U, kArmorRepairBlueprintMapId, {},
+            profile.lastRaidResult->lostRaidRecordId},
+        {recovery.revision, "armor-self-recovery"});
+    ASSERT_TRUE(recoveryResult.succeeded) << recoveryResult.message;
+    EXPECT_TRUE(std::none_of(recovery.pendingRaid->loot.begin(), recovery.pendingRaid->loot.end(),
+        [](const auto &entry) { return entry.definitionId == kArmorRepairBlueprintId; }));
+
+    const auto next = executeDeploy(profile, content,
+        {"armor-next-raid", "armor-next-return", 161U, kArmorRepairBlueprintMapId},
+        {profile.revision, "armor-next-deploy"});
+    ASSERT_TRUE(next.succeeded) << next.message;
+    const auto &nextLoot = profile.pendingRaid->loot;
+    const auto replacement = std::find_if(nextLoot.begin(), nextLoot.end(),
+        [](const auto &entry) { return entry.definitionId == kArmorRepairBlueprintId; });
+    ASSERT_NE(replacement, nextLoot.end());
+    EXPECT_NE(replacement->assetId, lostId);
+}
+
+TEST(RaidLifecycleTest, ArmorBlueprintIsExcludedFromCatalogGrantsAndTrade)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewPublishedProfile("armor-blueprint-catalog", content);
+    ASSERT_TRUE(grantDeveloperWarehouseCatalog(profile, content).succeeded);
+    EXPECT_EQ(firstAsset(profile, kArmorRepairBlueprintId), 0U);
+    auto fresh = makeNewAlphaProfile("armor-blueprint-trade", content);
+    const auto &blueprint = content.item(kArmorRepairBlueprintId);
+    const auto stash = ProfileContainerId::stash();
+    const auto fit = findFirstProfileFit(fresh, content, stash, blueprint, ItemOrientation::Degrees0);
+    ASSERT_TRUE(fit);
+    const auto asset = fresh.assets.create(blueprint, StoredAssetLocation{stash, *fit});
+    const auto fingerprint = profileStateFingerprint(fresh);
+    EXPECT_FALSE(executeEconomy(fresh, content, PurchaseCommand{kArmorRepairBlueprintId},
+        {fresh.revision, "armor-buy-blueprint"}).succeeded);
+    EXPECT_FALSE(executeEconomy(fresh, content, RecycleCommand{asset},
+        {fresh.revision, "armor-recycle-blueprint"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(fresh), fingerprint);
 }
