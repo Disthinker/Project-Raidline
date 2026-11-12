@@ -5,6 +5,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <string>
 #include <vector>
 
 inline constexpr float kRaidSightGeometryEpsilon{0.001F};
@@ -14,6 +16,29 @@ enum class RaidLightEnvironment
     DayOutdoor,
     NightOutdoor,
     WeakIndoor
+};
+
+struct RaidIlluminationCoverage;
+class RaidIlluminatedObservation;
+
+struct RaidIlluminationObservationKey
+{
+    std::shared_ptr<const RaidIlluminationCoverage> source;
+    Vec2 lensCenter{};
+    float lensRadius{};
+
+    [[nodiscard]] bool insideLens(Vec2 point) const noexcept
+    {
+        const float dx = point.x - lensCenter.x, dy = point.y - lensCenter.y;
+        return lensRadius <= 0 || dx * dx + dy * dy < lensRadius * lensRadius;
+    }
+
+    friend bool operator==(const RaidIlluminationObservationKey &a,
+                           const RaidIlluminationObservationKey &b) noexcept
+    {
+        return a.source == b.source && a.lensCenter.x == b.lensCenter.x &&
+            a.lensCenter.y == b.lensCenter.y && a.lensRadius == b.lensRadius;
+    }
 };
 
 struct RaidObservationKey
@@ -28,6 +53,7 @@ struct RaidObservationKey
     std::uint64_t geometryRevision{1};
     std::uint64_t lightAssetId{}, lightBatteryId{};
     float lightAngleDegrees{}, lightDistance{};
+    RaidIlluminationObservationKey illumination{};
 
     friend bool operator==(const RaidObservationKey &a,
                            const RaidObservationKey &b)
@@ -39,7 +65,8 @@ struct RaidObservationKey
                a.maximumDistance == b.maximumDistance &&
                a.environment == b.environment &&
                a.geometryRevision == b.geometryRevision && a.lightAssetId == b.lightAssetId && a.lightBatteryId == b.lightBatteryId &&
-               a.lightAngleDegrees == b.lightAngleDegrees && a.lightDistance == b.lightDistance;
+               a.lightAngleDegrees == b.lightAngleDegrees && a.lightDistance == b.lightDistance &&
+               a.illumination == b.illumination;
     }
 };
 
@@ -70,6 +97,8 @@ struct RaidVisibilityProjection
     RaidLightEnvironment environment{RaidLightEnvironment::WeakIndoor};
     std::uint64_t lightAssetId{}, lightBatteryId{};
     float lightAngleDegrees{}, lightDistance{};
+    RaidIlluminationObservationKey illuminationKey{};
+    std::shared_ptr<const RaidIlluminatedObservation> illumination;
 
     [[nodiscard]] RaidObservationKey key() const;
     // Cache comparison only. Commands must use matches(), which validates
@@ -96,8 +125,10 @@ class RaidVisibilityBoundsQuery
     RaidVisibilityBoundsQuery() = default;
     explicit RaidVisibilityBoundsQuery(const RaidVisibilityProjection &);
     [[nodiscard]] bool boundsVisible(Rect) const noexcept;
+    [[nodiscard]] bool pointVisible(Vec2) const noexcept;
 
   private:
+    [[nodiscard]] bool ordinaryBoundsVisible(Rect) const noexcept;
     struct Edge
     {
         Vec2 origin, delta;
@@ -122,6 +153,33 @@ class RaidVisibilityBoundsQuery
     std::vector<Triangle> triangles_;
     // Contiguous ranges and owned bounds remain valid after copy/move.
     std::vector<TriangleGroup> triangleGroups_;
+    std::shared_ptr<const RaidIlluminatedObservation> illumination_;
+};
+
+struct RaidIlluminationCoverage
+{
+    std::string effectIdentity;
+    std::array<RaidVisibilityProjection, 2> fans;
+    std::array<RaidVisibilityBoundsQuery, 2> queries;
+};
+
+class RaidIlluminatedObservation
+{
+public:
+    RaidIlluminatedObservation(RaidVisibilityProjection observer,
+                               RaidIlluminationObservationKey light);
+
+    // A single witness point must pass both independently occluded views.
+    [[nodiscard]] bool pointVisible(Vec2) const noexcept;
+    [[nodiscard]] const RaidIlluminationObservationKey &key() const noexcept
+    { return key_; }
+
+    const RaidVisibilityProjection observer;
+    const std::shared_ptr<const RaidIlluminationCoverage> source;
+
+private:
+    RaidIlluminationObservationKey key_;
+    RaidVisibilityBoundsQuery observerQuery_;
 };
 
 [[nodiscard]] bool raidSightSegmentIntersectsRectInterior(Vec2, Vec2,

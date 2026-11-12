@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "base-research-armor-readiness-content-80",
+  "content_version": "raid-thrown-illumination-content-81",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -300,6 +300,17 @@
         "output": {"item": "item.maintenance.armor_kit_basic", "quantity": 1},
         "worker_count": 1,
         "duration_minutes": 240
+      },
+      {
+        "id": "base_manufacturing.field_flare",
+        "display_name": "Field Flare",
+        "inputs": [
+          {"item": "item.loot.copper_wire_spool", "quantity": 1},
+          {"item": "item.loot.electronics", "quantity": 1}
+        ],
+        "output": {"item": "item.throwable.field_flare", "quantity": 2},
+        "worker_count": 1,
+        "duration_minutes": 90
       }
     ]
   },
@@ -1878,6 +1889,24 @@
       },
       "inventory_texture": "items/inventory/unpublished_precision_components.png",
       "world_texture": "items/world/unpublished_precision_components.png"
+    },
+    {
+      "id": "item.throwable.field_flare",
+      "display_name": "Field Flare",
+      "category": "throwable",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 2,
+      "unit_weight_grams": 180,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 24, "y": 24}, "pickup_size": {"x": 24, "y": 24}},
+      "thrown_illumination_use": {
+        "range": 450,
+        "flight_seconds": 0.35,
+        "radius": 300,
+        "duration_seconds": 20
+      },
+      "inventory_texture": "items/inventory/unpublished_component.png",
+      "world_texture": "items/world/unpublished_component.png"
     },
     {
       "id": "item.throwable.frag_grenade_basic",

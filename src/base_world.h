@@ -20,6 +20,7 @@
 #include "world_shooting_runtime.h"
 #include "world_melee_runtime.h"
 #include "raid_grenade_runtime.h"
+#include "thrown_illumination_runtime.h"
 #include "raid_noise_decoy_runtime.h"
 #include "raid_visibility.h"
 #include "grenade_explosion_plan.h"
@@ -116,8 +117,16 @@ public:
         float angle, float distance, float backgroundRadius) noexcept;
     [[nodiscard]] float weaponLightBackgroundRadius() const noexcept { return lightBackgroundRadius_; }
     [[nodiscard]] const std::array<RaidVisibilityProjection, 2> &weaponLightBackgroundObservations() const;
+    [[nodiscard]] const std::array<RaidVisibilityProjection, 2> &
+        thrownIlluminationBackgroundObservations() const;
+    // The current Base device policy has no powered night-vision output.
+    [[nodiscard]] float thrownIlluminationGlareSeconds() const noexcept { return 0.0F; }
     [[nodiscard]] const RaidNoiseDecoyRuntime &noiseDecoy() const noexcept { return noiseDecoy_; }
     [[nodiscard]] const RaidGrenadeRuntime &grenade() const noexcept { return grenade_; }
+    [[nodiscard]] const ThrownIlluminationRuntime &thrownIllumination() const noexcept { return thrownIllumination_; }
+    [[nodiscard]] std::optional<ThrownIlluminationLanding> previewThrownIllumination(
+        Vec2, const ThrownIlluminationUseDefinition &) const;
+    void commitThrownIllumination(ThrownIlluminationRuntime prepared) noexcept { thrownIllumination_ = std::move(prepared); }
     [[nodiscard]] std::optional<NoiseDecoyLanding> previewNoiseDecoy(Vec2, const NoiseDecoyUseDefinition &) const;
     [[nodiscard]] std::optional<GrenadeLanding> previewGrenade(Vec2, const GrenadeUseDefinition &) const;
     void commitNoiseDecoy(RaidNoiseDecoyRuntime prepared) noexcept { noiseDecoy_ = std::move(prepared); }
@@ -239,6 +248,7 @@ private:
     float playerControlRemaining_{}, playerImpactSlowRemaining_{};
     RaidNoiseDecoyRuntime noiseDecoy_;
     RaidGrenadeRuntime grenade_;
+    ThrownIlluminationRuntime thrownIllumination_;
     std::optional<GrenadeExplosion> lastGrenadeExplosion_;
     bool grenadeExplodedLastUpdate_{};
     float grenadeFlashSeconds_{};
@@ -248,6 +258,9 @@ private:
     Vec2 observationDirection_{-1, 0};
     mutable RaidVisibilityProjection observationCache_;
     mutable std::array<RaidVisibilityProjection, 2> lightBackgroundCache_;
+    mutable std::shared_ptr<const RaidIlluminationCoverage> thrownIlluminationCoverage_;
+    [[nodiscard]] const std::shared_ptr<const RaidIlluminationCoverage> &
+        activeThrownIlluminationCoverage() const;
     mutable std::vector<std::pair<CombatTargetId, bool>> enemyObservationCache_;
     [[nodiscard]] EnemyLifecycle &activeActors() noexcept;
     [[nodiscard]] const EnemyLifecycle &activeActors() const noexcept;

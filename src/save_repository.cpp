@@ -1034,7 +1034,7 @@ MagazineRoundRecord parseRound(const Json &value)
 }
 
 Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersion,
-    bool freightContract, bool fuelContract, bool armorContract)
+    bool freightContract, bool fuelContract, bool armorContract, bool illuminationContract)
 {
     Json assets = Json::array();
     for (const auto &[id, asset] : registry.records())
@@ -1247,7 +1247,9 @@ Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersi
         if (!fuelContract && asset.definitionId == kRaidFuelCanId)
             throw std::invalid_argument("fuel can requires schema 63 and compatible content");
         if (!armorContract && asset.definitionId == kArmorRepairBlueprintId)
-            throw std::invalid_argument("armor repair blueprint requires schema 64 and content 80");
+            throw std::invalid_argument("armor repair blueprint requires schema 64 and compatible content");
+        if (!illuminationContract && asset.definitionId == kThrownIlluminationItemId)
+            throw std::invalid_argument("field flare requires schema 65 and content 81");
         Json value{
             {"instance_id", asset.instanceId},
             {"definition_id", asset.definitionId.value()},
@@ -1310,7 +1312,7 @@ Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersi
 
 SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
     std::uint32_t schemaVersion, bool freightContract, bool fuelContract,
-    bool armorContract, const ContentRegistry &content)
+    bool armorContract, bool illuminationContract, const ContentRegistry &content)
 {
         for (const Json &value : values)
         {
@@ -1350,7 +1352,9 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
             if (!fuelContract && asset.definitionId == kRaidFuelCanId)
                 return {SaveLoadStatus::Failed, std::nullopt, "fuel can requires schema 63 and compatible content"};
             if (!armorContract && asset.definitionId == kArmorRepairBlueprintId)
-                return {SaveLoadStatus::Failed, std::nullopt, "armor repair blueprint requires schema 64 and content 80"};
+                return {SaveLoadStatus::Failed, std::nullopt, "armor repair blueprint requires schema 64 and compatible content"};
+            if (!illuminationContract && asset.definitionId == kThrownIlluminationItemId)
+                return {SaveLoadStatus::Failed, std::nullopt, "field flare requires schema 65 and content 81"};
             if (schemaVersion < 53 && (content.item(asset.definitionId).battery || content.item(asset.definitionId).weaponLight || value.contains("device_state")))
                 return {SaveLoadStatus::Failed, std::nullopt, "electronic state requires schema 53"};
             asset.quantity = value.at("quantity").get<std::uint32_t>();
@@ -1609,7 +1613,7 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
 }
 
 Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
-    bool freightContract, bool fuelContract, bool armorContract)
+    bool freightContract, bool fuelContract, bool armorContract, bool illuminationContract)
 {
     if (schemaVersion < 58 && profile.pendingRaid &&
         (profile.pendingRaid->rulesVersion == kRaidRunnerRulesVersion ||
@@ -1623,7 +1627,7 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
         throw std::invalid_argument{"Raid credentials require schema 57"};
     if (schemaVersion < 55 && profile.stashLayoutVersion != 0)
         throw std::invalid_argument{"independent Stash pages require schema 55"};
-    Json assets = assetRegistryValue(profile.assets, schemaVersion, freightContract, fuelContract, armorContract);
+    Json assets = assetRegistryValue(profile.assets, schemaVersion, freightContract, fuelContract, armorContract, illuminationContract);
 
     Json transactions = Json::array();
     for (const std::string &transaction : profile.committedTransactions)
@@ -2194,7 +2198,9 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
             if (!fuelContract && entry.definitionId == kRaidFuelCanId)
                 throw std::invalid_argument("frozen fuel Loot requires schema 63 and compatible content");
             if (!armorContract && entry.definitionId == kArmorRepairBlueprintId)
-                throw std::invalid_argument("frozen armor repair blueprint requires schema 64 and content 80");
+                throw std::invalid_argument("frozen armor repair blueprint requires schema 64 and compatible content");
+            if (!illuminationContract && entry.definitionId == kThrownIlluminationItemId)
+                throw std::invalid_argument("frozen field flare requires schema 65 and content 81");
             Json lootEntry{
                 {"asset_id", entry.assetId},
                 {"slot_index", entry.slotIndex},
@@ -2281,7 +2287,7 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
         if (schemaVersion >= 51)
             payload["pending_raid"]["starting_assets"] = raid.startingAssets
                 ? Json{{"next_asset_id", raid.startingAssets->nextAssetId()},
-                       {"assets", assetRegistryValue(*raid.startingAssets, schemaVersion, freightContract, fuelContract, armorContract)}} : Json(nullptr);
+                       {"assets", assetRegistryValue(*raid.startingAssets, schemaVersion, freightContract, fuelContract, armorContract, illuminationContract)}} : Json(nullptr);
         if (schemaVersion >= 4)
         {
             payload["pending_raid"]["starting_medical_status"] = {
@@ -2877,7 +2883,9 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
             if (!fuelContract && id == kRaidFuelCanId)
                 throw std::invalid_argument("returned fuel requires schema 63 and compatible content");
             if (!armorContract && id == kArmorRepairBlueprintId)
-                throw std::invalid_argument("returned armor repair blueprint requires schema 64 and content 80");
+                throw std::invalid_argument("returned armor repair blueprint requires schema 64 and compatible content");
+            if (!illuminationContract && id == kThrownIlluminationItemId)
+                throw std::invalid_argument("returned field flare requires schema 65 and content 81");
             returned.push_back(id.value());
         }
         payload["last_raid_result"] = {
@@ -2942,7 +2950,7 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
             payload["last_raid_result"]["wish_return"] = std::move(summary);
         }
     }
-    raidline::save60::writePlayerState(payload, profile, schemaVersion);
+    raidline::save60::writePlayerState(payload, profile, schemaVersion, illuminationContract);
     return payload;
 }
 
@@ -3007,10 +3015,10 @@ std::string serializeProfileEnvelope(
 {
     if (profile.pendingRaid && profile.pendingRaid->rulesVersion == kRaidRunnerRulesVersion &&
         !runnerCompatibleContent(contentVersion))
-        throw std::invalid_argument{"runner Raid requires compatible content 73 through 80"};
+        throw std::invalid_argument{"runner Raid requires compatible content 73 through 81"};
     if (profile.pendingRaid && profile.pendingRaid->hospitalNightVisionLoot &&
         !hospitalNightCompatibleContent(contentVersion))
-        throw std::invalid_argument{"hospital night vision Loot requires compatible content 77 through 80"};
+        throw std::invalid_argument{"hospital night vision Loot requires compatible content 77 through 81"};
     const bool freightContract = schemaVersion >= 62 && crossMapFreightCompatibleContent(contentVersion);
     if (profile.pendingRaid && (profile.pendingRaid->freightKeyLootSlotId || profile.pendingRaid->sealedFreightCrate) &&
         !freightContract)
@@ -3022,13 +3030,18 @@ std::string serializeProfileEnvelope(
         (!fuelContract || profile.lastRaidResult->outcome != RaidResultOutcome::Extracted))
         throw std::invalid_argument{"fuel payment requires an extracted result in schema 63 and compatible content"};
     const bool armorContract =
-        schemaVersion >= 64 && contentVersion == kArmorReadinessContentVersion;
+        schemaVersion >= 64 && supportsArmorReadinessContent(contentVersion);
+    const bool illuminationContract =
+        schemaVersion >= 65 && supportsThrownIlluminationContent(contentVersion);
+    if (!illuminationContract && profile.baseManufacturing.activeOrder &&
+        profile.baseManufacturing.activeOrder->recipeDefinitionId == kThrownIlluminationRecipeId)
+        throw std::invalid_argument{"field flare manufacturing requires schema 65 and content 81"};
     if (!armorContract &&
         (profile.baseManufacturing.armorRepairRecipeUnlocked ||
          (profile.baseManufacturing.activeOrder &&
           (profile.baseManufacturing.activeOrder->recipeDefinitionId == kArmorRepairResearchId ||
            profile.baseManufacturing.activeOrder->recipeDefinitionId == kArmorRepairRecipeId))))
-        throw std::invalid_argument{"armor repair research requires schema 64 and content 80"};
+        throw std::invalid_argument{"armor repair research requires schema 64 and compatible content"};
     if (schemaVersion != 1 && schemaVersion != 2 &&
         schemaVersion != 3 && schemaVersion != 4 && schemaVersion != 5 &&
         schemaVersion != 6 && schemaVersion != 7 && schemaVersion != 8 &&
@@ -3044,12 +3057,12 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
     const auto legacy = schemaVersion < 56 ? std::optional<ProfileState>{legacyChestRigSnapshot(profile)} : std::nullopt;
-    Json payload = profilePayload(legacy ? *legacy : profile, schemaVersion, freightContract, fuelContract, armorContract);
+    Json payload = profilePayload(legacy ? *legacy : profile, schemaVersion, freightContract, fuelContract, armorContract, illuminationContract);
     const std::string payloadText = payload.dump();
     Json envelope{
         {"schema_version", schemaVersion},
@@ -3228,7 +3241,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             (schemaVersion >= 60 && contentVersion == kAmmoLoopContentVersion) ||
             (schemaVersion >= 61 && contentVersion == kHospitalNightOperationsContentVersion) ||
             (schemaVersion >= 62 && contentVersion == kCrossMapFreightContentVersion) ||
-            (schemaVersion >= 63 && contentVersion == kFuelExtractionContentVersion);
+            (schemaVersion >= 63 && contentVersion == kFuelExtractionContentVersion) ||
+            (schemaVersion >= 64 && contentVersion == kArmorReadinessContentVersion);
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -3250,7 +3264,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-               schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64) ||
+               schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3264,7 +3278,9 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
         }
 
         const bool armorContract =
-            schemaVersion >= 64 && contentVersion == kArmorReadinessContentVersion;
+            schemaVersion >= 64 && supportsArmorReadinessContent(contentVersion);
+        const bool illuminationContract =
+            schemaVersion >= 65 && supportsThrownIlluminationContent(contentVersion);
         ProfileState profile;
         if (schemaVersion >= 57)
         {
@@ -3577,7 +3593,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             else if (manufacturing.contains("armor_repair_recipe_unlocked"))
             {
                 return {SaveLoadStatus::Failed, std::nullopt,
-                        "armor repair unlock requires schema 64 and content 80"};
+                        "armor repair unlock requires schema 64 and compatible content"};
             }
             if (!manufacturing.at("active_order").is_null())
             {
@@ -3592,7 +3608,12 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                      active.recipeDefinitionId == kArmorRepairRecipeId))
                 {
                     return {SaveLoadStatus::Failed, std::nullopt,
-                            "armor repair workshop order requires schema 64 and content 80"};
+                            "armor repair workshop order requires schema 64 and compatible content"};
+                }
+                if (!illuminationContract && active.recipeDefinitionId == kThrownIlluminationRecipeId)
+                {
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                            "field flare manufacturing requires schema 65 and content 81"};
                 }
                 active.committedWorkers = order.at(
                     "committed_workers").get<std::uint32_t>();
@@ -3969,7 +3990,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
 
         const bool freightContract = schemaVersion >= 62 && crossMapFreightCompatibleContent(contentVersion);
         const bool fuelContract = schemaVersion >= 63 && supportsFuelExtractionContent(contentVersion);
-        const auto assetLoad = parseAssetRegistry(profile.assets, payload.at("assets"), schemaVersion, freightContract, fuelContract, armorContract, content);
+        const auto assetLoad = parseAssetRegistry(profile.assets, payload.at("assets"), schemaVersion, freightContract, fuelContract, armorContract, illuminationContract, content);
         if (assetLoad.status == SaveLoadStatus::Failed) return assetLoad;
 
         if (schemaVersion >= 10 &&
@@ -4045,7 +4066,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             }
             if (raid.rulesVersion == kRaidRunnerRulesVersion &&
                 (schemaVersion < 58 || !runnerCompatibleContent(contentVersion)))
-                return {SaveLoadStatus::Failed, std::nullopt, "runner Raid requires schema 58+ and compatible content 73 through 80"};
+                return {SaveLoadStatus::Failed, std::nullopt, "runner Raid requires schema 58+ and compatible content 73 through 81"};
             raid.mapDefinitionId = MapDefinitionId{
                 value.at("map_definition_id").get<std::string>()};
             raid.seed = value.at("seed").get<std::uint64_t>();
@@ -4132,7 +4153,9 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                 if (!fuelContract && definitionId == kRaidFuelCanId)
                     return {SaveLoadStatus::Failed, std::nullopt, "frozen fuel Loot requires schema 63 and compatible content"};
                 if (!armorContract && definitionId == kArmorRepairBlueprintId)
-                    return {SaveLoadStatus::Failed, std::nullopt, "frozen armor repair blueprint requires schema 64 and content 80"};
+                    return {SaveLoadStatus::Failed, std::nullopt, "frozen armor repair blueprint requires schema 64 and compatible content"};
+                if (!illuminationContract && definitionId == kThrownIlluminationItemId)
+                    return {SaveLoadStatus::Failed, std::nullopt, "frozen field flare requires schema 65 and content 81"};
                 raid.loot.push_back(RaidLootSnapshot{
                     assetId,
                     definitionId,
@@ -4168,7 +4191,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                     raid.startingAssets.emplace();
                     const auto &baseline = value.at("starting_assets");
                     raid.startingAssets->setNextAssetIdForLoad(baseline.at("next_asset_id").get<AssetInstanceId>());
-                    const auto loaded = parseAssetRegistry(*raid.startingAssets, baseline.at("assets"), schemaVersion, freightContract, fuelContract, armorContract, content);
+                    const auto loaded = parseAssetRegistry(*raid.startingAssets, baseline.at("assets"), schemaVersion, freightContract, fuelContract, armorContract, illuminationContract, content);
                     if (loaded.status == SaveLoadStatus::Failed) return loaded;
                 }
             }
@@ -5021,7 +5044,9 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                 if (!fuelContract && definitionId == kRaidFuelCanId)
                     return {SaveLoadStatus::Failed, std::nullopt, "returned fuel requires schema 63 and compatible content"};
                 if (!armorContract && definitionId == kArmorRepairBlueprintId)
-                    return {SaveLoadStatus::Failed, std::nullopt, "returned armor repair blueprint requires schema 64 and content 80"};
+                    return {SaveLoadStatus::Failed, std::nullopt, "returned armor repair blueprint requires schema 64 and compatible content"};
+                if (!illuminationContract && definitionId == kThrownIlluminationItemId)
+                    return {SaveLoadStatus::Failed, std::nullopt, "returned field flare requires schema 65 and content 81"};
                 result.returnedItemDefinitionIds.push_back(std::move(definitionId));
             }
             result.currencyDelta = value.at("currency_delta").get<std::int64_t>();
@@ -5061,7 +5086,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                     value.at("contribution").get<std::uint64_t>(), value.at("expired").get<bool>()};
             }
         }
-        raidline::save60::parsePlayerState(payload, profile, schemaVersion);
+        raidline::save60::parsePlayerState(payload, profile, schemaVersion, illuminationContract);
         const ProfileValidationResult validation =
             validateProfileState(profile, content);
         if (!validation.valid)
@@ -5226,10 +5251,11 @@ SaveWriteResult SaveRepository::save(
     };
     if (hospitalNightCompatibleContent(contentVersion))
     {
-        const bool armor = contentVersion == kArmorReadinessContentVersion;
+        const bool illumination = supportsThrownIlluminationContent(contentVersion);
+        const bool armor = supportsArmorReadinessContent(contentVersion);
         const bool fuel = supportsFuelExtractionContent(contentVersion);
         const bool freight = crossMapFreightCompatibleContent(contentVersion);
-        const auto schema = armor ? 64U : fuel ? 63U : freight ? 62U : 61U;
+        const auto schema = illumination ? 65U : armor ? 64U : fuel ? 63U : freight ? 62U : 61U;
         const auto isLegacy = [&](const std::optional<SaveEnvelopeMetadata> &source) {
             return source && (source->schemaVersion < schema || source->contentVersion != contentVersion);
         };
@@ -5237,7 +5263,8 @@ SaveWriteResult SaveRepository::save(
         if (archivePrimary || isLegacy(backupMetadata))
         {
             // The former primary can remain in the rolling backup after upgrade.
-            const std::string_view marker = armor ? "base-research-armor-readiness-v1"
+            const std::string_view marker = illumination ? "raid-thrown-illumination-v1"
+                : armor ? "base-research-armor-readiness-v1"
                 : fuel ? "raid-fuel-extraction-loop-v1"
                 : freight ? "raid-cross-map-freight-access-v1" : "raid-hospital-night-operations-v1";
             const auto preserved = preserveLayoutMigrationSources(

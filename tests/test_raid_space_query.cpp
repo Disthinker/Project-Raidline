@@ -359,3 +359,72 @@ TEST(RaidSpaceQueryTest, DenseGridAcceptsActorNearPartialWorldEdgeCell)
               1.0F);
     EXPECT_TRUE(raidSpaceHasLineOfSight(start, *waypoint, blockers));
 }
+
+TEST(RaidSpaceQueryTest, ThrownIlluminationRequiresBothRaysToTheSamePoint)
+{
+    const auto space = outdoorRaidSpaceId();
+    const Vec2 observer{100, 100}, source{550, 130}, target{710, 100};
+    const Rect bounds{{700, 90}, {20, 20}};
+    const BallisticBlocker playerWall{1U, {{380, 80}, {10, 40}}};
+    const BallisticBlocker lightWall{2U, {{620, 110}, {6, 13}}};
+    for (const auto *blocker : {static_cast<const BallisticBlocker *>(nullptr),
+                                &playerWall, &lightWall})
+    {
+        const auto index = RaidSpaceBlockerIndex::build({1500, 1000},
+            blocker ? std::span<const BallisticBlocker>{blocker, 1}
+                    : std::span<const BallisticBlocker>{});
+        ASSERT_TRUE(index);
+        std::shared_ptr<const RaidIlluminationCoverage> cache;
+        RaidObservationKey key{space, observer, {1, 0}, 60, 500,
+            RaidLightEnvironment::WeakIndoor, 1};
+        auto view = buildRaidSpaceConeVisibility(*index, key);
+        ASSERT_TRUE(view.validGeometry());
+        EXPECT_FALSE(view.pointVisible(target));
+        key.illumination.source = getRaidIlluminationCoverage(cache, *index, space, 1,
+            "test-illumination", source, 300);
+        addRaidIlluminatedObservation(view, *index, key);
+        ASSERT_TRUE(view.matches(key));
+        EXPECT_EQ(view.pointVisible(target), blocker == nullptr);
+        EXPECT_EQ(view.boundsVisible(bounds), blocker == nullptr);
+        EXPECT_EQ(RaidVisibilityBoundsQuery{view}.boundsVisible(bounds), blocker == nullptr);
+        EXPECT_FALSE(view.pointVisible({475, 370})); // Lit outside the original aim angle.
+    }
+}
+
+TEST(RaidSpaceQueryTest, ThrownIlluminationPreservesScopeCapAndRejectsStaleProofs)
+{
+    const auto space = outdoorRaidSpaceId();
+    const auto index = RaidSpaceBlockerIndex::build({1600, 1000}, {});
+    ASSERT_TRUE(index);
+    const Vec2 observer{100, 100}, source{960, 100}, inRange{1080, 100};
+    std::shared_ptr<const RaidIlluminationCoverage> cache;
+    RaidObservationKey key{space, observer, {1, 0}, 100, 500,
+        RaidLightEnvironment::NightOutdoor, 1};
+    key.illumination.source = getRaidIlluminationCoverage(cache, *index, space, 1,
+        "test-illumination", source, 300);
+    auto view = buildRaidSpaceConeVisibility(*index, key);
+    addRaidIlluminatedObservation(view, *index, key);
+    EXPECT_TRUE(view.pointVisible(inRange));
+    EXPECT_FALSE(view.pointVisible({1101, 100}));
+    EXPECT_EQ(key.illumination.source, getRaidIlluminationCoverage(cache, *index, space, 1,
+        "test-illumination", source, 300));
+
+    auto scoped = key;
+    scoped.illumination.lensCenter = {1050, 100};
+    scoped.illumination.lensRadius = 20;
+    EXPECT_FALSE(view.matches(scoped));
+    auto scopedView = buildRaidSpaceConeVisibility(*index, scoped);
+    addRaidIlluminatedObservation(scopedView, *index, scoped);
+    ASSERT_TRUE(scopedView.matches(scoped));
+    EXPECT_FALSE(scopedView.pointVisible(inRange));
+    EXPECT_TRUE(scopedView.pointVisible({1050, 100}));
+    scoped.illumination = {};
+    EXPECT_FALSE(view.matches(scoped));
+
+    auto changedGeometry = key;
+    changedGeometry.geometryRevision = 2;
+    changedGeometry.illumination.source = getRaidIlluminationCoverage(cache, *index,
+        space, 2, "test-illumination", source, 300);
+    EXPECT_NE(changedGeometry.illumination.source, key.illumination.source);
+    EXPECT_FALSE(view.matches(changedGeometry));
+}

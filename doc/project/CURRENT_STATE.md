@@ -1,11 +1,24 @@
-# 当前 · 工坊蓝图研究与防具整备 v1 已验收，正在交付
+# 当前 · 野战照明弹与暗区搜索 v1 已验收
+
+搜回电料制成照明弹，下一次出击借远处短时光照判断路线和搜索机会。 [具体开发方案](../exec-plans/active/raid-thrown-illumination-v1.md)
+
+- task_id `raid-thrown-illumination-v1`，plan_version `RL-RAID-THROWN-ILLUMINATION-v1`，state `accepted_pending_remote_authorization`。approval_source 为 2026-11-11 用户对 RL-RAID-THROWN-ILLUMINATION-v1 明确回复“批准”。candidate_id `RL-RAID-THROWN-ILLUMINATION-v1-local-233ad40a1e95`。accepted_candidate_id `RL-RAID-THROWN-ILLUMINATION-v1-local-233ad40a1e95`。acceptance_source 为 2026-11-11 用户明确回复“验收通过”。2026-11-11 用户要求主线 CI 通过后协调策划，给出更大步长的具体方案，确认后实施。
+- 基线 `origin/main@d6544fb5d61c77cc920c3db3ce6706adba706148`。工坊蓝图研究与防具整备 PR #206 已验收合并，Windows 和 Ubuntu 各 3212/3212，13 项 3ms 检查通过。 [主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43014163163)
+- 原策划线程 `019feff4-477c-75c2-bf31-3f09ff1e3891` 已回复 `MAIN-NEXT-STAGE-20261111-AFTER-ARMOR-01`，协调任务 `raid-next-stage-after-armor-readiness`，协议 `RL-NEXT-STAGE-REQUEST-v1`，回复基线一致，状态 `proposal_ready_awaiting_human_approval`。隔离工作树 E:\WorkPlace\Projects\C\Project Raidline-raid-thrown-illumination-v1，分支 `codex/raid-thrown-illumination-v1`。
+- 固定入口已更新。Windows 全量 3226/3226，原 13 项及新增 1 项 3ms 检查通过。玩家旧档副本迁移回读一致。[联合验收](../acceptance/raid-thrown-illumination-v1.md)
+- 本地提交仅包含已验收候选和验收记录。远端交付待本阶段推送授权及双平台 CI。
+
+---
+
+# 当前 · 工坊蓝图研究与防具整备 v1 已验收并合并
 
 从灰烬工场带回蓝图，在基地研究和制造防具维修工具，再带进下一场对局。 [具体开发方案](../exec-plans/active/base-research-armor-readiness-v1.md)
 
-- task_id `base-research-armor-readiness-v1`，plan_version `RL-BASE-RESEARCH-ARMOR-READINESS-v1`，state `accepted_delivering`。approval_source 为 2026-11-11 用户对 RL-BASE-RESEARCH-ARMOR-READINESS-v1 明确回复“批准”。candidate_id `RL-BASE-RESEARCH-ARMOR-READINESS-v1-local-1caaec01cc66`。accepted_candidate_id `RL-BASE-RESEARCH-ARMOR-READINESS-v1-local-1caaec01cc66`。acceptance_source 为 2026-11-11 用户明确回复“工坊蓝图研究与防具整备 v1 验收通过，请完成提交、推送和合并。”2026-11-11 用户要求主线 CI 通过后协调策划，给出更大步长的具体方案，确认后实施。
+- task_id `base-research-armor-readiness-v1`，plan_version `RL-BASE-RESEARCH-ARMOR-READINESS-v1`，state `merged`。approval_source 为 2026-11-11 用户对 RL-BASE-RESEARCH-ARMOR-READINESS-v1 明确回复“批准”。candidate_id `RL-BASE-RESEARCH-ARMOR-READINESS-v1-local-1caaec01cc66`。accepted_candidate_id `RL-BASE-RESEARCH-ARMOR-READINESS-v1-local-1caaec01cc66`。acceptance_source 为 2026-11-11 用户明确回复“工坊蓝图研究与防具整备 v1 验收通过，请完成提交、推送和合并。”2026-11-11 用户要求主线 CI 通过后协调策划，给出更大步长的具体方案，确认后实施。
 - 基线 `origin/main@adacf3830c879609a6227aeef46273d3008b0e72`。燃油撤离 PR #205 已合并，Windows 和 Ubuntu 各 3201/3201，13 项 3ms 检查通过。 [主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/42957445265)
 - 原策划线程 `019feff4-477c-75c2-bf31-3f09ff1e3891` 已回复 `MAIN-NEXT-STAGE-20261111-AFTER-FUEL-01`，协调任务 `raid-next-stage-after-fuel`，协议 `RL-NEXT-STAGE-REQUEST-v1`，回复基线一致，状态 `proposal_ready_awaiting_human_approval`。隔离工作树 E:\WorkPlace\Projects\C\Project Raidline-base-research-armor-readiness-v1，分支 `codex/base-research-armor-readiness-v1`。
 - 固定入口已更新。Windows 全量 3212/3212，原 13 项 3ms 检查通过。玩家旧档副本迁移回读一致。[联合验收](../acceptance/base-research-armor-readiness-v1.md)
+- 提交 `d183c61` 已推送。[PR #206](https://github.com/Disthinker/Project-Raidline/pull/206) 已合入 `main@d6544fb`。[PR 双平台 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43003307940) 各 3212/3212，13 项 3ms 检查通过。 [合并后主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43014163163) 双平台各 3212/3212，13 项 3ms 检查通过。 Ubuntu 首轮一项既有 HUD 保存重试测试读到上一条失败提示，其余 3211 项及 13 项 3ms 检查通过。Windows 原主线与候选本地各运行 24 次，分别复现 1 次和 3 次同一断言。对同一提交仅重跑 Ubuntu。
 
 ---
 

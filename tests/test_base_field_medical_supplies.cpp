@@ -198,11 +198,12 @@ TEST(FieldMedicalSuppliesTest, ExistingWorkshopListsAllSixRecipesInChineseWithou
     addToStash(profile, kStock);
     const auto before = profileStateFingerprint(profile);
     const auto projection = projectUiWorkshop(profile, content(), UiLanguage::SimplifiedChinese, kRollRecipe);
-    ASSERT_EQ(projection.recipes.size(), 8U);
+    ASSERT_EQ(projection.recipes.size(), 9U);
     EXPECT_EQ(uiWorkshopPageCount(projection.recipes.size()), 2U);
     EXPECT_EQ(projection.recipes[kUiWorkshopPageSize].id,
         BaseManufacturingRecipeDefinitionId{"base_manufacturing.ammunition_5_45x39_expanding"});
-    EXPECT_EQ(projection.recipes.back().id, kArmorRepairResearchId);
+    EXPECT_EQ(projection.recipes[kUiWorkshopPageSize + 1].id, kArmorRepairResearchId);
+    EXPECT_EQ(projection.recipes.back().id, kThrownIlluminationRecipeId);
     const auto firstPageEnd = projection.recipes.begin() + kUiWorkshopPageSize;
     ASSERT_TRUE(projection.start.canCommit) << projection.start.message;
     EXPECT_EQ(projection.start.durationMinutes, 60U);

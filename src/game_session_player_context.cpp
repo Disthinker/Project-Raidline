@@ -8,8 +8,12 @@ void GameSession::bindBasePlayerWorld(BaseWorld *world) noexcept { basePlayerWor
 
 bool GameSession::playerThrowFlightActive() const noexcept
 {
-    return alphaRaidActive_ && world_ ? world_->noiseDecoy().flight().has_value() || world_->grenade().flight().has_value() :
-        basePlayerWorld_ && (basePlayerWorld_->noiseDecoy().flight().has_value() || basePlayerWorld_->grenade().flight().has_value());
+    if (alphaRaidActive_ && world_)
+        return world_->noiseDecoy().flight().has_value() || world_->grenade().flight().has_value() ||
+            world_->thrownIllumination().flight().has_value();
+    return basePlayerWorld_ && (basePlayerWorld_->noiseDecoy().flight().has_value() ||
+        basePlayerWorld_->grenade().flight().has_value() ||
+        basePlayerWorld_->thrownIllumination().flight().has_value());
 }
 
 PlayerGameplayContext GameSession::playerGameplayContext() const noexcept
@@ -97,6 +101,7 @@ bool GameSession::captureBasePlayerEffects(ProfileState &candidate) const
     value.medicalTickAccumulatorSeconds = medicalTickAccumulatorSeconds_;
     value.grenade = basePlayerWorld_->grenade().checkpoint();
     value.noiseDecoy = basePlayerWorld_->noiseDecoy().checkpoint();
+    value.thrownIllumination = basePlayerWorld_->thrownIllumination().checkpoint();
     if (!baseDefenseActive())
     {
         value.dailyCommandSequence=raidCommandSequence_; value.dailyWeaponFaultSequence=weaponFaultSequence_;
@@ -115,15 +120,31 @@ bool GameSession::captureBasePlayerEffects(ProfileState &candidate) const
 bool GameSession::restoreBasePlayerEffects(BaseWorld &world)
 {
     bindBasePlayerWorld(&world);
-    if (!profile_.basePlayerEffects) return true;
+    if (!profile_.basePlayerEffects)
+    {
+        world.commitThrownIllumination({});
+        return true;
+    }
     const auto saved=*profile_.basePlayerEffects;
     if (!weaponActionScopeMatches(profile_,saved.scope) ||
         !validateBasePlayerEffectsRecovery(saved,profile_,publishedContentRegistry()).valid ||
         saved.worldSize.x!=world.worldSize().x || saved.worldSize.y!=world.worldSize().y) return false;
-    RaidGrenadeRuntime grenade; RaidNoiseDecoyRuntime decoy;
+    RaidGrenadeRuntime grenade;
+    RaidNoiseDecoyRuntime decoy;
+    ThrownIlluminationRuntime illumination;
+    const auto validIlluminationSpace = [&](const ThrownIlluminationLanding &landing) {
+        return landing.space == world.activeSpaceId() &&
+            queryHomeRegionSafetyZone(landing.origin, world.baseParcel()) != HomeRegionSafetyZone::SafeCore &&
+            queryHomeRegionSafetyZone(landing.point, world.baseParcel()) != HomeRegionSafetyZone::SafeCore;
+    };
     if (!grenade.restore(saved.grenade) || !decoy.restore(saved.noiseDecoy) ||
+        !illumination.restore(saved.thrownIllumination) ||
+        (saved.thrownIllumination.flight && !validIlluminationSpace(saved.thrownIllumination.flight->landing)) ||
+        (saved.thrownIllumination.source && !validIlluminationSpace(saved.thrownIllumination.source->landing)) ||
         !world.restorePlayerBody(saved.playerPosition,saved.facingDirection,saved.controlRemainingSeconds,saved.impactSlowRemainingSeconds,baseDefenseActive())) return false;
-    world.commitGrenade(std::move(grenade)); world.commitNoiseDecoy(std::move(decoy));
+    world.commitGrenade(std::move(grenade));
+    world.commitNoiseDecoy(std::move(decoy));
+    world.commitThrownIllumination(std::move(illumination));
     medicalTickAccumulatorSeconds_=saved.medicalTickAccumulatorSeconds;
     if (saved.scope.activity==WeaponActionActivity::BaseDaily)
     {

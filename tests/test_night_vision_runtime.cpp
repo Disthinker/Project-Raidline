@@ -1,4 +1,6 @@
 #include "game_session.h"
+#include "alpha_content_ids.h"
+#include "thrown_illumination_domain.h"
 #include "tactical_device_domain.h"
 #include "weapon_component_domain.h"
 
@@ -371,5 +373,209 @@ TEST(NightVisionPerformanceTest, DualDeviceObservationSharesOneSnapshotWithinThr
         std::sort(samples.begin(), samples.end());
         EXPECT_LE(samples[142], 3.0) << "enemies=" << count << " blockers=220 samples=150";
         RecordProperty("dual_device_" + std::to_string(count) + "_p95_ms", std::to_string(samples[142]));
+    }
+}
+
+TEST(NightVisionRuntimeTest, ThrownIlluminationCausesGlareOnFirstDirectLookOnly)
+{
+    auto config = nightTestWorld();
+    config.grenadeEnabled = true;
+    GameplayWorld world(config);
+    world.setRaidDaylight(false);
+    world.setNightVision({150, 850}, {145, 750});
+    GameplayInput aim;
+    aim.aimWorldBounds = Rect{{}, config.worldSize};
+    aim.aimWorldPosition = Vec2{500, 1000};
+    const ThrownIlluminationUseDefinition use;
+    auto landing = world.previewThrownIllumination({1090, 1000}, use);
+    ASSERT_TRUE(landing);
+    landing->effectIdentity = "glare-first-look";
+    ThrownIlluminationRuntime prepared;
+    ASSERT_TRUE(prepared.start(*landing));
+    world.commitThrownIllumination(std::move(prepared));
+    world.update(aim, use.flightSeconds);
+    ASSERT_TRUE(world.thrownIllumination().source());
+    EXPECT_FALSE(world.thrownIllumination().source()->nightVisionGlareTriggered);
+    EXPECT_FLOAT_EQ(world.thrownIlluminationGlareSeconds(), 0);
+
+    aim.aimWorldPosition = Vec2{1500, 1000};
+    world.update(aim, 0.016F);
+    ASSERT_TRUE(world.thrownIllumination().source()->nightVisionGlareTriggered);
+    EXPECT_FLOAT_EQ(world.thrownIlluminationGlareSeconds(), 0.35F);
+    world.update(aim, 0.36F);
+    EXPECT_FLOAT_EQ(world.thrownIlluminationGlareSeconds(), 0);
+    EXPECT_TRUE(world.thrownIllumination().source()->nightVisionGlareTriggered);
+    world.update(aim, 0.016F);
+    EXPECT_FLOAT_EQ(world.thrownIlluminationGlareSeconds(), 0);
+    EXPECT_TRUE(world.raidObservation().pointVisible(landing->point));
+}
+
+TEST(NightVisionRuntimeTest, ThrownIlluminationOnLegacyObservationMapsOnlyLightsTerrain)
+{
+    auto config = nightTestWorld();
+    config.grenadeEnabled = true;
+    config.lightConeObservationEnabled = false;
+    GameplayWorld world(config);
+    world.setRaidDaylight(false);
+    auto landing = world.previewThrownIllumination({1200, 1000}, {});
+    ASSERT_TRUE(landing);
+    landing->effectIdentity = "legacy-terrain-light";
+    ThrownIlluminationRuntime prepared;
+    ASSERT_TRUE(prepared.start(*landing));
+    world.commitThrownIllumination(std::move(prepared));
+    world.update({}, landing->use.flightSeconds);
+    ASSERT_TRUE(world.thrownIllumination().source());
+    EXPECT_TRUE(world.thrownIlluminationBackgroundObservations().front().validGeometry());
+    EXPECT_FALSE(world.raidObservation().illuminationKey.source);
+    EXPECT_FALSE(world.raidObservation().illumination);
+}
+
+TEST(NightVisionPerformanceTest, ThrownIlluminationWithPoweredDevicesStaysWithinThreeMilliseconds)
+{
+    GameSession loadout;
+    ASSERT_NO_FATAL_FAILURE(armSession(loadout, 18));
+    auto &equipment = const_cast<ProfileState &>(loadout.profile());
+    const auto &content = publishedContentRegistry();
+    const auto vision = findNightVision(equipment, content, findItem(equipment, helmet));
+    const auto light = findWeaponLight(equipment, content, findItem(equipment, rifle));
+    ASSERT_NE(vision.batteryAssetId, 0U);
+    ASSERT_NE(light.batteryAssetId, 0U);
+    const auto chestRig = findItem(equipment, alpha_content::chestRig);
+    ASSERT_NE(chestRig, 0U);
+    ASSERT_TRUE(executeInventory(equipment, content,
+        InventoryEquipCommand{chestRig, EquipmentSlotKind::ChestRig},
+        {equipment.revision, "benchmark-flare-rig"}).succeeded);
+    const auto &definition = content.item(kThrownIlluminationItemId);
+    ASSERT_TRUE(definition.thrownIlluminationUse);
+    const auto carrier = ProfileContainerId::compartment(chestRig, 0);
+    const auto position = findFirstProfileFit(equipment, content, carrier,
+        definition, ItemOrientation::Degrees0);
+    ASSERT_TRUE(position);
+    const auto flare = equipment.assets.create(
+        definition, StoredAssetLocation{carrier, *position}, 2);
+
+    for (const int count : {32, 100})
+    {
+        auto profile = equipment;
+        ASSERT_TRUE(executeDeviceSwitch(profile, content, vision.deviceAssetId,
+            {profile.revision, "benchmark-flare-night-vision"}).succeeded);
+        ASSERT_TRUE(executeDeviceSwitch(profile, content, light.deviceAssetId,
+            {profile.revision, "benchmark-flare-flashlight"}).succeeded);
+        auto config = nightTestWorld();
+        config.grenadeEnabled = true;
+        for (int n = 0; n < 220; ++n)
+        {
+            const float angle = n * 6.28318530718F / 220;
+            const float radius = 260.0F + (n % 5) * 126.0F;
+            const float x = 1000.0F + std::cos(angle) * radius;
+            float y = 1000.0F + std::sin(angle) * radius;
+            // A narrow open corridor lets the real throw reach dense geometry
+            // on both sides, with at least one target beyond the old range.
+            if (y > 930 && y < 1046) y = y < 1000 ? 930 : 1046;
+            config.ballisticBlockers.push_back({
+                static_cast<std::uint64_t>(n + 1), {{x, y}, {5, 24}}});
+        }
+        config.initialEnemies.push_back(EnemySpawn{{1695, 975}, {50, 50}, 100});
+        for (int n = 1; n < count; ++n)
+        {
+            const float angle = n * 6.28318530718F / count;
+            const float radius = 420.0F + (n % 7) * 60.0F;
+            config.initialEnemies.push_back(EnemySpawn{
+                {975 + std::cos(angle) * radius, 975 + std::sin(angle) * radius},
+                {50, 50}, 100});
+        }
+        GameplayWorld world(config);
+        world.setRaidDaylight(false);
+        GameplayInput aim;
+        aim.aimWorldBounds = Rect{{}, config.worldSize};
+        aim.aimWorldPosition = Vec2{1720, 1000};
+        auto landing = world.previewThrownIllumination(
+            {1445, 1000}, *definition.thrownIlluminationUse);
+        ASSERT_TRUE(landing);
+        EXPECT_FLOAT_EQ(landing->point.x, 1445);
+        landing->effectIdentity = "benchmark-throw-flare";
+        ThrownIlluminationRuntime prepared;
+        ASSERT_TRUE(prepared.start(*landing));
+        ASSERT_TRUE(consumeThrownIllumination(profile, content, flare,
+            {profile.revision, landing->effectIdentity}).succeeded);
+        ASSERT_EQ(profile.assets.find(flare)->quantity, 1U);
+        world.commitThrownIllumination(std::move(prepared));
+        world.update(aim, landing->use.flightSeconds);
+        ASSERT_TRUE(world.thrownIllumination().source());
+        ASSERT_TRUE(const_cast<Player &>(world.player()).setPosition({764, 984}));
+        world.update(aim, 0.0F);
+
+        const auto setDevices = [&] {
+            advanceNightVision(profile, content, vision, true, 0.016F);
+            advanceWeaponLight(profile, content, light, true, 0.016F);
+            const auto poweredVision = queryNightVision(profile, content, vision, true);
+            const auto poweredLight = queryWeaponLight(profile, content, light, true);
+            world.setNightVision({poweredVision.vision.outdoorAngleDegrees,
+                poweredVision.vision.outdoorDistance},
+                {poweredVision.vision.indoorAngleDegrees,
+                poweredVision.vision.indoorDistance});
+            world.setWeaponLight(light.deviceAssetId, light.batteryAssetId,
+                poweredLight.light.angleDegrees, poweredLight.light.maximumDistance,
+                poweredLight.light.backgroundRadius);
+            return poweredVision.output && poweredLight.output;
+        };
+        using Clock = std::chrono::steady_clock;
+        const auto milliseconds = [](Clock::time_point start) {
+            return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+        };
+
+        ASSERT_TRUE(setDevices());
+        auto before = Clock::now();
+        const auto &firstView = world.raidObservation();
+        const auto landingMs = milliseconds(before);
+        ASSERT_TRUE(firstView.illumination);
+        const auto source = firstView.illumination->source;
+        EXPECT_TRUE(firstView.pointVisible({1720, 1000}));
+        EXPECT_GT(std::hypot(1720.0F - firstView.observer.x, 1000.0F - firstView.observer.y),
+            firstView.maximumDistance);
+        RecordProperty("illumination_first_observation_" + std::to_string(count) + "_ms",
+            std::to_string(landingMs));
+
+        std::vector<double> samples;
+        samples.reserve(150);
+        volatile int seen{};
+        for (int frame = 0; frame < 160; ++frame)
+        {
+            const float angle = std::sin(frame * 0.08F) * 0.17F;
+            const Vec2 center{780 + 3 * std::sin(angle), 1000 + 3 * std::cos(angle)};
+            ASSERT_TRUE(const_cast<Player &>(world.player()).setPosition(
+                {center.x - 16, center.y - 16}));
+            aim.aimWorldPosition = Vec2{
+                center.x + std::cos(angle) * 500, center.y + std::sin(angle) * 500};
+            world.update(aim, 0.016F);
+            const auto solves = world.enemyObservationSolveCount();
+            before = Clock::now();
+            const bool powered = setDevices();
+            const auto &view = world.raidObservation();
+            for (int consumer = 0; consumer < 4; ++consumer)
+                for (const auto &enemy : world.enemies())
+                    seen = seen + (world.raidEnemyObservable(enemy.combatTargetId()) ? 1 : 0);
+            const auto elapsed = milliseconds(before);
+            ASSERT_TRUE(powered);
+            ASSERT_TRUE(view.illumination);
+            EXPECT_EQ(view.illumination->source, source);
+            EXPECT_EQ(world.enemyObservationSolveCount() - solves, static_cast<std::uint64_t>(count));
+            if (frame >= 10) samples.push_back(elapsed);
+        }
+        ASSERT_EQ(samples.size(), 150U);
+        std::sort(samples.begin(), samples.end());
+        EXPECT_LE(samples[142], 3.0) << "enemies=" << count << " blockers=220 samples=150";
+        RecordProperty("illumination_" + std::to_string(count) + "_p95_ms",
+            std::to_string(samples[142]));
+
+        world.update(aim, landing->use.durationSeconds);
+        ASSERT_FALSE(world.thrownIllumination().active());
+        before = Clock::now();
+        const auto &expired = world.raidObservation();
+        const auto expiredMs = milliseconds(before);
+        EXPECT_FALSE(expired.illuminationKey.source);
+        EXPECT_FALSE(expired.illumination);
+        RecordProperty("illumination_expiry_observation_" + std::to_string(count) + "_ms",
+            std::to_string(expiredMs));
     }
 }

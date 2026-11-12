@@ -169,7 +169,7 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
     const bool research = command.recipeDefinitionId == kArmorRepairResearchId;
     const bool armorRepair = command.recipeDefinitionId == kArmorRepairRecipeId;
     if ((research || armorRepair) &&
-        content.contentVersion() != kArmorReadinessContentVersion)
+        !supportsArmorReadinessContent(content.contentVersion()))
     {
         return startFailure(
             DomainErrorCode::IllegalDestination,

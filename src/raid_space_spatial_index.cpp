@@ -330,6 +330,17 @@ void RaidSpaceBlockerIndex::queryCandidateIndices(
             }
         }
     }
+    // Each blocker belongs to exactly one cell. A multi-cell result with
+    // every blocker can emit the original index order directly.
+    const auto collected = directMerge ? candidateCount : output.size();
+    if (nonemptyCells > 1 && collected == blockerBounds_.size())
+    {
+        output.resize(collected);
+        auto *const indices = output.data();
+        for (std::size_t i = 0; i < collected; ++i)
+            indices[i] = i;
+        return;
+    }
     // build() visits original indices in ascending order. Preserve the direct
     // single-cell copy and the general insert/sort path for larger queries.
     if (!directMerge) {

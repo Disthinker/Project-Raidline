@@ -6,8 +6,13 @@ bool GameSession::canSelectNoiseDecoy() const
     if(profileUiCommitPending())return false;
     const auto context=playerGameplayContext();
     if(!context.available || context.dead || context.controlled)return false;
-    if(alphaRaidActive_)return world_->noiseDecoyEnabled() && !world_->noiseDecoy().flight() && !world_->grenade().active() && world_->melee().recoverySeconds()<=0;
-    return basePlayerWorld_ && !basePlayerWorld_->noiseDecoy().flight() && !basePlayerWorld_->grenade().active() && basePlayerWorld_->melee().recoverySeconds()<=0;
+    if (alphaRaidActive_)
+        return world_->noiseDecoyEnabled() && !world_->noiseDecoy().flight() &&
+            !world_->grenade().active() && !world_->thrownIllumination().flight() &&
+            world_->melee().recoverySeconds() <= 0;
+    return basePlayerWorld_ && !basePlayerWorld_->noiseDecoy().flight() &&
+        !basePlayerWorld_->grenade().active() && !basePlayerWorld_->thrownIllumination().flight() &&
+        basePlayerWorld_->melee().recoverySeconds() <= 0;
 }
 bool GameSession::beginNoiseDecoySelection()
 {
@@ -45,9 +50,7 @@ InventoryReceipt GameSession::throwNoiseDecoy(AssetInstanceId id,Vec2 aim,const 
 }
 void GameSession::prepareNoiseDecoyInput(GameplayInput &input,const GameplayInput &raw)
 {
-    const bool flying=alphaRaidActive_ ? (world_->noiseDecoy().flight().has_value() || world_->grenade().flight().has_value()) :
-        basePlayerWorld_ && (basePlayerWorld_->noiseDecoy().flight().has_value() || basePlayerWorld_->grenade().flight().has_value());
-    const bool blocked=input.throwableModal || flying;
+    const bool blocked = input.throwableModal || playerThrowFlightActive();
     if(!raw.firePressed && !raw.fireJustPressed)decoyFireSuppressedUntilRelease_=false;
     if(blocked && (raw.firePressed || raw.fireJustPressed))decoyFireSuppressedUntilRelease_=true;
     if(blocked || decoyFireSuppressedUntilRelease_)input.firePressed=input.fireJustPressed=false;

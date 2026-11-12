@@ -983,7 +983,7 @@ DeployReceipt executeDeploy(
     const bool freightKeySource = freightAccessRules && map->id == kFreightKeySourceMapId;
     const auto &workshop = candidate.baseManufacturing;
     const bool blueprintSource = regionalMissionCount == 0U &&
-        content.contentVersion() == kArmorReadinessContentVersion &&
+        supportsArmorReadinessContent(content.contentVersion()) &&
         map->id == kArmorRepairBlueprintMapId &&
         !workshop.armorRepairRecipeUnlocked &&
         (!workshop.activeOrder || workshop.activeOrder->recipeDefinitionId != kArmorRepairResearchId) &&

@@ -30,7 +30,7 @@ std::optional<UiItemDetailsProjection> projectUiItemDetails(
     const bool helmet = supportsUiNightVisionMount(content, definition);
     const bool freightKey = definition.definitionId == kFreightCrateKeyId;
     if (!definition.weaponUse && !definition.meleeUse && !definition.noiseDecoyUse &&
-        !definition.grenadeUse && !definition.nightVision && !helmet && !freightKey)
+        !definition.grenadeUse && !definition.thrownIlluminationUse && !definition.nightVision && !helmet && !freightKey)
         return std::nullopt;
     UiItemDetailsProjection result;
     result.instanceId = id;
@@ -55,6 +55,21 @@ std::optional<UiItemDetailsProjection> projectUiItemDetails(
             label(language, "装备到快速近战栏，按 V 使用；保留当前枪械。", "Equip in Quick Melee; press V without switching firearms."),
             label(language, "单次命中一个目标；墙体阻挡，护甲减伤。", "One target per swing; walls block and armor reduces damage."),
             label(language, "命中才磨损；局内不能维护，不造成连续硬直。", "Wear on contact only; no raid repairs or stun lock.")};
+    } else if (definition.thrownIlluminationUse) {
+        const auto &use = *definition.thrownIlluminationUse;
+        result.kind = UiItemDetailsKind::Illumination;
+        result.title = localizeUiText(language, "ILLUMINATION DETAILS");
+        metric("数量", "Quantity", fmt::format("{}", asset->quantity));
+        metric("单件重量", "Unit weight", fmt::format("{} g", definition.unitWeightGrams));
+        metric("投掷距离", "Throw range", fmt::format("{:.0f}", use.maximumRange));
+        metric("照明半径", "Light radius", fmt::format("{:.0f}", use.radius));
+        metric("持续时间", "Duration", fmt::format("{:.0f} s", use.durationSeconds));
+        result.status = label(language, "合法落地后开始照明", "Lights after a valid landing");
+        result.notes = {
+            label(language, "放入胸挂，按住 4 选择，松开后左键投出。",
+                "Carry in the rig. Hold 4 to select, release and click to throw."),
+            label(language, "每次一枚。视线和光照都须通畅。",
+                "One active flare. Both the player and light need line of sight.")};
     } else if (definition.grenadeUse) {
         const auto &use = *definition.grenadeUse;
         result.kind = UiItemDetailsKind::Grenade;
@@ -126,7 +141,7 @@ std::optional<UiItemDetailsProjection> projectUiItemDetails(
 SDL_FRect uiItemDetailsPanel() noexcept { return {40, 48, 1200, 656}; }
 SDL_FRect uiItemDetailsBack() noexcept { return {860, 92, 340, 32}; }
 SDL_FRect uiItemDetailsImage(UiItemDetailsKind kind) noexcept {
-    if (kind == UiItemDetailsKind::Decoy || kind == UiItemDetailsKind::Grenade) return {80, 190, 490, 102};
+    if (kind == UiItemDetailsKind::Decoy || kind == UiItemDetailsKind::Grenade || kind == UiItemDetailsKind::Illumination) return {80, 190, 490, 102};
     return kind == UiItemDetailsKind::Melee
         ? SDL_FRect{80, 190, 490, 246}
         : SDL_FRect{80, 190, 490, 124};

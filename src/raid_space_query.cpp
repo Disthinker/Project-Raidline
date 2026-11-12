@@ -1,4 +1,5 @@
 #include "raid_space_query.h"
+#include "raid_camera.h"
 
 #include <algorithm>
 #include <bit>
@@ -12,6 +13,7 @@
 #include <limits>
 #include <array>
 #include <queue>
+#include <numbers>
 #include <vector>
 
 #if defined(_M_X64) || defined(_M_IX86) || defined(__SSE__)
@@ -424,16 +426,20 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
     index.queryCandidateIndices(
         {{o.x - radius, o.y - radius}, {radius * 2, radius * 2}}, candidates);
     const auto *const blockerData = index.allBlockerBounds().data();
-    std::erase_if(candidates,
-                  [&](auto i)
-                  {
-                      const auto r = blockerData[i];
-                      const float x = std::clamp(o.x, r.position.x,
-                                                 r.position.x + r.size.x);
-                      const float y = std::clamp(o.y, r.position.y,
-                                                 r.position.y + r.size.y);
-                      return std::hypot(o.x - x, o.y - y) > radius;
-                  });
+    const auto candidateCount = candidates.size();
+    auto *const candidateData = candidates.data();
+    std::size_t localCount{};
+    for (std::size_t i = 0; i < candidateCount; ++i)
+    {
+        const auto index = candidateData[i];
+        const auto r = blockerData[index];
+        const float x = std::clamp(o.x, r.position.x, r.position.x + r.size.x);
+        const float y = std::clamp(o.y, r.position.y, r.position.y + r.size.y);
+        if (std::hypot(o.x - x, o.y - y) > radius)
+            continue;
+        candidateData[localCount++] = index;
+    }
+    candidates.resize(localCount);
     if (work)
         work->localBlockers = candidates.size();
     for (auto i : candidates)
@@ -502,7 +508,7 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
     struct ConeBlocker
     {
         Rect bounds;
-        Vec2 relativeCenter, halfExtent;
+        Vec2 maximum, relativeCenter, halfExtent;
         float linePadding;
         ConeSlabs slabs;
     };
@@ -520,7 +526,8 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
         const float padding = 8 * std::numeric_limits<float>::epsilon() *
             (std::abs(o.x) + std::abs(o.y) + std::abs(relativeCenter.x) +
              std::abs(relativeCenter.y) + halfExtent.x + halfExtent.y + 1);
-        localBounds.push_back({r, relativeCenter, halfExtent, padding,
+        const Vec2 maximum{r.position.x + r.size.x, r.position.y + r.size.y};
+        localBounds.push_back({r, maximum, relativeCenter, halfExtent, padding,
             prepareSlabs ? prepareConeSlabs(r, o) : ConeSlabs{}});
     }
     // Conservative angular buckets avoid scanning every local rectangle for
@@ -597,17 +604,18 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
     {
         const float angle = *angleCursor;
         const Vec2 d{std::cos(axisAngle + angle), std::sin(axisAngle + angle)};
-        std::array<float,2> limits{radiusAt(angle),0};
-        std::size_t limitCount=1;
+        float firstLimit = radiusAt(angle), secondLimit{};
+        std::size_t limitCount = 1;
         if (key.lightAssetId && (std::abs(std::abs(angle)-ambientHalf)<1e-7F || std::abs(std::abs(angle)-lightHalf)<1e-7F) && std::abs(angle)<half-1e-7F)
         {
-            limits={radiusAt(angle-0.000001F),radiusAt(angle+0.000001F)};
-            if (limits[0]!=limits[1]) limitCount=2;
+            firstLimit = radiusAt(angle - 0.000001F);
+            secondLimit = radiusAt(angle + 0.000001F);
+            if (firstLimit != secondLimit) limitCount = 2;
         }
         for (std::size_t limitIndex=0; limitIndex<limitCount; ++limitIndex)
         {
         if (work) ++work->rays;
-        float length = limits[limitIndex];
+        float length = limitIndex == 0 ? firstLimit : secondLimit;
         if (d.x > 1e-7F)
         {
             const float cap = (result.worldSize.x - o.x) / d.x;
@@ -646,8 +654,8 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
             const auto &candidate = localData[*previewCursor];
             const auto &r = candidate.bounds;
             const float pad = candidate.linePadding;
-            if (r.position.x + r.size.x < left - pad || r.position.x > right + pad ||
-                r.position.y + r.size.y < top - pad || r.position.y > bottom + pad) continue;
+            if (candidate.maximum.x < left - pad || r.position.x > right + pad ||
+                candidate.maximum.y < top - pad || r.position.y > bottom + pad) continue;
             const float cross = d.x * candidate.relativeCenter.y - d.y * candidate.relativeCenter.x;
             const float extent = absoluteX * candidate.halfExtent.y + absoluteY * candidate.halfExtent.x;
             if (std::abs(cross) > extent + pad) continue;
@@ -706,8 +714,8 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
             const auto &candidate = localData[*cursor];
             const auto &r = candidate.bounds;
             const float pad = candidate.linePadding;
-            if (r.position.x + r.size.x < left - pad || r.position.x > right + pad ||
-                r.position.y + r.size.y < top - pad || r.position.y > bottom + pad) continue;
+            if (candidate.maximum.x < left - pad || r.position.x > right + pad ||
+                candidate.maximum.y < top - pad || r.position.y > bottom + pad) continue;
             const float cross = d.x * candidate.relativeCenter.y -
                                 d.y * candidate.relativeCenter.x;
             const float extent = absoluteX * candidate.halfExtent.y +
@@ -743,6 +751,104 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
     result.boundary.resize(static_cast<std::size_t>(boundaryWrite - result.boundary.data()));
     result.valid = result.boundary.size() >= 3;
     return result;
+}
+
+const std::shared_ptr<const RaidIlluminationCoverage> &getRaidIlluminationCoverage(
+    std::shared_ptr<const RaidIlluminationCoverage> &cache,
+    const RaidSpaceBlockerIndex &index, const RaidSpaceDefinitionId &space,
+    std::uint64_t geometryRevision, std::string_view effectIdentity,
+    Vec2 source, float radius)
+{
+    if (cache)
+    {
+        const auto &previous = cache->fans.front();
+        if (cache->effectIdentity == effectIdentity && previous.spaceId == space &&
+            previous.geometryRevision == geometryRevision &&
+            previous.observer.x == source.x && previous.observer.y == source.y &&
+            previous.maximumDistance == radius)
+            return cache;
+    }
+    auto coverage = std::make_shared<RaidIlluminationCoverage>();
+    coverage->effectIdentity = effectIdentity;
+    for (std::size_t side = 0; side < coverage->fans.size(); ++side)
+    {
+        const RaidObservationKey light{
+            space, source, {side == 0 ? 1.0F : -1.0F, 0.0F}, 180.0F,
+            radius, RaidLightEnvironment::WeakIndoor, geometryRevision};
+        coverage->fans[side] = buildRaidSpaceConeVisibility(index, light);
+        coverage->queries[side] = RaidVisibilityBoundsQuery{coverage->fans[side]};
+    }
+    cache = std::move(coverage);
+    return cache;
+}
+
+RaidIlluminationObservationKey raidIlluminationObservationKey(
+    const std::shared_ptr<const RaidIlluminationCoverage> &source,
+    const WeaponOpticViewProjection *optic, Vec2 aim)
+{
+    RaidIlluminationObservationKey key{source};
+    if (source && optic != nullptr && optic->transitionWeight >= 1.0F &&
+        optic->lensRadius > 0.0F && optic->scale > 0.0F)
+    {
+        key.lensCenter = aim;
+        key.lensRadius = optic->lensRadius / optic->scale;
+    }
+    return key;
+}
+
+void addRaidIlluminatedObservation(RaidVisibilityProjection &view,
+    const RaidSpaceBlockerIndex &index, const RaidObservationKey &key,
+    RaidObservationWork *work)
+{
+    view.illuminationKey = key.illumination;
+    if (!view.valid || !key.illumination.source)
+        return;
+    const auto &light = key.illumination.source->fans.front();
+    const Vec2 delta{light.observer.x - key.observer.x, light.observer.y - key.observer.y};
+    const float distance = std::hypot(delta.x, delta.y);
+    const float radius = light.maximumDistance;
+    const float maximum = std::min(
+        raidSightParameters(RaidLightEnvironment::DayOutdoor).maximumDistance,
+        distance + radius);
+    if (maximum <= key.maximumDistance || distance - radius >= maximum)
+        return;
+
+    // Only trace directions which can meet the light's disk. The resulting
+    // clipped player fan still needs an independent witness in a light fan.
+    constexpr float radians = std::numbers::pi_v<float> / 180.0F;
+    const float viewHalf = key.angleDegrees * radians * 0.5F;
+    float left = -viewHalf, right = viewHalf;
+    if (distance > radius)
+    {
+        const float direction = std::atan2(
+            key.direction.x * delta.y - key.direction.y * delta.x,
+            key.direction.x * delta.x + key.direction.y * delta.y);
+        const float lightHalf = std::asin(radius / distance);
+        left = std::max(left, direction - lightHalf);
+        right = std::min(right, direction + lightHalf);
+    }
+    if (right <= left)
+        return;
+
+    const float center = (left + right) * 0.5F;
+    const float cosine = std::cos(center), sine = std::sin(center);
+    const Vec2 direction{key.direction.x * cosine - key.direction.y * sine,
+                         key.direction.x * sine + key.direction.y * cosine};
+    const RaidObservationKey extended{
+        key.spaceId, key.observer, direction,
+        std::min(key.angleDegrees, (right - left) / radians), maximum,
+        key.environment, key.geometryRevision};
+    RaidObservationWork extra;
+    auto playerFan = buildRaidSpaceConeVisibility(index, extended, work ? &extra : nullptr);
+    if (work)
+    {
+        work->localBlockers += extra.localBlockers;
+        work->rays += extra.rays;
+        work->blockerTests += extra.blockerTests;
+    }
+    if (playerFan.valid)
+        view.illumination = std::make_shared<const RaidIlluminatedObservation>(
+            std::move(playerFan), key.illumination);
 }
 
 bool raidSpaceHasLineOfSight(

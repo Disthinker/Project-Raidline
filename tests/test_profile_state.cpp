@@ -155,7 +155,8 @@ TEST(ProfileStateTest, NewPublishedProfileCreatesLegacyCatalogAndExcludesPurchas
             definition.definitionId == kExpanding545AmmunitionId ||
             definition.definitionId == kFreightCrateKeyId ||
             definition.definitionId == kRaidFuelCanId ||
-            definition.definitionId == kArmorRepairBlueprintId) {
+            definition.definitionId == kArmorRepairBlueprintId ||
+            definition.definitionId == kThrownIlluminationItemId) {
             EXPECT_EQ(stored, profile.assets.records().end()) << definition.definitionId.value();
             continue;
         }

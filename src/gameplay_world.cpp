@@ -1118,6 +1118,7 @@ void GameplayWorld::update(
     {
         noiseDecoy_.clear();
         grenade_.clear();
+        thrownIllumination_.clear();
         grenadeInvestigations_.clear();
         return;
     }
@@ -1174,6 +1175,11 @@ void GameplayWorld::update(
     static_cast<void>(player_.faceDirection(shooting_.aimDirection()));
     if (!observationDirectionFrozen_) observationDirection_ = weaponAimDirection();
     updateObservationLight(deltaTime);
+    if (thrownIllumination_.active() || thrownIllumination_.expiredLastAdvance())
+    {
+        thrownIllumination_.advance(deltaTime);
+        updateThrownIlluminationGlare(deltaTime);
+    }
 
     // 撤离使用移动后的 Player 逻辑中心，而不是更大的渲染精灵。
     const float highRiskTimeBeforeUpdate =
@@ -1263,6 +1269,7 @@ void GameplayWorld::update(
     // 终局形成后，本帧不再产生拾取、射击、敌人或命中结果。
     if (!raidSession_.isActive())
     {
+        thrownIllumination_.clear();
         return;
     }
 
@@ -1815,6 +1822,74 @@ void GameplayWorld::setWeaponLight(std::uint64_t device, std::uint64_t battery, 
     weaponLightBackgroundRadius_=background;
 }
 
+const std::shared_ptr<const RaidIlluminationCoverage> &
+GameplayWorld::activeThrownIlluminationCoverage() const
+{
+    static const std::shared_ptr<const RaidIlluminationCoverage> inactive;
+    const auto &source = thrownIllumination_.source();
+    if (!source || !raidSession_.isActive() || source->landing.space != activeRaidSpaceId())
+        return inactive;
+    const auto &landing = source->landing;
+    return getRaidIlluminationCoverage(thrownIlluminationCoverage_, activeBlockerIndex(),
+        landing.space, 1, landing.effectIdentity, landing.point, landing.use.radius);
+}
+
+const std::array<RaidVisibilityProjection, 2> &
+GameplayWorld::thrownIlluminationBackgroundObservations() const
+{
+    static const std::array<RaidVisibilityProjection, 2> inactive;
+    const auto &coverage = activeThrownIlluminationCoverage();
+    return coverage ? coverage->fans : inactive;
+}
+
+RaidIlluminationObservationKey GameplayWorld::currentThrownIlluminationObservation() const
+{
+    // Use the map's own observation capability, not an optic temporarily
+    // enabling observation on a map whose ordinary sight rules stay unchanged.
+    if (!thrownIllumination_.source() || !lightConeObservationEnabled_ ||
+        !isDarkForNightVision())
+        return {};
+    const auto &coverage = activeThrownIlluminationCoverage();
+    if (!coverage)
+        return {};
+    const auto &optic = weaponOpticView();
+    return raidIlluminationObservationKey(coverage, optic ? &*optic : nullptr,
+        weaponAimWorldPosition());
+}
+
+float GameplayWorld::thrownIlluminationGlareSeconds() const noexcept
+{
+    const auto &source = thrownIllumination_.source();
+    return source && source->nightVisionGlareTriggered &&
+        source->landing.space == activeRaidSpaceId() && nightVisionOutdoor_.maximumDistance > 0 &&
+        isDarkForNightVision() ? thrownIlluminationGlareSeconds_ : 0.0F;
+}
+
+void GameplayWorld::updateThrownIlluminationGlare(float seconds)
+{
+    const auto &source = thrownIllumination_.source();
+    if (!source)
+    {
+        thrownIlluminationGlareSeconds_ = 0.0F;
+        return;
+    }
+    thrownIlluminationGlareSeconds_ = std::max(
+        0.0F, thrownIlluminationGlareSeconds_ - seconds);
+    if (source->nightVisionGlareTriggered || source->landing.space != activeRaidSpaceId() ||
+        nightVisionOutdoor_.maximumDistance <= 0 || !isDarkForNightVision())
+        return;
+    const auto center = playerCenter(player_);
+    const auto point = source->landing.point;
+    const float dx = point.x - center.x, dy = point.y - center.y;
+    if (dx * dx + dy * dy > 120.0F * 120.0F)
+        return;
+    const auto &observation = raidObservation();
+    if (!observation.illuminationKey.insideLens(point) || !observation.pointVisible(point))
+        return;
+    thrownIllumination_.markNightVisionGlareTriggered();
+    thrownIlluminationGlareSeconds_ = 0.35F;
+}
+
 RaidObservationKey GameplayWorld::raidObservationKey() const
 {
     const auto parameters = currentObservationParameters();
@@ -1824,7 +1899,8 @@ RaidObservationKey GameplayWorld::raidObservationKey() const
             parameters.angleDegrees,
             parameters.maximumDistance,
             currentObservationEnvironment(),
-            1, weaponLightDevice_, weaponLightBattery_, weaponLightAngle_, weaponLightDistance_};
+            1, weaponLightDevice_, weaponLightBattery_, weaponLightAngle_, weaponLightDistance_,
+            currentThrownIlluminationObservation()};
 }
 
 const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
@@ -1838,6 +1914,7 @@ const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
     }
     const auto direction = currentObservationDirection();
     const auto parameters = currentObservationParameters();
+    const auto illumination = currentThrownIlluminationObservation();
     // Compare borrowed space identity and scalar parameters on the hot path.
     // Only a rebuild or a submitted command needs an owned context string.
     if (!indoorObservationCacheReady_ ||
@@ -1852,9 +1929,12 @@ const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
             currentObservationEnvironment() ||
         indoorObservationCache_.geometryRevision != 1 || indoorObservationCache_.lightAssetId != weaponLightDevice_ ||
         indoorObservationCache_.lightBatteryId != weaponLightBattery_ || indoorObservationCache_.lightAngleDegrees != weaponLightAngle_ ||
-        indoorObservationCache_.lightDistance != weaponLightDistance_)
+        indoorObservationCache_.lightDistance != weaponLightDistance_ ||
+        indoorObservationCache_.illuminationKey != illumination)
     {
-        const auto key = raidObservationKey();
+        const RaidObservationKey key{activeRaidSpaceId(), center, direction, parameters.angleDegrees,
+            parameters.maximumDistance, currentObservationEnvironment(), 1, weaponLightDevice_,
+            weaponLightBattery_, weaponLightAngle_, weaponLightDistance_, illumination};
         enemyObservationCache_.clear();
         enemyObservationIndexReady_ = false;
         if (lightConeObservationEnabled())
@@ -1877,6 +1957,9 @@ const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
                 {0, 0}, {size.x, 0}, size, {0, size.y}};
             indoorObservationCache_.valid = true;
         }
+        if (illumination.source)
+            addRaidIlluminatedObservation(indoorObservationCache_, activeBlockerIndex(),
+                key, &observationWork_);
         observationBoundsQuery_ =
             RaidVisibilityBoundsQuery{indoorObservationCache_};
         weaponLightBackgroundCache_ = {};
@@ -2688,6 +2771,7 @@ bool GameplayWorld::damagePlayer(int damage)
 
     const bool markedDead =
         raidSession_.markPlayerDead();
+    thrownIllumination_.clear();
 
     if (!markedDead)
     {

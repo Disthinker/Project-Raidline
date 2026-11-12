@@ -4,9 +4,29 @@
 #include <algorithm>
 #include <nlohmann/json.hpp>
 
-inline nlohmann::json contentBeforeArmorReadinessJson()
+inline nlohmann::json contentBeforeThrownIlluminationJson()
 {
     auto document = nlohmann::json::parse(publishedContentJson());
+    document["content_version"] = std::string{kArmorReadinessContentVersion};
+    auto &items = document["items"];
+    items.erase(std::remove_if(items.begin(), items.end(), [](const auto &item) {
+        return item.at("id") == std::string{kThrownIlluminationItemId.value()};
+    }), items.end());
+    auto &recipes = document["base_manufacturing"]["recipes"];
+    recipes.erase(std::remove_if(recipes.begin(), recipes.end(), [](const auto &recipe) {
+        return recipe.at("id") == std::string{kThrownIlluminationRecipeId.value()};
+    }), recipes.end());
+    return document;
+}
+
+inline ContentRegistry contentBeforeThrownIllumination()
+{
+    return ContentRegistry::fromJson(contentBeforeThrownIlluminationJson().dump());
+}
+
+inline nlohmann::json contentBeforeArmorReadinessJson()
+{
+    auto document = contentBeforeThrownIlluminationJson();
     document["content_version"] = std::string{kFuelExtractionContentVersion};
     auto &items = document["items"];
     items.erase(std::remove_if(items.begin(), items.end(), [](const auto &item) {

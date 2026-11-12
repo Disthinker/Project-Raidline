@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "ui_weapon_optic_view.h"
+#include "ui_raid_illumination.h"
 
 namespace
 {
@@ -179,6 +180,9 @@ bool App::renderWeaponOpticWorld(const WeaponOpticViewProjection &projection,
 void App::renderRaidOpticScene(Rect visible, bool terrainOnly, bool drawAvatar)
 {
     renderBackground(true, terrainOnly, visible);
+    const auto &world = gameSession_.world();
+    drawUiThrownIllumination(renderer_, world.thrownIlluminationBackgroundObservations(), visible,
+        world.thrownIlluminationGlareSeconds());
     renderBallisticBlockers(terrainOnly, visible);
     if (terrainOnly)
         return;

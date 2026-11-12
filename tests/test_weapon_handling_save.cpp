@@ -405,7 +405,7 @@ TEST_F(WeaponHandlingSaveTest, AmmoLoopUpgradeKeepsOldOrderAndPendingRaidAndArch
     EXPECT_EQ(readBytes(archive(false, primary)), primary);
     EXPECT_EQ(readBytes(archive(true, backup)), backup);
     const auto upgraded = Json::parse(readBytes(repository.primaryPath()));
-    EXPECT_EQ(upgraded.at("schema_version"), 64U);
+    EXPECT_EQ(upgraded.at("schema_version"), 65U);
     EXPECT_EQ(upgraded.at("content_version").get<std::string>(), kAmmoLoopContentVersion);
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile) << reopened.message;
@@ -509,7 +509,7 @@ TEST_F(WeaponHandlingSaveTest, FreightUpgradeKeepsFrozenSchema61CratesAndHospita
         const auto reopened = repository.load(content);
         ASSERT_TRUE(reopened.profile && reopened.profile->pendingRaid) << reopened.message;
         ASSERT_TRUE(reopened.sourceEnvelope);
-        EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 64U);
+        EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 65U);
         EXPECT_EQ(reopened.sourceEnvelope->contentVersion, kCrossMapFreightContentVersion);
         EXPECT_EQ(reopened.profile->pendingRaid->loot, oldProfile.pendingRaid->loot);
         EXPECT_FALSE(reopened.profile->pendingRaid->freightKeyLootSlotId);
@@ -722,7 +722,7 @@ TEST_F(WeaponHandlingSaveTest, FuelUpgradeKeepsFrozenSchema62FreightAndArchivesB
 
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile && reopened.profile->pendingRaid && reopened.sourceEnvelope) << reopened.message;
-    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 64U);
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 65U);
     EXPECT_EQ(reopened.sourceEnvelope->contentVersion, kFuelExtractionContentVersion);
     EXPECT_FALSE(reopened.profile->pendingRaid->fuelExtractionLootAssetId);
     EXPECT_EQ(reopened.profile->pendingRaid->loot, profile.pendingRaid->loot);
@@ -773,7 +773,7 @@ TEST_F(WeaponHandlingSaveTest, ArmorReadinessUpgradePreservesFrozenFuelAndActive
     const auto fingerprint = profileStateFingerprint(profile);
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), fingerprint);
 
-    const auto upgraded = repository.save(*loaded.profile, content.contentVersion());
+    const auto upgraded = repository.save(*loaded.profile, kArmorReadinessContentVersion);
     ASSERT_TRUE(upgraded.succeeded) << upgraded.message;
     EXPECT_EQ(readBytes(directory.path() /
         ("profile.pre-base-research-armor-readiness-v1." + checksum(primary) + ".json")), primary);
@@ -782,7 +782,7 @@ TEST_F(WeaponHandlingSaveTest, ArmorReadinessUpgradePreservesFrozenFuelAndActive
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile && reopened.sourceEnvelope && reopened.profile->pendingRaid)
         << reopened.message;
-    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 64U);
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 65U);
     EXPECT_EQ(reopened.sourceEnvelope->contentVersion, kArmorReadinessContentVersion);
     EXPECT_EQ(reopened.profile->baseManufacturing, profile.baseManufacturing);
     EXPECT_EQ(reopened.profile->pendingRaid->fuelExtractionLootAssetId,

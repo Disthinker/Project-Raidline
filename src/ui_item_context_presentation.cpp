@@ -39,6 +39,7 @@ std::string compactUiItemName(const ItemDefinition &d,UiLanguage language) {
         {"item.medical.painkiller_basic","Painkiller","止痛药"},
         {"item.throwable.noise_decoy","Decoy","诱饵"},
         {"item.throwable.frag_grenade_basic","Frag","破片"},
+        {"item.throwable.field_flare","Flare","照明弹"},
         {"item.component.suppressor_5_45","Suppressor","消音器"},
         {"item.loot.freight_crate_key","Key","货箱钥匙"},
         {"item.container.chest_rig_small","Light rig","小胸挂"},
@@ -121,6 +122,8 @@ std::vector<UiItemActionEntry> projectUiItemActions(
         result = {{UiItemAction::DecoyDetails, "DECOY DETAILS"}};
     if (definition.grenadeUse)
         result = {{UiItemAction::DecoyDetails, "GRENADE DETAILS"}};
+    if (definition.thrownIlluminationUse)
+        result = {{UiItemAction::DecoyDetails, "ILLUMINATION DETAILS"}};
     if (definition.nightVision)
         result = {{UiItemAction::NightVisionDetails, "NIGHT VISION DETAILS"}};
     else if (supportsUiNightVisionMount(content, definition))

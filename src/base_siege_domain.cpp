@@ -597,6 +597,7 @@ BaseAutoDefenseReceipt executeBaseRealtimeDefenseStart(
         effects.dailyDamageProtectionSeconds=0;
         effects.medical.reset();
         effects.noiseDecoy.investigations.clear();
+        effects.thrownIllumination = {};
     }
     // The Base event takes over the existing outing without invoking its
     // return/rescue settlement. Personal Loot stays where it is, and a later
@@ -678,6 +679,7 @@ BaseAutoDefenseReceipt executeBaseRealtimeDefenseSettlement(
         effects.dailyMedicalRandomSequence=snapshot.medicalRandomSequence;effects.dailyWoundRandomSequence=snapshot.woundRandomSequence;
         effects.medical.reset();
         effects.noiseDecoy.investigations.clear();
+        effects.thrownIllumination = {};
     }
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;

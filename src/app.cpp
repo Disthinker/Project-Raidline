@@ -1,5 +1,6 @@
 // Implementation of the App class
 #include "app.h"
+#include "ui_raid_illumination.h"
 #include "ui_weapon_optic_view.h"
 #include "base_siege_warning_layout.h"
 #include "base_wish_expedition.h"
@@ -2983,6 +2984,9 @@ void App::updateBase(float deltaTime)
         uiMessage_=gameSession_.persistenceMessage();
     consumePresentationAudioEvents();
     const BaseWorld &baseWorld = gameFlow_.baseWorld();
+    if (baseWorld.thrownIllumination().expiredLastAdvance() &&
+        (uiMessage_.empty() || uiMessage_ == "ILLUMINATION THROWN"))
+        uiMessage_ = "ILLUMINATION EXPIRED";
     for(unsigned pulse=0;pulse<baseWorld.noiseDecoy().pulsesLastUpdate();++pulse)
         gameAudio_.play(SoundEventId::NoiseDecoyPulse);
     if(baseWorld.grenadeExplodedLastUpdate())gameAudio_.play(SoundEventId::ImpactObstacle);
@@ -6195,6 +6199,9 @@ void App::update(float deltaTime)
         return;
     }
     consumePresentationAudioEvents();
+    if (gameSession_.world().thrownIllumination().expiredLastAdvance() &&
+        (uiMessage_.empty() || uiMessage_ == "ILLUMINATION THROWN"))
+        uiMessage_ = "ILLUMINATION EXPIRED";
     for (unsigned pulse=0; pulse<gameSession_.world().noiseDecoy().pulsesLastUpdate(); ++pulse)
         gameAudio_.play(SoundEventId::NoiseDecoyPulse);
     if(gameSession_.world().grenadeExplodedLastUpdate())
@@ -10144,6 +10151,7 @@ void App::renderBaseWorldScene(Rect visible, bool terrainOnly, bool drawAvatar)
 
     }
 
+    drawUiThrownIllumination(renderer_, world.thrownIlluminationBackgroundObservations(), visible);
     if (terrainOnly)
         return;
 
@@ -10316,7 +10324,18 @@ void App::renderBaseWorld()
                 vertices.data(),static_cast<int>(vertices.size()),nullptr,0);
         };
         for(const auto &near:world.weaponLightBackgroundObservations())paintVisibility(near,true);
-        paintVisibility(world.observation(),false);
+        const auto &observation = world.observation();
+        paintVisibility(observation,false);
+        std::vector<SDL_Vertex> litVertices;
+        for (const auto &triangle : clipUiIlluminatedObservation(observation, visible)) {
+            for (const auto point : triangle) {
+                const SDL_FPoint pixel{point.x - camera.x, point.y - camera.y};
+                litVertices.push_back({pixel, {1,1,1,1}, {pixel.x / kWindowWidth, pixel.y / kWindowHeight}});
+            }
+        }
+        if (!litVertices.empty())
+            SDL_RenderGeometry(renderer_, indoorInformationLayer_.get(), litVertices.data(),
+                static_cast<int>(litVertices.size()), nullptr, 0);
         SDL_SetRenderViewport(renderer_,&worldViewport);
         renderPlayerAvatar(world.playerPosition(),world.playerSize(),world.playerFacingDirection(),
             world.playerIsMoving(),world.playerAnimationFrame());
@@ -13881,6 +13900,17 @@ bool App::renderIndoorInformationLayer(const SDL_Rect &worldViewport)
                 indices.push_back(first + j + 1);
             }
         }
+    for (const auto &triangle : clipUiIlluminatedObservation(view, screenWorld))
+    {
+        for (const auto p : triangle)
+        {
+            const SDL_FPoint pixel{p.x + worldViewport.x, p.y + worldViewport.y};
+            indices.push_back(static_cast<int>(vertices.size()));
+            vertices.push_back({pixel, {1, 1, 1, 1},
+                {std::clamp(pixel.x / kWindowWidth, 0.0F, 1.0F),
+                 std::clamp(pixel.y / kWindowHeight, 0.0F, 1.0F)}});
+        }
+    }
     // The optic pass shares these targets. SDL retains scale per target.
     if (!SDL_SetRenderTarget(renderer_, indoorShadowMask_.get()) ||
         !SDL_SetRenderScale(renderer_, 1.0F, 1.0F))
@@ -13915,6 +13945,9 @@ bool App::renderIndoorInformationLayer(const SDL_Rect &worldViewport)
     deferWorldLabels_ = true;
     deferredWorldLabels_.clear();
     renderBackground();
+    const auto &world = gameSession_.world();
+    drawUiThrownIllumination(renderer_, world.thrownIlluminationBackgroundObservations(), screenWorld,
+        world.thrownIlluminationGlareSeconds());
     renderExtractionPoint();
     renderRaidSpacePortal();
     renderBallisticBlockers();
@@ -13998,6 +14031,11 @@ void App::renderUnscopedRaidWorld()
         static_cast<void>(SDL_SetRenderViewport(renderer_, &worldViewport));
     }
     renderBackground();
+    const auto &world = gameSession_.world();
+    const Rect visible{{-static_cast<float>(worldViewport.x), -static_cast<float>(worldViewport.y)},
+        {static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight)}};
+    drawUiThrownIllumination(renderer_, world.thrownIlluminationBackgroundObservations(), visible,
+        world.thrownIlluminationGlareSeconds());
     renderExtractionPoint();
     renderRaidSpacePortal();
     renderBallisticBlockers();
@@ -14482,7 +14520,8 @@ void App::renderProfileWeaponDetails()
     const auto &asset = *profile.assets.find(*profileDetailsAsset_);
     const auto &definition = content.item(asset.definitionId);
     if (model->kind == UiItemDetailsKind::Melee) { renderProfileMeleeDetails(asset, definition); return; }
-    if (model->kind == UiItemDetailsKind::Decoy || model->kind == UiItemDetailsKind::Grenade) { renderProfileDecoyDetails(asset, definition); return; }
+    if (model->kind == UiItemDetailsKind::Decoy || model->kind == UiItemDetailsKind::Grenade ||
+        model->kind == UiItemDetailsKind::Illumination) { renderProfileDecoyDetails(asset, definition); return; }
     const auto choose = [&](const char *zh, const char *en) { return uiTextRenderer_.language() == UiLanguage::SimplifiedChinese ? zh : en; };
     const bool inRaid = gameSession_.alphaRaidActive();
     const bool helmet = model->kind == UiItemDetailsKind::Helmet;

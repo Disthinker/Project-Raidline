@@ -28,10 +28,23 @@ const Enemy *findGrenadeHit(const Enemy *first, const Enemy *last,
 std::optional<GrenadeLanding> GameplayWorld::previewGrenade(Vec2 aim,const GrenadeUseDefinition &use) const
 {
     if(!grenadeEnabled_ || !raidSession_.isActive() || player_.isDead() || player_.isControlled() ||
-       grenade_.active() || noiseDecoy_.flight() || melee_.recoverySeconds()>0)return std::nullopt;
+       grenade_.active() || noiseDecoy_.flight() || thrownIllumination_.flight() || melee_.recoverySeconds()>0)return std::nullopt;
     const auto p=player_.position();const float s=player_.size();
     return queryGrenadeLanding({p.x+s/2,p.y+s/2},aim,activeRaidSpaceId(),use,activeBlockerIndex());
 }
+std::optional<ThrownIlluminationLanding> GameplayWorld::previewThrownIllumination(
+    Vec2 aim, const ThrownIlluminationUseDefinition &use) const
+{
+    if (!grenadeEnabled_ || !raidSession_.isActive() || player_.isDead() ||
+        player_.isControlled() || grenade_.active() || noiseDecoy_.flight() ||
+        thrownIllumination_.active() || melee_.recoverySeconds() > 0.0F)
+        return std::nullopt;
+    const Vec2 position = player_.position();
+    const float half = player_.size() / 2.0F;
+    return queryThrownIlluminationLanding({position.x + half, position.y + half},
+        aim, activeRaidSpaceId(), use, activeBlockerIndex());
+}
+
 void GameplayWorld::commitGrenade(RaidGrenadeRuntime prepared) noexcept
 {
     grenade_=std::move(prepared);

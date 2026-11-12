@@ -7,6 +7,8 @@
 #include <nlohmann/json.hpp>
 #include "alpha_content_ids.h"
 #include "base_corpse_domain.h"
+#include "base_manufacturing_domain.h"
+#include "raid_optics_legacy_fixture.h"
 #include "home_perimeter_domain.h"
 #include "save_repository.h"
 #include "test_temp_directory.h"
@@ -120,7 +122,7 @@ protected:
 TEST_F(PlayerSystemsV3SaveTest, CurrentSchemaRequiresAllThreeBaseFieldsAndLegacy59DefaultsEmpty)
 {
     const auto current=Json::parse(serializeProfileEnvelope(profile,content.contentVersion()));
-    EXPECT_EQ(current.at("schema_version"),64U);
+    EXPECT_EQ(current.at("schema_version"),65U);
     EXPECT_TRUE(current.at("payload").at("base_reload_recovery").is_null());
     EXPECT_TRUE(current.at("payload").at("base_player_effects").is_null());
     EXPECT_TRUE(current.at("payload").at("base_corpses").empty());
@@ -180,6 +182,113 @@ TEST_F(PlayerSystemsV3SaveTest, BodyMedicalThrowsAndEmptyCorpsesRoundTripWithCom
     EXPECT_EQ(serializeProfileEnvelope(*restored.profile,content.contentVersion()),text);
 }
 
+TEST_F(PlayerSystemsV3SaveTest, IlluminationCheckpointRoundTripsPhaseAndRejectsForgedFacts)
+{
+    BasePlayerEffectsRecovery effects;
+    effects.scope = scope;
+    effects.worldSize = access.worldSize;
+    effects.playerPosition = access.playerCenter;
+    const auto &item = content.item(kThrownIlluminationItemId);
+    ASSERT_TRUE(item.thrownIlluminationUse);
+    const ThrownIlluminationLanding landing{
+        {100, 100}, {200, 100},
+        RaidSpaceDefinitionId{"base_space." + std::string{scope.baseSiteDefinitionId.value()}},
+        *item.thrownIlluminationUse, "committed-base-flare"};
+    profile.committedTransactions.insert(landing.effectIdentity);
+    profile.basePlayerEffects = effects;
+
+    auto &light = profile.basePlayerEffects->thrownIllumination;
+    light.flight = ThrownIlluminationFlight{landing, 0.125};
+    const auto flight = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()), content);
+    ASSERT_TRUE(flight.profile && flight.profile->basePlayerEffects) << flight.message;
+    const auto &flightCheckpoint = flight.profile->basePlayerEffects->thrownIllumination;
+    ASSERT_TRUE(flightCheckpoint.flight);
+    EXPECT_EQ(flightCheckpoint.flight->elapsed, 0.125);
+    EXPECT_FALSE(flightCheckpoint.source);
+
+    light.flight.reset();
+    light.source = ThrownIlluminationSource{landing, 3.5, true};
+    const auto encoded = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto loaded = deserializeProfileEnvelope(encoded, content);
+    ASSERT_TRUE(loaded.profile && loaded.profile->basePlayerEffects) << loaded.message;
+    const auto &saved = loaded.profile->basePlayerEffects->thrownIllumination.source;
+    ASSERT_TRUE(saved);
+    EXPECT_EQ(saved->landing.effectIdentity, landing.effectIdentity);
+    EXPECT_EQ(saved->elapsed, 3.5);
+    EXPECT_TRUE(saved->nightVisionGlareTriggered);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+    EXPECT_EQ(serializeProfileEnvelope(*loaded.profile, content.contentVersion()), encoded);
+    const auto withGlare = profileStateFingerprint(profile);
+    light.source->nightVisionGlareTriggered = false;
+    EXPECT_NE(profileStateFingerprint(profile), withGlare);
+
+    const auto original = Json::parse(encoded);
+    const auto reject = [&](auto mutate) {
+        auto changed = original;
+        mutate(changed["payload"]["base_player_effects"]["thrown_illumination"]);
+        EXPECT_FALSE(deserializeProfileEnvelope(checked(changed), content).profile);
+    };
+    reject([](Json &value) { value["source"]["elapsed"] = 20; });
+    reject([](Json &value) { value["source"]["landing"]["point"]["x"] = 1000; });
+    reject([](Json &value) { value["source"]["landing"]["point"]["x"] = 102; });
+    reject([](Json &value) { value["source"]["landing"]["space_id"] = "base_space.foreign"; });
+    reject([](Json &value) { value["source"]["landing"]["effect_identity"] = "unknown-throw"; });
+    reject([](Json &value) { value["source"]["landing"]["use"]["radius"] = 200; });
+    reject([](Json &value) { value["source"]["night_vision_glare_triggered"] = 1; });
+    reject([](Json &value) { value["flight"] = value["source"]; });
+    auto legacy = original;
+    legacy["schema_version"] = 64U;
+    legacy["content_version"] = kArmorReadinessContentVersion;
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(legacy), content).profile);
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, kArmorReadinessContentVersion, 64)),
+        std::invalid_argument);
+}
+
+TEST_F(PlayerSystemsV3SaveTest, IlluminationUpgradePreservesExactOldArmorResearchAndBothSaveSlots)
+{
+    const auto historical = contentBeforeThrownIllumination();
+    profile = makeNewAlphaProfile("illumination-upgrade-old-research", historical);
+    profile.baseConstruction.workshopLevel = 2U;
+    const auto &blueprint = historical.item(kArmorRepairBlueprintId);
+    const auto position = findFirstProfileFit(profile, historical, ProfileContainerId::stash(),
+        blueprint, ItemOrientation::Degrees0);
+    ASSERT_TRUE(position);
+    const auto id = profile.assets.create(blueprint,
+        StoredAssetLocation{ProfileContainerId::stash(), *position});
+    const auto research = executeStartBaseManufacturing(profile, historical, {kArmorRepairResearchId},
+        {profile.revision, "start-frozen-armor-research"});
+    ASSERT_TRUE(research.succeeded) << research.message;
+    const auto primary = serializeProfileEnvelope(profile, historical.contentVersion(), 64);
+    auto earlier = profile;
+    ++earlier.revision;
+    const auto backup = serializeProfileEnvelope(earlier, historical.contentVersion(), 64);
+
+    SaveRepository repository{directory.path()};
+    writeBytes(repository.primaryPath(), primary);
+    writeBytes(repository.backupPath(), backup);
+    const auto loaded = repository.load(content);
+    ASSERT_TRUE(loaded.profile && loaded.sourceEnvelope) << loaded.message;
+    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 64U);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+    EXPECT_FALSE(loaded.profile->basePlayerEffects);
+    const auto upgraded = repository.save(*loaded.profile, content.contentVersion());
+    ASSERT_TRUE(upgraded.succeeded) << upgraded.message;
+    EXPECT_EQ(readBytes(directory.path() /
+        ("profile.pre-raid-thrown-illumination-v1." + digest(primary) + ".json")), primary);
+    EXPECT_EQ(readBytes(directory.path() /
+        ("profile.backup.pre-raid-thrown-illumination-v1." + digest(backup) + ".json")), backup);
+
+    const auto reopened = repository.load(content);
+    ASSERT_TRUE(reopened.profile && reopened.sourceEnvelope) << reopened.message;
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 65U);
+    EXPECT_EQ(reopened.sourceEnvelope->contentVersion, kThrownIlluminationContentVersion);
+    EXPECT_EQ(reopened.profile->baseManufacturing, profile.baseManufacturing);
+    const auto *reserved = reopened.profile->assets.find(id);
+    ASSERT_NE(reserved, nullptr);
+    EXPECT_EQ(std::get<BaseServiceAssetLocation>(reserved->location).jobId, research.jobId);
+}
+
 TEST_F(PlayerSystemsV3SaveTest, EffectsRejectMalformedNestedValuesAndDuplicateListenerIdentities)
 {
     addEffects();const auto original=Json::parse(serializeProfileEnvelope(profile,content.contentVersion()));
@@ -223,7 +332,7 @@ TEST_F(PlayerSystemsV3SaveTest, UpgradeArchivesExact59PrimaryAndBackupBeforeRota
     EXPECT_EQ(readBytes(archive(directory.path(),false,primary)),primary);EXPECT_EQ(readBytes(archive(directory.path(),true,backup)),backup);
     ++profile.revision;ASSERT_TRUE(repository.save(profile,content.contentVersion()).succeeded);
     EXPECT_EQ(readBytes(archive(directory.path(),false,primary)),primary);EXPECT_EQ(readBytes(archive(directory.path(),true,backup)),backup);
-    EXPECT_EQ(Json::parse(readBytes(repository.primaryPath()))["schema_version"],64U);
+    EXPECT_EQ(Json::parse(readBytes(repository.primaryPath()))["schema_version"],65U);
 }
 
 TEST_F(PlayerSystemsV3SaveTest, BackupRecoveryArchivesCorruptPrimaryAnd59BackupByteForByte)
