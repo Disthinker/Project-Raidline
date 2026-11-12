@@ -34,6 +34,18 @@ struct RaidIndoorVisibilityUiTestAccess
         return a.renderIndoorInformationLayer(viewport);
     }
     static void paint(App &a) { a.renderRaidScreen(); }
+    static void paintTacticalMap(App &a) { a.renderRaidTacticalMap(); }
+    static bool chalkAvailable(App &a) { return a.raidChalkContext().has_value(); }
+    static bool chalkDrawing(App &a) { return a.raidChalkRoutes_.drawing(); }
+    static std::size_t chalkStrokes(App &a, RaidChalkSpace space)
+    {
+        return a.raidChalkRoutes_.strokes(space).size();
+    }
+    static bool wantsAds(App &a) { return a.makeGameplayControls().aimDownSights; }
+    static void setChinese(App &a)
+    {
+        a.uiTextRenderer_.setLanguage(UiLanguage::SimplifiedChinese);
+    }
     static void directPaint(App &a)
     {
         a.renderBackground();
@@ -142,6 +154,202 @@ struct RaidIndoorVisibilityUiTestAccess
 namespace
 {
 using A = RaidIndoorVisibilityUiTestAccess;
+class RaidChalkRouteUiTest : public testing::Test
+{
+protected:
+    std::unique_ptr<App> app;
+    std::filesystem::path path = std::filesystem::temp_directory_path() /
+        ("raidline-chalk-ui-" +
+         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+
+    void SetUp() override { ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS)); }
+
+    void TearDown() override
+    {
+        app.reset();
+        SDL_Quit();
+        std::error_code error;
+        std::filesystem::remove_all(path, error);
+    }
+
+    void deploy(const MapDefinitionId &map, bool known)
+    {
+        auto profile = makeNewAlphaProfile("chalk-route-ui", publishedContentRegistry());
+        if (known)
+            profile.raidInteriorIntelligence.knownLayouts.insert(kHospitalFloorplanSpaceId);
+        ASSERT_TRUE(SaveRepository{path}.save(profile, publishedContentRegistry().contentVersion()).succeeded);
+        app = std::make_unique<App>();
+        A::flow(*app).configurePersistence(path);
+        ASSERT_TRUE(A::flow(*app).continueGame());
+        ASSERT_TRUE(A::flow(*app).deploy(map));
+    }
+
+    void key(SDL_Scancode code)
+    {
+        SDL_Event event{};
+        event.type = SDL_EVENT_KEY_DOWN;
+        event.key.scancode = code;
+        event.key.down = true;
+        ASSERT_TRUE(SDL_PushEvent(&event));
+        event.type = SDL_EVENT_KEY_UP;
+        event.key.down = false;
+        ASSERT_TRUE(SDL_PushEvent(&event));
+        A::frame(*app);
+    }
+
+    void pointer(Uint32 type, Vec2 point, Uint8 button = SDL_BUTTON_RIGHT)
+    {
+        SDL_Event event{};
+        event.type = type;
+        if (type == SDL_EVENT_MOUSE_MOTION)
+        {
+            event.motion.x = point.x;
+            event.motion.y = point.y;
+            event.motion.state = SDL_BUTTON_RMASK;
+        }
+        else
+        {
+            event.button.x = point.x;
+            event.button.y = point.y;
+            event.button.button = button;
+            event.button.down = type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+        }
+        ASSERT_TRUE(SDL_PushEvent(&event));
+        A::frame(*app);
+    }
+
+    void line(Vec2 from, Vec2 to)
+    {
+        pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, from);
+        pointer(SDL_EVENT_MOUSE_MOTION, to);
+        pointer(SDL_EVENT_MOUSE_BUTTON_UP, to);
+    }
+
+    void click(Vec2 point)
+    {
+        pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, point, SDL_BUTTON_LEFT);
+        pointer(SDL_EVENT_MOUSE_BUTTON_UP, point, SDL_BUTTON_LEFT);
+    }
+
+    void crossHospitalDoor()
+    {
+        auto &flow = A::flow(*app);
+        const auto &session = flow.gameSession();
+        const auto &world = session.world();
+        ASSERT_TRUE(session.profile().pendingRaid);
+        const auto &interiors = session.profile().pendingRaid->interiors;
+        const auto hospital = std::find_if(interiors.begin(), interiors.end(), [](const auto &room)
+        {
+            return room.id == kHospitalFloorplanSpaceId;
+        });
+        ASSERT_NE(hospital, interiors.end());
+        const auto door = world.inOutdoorRaidSpace() ? hospital->exteriorEntrance : hospital->interiorExit;
+        const float half = world.player().size() * 0.5F;
+        ASSERT_TRUE(const_cast<Player &>(world.player()).setPosition({
+            door.position.x + door.size.x * 0.5F - half,
+            door.position.y + door.size.y * 0.5F - half}));
+        GameplayInput input;
+        input.interactJustPressed = true;
+        flow.update(input, 0);
+    }
+
+    void verifyScaledMap()
+    {
+        for (const UiWindowSize size : kUiWindowSizes)
+        {
+            SCOPED_TRACE(size.width);
+            const auto viewport = UiViewport::fromWindow(size.width, size.height);
+            const Vec2 sample = viewport.toWindow({400, 220});
+            const Vec2 logical = viewport.toLogical(sample);
+            EXPECT_NEAR(logical.x, 400, 0.0001F);
+            EXPECT_NEAR(logical.y, 220, 0.0001F);
+
+            const std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)> surface(
+                SDL_CreateSurface(size.width, size.height, SDL_PIXELFORMAT_RGBA32), SDL_DestroySurface);
+            ASSERT_NE(surface, nullptr);
+            const std::unique_ptr<SDL_Renderer, decltype(&SDL_DestroyRenderer)> renderer(
+                SDL_CreateSoftwareRenderer(surface.get()), SDL_DestroyRenderer);
+            ASSERT_NE(renderer, nullptr);
+            ASSERT_TRUE(SDL_SetRenderLogicalPresentation(
+                renderer.get(), 1280, 720, SDL_LOGICAL_PRESENTATION_LETTERBOX));
+            const bool attached = A::attach(*app, renderer.get());
+            EXPECT_TRUE(attached);
+            if (attached)
+            {
+                A::setChinese(*app);
+                A::paintTacticalMap(*app);
+                EXPECT_TRUE(SDL_RenderPresent(renderer.get()));
+                bool strokePixel{};
+                for (int offset = -2; offset <= 2; ++offset)
+                {
+                    Uint8 r{}, g{}, b{}, a{};
+                    EXPECT_TRUE(SDL_ReadSurfacePixel(surface.get(), static_cast<int>(sample.x),
+                                                    static_cast<int>(sample.y) + offset, &r, &g, &b, &a));
+                    strokePixel |= r == 113 && g == 191 && b == 179;
+                }
+                EXPECT_TRUE(strokePixel);
+                if (const char *directory = std::getenv("RAIDLINE_CHALK_QA_DIR"))
+                {
+                    std::filesystem::create_directories(directory);
+                    const auto artifact = std::filesystem::path{directory} /
+                        ("hospital-chalk-" + std::to_string(size.width) + ".bmp");
+                    EXPECT_TRUE(SDL_SaveBMP(surface.get(), artifact.string().c_str()));
+                }
+            }
+            A::detach(*app);
+        }
+    }
+};
+
+TEST_F(RaidChalkRouteUiTest, RoutesRenderAcrossWindowSizesAndResetAtRaidEnd)
+{
+    ASSERT_NO_FATAL_FAILURE(deploy(kHospitalFloorplanMapId, true));
+    key(SDL_SCANCODE_M);
+    ASSERT_TRUE(A::chalkAvailable(*app));
+    line({300, 220}, {460, 220});
+    ASSERT_EQ(A::chalkStrokes(*app, RaidChalkSpace::Outdoor), 1U);
+    verifyScaledMap();
+
+    pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, {350, 300});
+    ASSERT_TRUE(A::chalkDrawing(*app));
+    key(SDL_SCANCODE_M);
+    EXPECT_FALSE(A::chalkDrawing(*app));
+    EXPECT_FALSE(A::wantsAds(*app));
+    pointer(SDL_EVENT_MOUSE_BUTTON_UP, {350, 300});
+    pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, {350, 300});
+    EXPECT_TRUE(A::wantsAds(*app));
+    pointer(SDL_EVENT_MOUSE_BUTTON_UP, {350, 300});
+
+    crossHospitalDoor();
+    ASSERT_EQ(A::flow(*app).gameSession().world().activeRaidSpaceId(), kHospitalFloorplanSpaceId);
+    key(SDL_SCANCODE_M);
+    ASSERT_TRUE(A::chalkAvailable(*app));
+    line({300, 220}, {460, 220});
+    line({300, 260}, {460, 260});
+    EXPECT_EQ(A::chalkStrokes(*app, RaidChalkSpace::HospitalInterior), 2U);
+    click({960, 682});
+    EXPECT_EQ(A::chalkStrokes(*app, RaidChalkSpace::HospitalInterior), 1U);
+    click({1080, 682});
+    EXPECT_EQ(A::chalkStrokes(*app, RaidChalkSpace::HospitalInterior), 0U);
+    EXPECT_EQ(A::chalkStrokes(*app, RaidChalkSpace::Outdoor), 1U);
+
+    ASSERT_TRUE(A::flow(*app).returnToMainMenu());
+    A::frame(*app);
+    EXPECT_EQ(A::chalkStrokes(*app, RaidChalkSpace::Outdoor), 0U);
+    EXPECT_EQ(A::chalkStrokes(*app, RaidChalkSpace::HospitalInterior), 0U);
+}
+
+TEST_F(RaidChalkRouteUiTest, UnknownHospitalLayoutDoesNotAcceptChalk)
+{
+    ASSERT_NO_FATAL_FAILURE(deploy(kHospitalFloorplanMapId, false));
+    crossHospitalDoor();
+    ASSERT_EQ(A::flow(*app).gameSession().world().activeRaidSpaceId(), kHospitalFloorplanSpaceId);
+    key(SDL_SCANCODE_M);
+    EXPECT_FALSE(A::chalkAvailable(*app));
+    line({300, 220}, {460, 220});
+    EXPECT_EQ(A::chalkStrokes(*app, RaidChalkSpace::HospitalInterior), 0U);
+}
+
 class RaidIndoorVisibilityUiTest : public testing::Test
 {
   protected:

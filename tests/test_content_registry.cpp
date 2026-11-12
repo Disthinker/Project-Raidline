@@ -127,7 +127,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        kRaidBackpackRecoveryContentVersion);
+        kHospitalFloorplanRoutesContentVersion);
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -259,7 +259,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.category, BaseSupplyCategory::Recreation);
     EXPECT_EQ(comfort.requiredContribution, 14U);
     EXPECT_FALSE(comfort.sourceHint.empty());
-    ASSERT_EQ(registry.items().size(), 69U);
+    ASSERT_EQ(registry.items().size(), 70U);
     const auto &light = registry.item(ItemDefinitionId{"item.component.weapon_flashlight_basic"});
     const auto &battery = registry.item(ItemDefinitionId{"item.battery.universal"});
     ASSERT_TRUE(light.weaponLight);
@@ -1922,6 +1922,12 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
                 return isHospitalNightVisionLootSlot(hospital.id, interior.id, slot.id);
             });
         });
+    const bool floorplanSlot = std::any_of(hospital.interiors.begin(), hospital.interiors.end(),
+        [&](const auto &interior) {
+            return std::any_of(interior.lootSlots.begin(), interior.lootSlots.end(), [&](const auto &slot) {
+                return isHospitalFloorplanLootSlot(hospital.id, interior.id, slot.id);
+            });
+        });
     for (const ItemDefinition &item : registry.items())
     {
         const bool lootSource = std::any_of(
@@ -1950,6 +1956,7 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
         const bool fixedResourceSource =
             item.definitionId == kFixedRaidOpticId ||
             (item.definitionId == kHospitalNightVisionId && nightVisionSlot) ||
+            (item.definitionId == kHospitalFloorplanItemId && floorplanSlot) ||
             (item.definitionId == kFreightCrateKeyId && freightKeySlot) ||
             (item.definitionId == kRaidFuelCanId && fuelSlot) ||
             (item.definitionId == kArmorRepairBlueprintId && blueprintSlot);
@@ -2239,7 +2246,7 @@ TEST(ContentRegistryTest, OpticDefinitionsSeparateTheReceiverMountAndOpticModes)
 TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDefinitions)
 {
     const auto original = hospitalContentCandidateJson();
-    ASSERT_EQ(original.at("content_version").get<std::string>(), kRaidBackpackRecoveryContentVersion);
+    ASSERT_EQ(original.at("content_version").get<std::string>(), kHospitalFloorplanRoutesContentVersion);
     for (const auto *required : {"fortifications", "enemy_combat_definitions"})
     {
         SCOPED_TRACE(required);

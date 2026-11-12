@@ -4,16 +4,32 @@
 #include <algorithm>
 #include <nlohmann/json.hpp>
 
-inline ContentRegistry contentBeforeRaidBackpackRecovery()
+inline nlohmann::json contentBeforeHospitalFloorplanRoutesJson()
 {
     auto document = nlohmann::json::parse(publishedContentJson());
+    document["content_version"] = kRaidBackpackRecoveryContentVersion;
+    auto &items = document["items"];
+    items.erase(std::remove_if(items.begin(), items.end(), [](const auto &item) {
+        return item.at("id") == std::string{kHospitalFloorplanItemId.value()};
+    }), items.end());
+    return document;
+}
+
+inline ContentRegistry contentBeforeHospitalFloorplanRoutes()
+{
+    return ContentRegistry::fromJson(contentBeforeHospitalFloorplanRoutesJson().dump());
+}
+
+inline ContentRegistry contentBeforeRaidBackpackRecovery()
+{
+    auto document = contentBeforeHospitalFloorplanRoutesJson();
     document["content_version"] = kThrownIlluminationContentVersion;
     return ContentRegistry::fromJson(document.dump());
 }
 
 inline nlohmann::json contentBeforeThrownIlluminationJson()
 {
-    auto document = nlohmann::json::parse(publishedContentJson());
+    auto document = contentBeforeHospitalFloorplanRoutesJson();
     document["content_version"] = std::string{kArmorReadinessContentVersion};
     auto &items = document["items"];
     items.erase(std::remove_if(items.begin(), items.end(), [](const auto &item) {

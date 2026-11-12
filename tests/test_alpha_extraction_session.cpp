@@ -1031,6 +1031,187 @@ TEST(AlphaExtractionSessionTest, HospitalNightVisionFollowsLootAssemblySecondSor
     EXPECT_TRUE(assetIsCarried(reopened.profile(), foundMedical.assetId));
 }
 
+void enterHospitalFloorplanRoom(GameSession &session, RaidLootSnapshot &floorplan)
+{
+    ASSERT_TRUE(session.deployAlpha(42U, kHospitalFloorplanMapId)) << session.persistenceMessage();
+    ASSERT_TRUE(session.profile().pendingRaid);
+    const auto &raid = *session.profile().pendingRaid;
+    const auto interior = std::find_if(raid.interiors.begin(), raid.interiors.end(),
+        [](const RaidInteriorSnapshot &entry) { return entry.id == kHospitalFloorplanSpaceId; });
+    ASSERT_NE(interior, raid.interiors.end());
+    const auto loot = std::find_if(raid.loot.begin(), raid.loot.end(),
+        [](const RaidLootSnapshot &entry) { return entry.definitionId == kHospitalFloorplanItemId; });
+    ASSERT_NE(loot, raid.loot.end());
+    floorplan = *loot;
+    ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(interior->exteriorEntrance.position));
+    GameplayInput interact;
+    interact.interactJustPressed = true;
+    session.update(interact, 0.0F);
+    EXPECT_EQ(session.world().activeRaidSpaceId(), kHospitalFloorplanSpaceId);
+    ASSERT_TRUE(session.world().activeInteriorMapProjection());
+}
+
+void pickUpHospitalFloorplan(GameSession &session, const RaidLootSnapshot &floorplan)
+{
+    auto &player = const_cast<Player &>(session.world().player());
+    const float half = player.size() * 0.5F;
+    ASSERT_TRUE(player.setPosition({floorplan.position.x - half, floorplan.position.y - half}));
+    GameplayInput interact;
+    interact.aimWorldPosition = {floorplan.position.x + 60.0F, floorplan.position.y};
+    interact.interactJustPressed = true;
+    session.update(interact, 0.0F);
+}
+
+void equipHospitalFloorplanPack(GameSession &session)
+{
+    const auto backpacks = assets(session.profile(), alpha_content::backpack);
+    ASSERT_FALSE(backpacks.empty());
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryEquipCommand{backpacks.front(), EquipmentSlotKind::Backpack},
+        "floorplan-pack").succeeded);
+}
+
+TEST(AlphaExtractionSessionTest, HospitalFloorplanFailedWriteRetriesAndPreservesOnlyKnowledge)
+{
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-hospital-floorplan-", "durable-pickup");
+    const auto &content = publishedContentRegistry();
+    SaveRepository repository(directory.path());
+    ProfileState expectedRecovery;
+    {
+        GameSession session;
+        session.configurePersistence(directory.path());
+        ASSERT_TRUE(session.startNewProfile("floorplan-durable-pickup"));
+        ASSERT_NO_FATAL_FAILURE(equipHospitalFloorplanPack(session));
+        RaidLootSnapshot floorplan;
+        ASSERT_NO_FATAL_FAILURE(enterHospitalFloorplanRoom(session, floorplan));
+        EXPECT_FALSE(session.world().activeInteriorMapProjection()->layoutKnown);
+        auto priorCheckpoint = repository.load(content);
+        ASSERT_TRUE(priorCheckpoint.profile) << priorCheckpoint.message;
+        expectedRecovery = std::move(*priorCheckpoint.profile);
+        ASSERT_FALSE(expectedRecovery.pendingRaid);
+        ASSERT_FALSE(expectedRecovery.raidInteriorIntelligence.knows(kHospitalFloorplanSpaceId));
+
+        const auto blockedTemp = directory.path() / "profile.tmp.json";
+        ASSERT_TRUE(std::filesystem::create_directory(blockedTemp));
+        const auto before = profileStateFingerprint(session.profile());
+        static_cast<void>(session.takePresentationEvents());
+        ASSERT_NO_FATAL_FAILURE(pickUpHospitalFloorplan(session, floorplan));
+        ASSERT_TRUE(session.profileUiCommitPending());
+        EXPECT_FALSE(waitForProfileUiDurability(session));
+        EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+        const auto *ground = session.profile().assets.find(floorplan.assetId);
+        ASSERT_NE(ground, nullptr);
+        EXPECT_TRUE(std::holds_alternative<RaidGroundAssetLocation>(ground->location));
+        EXPECT_FALSE(session.world().activeInteriorMapProjection()->layoutKnown);
+        EXPECT_TRUE(session.takePresentationEvents().empty());
+        auto completions = session.takeProfileUiCompletions();
+        ASSERT_EQ(completions.size(), 1U);
+        EXPECT_EQ(completions.front().kind, ProfileUiCompletionKind::HospitalFloorplan);
+        EXPECT_FALSE(completions.front().succeeded);
+
+        ASSERT_TRUE(std::filesystem::remove(blockedTemp));
+        ASSERT_TRUE(session.retryProfileUiCommit().accepted) << session.persistenceMessage();
+        ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+        EXPECT_TRUE(assetIsCarried(session.profile(), floorplan.assetId));
+        EXPECT_TRUE(session.profile().raidInteriorIntelligence.knows(kHospitalFloorplanSpaceId));
+        EXPECT_TRUE(session.world().activeInteriorMapProjection()->layoutKnown);
+        EXPECT_EQ(session.takePresentationEvents(),
+            std::vector{GameSessionPresentationEvent::LootPickedUp});
+        completions = session.takeProfileUiCompletions();
+        ASSERT_EQ(completions.size(), 1U);
+        EXPECT_EQ(completions.front().kind, ProfileUiCompletionKind::HospitalFloorplan);
+        EXPECT_TRUE(completions.front().succeeded);
+        ASSERT_NO_FATAL_FAILURE(pickUpHospitalFloorplan(session, floorplan));
+        EXPECT_FALSE(session.profileUiCommitPending());
+        EXPECT_TRUE(session.takePresentationEvents().empty());
+    }
+
+    GameSession reopened;
+    reopened.configurePersistence(directory.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    expectedRecovery.raidInteriorIntelligence.knownLayouts.insert(kHospitalFloorplanSpaceId);
+    ++expectedRecovery.revision;
+    EXPECT_EQ(profileStateFingerprint(reopened.profile()), profileStateFingerprint(expectedRecovery));
+
+    RaidLootSnapshot secondFloorplan;
+    ASSERT_NO_FATAL_FAILURE(enterHospitalFloorplanRoom(reopened, secondFloorplan));
+    EXPECT_TRUE(reopened.world().activeInteriorMapProjection()->layoutKnown);
+    ASSERT_NO_FATAL_FAILURE(pickUpHospitalFloorplan(reopened, secondFloorplan));
+    EXPECT_TRUE(assetIsCarried(reopened.profile(), secondFloorplan.assetId));
+    EXPECT_FALSE(reopened.profileUiCommitPending()); // Known plans are ordinary loot.
+
+    auto &player = const_cast<Player &>(reopened.world().player());
+    ASSERT_TRUE(player.setPosition(reopened.profile().pendingRaid->interiors.front().interiorExit.position));
+    GameplayInput exit;
+    exit.interactJustPressed = true;
+    reopened.update(exit, 0.0F);
+    ASSERT_TRUE(reopened.world().inOutdoorRaidSpace());
+    ASSERT_TRUE(player.setPosition(reopened.world().extractionPoint().bounds().position));
+    for (int frame = 0; frame < 45 && reopened.profile().pendingRaid; ++frame)
+        reopened.update({}, 0.1F);
+    ASSERT_TRUE(waitForProfileUiDurability(reopened)) << reopened.persistenceMessage();
+    ASSERT_FALSE(reopened.profile().pendingRaid);
+    ASSERT_TRUE(assetIsCarried(reopened.profile(), secondFloorplan.assetId));
+    auto returned = reopened.profile();
+    const auto recycled = executeEconomy(returned, content, RecycleCommand{secondFloorplan.assetId},
+        {returned.revision, "floorplan-recycle"});
+    ASSERT_TRUE(recycled.succeeded) << recycled.message;
+    EXPECT_EQ(recycled.currencyDelta, 35);
+    EXPECT_TRUE(returned.raidInteriorIntelligence.knows(kHospitalFloorplanSpaceId));
+}
+
+TEST(AlphaExtractionSessionTest, HospitalFloorplanFullPackLeavesLootAndLayoutUntouched)
+{
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-hospital-floorplan-", "full-pack");
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("floorplan-full-pack", content);
+    const auto backpacks = assets(profile, alpha_content::backpack);
+    ASSERT_FALSE(backpacks.empty());
+    ASSERT_TRUE(executeInventory(profile, content,
+        InventoryEquipCommand{backpacks.front(), EquipmentSlotKind::Backpack},
+        {profile.revision, "floorplan-full-pack-equip"}).succeeded);
+    const auto pack = ProfileContainerId::compartment(backpacks.front(), 0);
+    const auto &filler = content.item(alpha_content::ammunition);
+    while (const auto fit = findFirstProfileFit(profile, content, pack, filler, ItemOrientation::Degrees0))
+        static_cast<void>(profile.assets.create(filler, StoredAssetLocation{pack, *fit}));
+    ASSERT_TRUE(SaveRepository(directory.path()).save(profile, content.contentVersion()).succeeded);
+    GameSession session;
+    session.configurePersistence(directory.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    RaidLootSnapshot floorplan;
+    ASSERT_NO_FATAL_FAILURE(enterHospitalFloorplanRoom(session, floorplan));
+
+    const auto before = profileStateFingerprint(session.profile());
+    ASSERT_NO_FATAL_FAILURE(pickUpHospitalFloorplan(session, floorplan));
+    EXPECT_FALSE(session.profileUiCommitPending());
+    EXPECT_EQ(session.persistenceMessage(), "equipped containers cannot hold this Loot");
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+    EXPECT_FALSE(assetIsCarried(session.profile(), floorplan.assetId));
+    EXPECT_FALSE(session.world().activeInteriorMapProjection()->layoutKnown);
+}
+
+TEST(AlphaExtractionSessionTest, HospitalFloorplanKnowledgeSurvivesDeathWhileLootUsesNormalLoss)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("floorplan-death"));
+    ASSERT_NO_FATAL_FAILURE(equipHospitalFloorplanPack(session));
+    RaidLootSnapshot floorplan;
+    ASSERT_NO_FATAL_FAILURE(enterHospitalFloorplanRoom(session, floorplan));
+    ASSERT_NO_FATAL_FAILURE(pickUpHospitalFloorplan(session, floorplan));
+    ASSERT_TRUE(assetIsCarried(session.profile(), floorplan.assetId));
+    ASSERT_TRUE(session.world().activeInteriorMapProjection()->layoutKnown);
+
+    ASSERT_TRUE(session.world().markPlayerDead());
+    session.update({}, 0.0F);
+    ASSERT_FALSE(session.profile().pendingRaid);
+    ASSERT_TRUE(session.profile().lastRaidResult);
+    EXPECT_EQ(session.profile().lastRaidResult->outcome, RaidResultOutcome::PlayerDead);
+    EXPECT_FALSE(assetIsCarried(session.profile(), floorplan.assetId));
+    EXPECT_TRUE(session.profile().raidInteriorIntelligence.knows(kHospitalFloorplanSpaceId));
+}
+
 TEST(AlphaExtractionSessionTest, PublishedHospitalDeploysFreezesAndSettlesThroughRealSession)
 {
     for (const std::uint64_t seed : {1ULL, 42ULL, 910223ULL})

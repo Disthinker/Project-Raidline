@@ -33,9 +33,14 @@ inline constexpr std::string_view kThrownIlluminationContentVersion{
     "raid-thrown-illumination-content-81"};
 inline constexpr std::string_view kRaidBackpackRecoveryContentVersion{
     "raid-load-and-pack-recovery-content-82"};
+inline constexpr std::string_view kHospitalFloorplanRoutesContentVersion{
+    "raid-hospital-floorplan-routes-content-83"};
 inline const ItemDefinitionId kFixedRaidOpticId{"item.component.optic_4x_5_45"};
 inline const ItemDefinitionId kExpanding545AmmunitionId{"item.ammunition.5_45x39_expanding"};
 inline const ItemDefinitionId kHospitalNightVisionId{"item.device.night_vision_basic"};
+inline const ItemDefinitionId kHospitalFloorplanItemId{"item.intelligence.hospital_floorplan"};
+inline const MapDefinitionId kHospitalFloorplanMapId{"map.raid.hospital_district"};
+inline const RaidSpaceDefinitionId kHospitalFloorplanSpaceId{"raid_space.hospital_district.main_building"};
 inline const ItemDefinitionId kFreightCrateKeyId{"item.loot.freight_crate_key"};
 inline const ItemDefinitionId kFreightCrateSupplyId{"item.loot.precision_components"};
 inline const ItemDefinitionId kRaidFuelCanId{"item.loot.extraction_fuel_can"};
@@ -63,9 +68,21 @@ inline constexpr std::string_view kRaidFuelLootSlotId{"freight_manifest"};
         slotId == "hospital_service";
 }
 
+[[nodiscard]] inline bool isHospitalFloorplanLootSlot(
+    const MapDefinitionId &map, const RaidSpaceDefinitionId &space, std::string_view slotId)
+{
+    return map == kHospitalFloorplanMapId && space == kHospitalFloorplanSpaceId &&
+        slotId == "hospital_reception";
+}
+
+[[nodiscard]] inline bool supportsHospitalFloorplanRoutesContent(std::string_view version) noexcept
+{
+    return version == kHospitalFloorplanRoutesContentVersion;
+}
+
 [[nodiscard]] inline bool supportsRaidBackpackRecoveryContent(std::string_view version) noexcept
 {
-    return version == kRaidBackpackRecoveryContentVersion;
+    return version == kRaidBackpackRecoveryContentVersion || supportsHospitalFloorplanRoutesContent(version);
 }
 
 [[nodiscard]] inline bool supportsThrownIlluminationContent(std::string_view version) noexcept

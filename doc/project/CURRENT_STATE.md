@@ -1,8 +1,19 @@
+# 当前 · 区医院图纸搜获与粉笔路线 v1 已验收
+
+在医院找到图纸后当场掌握内部布局。下一趟进医院，在战术地图上画自己的搜索和撤离路线。 [具体开发方案](../exec-plans/active/raid-hospital-floorplan-routes-v1.md)
+
+- task_id `raid-hospital-floorplan-routes-v1`，plan_version `RL-RAID-HOSPITAL-FLOORPLAN-ROUTES-v1`，state `accepted`。approval_source 为 2026-11-12 用户对该版本回复“批准”。candidate_id `RL-RAID-HOSPITAL-FLOORPLAN-ROUTES-v1-local-6925381e36f6`。accepted_candidate_id `RL-RAID-HOSPITAL-FLOORPLAN-ROUTES-v1-local-6925381e36f6`。acceptance_source 为 2026-11-12 用户回复“验收通过”，按既定约定提交并推送。
+- 基线 `origin/main@302901a5c2d8b3a1e810bfa83f654bd99729267e` 双平台 CI 通过。外勤负重与战术卸包 v1 已验收并推送 `7206b3f`，仍为独立分支。本轮从已验收负重提交创建独立分支，统一验证负重行为与 82／66 存档兼容性。 [主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43145371432)
+- 原策划线程已回复请求 `MAIN-NEXT-STAGE-20261112-AFTER-PACK-01`，协调任务 `raid-next-stage-after-load-pack-recovery`，协议 `RL-NEXT-STAGE-REQUEST-v1`，turn `01a1cf3c-99ff-7ee0-9e4f-b91a4a2aba95`，基线一致。
+- 隔离分支 `codex/raid-hospital-floorplan-routes-v1`，依赖已验收提交 `7206b3f`。
+- 固定入口已更新。Windows 全量 3252/3252，14 项 3 ms 检查通过，旧玩家档和负重档副本升级回读一致。[联合验收](../acceptance/raid-hospital-floorplan-routes-v1.md)
+
+---
 # 当前 · 外勤负重与战术卸包 v1 已验收
 
 携包奔跑有负重取舍，交战时可卸下整包，再决定回头取包还是轻装撤离。 [具体开发方案](../exec-plans/active/raid-load-and-pack-recovery-v1.md)
 
-- task_id `raid-load-and-pack-recovery-v1`，plan_version `RL-RAID-LOAD-AND-PACK-RECOVERY-v1`，state `accepted`。approval_source 为 2026-11-12 用户明确回复“批准”。candidate_id `RL-RAID-LOAD-AND-PACK-RECOVERY-v1-local-5bca52fd76c9`。accepted_candidate_id `RL-RAID-LOAD-AND-PACK-RECOVERY-v1-local-5bca52fd76c9`。acceptance_source 为 2026-11-12 用户明确回复“验收通过”，按其已明确的约定提交并推送。
+- task_id `raid-load-and-pack-recovery-v1`，plan_version `RL-RAID-LOAD-AND-PACK-RECOVERY-v1`，state `accepted_pushed`。approval_source 为 2026-11-12 用户明确回复“批准”。candidate_id `RL-RAID-LOAD-AND-PACK-RECOVERY-v1-local-5bca52fd76c9`。accepted_candidate_id `RL-RAID-LOAD-AND-PACK-RECOVERY-v1-local-5bca52fd76c9`。acceptance_source 为 2026-11-12 用户明确回复“验收通过”，按其已明确的约定提交并推送。
 - 基线 `origin/main@302901a5c2d8b3a1e810bfa83f654bd99729267e`。照明弹 PR #207 已合并，合并前 Windows 与 Ubuntu 各通过 3226 项及全部 14 项 3 ms 检查。 [主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43145371432)
 - 原策划线程已回复请求 `MAIN-NEXT-STAGE-20261112-AFTER-ILLUMINATION-01`，协调任务 `raid-next-stage-after-thrown-illumination`，协议 `RL-NEXT-STAGE-REQUEST-v1`，turn `01a1cdb4-d985-70c3-a844-7f17e0cb237a`，基线一致。
 - 隔离工作树 `E:\WorkPlace\Projects\C\Project Raidline-raid-load-and-pack-recovery-v1`，分支 `codex/raid-load-and-pack-recovery-v1`。

@@ -30,6 +30,7 @@
 #include "profile_container_presentation.h"
 #include "raid_camera.h"
 #include "raid_pointer_capture.h"
+#include "raid_tactical_map_presentation.h"
 #include "texture.h"
 #include "ui_text_renderer.h"
 #include "ui_item_context_presentation.h"
@@ -567,6 +568,15 @@ private:
     void updateRaidReloadInput(GameplayInput &);
     void cancelMagazineWheel();
     bool tacticalMapOpen_{};
+    struct RaidChalkContext
+    {
+        RaidChalkSpace space;
+        RaidTacticalMapChart chart;
+    };
+    RaidChalkRoutes raidChalkRoutes_;
+    UiDiscretePress raidChalkPress_;
+    std::string raidChalkRaidId_;
+    bool raidChalkAimBlockedUntilRelease_{};
     std::vector<AssetInstanceId> medicalWheelOptions_;
     std::size_t medicalWheelSelectedIndex_{};
     std::optional<std::array<bool, 3>> savedRangeDeveloperSettings_;
@@ -901,6 +911,11 @@ private:
     [[nodiscard]] float baseConstructionZoom() const noexcept;
     [[nodiscard]] Vec2 baseScreenToWorld(Vec2 screenPosition) const noexcept;
     void renderRaidTacticalMap();
+    [[nodiscard]] std::optional<RaidChalkContext> raidChalkContext() const;
+    void syncRaidChalkRoutes();
+    [[nodiscard]] bool routeRaidChalkEvent(const SDL_Event &event);
+    void renderRaidChalkLines(const RaidChalkContext &context);
+    void renderRaidChalkFooter(RaidChalkSpace space);
     void renderScreenPrimaryButton(
         const char *label);
     void renderBackground(bool drawOutdoorDetails = true, bool terrainOnly = false,

@@ -294,6 +294,7 @@ std::size_t populatePublishedWarehouseCatalog(
             definition.definitionId == kFreightCrateKeyId ||
             definition.definitionId == kRaidFuelCanId ||
             definition.definitionId == kArmorRepairBlueprintId ||
+            definition.definitionId == kHospitalFloorplanItemId ||
             definition.definitionId == kThrownIlluminationItemId)
         {
             continue;
@@ -4372,6 +4373,7 @@ ProfileValidationResult validateProfileState(
             bool validSlot{};
             bool validPosition{};
             bool nightVisionSlot{};
+            bool hospitalFloorplanSlot{};
             bool freightKeySlot{};
             bool sealedFreightSlot{};
             bool fuelSlot{};
@@ -4557,6 +4559,7 @@ ProfileValidationResult validateProfileState(
                             validPosition = loot.position.x == expected.x &&
                                 loot.position.y == expected.y;
                             nightVisionSlot = isHospitalNightVisionLootSlot(raid.mapDefinitionId, interior.id, slot.id);
+                            hospitalFloorplanSlot = isHospitalFloorplanLootSlot(raid.mapDefinitionId, interior.id, slot.id);
                             sealedFreightSlot = raid.sealedFreightCrate && interior.id == kFreightCrateSpaceId &&
                                 slot.id == kFreightCrateSlotId;
                             fuelSlot = raid.fuelExtractionLootAssetId && interior.id == kFreightCrateSpaceId &&
@@ -4669,6 +4672,12 @@ ProfileValidationResult validateProfileState(
             }
             else if (loot.definitionId == kHospitalNightVisionId && recoveryRoot == nullptr)
                 return {false, "pending Raid night vision is outside its fixed loot slot"};
+            // Legacy Raid snapshots retain the original reception roll.
+            if (loot.definitionId == kHospitalFloorplanItemId && recoveryRoot == nullptr &&
+                (!hospitalFloorplanSlot || regionalMissionCount != 0U || loot.quantity != 1U ||
+                 loot.requiresHighRisk || loot.sceneContainerAssetId ||
+                 !supportsHospitalFloorplanRoutesContent(content.contentVersion())))
+                return {false, "pending Raid hospital floor plan is outside its fixed loot slot"};
             if (freightKeySlot)
             {
                 if (loot.definitionId != kFreightCrateKeyId || loot.quantity != 1U || loot.sceneContainerAssetId)

@@ -4506,6 +4506,8 @@ void GameSession::updateAlphaRaid(
                 (!raidWorldInteractionAvailable(input.inventoryOpen) || world_->player().isControlled()))
                 return;
             const auto currentObservation = world_->raidObservationKey();
+            if (tryLearnHospitalFloorplan(*loot, input.inventoryOpen, currentObservation))
+                return;
             auto reloadAccess = raidReloadAccess(currentObservation);
             if (recoveringPack)
                 reloadAccess.activity = playerGameplayContext().activity;

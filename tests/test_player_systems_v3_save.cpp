@@ -273,7 +273,7 @@ TEST_F(PlayerSystemsV3SaveTest, IlluminationUpgradePreservesExactOldArmorResearc
     EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 64U);
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
     EXPECT_FALSE(loaded.profile->basePlayerEffects);
-    const auto upgraded = repository.save(*loaded.profile, content.contentVersion());
+    const auto upgraded = repository.save(*loaded.profile, kRaidBackpackRecoveryContentVersion);
     ASSERT_TRUE(upgraded.succeeded) << upgraded.message;
     EXPECT_EQ(readBytes(directory.path() /
         ("profile.pre-raid-load-and-pack-recovery-v1." + digest(primary) + ".json")), primary);
@@ -326,7 +326,7 @@ TEST_F(PlayerSystemsV3SaveTest, BackpackRecoveryUpgradeArchivesSchema65AndKeepsF
     EXPECT_FALSE(loaded.profile->pendingRaid->backpackRecoveryEnabled);
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
 
-    const auto saved = repository.save(*loaded.profile, content.contentVersion());
+    const auto saved = repository.save(*loaded.profile, kRaidBackpackRecoveryContentVersion);
     ASSERT_TRUE(saved.succeeded) << saved.message;
     EXPECT_EQ(readBytes(directory.path() /
         ("profile.pre-raid-load-and-pack-recovery-v1." + digest(primary) + ".json")), primary);
@@ -341,6 +341,55 @@ TEST_F(PlayerSystemsV3SaveTest, BackpackRecoveryUpgradeArchivesSchema65AndKeepsF
     EXPECT_EQ(reopened.profile->pendingRaid->loot, profile.pendingRaid->loot);
     EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
     EXPECT_TRUE(assetIsCarried(*reopened.profile, flare));
+}
+
+TEST_F(PlayerSystemsV3SaveTest, HospitalFloorplanUpgradePreservesPackAndBothFrozen82Slots)
+{
+    const auto previous = contentBeforeHospitalFloorplanRoutes();
+    profile = makeNewAlphaProfile("pre-hospital-floorplan", previous);
+    const auto backpack = first(profile, alpha_content::backpack);
+    ASSERT_NE(backpack, 0U);
+    const auto equip = executeInventory(profile, previous,
+        InventoryEquipCommand{backpack, EquipmentSlotKind::Backpack},
+        {profile.revision, "pre-floorplan-equip"});
+    ASSERT_TRUE(equip.succeeded) << equip.message;
+    const auto deploy = executeDeploy(profile, previous,
+        {"pre-floorplan-raid", "pre-floorplan-settlement", 9917U, kHospitalFloorplanMapId},
+        {profile.revision, "pre-floorplan-deploy"});
+    ASSERT_TRUE(deploy.succeeded) << deploy.message;
+    ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->startingAssets);
+    EXPECT_TRUE(profile.pendingRaid->backpackRecoveryEnabled);
+    EXPECT_TRUE(std::none_of(profile.pendingRaid->loot.begin(), profile.pendingRaid->loot.end(),
+        [](const auto &loot) { return loot.definitionId == kHospitalFloorplanItemId; }));
+
+    const auto primary = serializeProfileEnvelope(profile, kRaidBackpackRecoveryContentVersion, 66U);
+    auto previousBackup = profile;
+    ++previousBackup.revision;
+    const auto backup = serializeProfileEnvelope(previousBackup, kRaidBackpackRecoveryContentVersion, 66U);
+    SaveRepository repository{directory.path()};
+    writeBytes(repository.primaryPath(), primary);
+    writeBytes(repository.backupPath(), backup);
+
+    const auto loaded = repository.load(content);
+    ASSERT_TRUE(loaded.profile && loaded.profile->pendingRaid && loaded.sourceEnvelope) << loaded.message;
+    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 66U);
+    EXPECT_EQ(loaded.sourceEnvelope->contentVersion, kRaidBackpackRecoveryContentVersion);
+    EXPECT_EQ(loaded.profile->pendingRaid->loot, profile.pendingRaid->loot);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+    const auto saved = repository.save(*loaded.profile, content.contentVersion());
+    ASSERT_TRUE(saved.succeeded) << saved.message;
+    EXPECT_EQ(readBytes(directory.path() /
+        ("profile.pre-raid-hospital-floorplan-routes-v1." + digest(primary) + ".json")), primary);
+    EXPECT_EQ(readBytes(directory.path() /
+        ("profile.backup.pre-raid-hospital-floorplan-routes-v1." + digest(backup) + ".json")), backup);
+
+    const auto reopened = repository.load(content);
+    ASSERT_TRUE(reopened.profile && reopened.profile->pendingRaid && reopened.sourceEnvelope) << reopened.message;
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 66U);
+    EXPECT_EQ(reopened.sourceEnvelope->contentVersion, kHospitalFloorplanRoutesContentVersion);
+    EXPECT_TRUE(reopened.profile->pendingRaid->backpackRecoveryEnabled);
+    EXPECT_EQ(reopened.profile->pendingRaid->loot, profile.pendingRaid->loot);
+    EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
 }
 
 TEST_F(PlayerSystemsV3SaveTest, BackpackRecoveryRoundTripAndRollbackKeepWholeAssetTree)

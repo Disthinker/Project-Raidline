@@ -313,6 +313,7 @@ public:
     [[nodiscard]] bool spaceTransitionedLastUpdate() const noexcept;
     [[nodiscard]] std::optional<RaidInteriorMapProjection>
     activeInteriorMapProjection() const noexcept;
+    void confirmRaidInteriorLayout(const RaidSpaceDefinitionId &spaceId) noexcept;
     [[nodiscard]] const RaidOutdoorPresentationProjection &
     outdoorPresentation(ContentRect visibleWorldBounds) const;
 

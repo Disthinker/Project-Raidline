@@ -243,6 +243,7 @@ TEST(PersistentSessionTest, DeveloperCatalogGrantPersistsAndIsIdempotent)
                   session.profile(),
                   ItemDefinitionId{"item.weapon.lmg_7_62x51_service"}),
               0U);
+    EXPECT_EQ(findDefinition(session.profile(), kHospitalFloorplanItemId), 0U);
     const std::uint64_t grantedFingerprint =
         profileStateFingerprint(session.profile());
 

@@ -1082,6 +1082,8 @@ DeployReceipt executeDeploy(
         map->highRisk.advancedLootSlots.size();
     const bool nightVisionLootRules = regionalMissionCount == 0U &&
         hospitalNightCompatibleContent(content.contentVersion());
+    const bool hospitalFloorplanLootRules = regionalMissionCount == 0U &&
+        supportsHospitalFloorplanRoutesContent(content.contentVersion());
     const bool sealedFreightRules = freightAccessRules && map->id == kFreightCrateMapId;
     const bool fuelExtractionRules = sealedFreightRules &&
         supportsFuelExtractionContent(content.contentVersion());
@@ -1104,17 +1106,20 @@ DeployReceipt executeDeploy(
             // Keep both original random draws for fixed rewards.
             const bool nightVisionSlot = nightVisionLootRules &&
                 isHospitalNightVisionLootSlot(map->id, interior.id, slot.id);
+            const bool hospitalFloorplanSlot = hospitalFloorplanLootRules &&
+                isHospitalFloorplanLootSlot(map->id, interior.id, slot.id);
             const bool sealedFreightSlot = sealedFreightRules && interior.id == kFreightCrateSpaceId &&
                 slot.id == kFreightCrateSlotId;
             const bool fuelSlot = fuelExtractionRules && interior.id == kFreightCrateSpaceId &&
                 slot.id == kRaidFuelLootSlotId;
             const ItemDefinitionId &item = nightVisionSlot
                 ? kHospitalNightVisionId
+                : hospitalFloorplanSlot ? kHospitalFloorplanItemId
                 : sealedFreightSlot ? kFreightCrateSupplyId
                 : fuelSlot ? kRaidFuelCanId : entry.itemDefinitionId;
             if (nightVisionSlot)
                 snapshot.hospitalNightVisionLoot = true;
-            if (nightVisionSlot || sealedFreightSlot || fuelSlot)
+            if (nightVisionSlot || hospitalFloorplanSlot || sealedFreightSlot || fuelSlot)
                 quantity = 1U;
             const AssetInstanceId assetId = candidate.assets.create(
                 content.item(item),

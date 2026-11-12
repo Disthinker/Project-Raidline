@@ -48,6 +48,19 @@ namespace
     const char *lightStateLabel(const WeaponLightProjection &light);
     constexpr int kWindowWidth{1280};
     constexpr int kWindowHeight{720};
+
+    constexpr SDL_FRect kRaidChart{
+        kRaidTacticalChart.position.x, kRaidTacticalChart.position.y,
+        kRaidTacticalChart.size.x, kRaidTacticalChart.size.y};
+    constexpr SDL_FRect kRaidChalkUndo{904.0F, 668.0F, 112.0F, 28.0F};
+    constexpr SDL_FRect kRaidChalkClear{1024.0F, 668.0F, 112.0F, 28.0F};
+    constexpr int kRaidChalkUndoAction = 23101;
+    constexpr int kRaidChalkClearAction = 23102;
+
+    constexpr std::string_view raidChalkContextKey(RaidChalkSpace space) noexcept
+    {
+        return space == RaidChalkSpace::Outdoor ? "outdoor" : "hospital";
+    }
     constexpr float kBaseBuildCameraPanSpeed{720.0F};
     constexpr float kBaseOperationNoticeLifetimeSeconds{9.0F};
     constexpr std::size_t kBaseBuildCardsPerPage{4U};
@@ -1827,7 +1840,7 @@ GameplayInput App::makeGameplayControls() const
     input.fireJustPressed=input_.wasActionJustPressed(GameAction::Fire) || input_.wasPrimaryPointerJustPressed();
     input.firePressed=input_.isActionPressed(GameAction::Fire) || input_.isPrimaryPointerPressed();
     input.firePhysicallyPressed=input_.isActionPressed(GameAction::Fire) || input_.isPrimaryPointerPhysicallyPressed();
-    input.aimDownSights = input_.isSecondaryPointerPressed();
+    input.aimDownSights = input_.isSecondaryPointerPressed() && !raidChalkAimBlockedUntilRelease_;
     input.allowWeaponOptics = !opticAimBlockedUntilRelease_;
     input.developerInfiniteAmmo = developerInfiniteAmmoEnabled_;
     input.interactJustPressed =
@@ -4650,6 +4663,7 @@ void App::handleInventoryPartialTransferEvent(
 // Process SDL events, set running_ to false if quit event is received
 void App::processEvents()
 {
+    syncRaidChalkRoutes();
     syncBaseSiegeWarningUi();
     pendingSiegeWarningAction_.reset();
     pendingLostRecoveryEvents_.clear();
@@ -4698,6 +4712,8 @@ void App::processEvents()
             event.type == SDL_EVENT_WINDOW_FOCUS_LOST ||
             event.type == SDL_EVENT_WINDOW_RESIZED ||
             event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
+            raidChalkRoutes_.endStroke();
+            raidChalkPress_.cancel();
             itemDetailsInteraction_ = {}; deviceBatteryDrag_.reset();
             raidResultUi_.press.reset();
             pendingRaidResultEvents_.clear();
@@ -4716,6 +4732,11 @@ void App::processEvents()
             deploymentUi_.confirmationKey.reset();
         }
         input_.handleEvent(event);
+        if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+             event.type == SDL_EVENT_MOUSE_BUTTON_UP) &&
+            event.button.button == SDL_BUTTON_RIGHT &&
+            (event.type == SDL_EVENT_MOUSE_BUTTON_UP || !tacticalMapOpen_))
+            raidChalkAimBlockedUntilRelease_ = false;
         if (gameSession_.tacticalDeviceWheelOpen()) {
             if (event.type == SDL_EVENT_KEY_UP && event.key.scancode == SDL_SCANCODE_U)
                 tacticalDeviceReleasePointer_ = wheelPointerOffset_;
@@ -5145,6 +5166,8 @@ void App::processEvents()
         }
 
         if (developerWeaponPanelBlocksGameplayThisFrame_)
+            continue;
+        if (routeRaidChalkEvent(event))
             continue;
         syncBaseSiegeWarningUi();
         if (routeBaseSiegeWarningEvent(event))
@@ -5966,6 +5989,9 @@ void App::update(float deltaTime)
         input_.suppressPrimaryPointerUntilRelease();
     }
 
+    if (tacticalToggle || escapePressed)
+        syncRaidChalkRoutes();
+
     const bool raidAcceptsInventoryInput =
         gameSession_.world().raidSession().isActive();
 
@@ -6162,6 +6188,7 @@ void App::update(float deltaTime)
     gameFlow_.update(
         gameplayInput,
         deltaTime);
+    syncRaidChalkRoutes();
     if (!deviceWheelWasOpen && gameSession_.tacticalDeviceWheelOpen()) {
         wheelPointerOffset_ = tacticalDeviceReleasePointer_ = pendingRelativeAimMotion_ = {};
         input_.suppressPrimaryPointerUntilRelease();
@@ -13256,6 +13283,164 @@ void App::renderBaseSiegeWarning()
     SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_NONE);
 }
 
+std::optional<App::RaidChalkContext> App::raidChalkContext() const
+{
+    if (!tacticalMapOpen_ || gameFlow_.state() != GameFlowState::Raid ||
+        !gameSession_.world().raidSession().isActive() ||
+        !supportsHospitalFloorplanRoutesContent(publishedContentRegistry().contentVersion()))
+        return std::nullopt;
+
+    const auto &raid = gameSession_.profile().pendingRaid;
+    if (!raid || raid->mapDefinitionId != kHospitalFloorplanMapId ||
+        raid->selfRecovery || raid->outpostRestoration ||
+        raid->baseSiteClearance || raid->basePerimeterSweep)
+        return std::nullopt;
+
+    const auto &world = gameSession_.world();
+    if (world.inOutdoorRaidSpace())
+    {
+        if (world.tacticalMap().configured())
+            return RaidChalkContext{RaidChalkSpace::Outdoor, {world.tacticalMap().worldSize()}};
+    }
+    else if (const auto room = world.activeInteriorMapProjection();
+             room && room->id == kHospitalFloorplanSpaceId && room->layoutKnown)
+    {
+        return RaidChalkContext{RaidChalkSpace::HospitalInterior, {room->worldSize}};
+    }
+    return std::nullopt;
+}
+
+void App::syncRaidChalkRoutes()
+{
+    if (!tacticalMapOpen_ && raidChalkRaidId_.empty())
+        return;
+
+    const auto &raid = gameSession_.profile().pendingRaid;
+    if (!raidChalkRaidId_.empty() &&
+        (gameFlow_.state() != GameFlowState::Raid || !raid ||
+         raid->raidId != raidChalkRaidId_ || !gameSession_.world().raidSession().isActive()))
+    {
+        raidChalkRoutes_ = {};
+        raidChalkPress_.cancel();
+        raidChalkRaidId_.clear();
+    }
+
+    const auto context = raidChalkContext();
+    if (!context || !windowHasInputFocus_ || pauseMenu_.isOpen() ||
+        raidSaveProtectionVisible() || developerWeaponPanelOpen_ || quickWheelOpen())
+    {
+        raidChalkRoutes_.setSpace(std::nullopt);
+        raidChalkPress_.cancel();
+        return;
+    }
+
+    if (raidChalkRaidId_.empty())
+        raidChalkRaidId_ = raid->raidId;
+    raidChalkRoutes_.setSpace(context->space);
+    if (raidChalkPress_.context != raidChalkContextKey(context->space))
+        raidChalkPress_.cancel();
+    if (input_.isSecondaryPointerPressed())
+        raidChalkAimBlockedUntilRelease_ = true;
+}
+
+bool App::routeRaidChalkEvent(const SDL_Event &event)
+{
+    const bool motion = event.type == SDL_EVENT_MOUSE_MOTION;
+    const bool press = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+    const bool release = event.type == SDL_EVENT_MOUSE_BUTTON_UP;
+    if (!tacticalMapOpen_ || (!motion && !press && !release) ||
+        (motion && !raidChalkRoutes_.drawing()) ||
+        !windowHasInputFocus_ || raidSaveProtectionVisible() || quickWheelOpen())
+        return false;
+
+    const auto context = raidChalkContext();
+    if (!context)
+        return false;
+
+    if (motion)
+    {
+        if (const auto point = context->chart.worldPoint({event.motion.x, event.motion.y}))
+            raidChalkRoutes_.extendStroke(*point);
+        else
+            raidChalkRoutes_.endStroke();
+        return true;
+    }
+
+    const Vec2 position{event.button.x, event.button.y};
+    if (event.button.button == SDL_BUTTON_RIGHT)
+    {
+        const auto point = context->chart.worldPoint(position);
+        if (press)
+        {
+            raidChalkAimBlockedUntilRelease_ = true;
+            raidChalkPress_.cancel();
+            if (point)
+                raidChalkRoutes_.beginStroke(*point);
+        }
+        else
+        {
+            if (point)
+                raidChalkRoutes_.extendStroke(*point);
+            raidChalkRoutes_.endStroke();
+        }
+        return true;
+    }
+
+    if (event.button.button != SDL_BUTTON_LEFT)
+        return false;
+
+    input_.suppressPrimaryPointerUntilRelease();
+    const bool canEdit = !raidChalkRoutes_.strokes(context->space).empty() &&
+        !input_.isSecondaryPointerPressed();
+    int action{};
+    if (canEdit && uiContains(kRaidChalkUndo, position))
+        action = kRaidChalkUndoAction;
+    if (canEdit && uiContains(kRaidChalkClear, position))
+        action = kRaidChalkClearAction;
+    const auto key = raidChalkContextKey(context->space);
+    if (press)
+        raidChalkPress_.begin(action, key);
+    else if (raidChalkPress_.release(action, key))
+    {
+        if (action == kRaidChalkUndoAction)
+            raidChalkRoutes_.undo(context->space);
+        else
+            raidChalkRoutes_.clear(context->space);
+    }
+    return true;
+}
+
+void App::renderRaidChalkLines(const RaidChalkContext &context)
+{
+    SDL_SetRenderDrawColor(renderer_, 113, 191, 179, 255);
+    std::array<SDL_FPoint, RaidChalkRoutes::kMaximumStrokePoints> screenPoints;
+    for (const auto &stroke : raidChalkRoutes_.strokes(context.space))
+    {
+        std::transform(stroke.points.begin(), stroke.points.end(), screenPoints.begin(),
+            [&](Vec2 worldPoint)
+            {
+                const Vec2 point = context.chart.screenPoint(worldPoint);
+                return SDL_FPoint{point.x, point.y};
+            });
+        SDL_RenderLines(renderer_, screenPoints.data(), static_cast<int>(stroke.points.size()));
+    }
+}
+
+void App::renderRaidChalkFooter(RaidChalkSpace space)
+{
+    const bool canEdit = !raidChalkRoutes_.strokes(space).empty() &&
+        !input_.isSecondaryPointerPressed();
+    const bool exhausted = raidChalkRoutes_.remainingLength() <= 0.0;
+    SDL_SetRenderDrawColor(renderer_, 65, 81, 99, 255);
+    SDL_RenderLine(renderer_, kRaidChart.x, 664.0F, kRaidChart.x + kRaidChart.w, 664.0F);
+    uiFinalTextAt(renderer_, uiTextRenderer_, kRaidChart.x, 674.0F,
+                  exhausted ? "CHALK LIMIT REACHED" : "HOLD RMB TO DRAW", 744.0F, 13, 1);
+    renderFoundationButton(kRaidChalkUndoAction, kRaidChalkUndo, "UNDO STROKE",
+                           canEdit, false, false, {}, 13);
+    renderFoundationButton(kRaidChalkClearAction, kRaidChalkClear, "CLEAR ROUTE",
+                           canEdit, false, false, {}, 13);
+}
+
 void App::renderRaidTacticalMap()
 {
     if (!tacticalMapOpen_ ||
@@ -13264,6 +13449,9 @@ void App::renderRaidTacticalMap()
         return;
     }
 
+    const auto chalk = raidChalkContext();
+    const SDL_FRect panel{104.0F, 54.0F, 1072.0F, chalk ? 654.0F : 612.0F};
+    const SDL_FRect &chart = kRaidChart;
     if (!gameSession_.world().inOutdoorRaidSpace())
     {
         const std::optional<RaidInteriorMapProjection> interior =
@@ -13276,8 +13464,6 @@ void App::renderRaidTacticalMap()
         SDL_RenderFillRect(renderer_, &shade);
         if (interior.has_value())
         {
-            const SDL_FRect panel{104.0F, 54.0F, 1072.0F, 612.0F};
-            const SDL_FRect chart{144.0F, 114.0F, 992.0F, 504.0F};
             uiFinalPanel(renderer_,panel);
             SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
             SDL_RenderFillRect(renderer_, &chart);
@@ -13305,6 +13491,8 @@ void App::renderRaidTacticalMap()
                 SDL_SetRenderDrawColor(renderer_, 124, 146, 140, 245);
                 SDL_RenderRect(renderer_, &bounds);
             }
+            if (chalk)
+                renderRaidChalkLines(*chalk);
             const SDL_FRect exit = screenRect(interior->exit);
             SDL_SetRenderDrawColor(renderer_, 82, 216, 132, 245);
             SDL_RenderRect(renderer_, &exit);
@@ -13330,6 +13518,8 @@ void App::renderRaidTacticalMap()
                 uiTextRenderer_.language(),interior->displayName,interior->layoutKnown);
             uiFinalTextAt(renderer_,uiTextRenderer_,144.0F,76.0F,title.c_str(),570,15,1);
             uiFinalTextAt(renderer_,uiTextRenderer_,740.0F,76.0F,"M/ESC CLOSE | WORLD CONTINUES | MOVE 45%",396,11,1);
+            if (chalk)
+                renderRaidChalkFooter(chalk->space);
             SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
             return;
         }
@@ -13359,8 +13549,6 @@ void App::renderRaidTacticalMap()
     SDL_SetRenderDrawColor(renderer_, 3, 7, 9, 210);
     SDL_RenderFillRect(renderer_, &shade);
 
-    const SDL_FRect panel{104.0F, 54.0F, 1072.0F, 612.0F};
-    const SDL_FRect chart{144.0F, 114.0F, 992.0F, 504.0F};
     uiFinalPanel(renderer_,panel);
 
     const float cellWidth = chart.w / static_cast<float>(map.columns());
@@ -13738,6 +13926,8 @@ void App::renderRaidTacticalMap()
         uiFinalTextAt(renderer_,uiTextRenderer_,marker.x + 5.0F,marker.y + 4.0F,label,std::max(40.0F, 1136.0F-(marker.x + 5.0F)),11,1);
     }
 
+    if (chalk)
+        renderRaidChalkLines(*chalk);
     const Player &player = gameSession_.world().player();
     const Vec2 playerMarker = screenPoint(Vec2{
         player.position().x + player.size() * 0.5F,
@@ -13813,6 +14003,8 @@ void App::renderRaidTacticalMap()
                 ? "OPERATION | PERIMETER SWEEP | SECURED"
                 : "OPERATION | PERIMETER SWEEP | ACTIVE",500,11,1);
     }
+    if (chalk)
+        renderRaidChalkFooter(chalk->space);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }
 

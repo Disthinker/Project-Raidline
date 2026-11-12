@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-load-and-pack-recovery-content-82",
+  "content_version": "raid-hospital-floorplan-routes-content-83",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -1874,6 +1874,22 @@
       },
       "inventory_texture": "items/inventory/unpublished_precision_components.png",
       "world_texture": "items/world/unpublished_precision_components.png"
+    },
+    {
+      "id": "item.intelligence.hospital_floorplan",
+      "display_name": "District Hospital Floor Plan",
+      "category": "loot",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 50,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 24, "y": 24},
+        "pickup_size": {"x": 32, "y": 32}
+      },
+      "inventory_texture": "items/inventory/unpublished_precision_components.png",
+      "world_texture": "items/world/unpublished_precision_components.png",
+      "market_recycle_price": 35
     },
     {
       "id": "item.loot.extraction_fuel_can",

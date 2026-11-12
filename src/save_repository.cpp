@@ -1131,7 +1131,7 @@ Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersi
         else if (const auto *drop = std::get_if<RaidDroppedBackpackLocation>(&asset.location))
         {
             if (!backpackContract)
-                throw std::invalid_argument{"dropped backpacks require schema 66 and content 82"};
+                throw std::invalid_argument{"dropped backpacks require schema 66 and compatible backpack recovery content"};
             location = {{"type", "raid_dropped_backpack"}, {"raid_id", drop->raidId},
                 {"space_id", drop->spaceId.value()}, {"position", vectorValue(drop->position)}};
         }
@@ -1532,7 +1532,7 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
             else if (locationType == "raid_dropped_backpack")
             {
                 if (!backpackContract)
-                    return {SaveLoadStatus::Failed, std::nullopt, "dropped backpacks require schema 66 and content 82"};
+                    return {SaveLoadStatus::Failed, std::nullopt, "dropped backpacks require schema 66 and compatible backpack recovery content"};
                 asset.location = RaidDroppedBackpackLocation{
                     raidline::save60::text(location.at("raid_id")),
                     RaidSpaceDefinitionId{raidline::save60::text(location.at("space_id"))},
@@ -3038,10 +3038,10 @@ std::string serializeProfileEnvelope(
 {
     if (profile.pendingRaid && profile.pendingRaid->rulesVersion == kRaidRunnerRulesVersion &&
         !runnerCompatibleContent(contentVersion))
-        throw std::invalid_argument{"runner Raid requires compatible content 73 through 82"};
+        throw std::invalid_argument{"runner Raid requires compatible content 73 through 83"};
     if (profile.pendingRaid && profile.pendingRaid->hospitalNightVisionLoot &&
         !hospitalNightCompatibleContent(contentVersion))
-        throw std::invalid_argument{"hospital night vision Loot requires compatible content 77 through 82"};
+        throw std::invalid_argument{"hospital night vision Loot requires compatible content 77 through 83"};
     const bool freightContract = schemaVersion >= 62 && crossMapFreightCompatibleContent(contentVersion);
     if (profile.pendingRaid && (profile.pendingRaid->freightKeyLootSlotId || profile.pendingRaid->sealedFreightCrate) &&
         !freightContract)
@@ -3059,7 +3059,7 @@ std::string serializeProfileEnvelope(
     const bool backpackContract =
         schemaVersion >= 66 && supportsRaidBackpackRecoveryContent(contentVersion);
     if (profile.pendingRaid && profile.pendingRaid->backpackRecoveryEnabled && !backpackContract)
-        throw std::invalid_argument{"Raid backpack recovery requires schema 66 and content 82"};
+        throw std::invalid_argument{"Raid backpack recovery requires schema 66 and compatible backpack recovery content"};
     if (!illuminationContract && profile.baseManufacturing.activeOrder &&
         profile.baseManufacturing.activeOrder->recipeDefinitionId == kThrownIlluminationRecipeId)
         throw std::invalid_argument{"field flare manufacturing requires schema 65 and content 81"};
@@ -3271,7 +3271,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             (schemaVersion >= 62 && contentVersion == kCrossMapFreightContentVersion) ||
             (schemaVersion >= 63 && contentVersion == kFuelExtractionContentVersion) ||
             (schemaVersion >= 64 && contentVersion == kArmorReadinessContentVersion) ||
-            (schemaVersion >= 65 && contentVersion == kThrownIlluminationContentVersion);
+            (schemaVersion >= 65 && contentVersion == kThrownIlluminationContentVersion) ||
+            (schemaVersion >= 66 && contentVersion == kRaidBackpackRecoveryContentVersion);
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -4076,7 +4077,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                 const auto &enabled = value.at("backpack_recovery_enabled");
                 if (!backpackContract || !enabled.is_boolean())
                     return {SaveLoadStatus::Failed, std::nullopt,
-                        "Raid backpack recovery requires a boolean in schema 66 and content 82"};
+                        "Raid backpack recovery requires a boolean in schema 66 and compatible backpack recovery content"};
                 raid.backpackRecoveryEnabled = enabled.get<bool>();
             }
             if (value.contains("hospital_night_vision_loot"))
@@ -4106,7 +4107,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             }
             if (raid.rulesVersion == kRaidRunnerRulesVersion &&
                 (schemaVersion < 58 || !runnerCompatibleContent(contentVersion)))
-                return {SaveLoadStatus::Failed, std::nullopt, "runner Raid requires schema 58+ and compatible content 73 through 82"};
+                return {SaveLoadStatus::Failed, std::nullopt, "runner Raid requires schema 58+ and compatible content 73 through 83"};
             raid.mapDefinitionId = MapDefinitionId{
                 value.at("map_definition_id").get<std::string>()};
             raid.seed = value.at("seed").get<std::uint64_t>();
@@ -5305,7 +5306,9 @@ SaveWriteResult SaveRepository::save(
         if (archivePrimary || isLegacy(backupMetadata))
         {
             // The former primary can remain in the rolling backup after upgrade.
-            const std::string_view marker = backpack ? "raid-load-and-pack-recovery-v1"
+            const std::string_view marker =
+                supportsHospitalFloorplanRoutesContent(contentVersion) ? "raid-hospital-floorplan-routes-v1"
+                : backpack ? "raid-load-and-pack-recovery-v1"
                 : illumination ? "raid-thrown-illumination-v1"
                 : armor ? "base-research-armor-readiness-v1"
                 : fuel ? "raid-fuel-extraction-loop-v1"

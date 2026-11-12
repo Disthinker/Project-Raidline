@@ -61,7 +61,7 @@ TEST(RaidLifecycleTest, HospitalRealDeployHasReachableConsumersAcross128Seeds)
 
 TEST(RaidLifecycleTest, HospitalNightVisionChangesOnlyTheFrozenServiceSlotByDayOrNight)
 {
-    const auto &current = publishedContentRegistry();
+    const auto current = contentBeforeHospitalFloorplanRoutes();
     const auto previous = contentBeforeHospitalNightOperations();
     const MapDefinitionId hospital{"map.raid.hospital_district"};
     const auto &interior = current.map(hospital).interiors.front();
@@ -108,6 +108,62 @@ TEST(RaidLifecycleTest, HospitalNightVisionChangesOnlyTheFrozenServiceSlotByDayO
         EXPECT_TRUE(validateProfileState(oldProfile, current).valid);
         newRaid.hospitalNightVisionLoot = false;
         EXPECT_FALSE(validateProfileState(newProfile, current).valid);
+    }
+}
+
+TEST(RaidLifecycleTest, HospitalFloorplanChangesOnlyTheFrozenReceptionSlot)
+{
+    const auto &current = publishedContentRegistry();
+    const auto previous = contentBeforeHospitalFloorplanRoutes();
+    const auto &interior = current.map(kHospitalFloorplanMapId).interiors.front();
+    const auto reception = std::find_if(interior.lootSlots.begin(), interior.lootSlots.end(),
+        [&](const auto &slot) {
+            return isHospitalFloorplanLootSlot(kHospitalFloorplanMapId, interior.id, slot.id);
+        });
+    ASSERT_NE(reception, interior.lootSlots.end());
+    EXPECT_EQ(reception->position.x, 880.0F);
+    EXPECT_EQ(reception->position.y, 1200.0F);
+
+    for (const auto seed : {9U, 9917U, 47091U})
+    {
+        SCOPED_TRACE(seed);
+        auto oldProfile = makeNewAlphaProfile("hospital-floorplan-loot", previous);
+        auto newProfile = makeNewAlphaProfile("hospital-floorplan-loot", current);
+        const DeployCommand deploy{"floorplan-raid", "floorplan-settlement", seed, kHospitalFloorplanMapId};
+        const auto oldResult = executeDeploy(oldProfile, previous, deploy,
+            {oldProfile.revision, "old-floorplan-deploy"});
+        const auto newResult = executeDeploy(newProfile, current, deploy,
+            {newProfile.revision, "new-floorplan-deploy"});
+        ASSERT_TRUE(oldResult.succeeded) << oldResult.message;
+        ASSERT_TRUE(newResult.succeeded) << newResult.message;
+        ASSERT_TRUE(oldProfile.pendingRaid);
+        ASSERT_TRUE(newProfile.pendingRaid);
+        const auto &oldRaid = *oldProfile.pendingRaid;
+        const auto &newRaid = *newProfile.pendingRaid;
+        EXPECT_TRUE(oldRaid.backpackRecoveryEnabled);
+        EXPECT_TRUE(newRaid.backpackRecoveryEnabled);
+        EXPECT_TRUE(oldRaid.hospitalNightVisionLoot);
+        EXPECT_TRUE(newRaid.hospitalNightVisionLoot);
+        EXPECT_EQ(oldRaid.enemies, newRaid.enemies);
+        EXPECT_EQ(oldRaid.spatialLayout.layoutHash, newRaid.spatialLayout.layoutHash);
+        ASSERT_EQ(oldRaid.loot.size(), newRaid.loot.size());
+        std::size_t replacements{};
+        for (std::size_t i{}; i < oldRaid.loot.size(); ++i)
+        {
+            auto expected = oldRaid.loot[i];
+            if (expected.spaceId == interior.id && expected.position.x == reception->position.x &&
+                expected.position.y == reception->position.y)
+            {
+                EXPECT_NE(expected.definitionId, kHospitalFloorplanItemId);
+                expected.definitionId = kHospitalFloorplanItemId;
+                expected.quantity = 1U;
+                ++replacements;
+            }
+            EXPECT_EQ(expected, newRaid.loot[i]);
+        }
+        EXPECT_EQ(replacements, 1U);
+        EXPECT_TRUE(validateProfileState(oldProfile, current).valid);
+        EXPECT_TRUE(validateProfileState(newProfile, current).valid);
     }
 }
 

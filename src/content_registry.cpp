@@ -4418,6 +4418,43 @@ ContentRegistry ContentRegistry::fromJson(
                     }) != 1)
                 fail("field flare is workshop-only");
         }
+        if (supportsHospitalFloorplanRoutesContent(registry.contentVersion()))
+        {
+            if (!registry.itemIndex_.contains(kHospitalFloorplanItemId))
+                fail("hospital floor plan requires a physical item");
+            const auto &floorplan = registry.item(kHospitalFloorplanItemId);
+            if (floorplan.category != ItemCategory::Loot || floorplan.inventoryWidthCells != 1 ||
+                floorplan.inventoryHeightCells != 1 || floorplan.maxStackSize != 1 ||
+                floorplan.marketBuyPrice || floorplan.marketRecyclePrice != 35U ||
+                floorplan.baseContribution || floorplan.baseConstructionMaterialValue)
+                fail("hospital floor plan definition is invalid");
+
+            if (registry.mapIndex_.contains(kHospitalFloorplanMapId))
+            {
+                const auto &hospital = registry.map(kHospitalFloorplanMapId);
+                const bool hasReceptionSlot = std::any_of(
+                    hospital.interiors.begin(), hospital.interiors.end(), [&](const auto &interior) {
+                        return std::any_of(interior.lootSlots.begin(), interior.lootSlots.end(),
+                            [&](const auto &slot) {
+                                return isHospitalFloorplanLootSlot(hospital.id, interior.id, slot.id);
+                            });
+                    });
+                if (!hasReceptionSlot) fail("hospital floor plan reception slot is missing");
+            }
+            if (std::any_of(registry.lootTables_.begin(), registry.lootTables_.end(), [](const auto &table) {
+                    return std::any_of(table.entries.begin(), table.entries.end(), [](const auto &entry) {
+                        return entry.itemDefinitionId == kHospitalFloorplanItemId;
+                    });
+                }) || std::any_of(registry.maps_.begin(), registry.maps_.end(), [](const auto &map) {
+                    return std::any_of(map.groundItems.begin(), map.groundItems.end(), [](const auto &item) {
+                        return item.itemDefinitionId == kHospitalFloorplanItemId;
+                    });
+                }) || std::any_of(registry.baseManufacturingRecipes_.begin(),
+                    registry.baseManufacturingRecipes_.end(), [](const auto &recipe) {
+                        return recipe.outputItemDefinitionId == kHospitalFloorplanItemId;
+                    }))
+                fail("hospital floor plan requires its fixed reception source");
+        }
         return registry;
     }
     catch (const ContentRegistryError &)

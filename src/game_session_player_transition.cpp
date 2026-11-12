@@ -435,6 +435,62 @@ ProfileUiSubmission GameSession::requestOrdinarySurvivorRescue()
     return enqueuePreparedProfileUi(std::move(live),std::move(recovery),ProfileUiCompletionKind::Rescue,std::nullopt,std::move(prepared));
 }
 
+bool GameSession::tryLearnHospitalFloorplan(
+    AssetInstanceId assetId, bool inventoryOpen, const RaidObservationKey &observation)
+{
+    const auto *asset = profile_.assets.find(assetId);
+    if (!asset || asset->definitionId != kHospitalFloorplanItemId ||
+        !profile_.pendingRaid || profile_.pendingRaid->mapDefinitionId != kHospitalFloorplanMapId ||
+        world_->activeRaidSpaceId() != kHospitalFloorplanSpaceId ||
+        profile_.raidInteriorIntelligence.knows(kHospitalFloorplanSpaceId))
+        return false;
+
+    if (!raidWorldInteractionAvailable(inventoryOpen) || world_->player().isControlled())
+        return true;
+    if (!activeRaidRecoveryProfile_ ||
+        activeRaidRecoveryProfile_->revision == std::numeric_limits<ProfileRevision>::max())
+    {
+        persistenceMessage_ = "Save protection is waiting for retry";
+        return true;
+    }
+
+    ProfileState live = profile_;
+    const auto interior = std::find_if(live.pendingRaid->interiors.begin(),
+        live.pendingRaid->interiors.end(), [](const RaidInteriorSnapshot &snapshot) {
+            return snapshot.id == kHospitalFloorplanSpaceId;
+        });
+    if (interior == live.pendingRaid->interiors.end())
+        return true;
+
+    // Inventory validates the same candidate that will publish the learned layout.
+    // The frozen loot validator ties the floorplan to the reception slot.
+    live.raidInteriorIntelligence.knownLayouts.insert(kHospitalFloorplanSpaceId);
+    interior->layoutKnown = true;
+    const auto &content = publishedContentRegistry();
+    const auto receipt = pickupRaidLoot(live, content, assetId,
+        {profile_.revision, nextRaidTransaction("pickup")},
+        &world_->raidObservation(), &observation);
+    if (!receipt.succeeded)
+    {
+        persistenceMessage_ = receipt.message;
+        return true;
+    }
+
+    // Checkpoint only permanent knowledge onto the pre-Raid recovery state.
+    // All live loot, health and time remain subject to normal Raid settlement.
+    ProfileState recovery = *activeRaidRecoveryProfile_;
+    recovery.raidInteriorIntelligence.knownLayouts.insert(kHospitalFloorplanSpaceId);
+    ++recovery.revision;
+    auto prepared = std::make_shared<PreparedPlayerTransition>();
+    prepared->kind = PreparedPlayerTransition::Kind::HospitalFloorplan;
+    prepared->raidRecoveryProfile = recovery;
+    const auto submitted = enqueuePreparedProfileUi(std::move(live), std::move(recovery),
+        ProfileUiCompletionKind::HospitalFloorplan, std::nullopt, std::move(prepared));
+    if (!submitted.accepted)
+        persistenceMessage_ = submitted.message;
+    return true;
+}
+
 void GameSession::completePreparedPlayerTransition(const std::shared_ptr<PreparedPlayerTransition> &prepared)
 {
     if(!prepared)return;
@@ -507,6 +563,10 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     } else if(prepared->kind==PreparedPlayerTransition::Kind::Rescue) {
         activeRaidRecoveryProfile_=std::move(prepared->raidRecoveryProfile);
         world_->confirmOrdinarySurvivorRescue();presentationEvents_.push_back(GameSessionPresentationEvent::RescueSecured);
+    } else if (prepared->kind == PreparedPlayerTransition::Kind::HospitalFloorplan) {
+        activeRaidRecoveryProfile_ = std::move(prepared->raidRecoveryProfile);
+        world_->confirmRaidInteriorLayout(kHospitalFloorplanSpaceId);
+        presentationEvents_.push_back(GameSessionPresentationEvent::LootPickedUp);
     } else if(prepared->kind==PreparedPlayerTransition::Kind::DefenseStart) {
         raidActionState_.cancel();cancelPlayerControlIntent();
         if(basePlayerWorld_ && !restoreBaseDefenseRuntime(*basePlayerWorld_))baseDefenseSaveBlocked_=true;

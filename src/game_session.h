@@ -658,6 +658,8 @@ private:
         const RaidDeploymentProgressCallback &);
     [[nodiscard]] ProfileUiSubmission requestRaidSettlement(RaidResultOutcome);
     [[nodiscard]] ProfileUiSubmission requestOrdinarySurvivorRescue();
+    [[nodiscard]] bool tryLearnHospitalFloorplan(
+        AssetInstanceId, bool inventoryOpen, const RaidObservationKey &);
     [[nodiscard]] bool prepareRaidSettlementCandidate(RaidResultOutcome, ProfileState &);
     [[nodiscard]] bool prepareOrdinarySurvivorRescueCandidate(ProfileState &, ProfileState &);
     [[nodiscard]] ProfileState inventoryCheckpointCandidate(const ProfileState &current);

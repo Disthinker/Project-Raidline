@@ -81,6 +81,58 @@ TEST(RaidTacticalMapPresentationTest, EnemyIntelRemainsIndependent)
     EXPECT_TRUE(tacticalMapEnemyDeploymentVisible(map));
 }
 
+TEST(RaidTacticalMapPresentationTest, ChalkStrokesShareLengthButEditOnlyCurrentSpace)
+{
+    RaidChalkRoutes routes;
+    routes.setSpace(RaidChalkSpace::Outdoor);
+    routes.beginStroke({0, 40});
+    routes.extendStroke({4, 40});
+    EXPECT_TRUE(routes.strokes(RaidChalkSpace::Outdoor).empty());
+    routes.extendStroke({3000, 40});
+    routes.setSpace(RaidChalkSpace::HospitalInterior);
+    routes.extendStroke({1000, 40});
+    EXPECT_FALSE(routes.drawing());
+    EXPECT_TRUE(routes.strokes(RaidChalkSpace::HospitalInterior).empty());
+
+    routes.beginStroke({100, 100});
+    routes.extendStroke({1400, 100});
+    ASSERT_EQ(routes.strokes(RaidChalkSpace::HospitalInterior).size(), 1U);
+    EXPECT_FLOAT_EQ(routes.strokes(RaidChalkSpace::HospitalInterior).front().points.back().x, 1100.0F);
+    EXPECT_DOUBLE_EQ(routes.remainingLength(), 0.0);
+    EXPECT_FALSE(routes.drawing());
+
+    routes.undo(RaidChalkSpace::HospitalInterior);
+    EXPECT_DOUBLE_EQ(routes.remainingLength(), 1000.0);
+    EXPECT_TRUE(routes.strokes(RaidChalkSpace::HospitalInterior).empty());
+    EXPECT_EQ(routes.strokes(RaidChalkSpace::Outdoor).size(), 1U);
+    routes.clear(RaidChalkSpace::Outdoor);
+    EXPECT_DOUBLE_EQ(routes.remainingLength(), RaidChalkRoutes::kLengthLimit);
+    EXPECT_TRUE(routes.strokes(RaidChalkSpace::Outdoor).empty());
+}
+
+TEST(RaidTacticalMapPresentationTest, ChalkAcrossFogDoesNotRevealChartData)
+{
+    const RaidTacticalMapState map = configuredMap();
+    const RaidTacticalMapChart chart{map.worldSize()};
+    const Vec2 hidden{100, 100};
+    const auto roundTrip = chart.worldPoint(chart.screenPoint(hidden));
+    ASSERT_TRUE(roundTrip);
+    EXPECT_NEAR(roundTrip->x, hidden.x, 0.0001F);
+    EXPECT_NEAR(roundTrip->y, hidden.y, 0.0001F);
+    EXPECT_FALSE(chart.worldPoint({143, 114}));
+    EXPECT_FALSE(chart.worldPoint({144, 618}));
+
+    RaidChalkRoutes routes;
+    routes.setSpace(RaidChalkSpace::Outdoor);
+    routes.beginStroke({0, 100});
+    routes.extendStroke(*roundTrip);
+    routes.endStroke();
+    ASSERT_EQ(routes.strokes(RaidChalkSpace::Outdoor).size(), 1U);
+    EXPECT_FALSE(tacticalMapPointVisible(map, hidden, RaidTacticalMapPresentationMode::FogOfWar));
+    EXPECT_FALSE(tacticalMapExtractionVisible(
+        map, RaidMapExtractionKind::Normal, RaidTacticalMapPresentationMode::FogOfWar));
+}
+
 TEST(RaidTacticalMapPresentationTest,
      ObjectivesSeparateBriefingExplorationAndDebugVisibility)
 {

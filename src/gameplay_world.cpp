@@ -2148,6 +2148,18 @@ GameplayWorld::activeInteriorMapProjection() const noexcept
         interior.layoutKnown};
 }
 
+void GameplayWorld::confirmRaidInteriorLayout(const RaidSpaceDefinitionId &spaceId) noexcept
+{
+    for (InteriorRuntime &interior : interiors_)
+    {
+        if (interior.id == spaceId)
+        {
+            interior.layoutKnown = true;
+            return;
+        }
+    }
+}
+
 const RaidOutdoorPresentationProjection &GameplayWorld::outdoorPresentation(
     ContentRect visibleWorldBounds) const
 {
