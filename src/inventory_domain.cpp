@@ -804,10 +804,16 @@ bool sceneCommandAllowed(const ProfileState &profile, const InventoryCommand &co
 {
     const auto sourceId = std::visit([](const auto &value) { return value.instanceId; }, command);
     if (profile.pendingRaid && assetIsLegacyOverflowAsset(profile, sourceId)) return false;
+    if (raidDroppedBackpackRoot(profile, sourceId)) return false;
     const auto sourceRoot = raidSceneContainerRoot(profile, sourceId);
     std::optional<AssetInstanceId> destinationRoot;
-    if (const auto *move = std::get_if<InventoryMoveCommand>(&command); move && move->destination.container.kind == ProfileContainerKind::AssetCompartment)
-        destinationRoot = raidSceneContainerRoot(profile, move->destination.container.ownerAssetId);
+    if (const auto *move = std::get_if<InventoryMoveCommand>(&command);
+        move && move->destination.container.kind == ProfileContainerKind::AssetCompartment)
+    {
+        const auto owner = move->destination.container.ownerAssetId;
+        if (raidDroppedBackpackRoot(profile, owner)) return false;
+        destinationRoot = raidSceneContainerRoot(profile, owner);
+    }
     if (!sourceRoot && !destinationRoot) return true;
     if (!access || !raidSceneContainerAccessible(profile, *access)) return false;
     if ((sourceRoot && *sourceRoot != access->containerAssetId) || (destinationRoot && *destinationRoot != access->containerAssetId)) return false;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <span>
 #include <string>
 
 #include "inventory_domain.h"
@@ -153,6 +154,34 @@ struct RaidTravelPreview
 [[nodiscard]] RaidRollbackReceipt rollbackPendingRaidToBase(
     ProfileState &profile,
     const ContentRegistry &content);
+
+inline constexpr float kRaidBackpackInteractionRange = 72.0F;
+
+[[nodiscard]] constexpr Rect raidBackpackGroundBounds(Vec2 position) noexcept
+{
+    return {{position.x - 12.0F, position.y - 12.0F}, {24.0F, 24.0F}};
+}
+
+[[nodiscard]] bool raidBackpackPlacementValid(
+    const PendingRaidSnapshot &raid,
+    const MapDefinition &map,
+    const RaidDroppedBackpackLocation &location) noexcept;
+
+[[nodiscard]] InventoryReceipt dropRaidBackpack(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId assetId,
+    Vec2 landing,
+    const CommandContext &context,
+    const RaidReloadWorldAccess &access,
+    std::span<const AssetInstanceId> lockedAssets = {});
+
+[[nodiscard]] InventoryReceipt pickupRaidBackpack(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId assetId,
+    const CommandContext &context,
+    const RaidReloadWorldAccess &access);
 
 [[nodiscard]] InventoryReceipt pickupRaidLoot(
     ProfileState &profile,

@@ -1,12 +1,28 @@
-# 当前 · 野战照明弹与暗区搜索 v1 已验收
+# 当前 · 外勤负重与战术卸包 v1 已验收
+
+携包奔跑有负重取舍，交战时可卸下整包，再决定回头取包还是轻装撤离。 [具体开发方案](../exec-plans/active/raid-load-and-pack-recovery-v1.md)
+
+- task_id `raid-load-and-pack-recovery-v1`，plan_version `RL-RAID-LOAD-AND-PACK-RECOVERY-v1`，state `accepted`。approval_source 为 2026-11-12 用户明确回复“批准”。candidate_id `RL-RAID-LOAD-AND-PACK-RECOVERY-v1-local-5bca52fd76c9`。accepted_candidate_id `RL-RAID-LOAD-AND-PACK-RECOVERY-v1-local-5bca52fd76c9`。acceptance_source 为 2026-11-12 用户明确回复“验收通过”，按其已明确的约定提交并推送。
+- 基线 `origin/main@302901a5c2d8b3a1e810bfa83f654bd99729267e`。照明弹 PR #207 已合并，合并前 Windows 与 Ubuntu 各通过 3226 项及全部 14 项 3 ms 检查。 [主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43145371432)
+- 原策划线程已回复请求 `MAIN-NEXT-STAGE-20261112-AFTER-ILLUMINATION-01`，协调任务 `raid-next-stage-after-thrown-illumination`，协议 `RL-NEXT-STAGE-REQUEST-v1`，turn `01a1cdb4-d985-70c3-a844-7f17e0cb237a`，基线一致。
+- 隔离工作树 `E:\WorkPlace\Projects\C\Project Raidline-raid-load-and-pack-recovery-v1`，分支 `codex/raid-load-and-pack-recovery-v1`。
+- 固定入口已更新。Windows 全量 3243/3243，14 项 3 ms 检查通过。旧档副本迁移回读一致。[联合验收](../acceptance/raid-load-and-pack-recovery-v1.md)
+- 基线主线 CI 的 Windows 和 Ubuntu 均已通过。
+
+---
+
+# 当前 · 野战照明弹与暗区搜索 v1 已验收并合并
 
 搜回电料制成照明弹，下一次出击借远处短时光照判断路线和搜索机会。 [具体开发方案](../exec-plans/active/raid-thrown-illumination-v1.md)
 
-- task_id `raid-thrown-illumination-v1`，plan_version `RL-RAID-THROWN-ILLUMINATION-v1`，state `accepted_pending_remote_authorization`。approval_source 为 2026-11-11 用户对 RL-RAID-THROWN-ILLUMINATION-v1 明确回复“批准”。candidate_id `RL-RAID-THROWN-ILLUMINATION-v1-local-233ad40a1e95`。accepted_candidate_id `RL-RAID-THROWN-ILLUMINATION-v1-local-233ad40a1e95`。acceptance_source 为 2026-11-11 用户明确回复“验收通过”。2026-11-11 用户要求主线 CI 通过后协调策划，给出更大步长的具体方案，确认后实施。
+- task_id `raid-thrown-illumination-v1`，plan_version `RL-RAID-THROWN-ILLUMINATION-v1`，state `merged`。approval_source 为 2026-11-11 用户对 RL-RAID-THROWN-ILLUMINATION-v1 明确回复“批准”。candidate_id `RL-RAID-THROWN-ILLUMINATION-v1-local-233ad40a1e95`。accepted_candidate_id `RL-RAID-THROWN-ILLUMINATION-v1-local-233ad40a1e95`。acceptance_source 为 2026-11-11 用户明确回复“验收通过”。2026-11-11 用户要求主线 CI 通过后协调策划，给出更大步长的具体方案，确认后实施。
 - 基线 `origin/main@d6544fb5d61c77cc920c3db3ce6706adba706148`。工坊蓝图研究与防具整备 PR #206 已验收合并，Windows 和 Ubuntu 各 3212/3212，13 项 3ms 检查通过。 [主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43014163163)
 - 原策划线程 `019feff4-477c-75c2-bf31-3f09ff1e3891` 已回复 `MAIN-NEXT-STAGE-20261111-AFTER-ARMOR-01`，协调任务 `raid-next-stage-after-armor-readiness`，协议 `RL-NEXT-STAGE-REQUEST-v1`，回复基线一致，状态 `proposal_ready_awaiting_human_approval`。隔离工作树 E:\WorkPlace\Projects\C\Project Raidline-raid-thrown-illumination-v1，分支 `codex/raid-thrown-illumination-v1`。
 - 固定入口已更新。Windows 全量 3226/3226，原 13 项及新增 1 项 3ms 检查通过。玩家旧档副本迁移回读一致。[联合验收](../acceptance/raid-thrown-illumination-v1.md)
-- 本地提交仅包含已验收候选和验收记录。远端交付待本阶段推送授权及双平台 CI。
+- 本地提交 `cf22d96` 仅包含已验收候选和验收记录。2026-11-11 用户明确说明“验收通过”即授权提交并推送。已核对 GitHub 远端分支 `codex/raid-thrown-illumination-v1` 指向 `cf22d96`，主线仍为 `d6544fb`。
+- 2026-11-11 用户授权创建 PR 并在 Windows 和 Ubuntu CI 通过后合并。
+- [PR #207](https://github.com/Disthinker/Project-Raidline/pull/207) 已合入 `main@302901a`。合并树与已验收提交一致。Windows 和 Ubuntu 各通过 3226 项测试及全部 14 项 3 ms 检查。首轮 Ubuntu 因依赖镜像域名解析失败，对同一提交单独重跑后通过。[双平台 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43052486566)。合并后[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43145371432)已触发。
+- 2026-11-12 按用户要求，在 PR #207 合并后向原策划线程发出下一阶段请求。请求 `MAIN-NEXT-STAGE-20261112-AFTER-ILLUMINATION-01`，任务 `raid-next-stage-after-thrown-illumination`，协议 `RL-NEXT-STAGE-REQUEST-v1`，基线 `origin/main@302901a5c2d8b3a1e810bfa83f654bd99729267e`。策划已按同一基线回复，推荐外勤负重与战术卸包 v1。 [下一阶段方案](../exec-plans/active/raid-load-and-pack-recovery-v1.md)
 
 ---
 

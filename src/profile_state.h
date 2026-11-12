@@ -295,6 +295,20 @@ struct RetainedRaidMagazineLocation
                            const RetainedRaidMagazineLocation &) = default;
 };
 
+struct RaidDroppedBackpackLocation
+{
+    std::string raidId;
+    RaidSpaceDefinitionId spaceId;
+    Vec2 position{};
+
+    friend bool operator==(const RaidDroppedBackpackLocation &left,
+                           const RaidDroppedBackpackLocation &right) noexcept
+    {
+        return left.raidId == right.raidId && left.spaceId == right.spaceId &&
+            left.position.x == right.position.x && left.position.y == right.position.y;
+    }
+};
+
 using AssetLocation = std::variant<
     StoredAssetLocation,
     EquippedAssetLocation,
@@ -315,7 +329,8 @@ using AssetLocation = std::variant<
     BaseReloadHeldMagazineLocation,
     TrainingHeldMagazineLocation,
     TrainingDroppedMagazineLocation,
-    InstalledHelmetDeviceLocation>;
+    InstalledHelmetDeviceLocation,
+    RaidDroppedBackpackLocation>;
 
 struct MagazineRoundRecord
 {
@@ -1187,7 +1202,7 @@ struct PendingRaidSnapshot
     std::vector<RaidEnemySnapshot> enemies;
     std::vector<RaidEncounterGroupSnapshot> encounterGroups;
     std::vector<RaidLootSnapshot> loot;
-    std::optional<AssetRegistry> startingAssets; // schema 51: exact pre-deploy assets for scene-container rollback
+    std::optional<AssetRegistry> startingAssets; // Exact pre-deploy assets for Raid rollback.
     std::optional<RaidRescueSnapshot> rescue;
     std::optional<RaidCredentialExtractionSnapshot> credentialExtraction;
     std::optional<RaidSelfRecoverySnapshot> selfRecovery;
@@ -1207,6 +1222,7 @@ struct PendingRaidSnapshot
     std::optional<std::string> freightKeyLootSlotId;
     std::optional<RaidSealedFreightCrateSnapshot> sealedFreightCrate;
     std::optional<AssetInstanceId> fuelExtractionLootAssetId;
+    bool backpackRecoveryEnabled{};
 };
 
 struct LastRaidResult
@@ -1358,6 +1374,10 @@ grantDeveloperWarehouseCatalog(
 
 // Gross carried mass includes equipped roots, nested carried contents,
 // installed magazines, magazine rounds, and chambered rounds exactly once.
+[[nodiscard]] std::optional<AssetInstanceId> raidDroppedBackpackRoot(
+    const ProfileState &profile, AssetInstanceId assetId) noexcept;
+[[nodiscard]] bool raidBackpackHasDeploymentOrigin(
+    const PendingRaidSnapshot &raid, const AssetRecord &asset) noexcept;
 [[nodiscard]] std::uint64_t carriedWeightGrams(
     const ProfileState &profile,
     const ContentRegistry &content) noexcept;

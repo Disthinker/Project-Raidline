@@ -7,6 +7,7 @@
 #include "alpha_content_ids.h"
 #include "base_wish_expedition.h"
 #include "game_session.h"
+#include "raid_optics_legacy_fixture.h"
 
 namespace {
 const auto &content = publishedContentRegistry();
@@ -42,8 +43,9 @@ AssetInstanceId equipBackpack(ProfileState &profile) {
         {profile.revision, "equip:bag"}).succeeded);
     return id;
 }
-DeployReceipt deploy(ProfileState &profile, bool frontier = false) {
-    return executeDeploy(profile, content,
+DeployReceipt deploy(ProfileState &profile, bool frontier = false,
+    const ContentRegistry &deploymentContent = content) {
+    return executeDeploy(profile, deploymentContent,
         {"wish-raid", "wish-settlement", 73419U, MapDefinitionId{frontier ? "map.raid.frontier_exchange" : "map.v0.test"}},
         {profile.revision, "wish:deploy"});
 }
@@ -226,7 +228,8 @@ TEST(BaseWishExpeditionTest, Schema44RoundTripsAnd43MigratesWithoutInventedFocus
     EXPECT_EQ(profileStateFingerprint(profile), profileStateFingerprint(*loaded.profile));
     auto legacy = roundTrip(profile, 43U); ASSERT_TRUE(legacy.profile) << legacy.message;
     EXPECT_FALSE(legacy.profile->basePriority.focus);
-    ASSERT_TRUE(deploy(profile).succeeded);
+    const auto historical = contentBeforeRaidBackpackRecovery();
+    ASSERT_TRUE(deploy(profile, false, historical).succeeded);
     loaded = roundTrip(profile, 44U); ASSERT_TRUE(loaded.profile) << loaded.message;
     EXPECT_EQ(profileStateFingerprint(profile), profileStateFingerprint(*loaded.profile));
     legacy = roundTrip(profile, 43U); ASSERT_TRUE(legacy.profile) << legacy.message;

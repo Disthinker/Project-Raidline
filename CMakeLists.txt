@@ -457,6 +457,7 @@ add_library(raidline_services STATIC
     src/game_session_player_context.cpp
     src/game_session_player_actions.cpp
     src/game_session_grenade.cpp
+    src/game_session_backpack.cpp
     src/game_session_noise_decoy.cpp
     src/game_session_melee.cpp
     src/base_defense_checkpoint_writer.cpp
@@ -1140,6 +1141,8 @@ raidline_add_test(WeaponSuppressorSaveTest tests/test_weapon_suppressor_save.cpp
 raidline_add_test(WeaponSuppressorRuntimeTest tests/test_weapon_suppressor_runtime.cpp raidline::services)
 raidline_add_test(GrenadeDomainTest tests/test_grenade_domain.cpp raidline::services)
 raidline_add_test(ThrownIlluminationTest tests/test_thrown_illumination.cpp raidline::services)
+raidline_add_test(RaidCarryWeightTest tests/test_raid_carry_weight.cpp raidline::services)
+raidline_add_test(RaidBackpackDomainTest tests/test_raid_backpack_domain.cpp raidline::services)
 raidline_add_test(GrenadeRuntimeTest tests/test_grenade_runtime.cpp raidline::services)
 raidline_add_test(GrenadeSessionTest tests/test_grenade_session.cpp raidline::services)
 raidline_add_test(GrenadePerformanceTest tests/test_grenade_performance.cpp raidline::services)

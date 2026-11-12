@@ -130,6 +130,9 @@ std::vector<UiItemActionEntry> projectUiItemActions(
         result = {{UiItemAction::HelmetDetails, "HELMET DETAILS"}};
     else if (definition.definitionId == kFreightCrateKeyId)
         result = {{UiItemAction::FreightKeyDetails, "FREIGHT CRATE KEY DETAILS"}};
+    if (inRaid && profile.pendingRaid && profile.pendingRaid->backpackRecoveryEnabled &&
+        equippedAsset(profile, EquipmentSlotKind::Backpack) == id)
+        result.push_back({UiItemAction::DropBackpack, "DROP BACKPACK"});
     if (const auto action = queryProfileContextAction(profile, content, id, inRaid)) {
         switch (*action) {
         case ProfileContextActionKind::UnloadMagazine:

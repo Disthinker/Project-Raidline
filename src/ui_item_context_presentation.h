@@ -8,7 +8,7 @@
 // These IDs name existing client entry points, never new domain operations.
 enum class UiItemAction {
     WeaponDetails, ModifyWeapon, MeleeDetails, DecoyDetails, HelmetDetails, NightVisionDetails,
-    FreightKeyDetails, UnloadMagazine, UseMedical, ChamberRound, CycleFireMode
+    FreightKeyDetails, UnloadMagazine, UseMedical, ChamberRound, CycleFireMode, DropBackpack
 };
 struct UiItemActionEntry {
     UiItemAction id{};

@@ -840,7 +840,7 @@ TEST(SaveRepositoryTest, SchemaV8PendingRaidMigratesToZeroTravelRollback)
         publishedContentRegistry());
     ASSERT_TRUE(executeDeploy(
         profile,
-        publishedContentRegistry(),
+        contentBeforeRaidBackpackRecovery(),
         DeployCommand{
             "legacy-raid",
             "legacy-settlement",
@@ -1741,7 +1741,7 @@ TEST(SaveRepositoryTest, SchemaV18RoundTripsMoraleEventAndRaidRollback)
     profile.baseMorale.pendingNegativeEventCount = 1U;
     ASSERT_TRUE(executeDeploy(
         profile,
-        publishedContentRegistry(),
+        contentBeforeRaidBackpackRecovery(),
         DeployCommand{
             "save-morale-raid",
             "save-morale-settlement",
@@ -1863,7 +1863,7 @@ TEST(SaveRepositoryTest, SchemaV20RoundTripsRaidIntelligenceAndPendingLoadout)
     loadout.set(RaidIntelligenceCategory::Transport, true);
     ASSERT_TRUE(executeDeploy(
         profile,
-        publishedContentRegistry(),
+        contentBeforeRaidBackpackRecovery(),
         DeployCommand{"save-intelligence-raid", "save-intelligence-settle",
                       99441U, mapId, loadout},
         {profile.revision, "save-intelligence-deploy"}).succeeded);
@@ -3111,7 +3111,7 @@ TEST(SaveRepositoryTest, SchemaV25MigratesWithoutRaidSelfRecoveryTarget)
         "save-self-recovery-v25-migration", content);
     ASSERT_TRUE(executeDeploy(
         profile,
-        content,
+        contentBeforeRaidBackpackRecovery(),
         DeployCommand{
             "save-v25-raid", "save-v25-settlement", 9331U,
             MapDefinitionId{"map.v0.test"}, {}, std::nullopt},
@@ -3468,7 +3468,7 @@ TEST(SaveRepositoryTest, SchemaV21MigratesRootActorsWithoutInteriorState)
         "save-root-space-v21", publishedContentRegistry());
     ASSERT_TRUE(executeDeploy(
         profile,
-        publishedContentRegistry(),
+        contentBeforeRaidBackpackRecovery(),
         DeployCommand{
             "save-root-raid",
             "save-root-settle",
@@ -3901,7 +3901,7 @@ TEST(SaveRepositoryTest, Schema55RoundTripsIndependentPagesOverflowAndOwnedSubtr
     ASSERT_TRUE(validateProfileState(profile, content).valid);
     const auto text = serializeProfileEnvelope(profile, content.contentVersion());
     const auto envelope = nlohmann::json::parse(text);
-    EXPECT_EQ(envelope.at("schema_version"), 65U);
+    EXPECT_EQ(envelope.at("schema_version"), 66U);
     EXPECT_EQ(envelope.at("payload").at("stash_layout_version"), 1U);
     const auto loaded = deserializeProfileEnvelope(text, content);
     ASSERT_TRUE(loaded.profile) << loaded.message;

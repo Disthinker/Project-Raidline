@@ -4,6 +4,13 @@
 #include <algorithm>
 #include <nlohmann/json.hpp>
 
+inline ContentRegistry contentBeforeRaidBackpackRecovery()
+{
+    auto document = nlohmann::json::parse(publishedContentJson());
+    document["content_version"] = kThrownIlluminationContentVersion;
+    return ContentRegistry::fromJson(document.dump());
+}
+
 inline nlohmann::json contentBeforeThrownIlluminationJson()
 {
     auto document = nlohmann::json::parse(publishedContentJson());

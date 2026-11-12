@@ -12626,7 +12626,7 @@ void App::renderProfileInventory(
         }
     }
     text({32,594,232,22},fmt::format("HP {}   {:.1f} KG",profile.currentHealth,
-        carriedWeightGrams(profile,publishedContentRegistry())/1000.0));
+        gameSession_.currentRaidCarriedWeightGrams()/1000.0));
     if(profile.medicalStatus.bleeding!=BleedingSeverity::None)
         text({32,618,232,20},profile.medicalStatus.bleeding==BleedingSeverity::Heavy?"HEAVY BLEEDING":"LIGHT BLEEDING",12);
     if(right) {
@@ -12796,6 +12796,21 @@ void App::renderAlphaRaidLoot()
         SDL_SetRenderDrawColor(renderer_,160,154,86,255); SDL_RenderFillRect(renderer_,&cell);
         SDL_SetRenderDrawColor(renderer_,230,224,168,255); SDL_RenderRect(renderer_,&cell);
         renderWorldLabel(cell.x-12,cell.y-24,"USED BATTERY | F");
+    }
+    for (const auto id : gameSession_.droppedRaidBackpackIds())
+    {
+        const auto position = gameSession_.observableRaidBackpackPosition(id);
+        if (!position) continue;
+        const Rect footprint = raidBackpackGroundBounds(*position);
+        const SDL_FRect pack{footprint.position.x, footprint.position.y,
+            footprint.size.x, footprint.size.y};
+        SDL_SetRenderDrawColor(renderer_, 78, 98, 78, 255);
+        SDL_RenderFillRect(renderer_, &pack);
+        SDL_SetRenderDrawColor(renderer_, 205, 224, 187, 255);
+        SDL_RenderRect(renderer_, &pack);
+        SDL_RenderLine(renderer_, pack.x + 3, pack.y + 9, pack.x + pack.w - 3, pack.y + 9);
+        SDL_RenderLine(renderer_, position->x, pack.y + 9, position->x, pack.y + 13);
+        renderWorldLabel(pack.x, pack.y - 20, "BACKPACK | E");
     }
     for(const auto id:gameSession_.droppedRaidMagazineIds()) {
         const auto *asset=profile.assets.find(id);
@@ -15203,6 +15218,12 @@ void App::handleProfileContextMenuClick(MousePosition position, bool inRaid) {
     case UiItemAction::CycleFireMode:
         cycleProfileFireMode(id);
         return;
+    case UiItemAction::DropBackpack: {
+        const auto result = gameSession_.dropRaidBackpack(id,
+            {gameSession_.profile().revision, nextProfileTransactionId("drop-backpack")});
+        uiMessage_ = result.succeeded ? "BACKPACK DROPPED" : result.message;
+        return;
+    }
     }
 }
 

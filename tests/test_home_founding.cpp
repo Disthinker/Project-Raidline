@@ -6,6 +6,7 @@
 #include "game_flow.h"
 #include "home_founding_domain.h"
 #include "raid_lifecycle.h"
+#include "raid_optics_legacy_fixture.h"
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -263,7 +264,7 @@ TEST(HomeFoundingTest, LegacyPendingRaidRemainsFrozenAfterSchema44Load) {
   auto profile = makeNewAlphaProfile("legacy-pending", content);
   profile.stashLayoutVersion = 0U;
   ASSERT_TRUE(
-      executeDeploy(profile, content,
+      executeDeploy(profile, contentBeforeRaidBackpackRecovery(),
                     {"old", "old-settle", 101, MapDefinitionId{"map.v0.test"}},
                     {profile.revision, "deploy"})
           .succeeded);

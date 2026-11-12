@@ -31,6 +31,8 @@ inline constexpr std::string_view kArmorReadinessContentVersion{
     "base-research-armor-readiness-content-80"};
 inline constexpr std::string_view kThrownIlluminationContentVersion{
     "raid-thrown-illumination-content-81"};
+inline constexpr std::string_view kRaidBackpackRecoveryContentVersion{
+    "raid-load-and-pack-recovery-content-82"};
 inline const ItemDefinitionId kFixedRaidOpticId{"item.component.optic_4x_5_45"};
 inline const ItemDefinitionId kExpanding545AmmunitionId{"item.ammunition.5_45x39_expanding"};
 inline const ItemDefinitionId kHospitalNightVisionId{"item.device.night_vision_basic"};
@@ -61,9 +63,14 @@ inline constexpr std::string_view kRaidFuelLootSlotId{"freight_manifest"};
         slotId == "hospital_service";
 }
 
+[[nodiscard]] inline bool supportsRaidBackpackRecoveryContent(std::string_view version) noexcept
+{
+    return version == kRaidBackpackRecoveryContentVersion;
+}
+
 [[nodiscard]] inline bool supportsThrownIlluminationContent(std::string_view version) noexcept
 {
-    return version == kThrownIlluminationContentVersion;
+    return version == kThrownIlluminationContentVersion || supportsRaidBackpackRecoveryContent(version);
 }
 
 [[nodiscard]] inline bool supportsArmorReadinessContent(std::string_view version) noexcept

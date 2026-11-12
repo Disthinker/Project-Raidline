@@ -1,5 +1,6 @@
 #include "app.h"
 #include "ui_app_persistence_wait.h"
+#include "ui_localization.h"
 #include "alpha_content_ids.h"
 
 #include <chrono>
@@ -30,7 +31,7 @@ struct UiItemContextTestAccess {
         a.updateProfileItemContext(dt);
     }
     static void tick(App &a, float dt) { a.updateProfileItemContext(dt); }
-    static void right(App &a, MousePosition p) { a.handleProfileRightClick(p, false); }
+    static void right(App &a, MousePosition p, bool raid = false) { a.handleProfileRightClick(p, raid); }
     static void frame(App &a, float dt=0) {
         a.processEvents();a.update(dt);a.input_.endFrame();
         ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
@@ -60,7 +61,7 @@ struct UiItemContextTestAccess {
                     grid.bounds.y+(stored->origin.y+footprint.height*.5F)*kProfileItemCell};
         ADD_FAILURE()<<"fixture item is not visible";return {};
     }
-    static void event(App &a, InventoryUiEvent event) { a.handleProfileInventoryUiEvent(event, false); }
+    static void event(App &a, InventoryUiEvent event, bool raid = false) { a.handleProfileInventoryUiEvent(event, raid); }
     static void cancel(App &a) { a.handleInventoryCancel(); }
     static void close(App &a) { a.closeInventory(); }
     static bool inventory(App &a) { return a.inventoryOverlayState_.isOpen(); }
@@ -80,7 +81,8 @@ struct UiItemContextTestAccess {
             ASSERT_TRUE(a.inventoryItemTextures_[i].valid()) << definition.inventoryTexturePath;
         }
     }
-    static void drawInventory(App &a) { a.renderProfileInventory(true, false); }
+    static void drawInventory(App &a, bool raid = false) { a.renderProfileInventory(!raid, raid); }
+    static void drawRaidGround(App &a) { a.renderAlphaRaidLoot(); }
     static void clock(App &a, float seconds) { a.uiClockSeconds_ += seconds; }
     static void drawMenu(App &a) { a.renderProfileContextMenu(false); }
     static void drawCard(App &a) { a.renderProfileItemCard(true, false); }
@@ -446,6 +448,110 @@ TEST_F(UiItemContextTest, SoftwarePreviewUsesAllThreeWindowScalesAndBothLanguage
             A::detach(*app); SDL_DestroyRenderer(renderer); SDL_DestroySurface(surface);
             renderer = nullptr; surface = nullptr;
         }
+}
+
+
+TEST_F(UiItemContextTest, BackpackMenuDropsOnReleaseAndERecoversSameContents)
+{
+    A::carryMedical(*app, medkit, bag);
+    ASSERT_TRUE(assetIsCarried(profile(), medkit));
+    const AssetLocation originalMedicalLocation = profile().assets.find(medkit)->location;
+    A::close(*app);
+    ASSERT_TRUE(A::flow(*app).deploy(MapDefinitionId{"map.raid.frontier_exchange"}))
+        << session().persistenceMessage();
+    A::frame(*app);
+    ASSERT_TRUE(profile().pendingRaid);
+    ASSERT_TRUE(profile().pendingRaid->backpackRecoveryEnabled);
+    A::open(*app);
+    A::focus(*app, true);
+    const auto slot = profileEquipmentBounds(EquipmentSlotKind::Backpack);
+    const MousePosition packPoint{slot.x + slot.width / 2, slot.y + slot.height / 2};
+    const auto weight = session().currentRaidCarriedWeightGrams();
+
+    for (const auto size : kUiWindowSizes)
+    {
+        drawSetup(size.width, size.height);
+        A::loadArt(*app);
+        A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+        A::right(*app, packPoint, true);
+        ASSERT_TRUE(A::menu(*app));
+        ASSERT_EQ(A::menu(*app)->actions.size(), 1U);
+        ASSERT_EQ(A::menu(*app)->actions.front().id, UiItemAction::DropBackpack);
+        EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese,
+            A::menu(*app)->layout.rows.front().text), "卸包");
+        inside(A::menu(*app)->layout.panel);
+
+        SDL_SetRenderDrawColor(renderer, 8, 12, 18, 255);
+        SDL_RenderClear(renderer);
+        A::drawInventory(*app, true);
+        ASSERT_TRUE(SDL_RenderPresent(renderer));
+        if (const auto *dir = std::getenv("RAIDLINE_PACK_REVIEW_DIR"))
+        {
+            const std::filesystem::path output{dir};
+            ASSERT_TRUE(output.filename().string().starts_with("raidline-pack-review-"));
+            std::filesystem::create_directories(output);
+            const auto filename = output / ("drop-menu-" + std::to_string(size.width) + ".bmp");
+            EXPECT_TRUE(SDL_SaveBMP(surface, filename.string().c_str())) << SDL_GetError();
+        }
+
+        A::cancel(*app);
+        A::detach(*app);
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroySurface(surface);
+        renderer = nullptr;
+        surface = nullptr;
+    }
+
+    A::right(*app, packPoint, true);
+    const auto action = row(UiItemAction::DropBackpack);
+    const auto press = [&](InventoryPointerEventType type) {
+        A::event(*app, InventoryPointerEvent{type, action}, true);
+    };
+    press(InventoryPointerEventType::LeftButtonDown);
+    EXPECT_EQ(equippedAsset(profile(), EquipmentSlotKind::Backpack), bag);
+    press(InventoryPointerEventType::LeftButtonUp);
+    EXPECT_EQ(A::message(*app), "BACKPACK DROPPED");
+    ASSERT_TRUE(std::holds_alternative<RaidDroppedBackpackLocation>(profile().assets.find(bag)->location));
+    EXPECT_EQ(profile().assets.find(medkit)->location, originalMedicalLocation);
+    EXPECT_LT(session().currentRaidCarriedWeightGrams(), weight);
+    const auto dropped = profileStateFingerprint(profile());
+    press(InventoryPointerEventType::LeftButtonUp);
+    EXPECT_EQ(profileStateFingerprint(profile()), dropped);
+
+    drawSetup();
+    A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+    const auto position = session().observableRaidBackpackPosition(bag);
+    ASSERT_TRUE(position);
+    const auto size = session().world().raidSpaceWorldSize();
+    const SDL_Rect viewport{640 - static_cast<int>(position->x), 360 - static_cast<int>(position->y),
+        static_cast<int>(size.x), static_cast<int>(size.y)};
+    SDL_SetRenderDrawColor(renderer, 8, 12, 18, 255);
+    SDL_RenderClear(renderer);
+    ASSERT_TRUE(SDL_SetRenderViewport(renderer, &viewport));
+    A::drawRaidGround(*app);
+    ASSERT_TRUE(SDL_SetRenderViewport(renderer, nullptr));
+    ASSERT_TRUE(SDL_RenderPresent(renderer));
+    Uint8 red{}, green{}, blue{}, alpha{};
+    ASSERT_TRUE(SDL_ReadSurfacePixel(surface, 634, 361, &red, &green, &blue, &alpha));
+    EXPECT_EQ(green, 98);
+    if (const auto *dir = std::getenv("RAIDLINE_PACK_REVIEW_DIR"))
+    {
+        const auto filename = std::filesystem::path{dir} / "ground-backpack-1280.bmp";
+        EXPECT_TRUE(SDL_SaveBMP(surface, filename.string().c_str())) << SDL_GetError();
+    }
+
+    A::close(*app);
+    SDL_Event event{};
+    event.type = SDL_EVENT_KEY_DOWN;
+    event.key.scancode = SDL_SCANCODE_E;
+    event.key.down = true;
+    ASSERT_TRUE(SDL_PushEvent(&event));
+    A::frame(*app);
+    ASSERT_EQ(equippedAsset(profile(), EquipmentSlotKind::Backpack), bag)
+        << session().persistenceMessage();
+    EXPECT_EQ(profile().assets.find(medkit)->location, originalMedicalLocation);
+    EXPECT_EQ(session().currentRaidCarriedWeightGrams(), weight);
+    EXPECT_TRUE(session().droppedRaidBackpackIds().empty());
 }
 
 TEST_F(UiItemContextTest, EveryExistingSupplyStatusAndSuggestionRemainsReadable) {

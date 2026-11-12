@@ -509,6 +509,22 @@ void GameSession::gateOpticInteraction(GameplayInput &input, GameplayInput &simu
     simulationInput.interactJustPressed = simulationInput.interactPressed = false;
 }
 
+std::uint64_t GameSession::currentRaidCarriedWeightGrams() const noexcept
+{
+    const auto assetCount = profile_.assets.records().size();
+    // Committed inventory and ammunition changes advance the revision. The
+    // profile epoch covers replacement at the same revision, while the count
+    // catches depleted batteries erased by simulation without a transaction.
+    if (!carriedWeightCache_ || carriedWeightCache_->revision != profile_.revision ||
+        carriedWeightCache_->profileEpoch != profileUiEpoch_ ||
+        carriedWeightCache_->assetCount != assetCount)
+    {
+        carriedWeightCache_ = CarriedWeightCache{profile_.revision, profileUiEpoch_,
+            assetCount, carriedWeightGrams(profile_, publishedContentRegistry())};
+    }
+    return carriedWeightCache_->grams;
+}
+
 void GameSession::preparePlayerCombatInput(GameplayInput &simulationInput,const GameplayInput &input,float deltaTime,const std::optional<WeaponHandlingParameters> &weaponHandling)
 {
     const auto weapon=activeAlphaWeapon();
@@ -603,7 +619,20 @@ void GameSession::preparePlayerCombatInput(GameplayInput &simulationInput,const 
             simulationInput.sprint = false;
         }
     }
-
+    if (simulationInput.sprint)
+    {
+        const bool carryWeightAffectsSprint = alphaRaidActive_
+            ? !developerRange_ && profile_.pendingRaid && profile_.pendingRaid->backpackRecoveryEnabled
+            : basePlayerWorld_ && basePlayerWorld_->playerSafetyZone() != HomeRegionSafetyZone::SafeCore;
+        if (carryWeightAffectsSprint)
+        {
+            const auto grams = currentRaidCarriedWeightGrams();
+            if (grams > 30000U)
+                simulationInput.movementSpeedMultiplier *= 0.8F;
+            else if (grams > 22000U)
+                simulationInput.movementSpeedMultiplier *= 0.9F;
+        }
+    }
 }
 
 void GameSession::cancelWeaponLightInput() noexcept

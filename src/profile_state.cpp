@@ -1015,6 +1015,72 @@ bool assetIsBaseAccessible(
     return false;
 }
 
+namespace
+{
+const AssetRecord *inventoryOwnershipRoot(
+    const AssetRegistry &assets, AssetInstanceId id) noexcept
+{
+    // A bounded walk fails closed on malformed ownership cycles.
+    for (std::size_t depth = 0; depth < assets.records().size(); ++depth)
+    {
+        const auto *asset = assets.find(id);
+        if (!asset)
+            return nullptr;
+        const auto &location = asset->location;
+        if (const auto *stored = std::get_if<StoredAssetLocation>(&location);
+            stored && stored->container.kind == ProfileContainerKind::AssetCompartment)
+            id = stored->container.ownerAssetId;
+        else if (const auto *magazine = std::get_if<InstalledMagazineLocation>(&location))
+            id = magazine->weaponAssetId;
+        else if (const auto *component = std::get_if<InstalledWeaponComponentLocation>(&location))
+            id = component->weaponAssetId;
+        else if (const auto *retained = std::get_if<RetainedRaidMagazineLocation>(&location))
+            id = retained->weaponAssetId;
+        else if (const auto *device = std::get_if<InstalledHelmetDeviceLocation>(&location))
+            id = device->helmetAssetId;
+        else if (const auto *battery = std::get_if<InstalledDeviceBatteryLocation>(&location))
+            id = battery->deviceAssetId;
+        else
+            return asset;
+    }
+    return nullptr;
+}
+}
+
+std::optional<AssetInstanceId> raidDroppedBackpackRoot(
+    const ProfileState &profile, AssetInstanceId assetId) noexcept
+{
+    if (!profile.pendingRaid || !profile.pendingRaid->backpackRecoveryEnabled)
+        return std::nullopt;
+    const auto *root = inventoryOwnershipRoot(profile.assets, assetId);
+    const auto *ground = root
+        ? std::get_if<RaidDroppedBackpackLocation>(&root->location)
+        : nullptr;
+    if (ground && ground->raidId == profile.pendingRaid->raidId)
+        return root->instanceId;
+    return std::nullopt;
+}
+
+bool raidBackpackHasDeploymentOrigin(
+    const PendingRaidSnapshot &raid, const AssetRecord &asset) noexcept
+{
+    if (raid.startingAssets)
+    {
+        const auto *original = raid.startingAssets->find(asset.instanceId);
+        const auto *root = original && original->definitionId == asset.definitionId
+            ? inventoryOwnershipRoot(*raid.startingAssets, asset.instanceId)
+            : nullptr;
+        if (root && std::holds_alternative<EquippedAssetLocation>(root->location) &&
+            std::find(raid.carriedRootAssetIds.begin(), raid.carriedRootAssetIds.end(),
+                root->instanceId) != raid.carriedRootAssetIds.end())
+            return true;
+    }
+    return std::any_of(raid.loot.begin(), raid.loot.end(), [&](const auto &loot) {
+        return loot.collected && loot.assetId == asset.instanceId &&
+            loot.definitionId == asset.definitionId;
+    });
+}
+
 std::vector<AssetInstanceId> carriedAssetIds(const ProfileState &profile)
 {
     std::vector<AssetInstanceId> result;
@@ -2149,6 +2215,14 @@ ProfileValidationResult validateProfileState(
             std::holds_alternative<BaseReloadHeldMagazineLocation>(asset.location) ||
             std::holds_alternative<TrainingHeldMagazineLocation>(asset.location) ||
             std::holds_alternative<TrainingDroppedMagazineLocation>(asset.location)) continue;
+        if (const auto *backpack = std::get_if<RaidDroppedBackpackLocation>(&asset.location))
+        {
+            if (!profile.pendingRaid || !profile.pendingRaid->backpackRecoveryEnabled ||
+                backpack->raidId != profile.pendingRaid->raidId || asset.quantity != 1U ||
+                !itemCanEquipInSlot(*definition, EquipmentSlotKind::Backpack))
+                return {false, "dropped Raid backpack ownership is invalid"};
+            continue;
+        }
         if (std::holds_alternative<RaidDroppedBatteryLocation>(asset.location)) continue; // Validated by device ownership contract.
         if (std::holds_alternative<RaidCorpseContainerAssetLocation>(asset.location)) continue; // Validated by the independent corpse contract below.
         if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
@@ -2551,6 +2625,10 @@ ProfileValidationResult validateProfileState(
         {
             return {false, "pending Raid map is invalid"};
         }
+        if (raid.backpackRecoveryEnabled &&
+            (!supportsRaidBackpackRecoveryContent(content.contentVersion()) || !raid.startingAssets ||
+             raid.selfRecovery || raid.outpostRestoration || raid.baseSiteClearance || raid.basePerimeterSweep))
+            return {false, "backpack recovery requires an ordinary Raid with exact pre-deploy assets"};
         const bool runnerEcologyRules = raid.rulesVersion == kRaidRunnerRulesVersion;
         if (runnerEcologyRules &&
             (raid.mapDefinitionId != MapDefinitionId{"map.raid.frontier_exchange"} ||
@@ -2613,7 +2691,13 @@ ProfileValidationResult validateProfileState(
         std::set<RaidSpaceDefinitionId> sceneSpaces;
         bool foundSealedCrate{};
         for (const auto &[id, asset] : profile.assets.records())
-            if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
+            if (const auto *backpack = std::get_if<RaidDroppedBackpackLocation>(&asset.location))
+            {
+                if (!raidBackpackHasDeploymentOrigin(raid, asset) ||
+                    !raidBackpackPlacementValid(raid, *raidMap, *backpack))
+                    return {false, "dropped Raid backpack origin or placement is invalid"};
+            }
+            else if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
             {
                 const bool isSealed = raid.sealedFreightCrate && raid.sealedFreightCrate->containerAssetId == id;
                 if (isSealed)
@@ -2637,7 +2721,19 @@ ProfileValidationResult validateProfileState(
             return {false, "sealed freight crate is missing"};
         if (raid.startingAssets)
         {
-            if (sceneSpaces.size() != 2U) return {false, "Raid scene container snapshot is incomplete"};
+            // Legacy rollback snapshots were created only for the two Frontier
+            // scene containers. Backpack recovery also needs exact baselines on
+            // ordinary maps that do not have these containers.
+            std::size_t expectedSceneSpaces = 2U;
+            if (raid.backpackRecoveryEnabled)
+                expectedSceneSpaces = static_cast<std::size_t>(std::count_if(
+                    raidMap->interiors.begin(), raidMap->interiors.end(), [](const auto &interior) {
+                        return interior.lootSlots.size() >= 2U &&
+                            (interior.id == RaidSpaceDefinitionId{"raid_space.frontier_exchange.office"} ||
+                             interior.id == kFreightCrateSpaceId);
+                    }));
+            if (sceneSpaces.size() != expectedSceneSpaces)
+                return {false, "Raid scene container snapshot is incomplete"};
             const auto graph = validateInventoryAssetGraph(
                 *raid.startingAssets, content, profile.stashLayoutVersion, profile.chestRigLayoutVersion);
             if (!graph.valid) return {false, "Raid scene rollback asset graph is invalid: " + graph.message};
@@ -2649,6 +2745,7 @@ ProfileValidationResult validateProfileState(
                     std::holds_alternative<RaidCorpseContainerAssetLocation>(asset.location) ||
                     std::holds_alternative<RaidReloadHeldMagazineLocation>(asset.location) ||
                     std::holds_alternative<RaidDroppedMagazineLocation>(asset.location) ||
+                    std::holds_alternative<RaidDroppedBackpackLocation>(asset.location) ||
                     std::holds_alternative<BaseReloadHeldMagazineLocation>(asset.location) ||
                     std::holds_alternative<TrainingHeldMagazineLocation>(asset.location) ||
                     std::holds_alternative<TrainingDroppedMagazineLocation>(asset.location))
@@ -4489,11 +4586,8 @@ ProfileValidationResult validateProfileState(
                 (asset != nullptr &&
                  !groundAssetIds.contains(loot.assetId) &&
                  !assetIsCarried(profile, loot.assetId) &&
-                 !raidSceneContainerRoot(profile, loot.assetId)) ||
-                (loot.collected && asset != nullptr &&
-                 !groundAssetIds.contains(loot.assetId) &&
-                 !assetIsCarried(profile, loot.assetId) &&
-                 !raidSceneContainerRoot(profile, loot.assetId)) ||
+                 !raidSceneContainerRoot(profile, loot.assetId) &&
+                 !(loot.collected && raidDroppedBackpackRoot(profile, loot.assetId))) ||
                 (asset != nullptr &&
                  asset->definitionId != loot.definitionId))
             {
@@ -4875,8 +4969,9 @@ ProfileValidationResult validateProfileState(
             // The deployment snapshot records the roots that entered the
             // Raid, not permanent equipment-slot assignments. During a Raid
             // those roots may be moved between equipment and another carried
-            // container, but must never leave the carried ownership tree.
-            if (asset == nullptr || !assetIsCarried(profile, root))
+            // container, or temporarily follow a validated dropped backpack.
+            if (asset == nullptr ||
+                (!assetIsCarried(profile, root) && !raidDroppedBackpackRoot(profile, root)))
             {
                 return {false, "pending Raid carried root is invalid"};
             }
@@ -5447,6 +5542,14 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, 15U); hashInteger(hash, retained->weaponAssetId);
             hashInteger(hash, static_cast<std::uint32_t>(retained->role));
         }
+        else if (const auto *drop = std::get_if<RaidDroppedBackpackLocation>(&asset.location))
+        {
+            hashInteger(hash, 20U);
+            hashBytes(hash, drop->raidId);
+            hashBytes(hash, drop->spaceId.value());
+            hashFloat(hash, drop->position.x);
+            hashFloat(hash, drop->position.y);
+        }
         else if (const auto *drop = std::get_if<RaidDroppedBatteryLocation>(&asset.location))
         {
             hashInteger(hash, 12U); hashBytes(hash, drop->raidId); hashBytes(hash, drop->spaceId.value());
@@ -5600,6 +5703,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashBytes(hash, raid.raidId);
         hashBytes(hash, raid.settlementId);
         hashBytes(hash, raid.rulesVersion);
+        if (raid.backpackRecoveryEnabled) hashBytes(hash, "raid-backpack-recovery-v1");
         if (raid.hospitalNightVisionLoot) hashBytes(hash, "hospital-night-vision-loot-v1");
         if (raid.freightKeyLootSlotId)
         {

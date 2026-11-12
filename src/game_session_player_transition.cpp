@@ -454,6 +454,7 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     raidActionState_.cancel();
     weaponTriggerGate_.reset();
     droppedRaidMagazineIds_.clear();
+    droppedRaidBackpackIds_.clear();
     medicalTickAccumulatorSeconds_ = 0.0F;
     medicalRandomSequence_ = 0;
     woundRandomSequence_ = 0;
@@ -485,6 +486,7 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     raidActionState_.cancel();
     weaponTriggerGate_.reset();
     droppedRaidMagazineIds_.clear();
+    droppedRaidBackpackIds_.clear();
     weaponClearGesture_.reset();
     raidElapsedSeconds_ = 0.0F;
     selfRecoveryInteractionSeconds_ = 0.0F;

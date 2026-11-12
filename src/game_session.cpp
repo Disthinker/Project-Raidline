@@ -726,11 +726,6 @@ GameSession::settlement() const noexcept
     return settlement_;
 }
 
-std::uint64_t GameSession::currentRaidCarriedWeightGrams() const noexcept
-{
-    return carriedWeightGrams(profile_, publishedContentRegistry());
-}
-
 std::uint64_t
 GameSession::conditionalExtractionWeightLimitGrams() const noexcept
 {
@@ -3981,6 +3976,7 @@ void GameSession::resetWorldClockRuntime() noexcept
     weaponTriggerGate_.reset();
     freightUnlock_ = {};
     droppedRaidMagazineIds_.clear();
+    droppedRaidBackpackIds_.clear();
     pendingWorldSeconds_ = 0.0;
     worldClockCheckpointElapsedSeconds_ = 0.0F;
     worldClockDirty_ = false;
@@ -4504,8 +4500,15 @@ void GameSession::updateAlphaRaid(
     {
         if (const auto loot = nearbyRaidLoot())
         {
+            const bool recoveringPack = std::find(droppedRaidBackpackIds_.begin(),
+                droppedRaidBackpackIds_.end(), *loot) != droppedRaidBackpackIds_.end();
+            if (recoveringPack &&
+                (!raidWorldInteractionAvailable(input.inventoryOpen) || world_->player().isControlled()))
+                return;
             const auto currentObservation = world_->raidObservationKey();
-            const auto reloadAccess = raidReloadAccess(currentObservation);
+            auto reloadAccess = raidReloadAccess(currentObservation);
+            if (recoveringPack)
+                reloadAccess.activity = playerGameplayContext().activity;
             const InventoryReceipt receipt = pickupRaidLoot(
                 profile_,
                 publishedContentRegistry(),
@@ -4517,6 +4520,11 @@ void GameSession::updateAlphaRaid(
             if (receipt.succeeded)
             {
                 std::erase(droppedRaidMagazineIds_, *loot);
+                if (recoveringPack)
+                {
+                    std::erase(droppedRaidBackpackIds_, *loot);
+                    persistenceMessage_ = "BACKPACK RECOVERED";
+                }
                 presentationEvents_.push_back(
                     GameSessionPresentationEvent::LootPickedUp);
             }
@@ -5238,6 +5246,19 @@ std::optional<AssetInstanceId> GameSession::nearbyRaidLoot() const
         if (!drop || drop->spaceId!=world_->activeRaidSpaceId() || !world_->raidBoundsObservable({{drop->position.x-12,drop->position.y-12},{24,24}})) continue;
         const float dx=drop->position.x-playerCenter.x, dy=drop->position.y-playerCenter.y;
         if (dx*dx+dy*dy<=bestDistance) { bestDistance=dx*dx+dy*dy; result=id; }
+    }
+    for (const auto id : droppedRaidBackpackIds_)
+    {
+        const auto point = observableRaidBackpackPosition(id);
+        if (!point) continue;
+        const float dx = point->x - playerCenter.x;
+        const float dy = point->y - playerCenter.y;
+        const float distance = dx * dx + dy * dy;
+        if (distance <= bestDistance)
+        {
+            bestDistance = distance;
+            result = id;
+        }
     }
     return result;
 }
