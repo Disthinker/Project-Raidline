@@ -143,6 +143,49 @@ TEST(BaseConstructionDomainTest,
   EXPECT_TRUE(validateProfileState(profile, content).valid);
 }
 
+TEST(BaseConstructionDomainTest, GeneratorConstructionReservesOneRoomAndAddsThreatOnce) {
+  const ContentRegistry &content = publishedContentRegistry();
+  ProfileState profile = makeNewAlphaProfile("construction-generator", content);
+  profile.baseConstruction.materialUnits = 5U;
+  profile.baseSiege.siteThreatUnits = 35U;
+  const StartBaseConstructionCommand command{kBaseGeneratorProjectId};
+
+  EXPECT_FALSE(baseFacilityOwned(profile, kBaseGeneratorFacilityId));
+  EXPECT_FALSE(queryStartBaseConstruction(profile, content, command).canCommit);
+  profile.baseConstruction.materialUnits = 6U;
+  const auto plan = queryStartBaseConstruction(profile, content, command);
+  ASSERT_TRUE(plan.canCommit) << plan.message;
+  EXPECT_EQ(plan.materialCost, 6U);
+  EXPECT_EQ(plan.workerCount, 2U);
+  EXPECT_EQ(plan.durationMinutes, 480U);
+  ASSERT_TRUE(executeStartBaseConstruction(
+      profile, content, command, {profile.revision, "build-generator"}).succeeded);
+  EXPECT_EQ(profile.baseConstruction.materialUnits, 0U);
+
+  static_cast<void>(advanceWorldClock(profile.worldClock, 479U));
+  EXPECT_FALSE(applyBaseConstructionThrough(profile, content).completed);
+  EXPECT_EQ(profile.baseSiege.siteThreatUnits, 35U);
+  EXPECT_FALSE(baseFacilityOwned(profile, kBaseGeneratorFacilityId));
+
+  static_cast<void>(advanceWorldClock(profile.worldClock, 1U));
+  const auto result = applyBaseConstructionThrough(profile, content);
+  ASSERT_TRUE(result.completed);
+  EXPECT_EQ(result.target, BaseFacilityUpgradeTarget::Generator);
+  EXPECT_EQ(result.releasedWorkers, 2U);
+  EXPECT_EQ(profile.baseSiege.siteThreatUnits, 37U);
+  EXPECT_EQ(profile.baseConstruction.facilities.at(kBaseGeneratorFacilityId),
+            BaseConstructionState::FacilityPlacement::Reserve);
+  EXPECT_FALSE(baseFacilityInstalled(profile, kBaseGeneratorFacilityId));
+  EXPECT_FALSE(applyBaseConstructionThrough(profile, content).completed);
+  EXPECT_EQ(profile.baseSiege.siteThreatUnits, 37U);
+
+  profile.baseConstruction.materialUnits = 6U;
+  EXPECT_FALSE(queryStartBaseConstruction(profile, content, command).canCommit);
+  EXPECT_FALSE(executeInstallBaseFacility(profile, content,
+      {kBaseGeneratorFacilityId}, {profile.revision, "skip-placement"}).succeeded);
+  EXPECT_TRUE(validateProfileState(profile, content).valid);
+}
+
 TEST(BaseConstructionDomainTest,
      CatalogProjectsPublishedDefinitionsInStableOrder) {
   const ContentRegistry &content = publishedContentRegistry();

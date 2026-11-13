@@ -19,6 +19,7 @@ std::string uiBaseFacilityTitle(BaseFacilityKind kind, UiLanguage language) {
     case BaseFacilityKind::Dormitory:return text("Dormitory","宿舍");
     case BaseFacilityKind::KitchenWater:return text("Kitchen & water","厨房与净水");
     case BaseFacilityKind::Workshop:return text("Workshop","工坊");
+    case BaseFacilityKind::Generator:return text("Generator room","发电机房");
     case BaseFacilityKind::RaidGate:return text("Deployment","对局出击");
     }
     return text("Unknown facility","未知设施");
@@ -33,6 +34,7 @@ std::string uiBaseFacilityShortName(BaseFacilityKind kind, UiLanguage language) 
     case BaseFacilityKind::Dormitory:return text("Dorm","宿舍");
     case BaseFacilityKind::KitchenWater:return text("Kitchen","厨房");
     case BaseFacilityKind::Workshop:return text("Workshop","工坊");
+    case BaseFacilityKind::Generator:return text("Generator","发电机");
     case BaseFacilityKind::RaidGate:return text("Deploy","出击");
     }
     return text("Facility","设施");
@@ -191,7 +193,7 @@ std::string uiBaseQuickActionTitle(BaseFacilityQuickActionKind kind,UiLanguage l
     case BaseFacilityQuickActionKind::CancelUpgrade:return t("Cancel upgrade","取消升级");
     case BaseFacilityQuickActionKind::CollectManufacturing:return t("Collect output","领取产物");
     case BaseFacilityQuickActionKind::CancelManufacturing:return t("Cancel production","取消生产");
-    case BaseFacilityQuickActionKind::StartResidentTreatment:return t("Treat residents","治疗居民");
+    case BaseFacilityQuickActionKind::StartResidentTreatment:return t("Resident care","居民医疗");
     case BaseFacilityQuickActionKind::AutoFillWorkers:return t("Fill vacant jobs","自动补齐岗位");
     }
     return t("Unavailable","不可用");
@@ -274,14 +276,23 @@ std::vector<UiBaseConstructionCard> projectUiBaseConstructionCards(
             }
             row.explanation=localizeUiText(language,project.message);
             if(row.active) row.explanation+=t("\nCancel returns the original materials and releases workers.","\n取消将按原规则返还材料并释放工作人员。");
-            if(row.complete) row.explanation=t("This project is complete. Open the facility to use it.","该建设项目已完成，可前往设施使用原有功能。");
+            if (project.definitionId == kBaseGeneratorProjectId) {
+                if (row.complete && !baseFacilityInstalled(p, kBaseGeneratorFacilityId))
+                    row.explanation = t("Install the generator from Owned before use.", "请先到「已有」部署发电机房。");
+                else if (row.complete)
+                    row.explanation = t("Open the generator room to power an order.", "前往发电机房可为订单供电。");
+                else if (!row.active)
+                    row.explanation += t(" Completing construction adds 2 base threat.", " 完工增加 2 点基地威胁。");
+            } else if (row.complete) {
+                row.explanation=t("This project is complete. Open the facility to use it.","该建设项目已完成，可前往设施使用原有功能。");
+            }
             rows.push_back(std::move(row));
         }
     } else {
         constexpr std::array kinds{BaseFacilityKind::Storage,BaseFacilityKind::Medical,BaseFacilityKind::Dormitory,
-            BaseFacilityKind::KitchenWater,BaseFacilityKind::Workshop};
+            BaseFacilityKind::KitchenWater,BaseFacilityKind::Workshop,BaseFacilityKind::Generator};
         constexpr std::array ids{"base_facility.warehouse","base_facility.medical","base_facility.dormitory",
-            "base_facility.kitchen_water","base_facility.workshop"};
+            "base_facility.kitchen_water","base_facility.workshop","base_facility.generator"};
         for(std::size_t i=0;i<kinds.size();++i) {
             const BaseFacilityDefinitionId id{ids[i]};
             if(!baseFacilityOwned(p,id) || baseFacilityInstalled(p,id))continue;

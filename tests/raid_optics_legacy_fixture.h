@@ -4,9 +4,71 @@
 #include <algorithm>
 #include <nlohmann/json.hpp>
 
-inline nlohmann::json contentBeforeThrownIlluminationJson()
+inline nlohmann::json contentBeforeHospitalMedicalReserveJson()
 {
     auto document = nlohmann::json::parse(publishedContentJson());
+    document["content_version"] = kEmergencyPowerContentVersion;
+    for (auto &map : document.at("maps"))
+        if (map.at("id") == std::string{kHospitalFloorplanMapId.value()})
+            map.erase("rescue");
+    return document;
+}
+
+inline nlohmann::json contentBeforeEmergencyPowerJson()
+{
+    auto document = contentBeforeHospitalMedicalReserveJson();
+    document["content_version"] = kFreightBreachContentVersion;
+    auto &construction = document["base_construction"];
+    std::erase_if(construction["facilities"].get_ref<nlohmann::json::array_t &>(), [](const auto &facility) {
+        return facility.at("id") == std::string{kBaseGeneratorFacilityId.value()};
+    });
+    std::erase_if(construction["projects"].get_ref<nlohmann::json::array_t &>(), [](const auto &project) {
+        return project.at("id") == std::string{kBaseGeneratorProjectId.value()};
+    });
+    return document;
+}
+
+inline nlohmann::json contentBeforeFreightBreachJson()
+{
+    auto document = contentBeforeEmergencyPowerJson();
+    document["content_version"] = kHospitalFloorplanRoutesContentVersion;
+    auto &items = document["items"];
+    std::erase_if(items.get_ref<nlohmann::json::array_t &>(), [](const auto &item) {
+        return item.at("id") == std::string{kFreightBreachWedgesId.value()};
+    });
+    auto &recipes = document["base_manufacturing"]["recipes"];
+    std::erase_if(recipes.get_ref<nlohmann::json::array_t &>(), [](const auto &recipe) {
+        return recipe.at("id") == std::string{kFreightBreachRecipeId.value()};
+    });
+    return document;
+}
+
+inline nlohmann::json contentBeforeHospitalFloorplanRoutesJson()
+{
+    auto document = contentBeforeFreightBreachJson();
+    document["content_version"] = kRaidBackpackRecoveryContentVersion;
+    auto &items = document["items"];
+    items.erase(std::remove_if(items.begin(), items.end(), [](const auto &item) {
+        return item.at("id") == std::string{kHospitalFloorplanItemId.value()};
+    }), items.end());
+    return document;
+}
+
+inline ContentRegistry contentBeforeHospitalFloorplanRoutes()
+{
+    return ContentRegistry::fromJson(contentBeforeHospitalFloorplanRoutesJson().dump());
+}
+
+inline ContentRegistry contentBeforeRaidBackpackRecovery()
+{
+    auto document = contentBeforeHospitalFloorplanRoutesJson();
+    document["content_version"] = kThrownIlluminationContentVersion;
+    return ContentRegistry::fromJson(document.dump());
+}
+
+inline nlohmann::json contentBeforeThrownIlluminationJson()
+{
+    auto document = contentBeforeHospitalFloorplanRoutesJson();
     document["content_version"] = std::string{kArmorReadinessContentVersion};
     auto &items = document["items"];
     items.erase(std::remove_if(items.begin(), items.end(), [](const auto &item) {

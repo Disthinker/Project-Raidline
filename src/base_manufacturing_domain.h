@@ -22,6 +22,7 @@ struct BaseManufacturingInputSelection
 {
     AssetInstanceId assetId{};
     ItemDefinitionId definitionId;
+    std::uint32_t quantity{};
 };
 
 struct BaseManufacturingStartPlan

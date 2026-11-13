@@ -132,6 +132,7 @@ baseFacilityWorkSocket(const BaseFacility &facility) noexcept
     case BaseFacilityKind::Supply:
     case BaseFacilityKind::Allocation:
     case BaseFacilityKind::RaidGate:
+    case BaseFacilityKind::Generator:
         return std::nullopt;
     }
     return projectBaseFacilityWorkSocket(
@@ -205,6 +206,12 @@ void BaseWorld::rebuildSite(std::string_view siteDefinitionId)
         BaseFacility{BaseFacilityKind::Workshop,
                      {{origin.x + 870.0F, origin.y + 520.0F},
                       {270.0F, 170.0F}}},
+        BaseFacility{BaseFacilityKind::Generator,
+                     {{origin.x + layout_.baseParcel.size.x * kBaseGeneratorDefaultCenter.x -
+                            kBaseGeneratorFootprint.x * 0.5F,
+                       origin.y + layout_.baseParcel.size.y * kBaseGeneratorDefaultCenter.y -
+                            kBaseGeneratorFootprint.y * 0.5F},
+                      kBaseGeneratorFootprint}, false},
         BaseFacility{BaseFacilityKind::RaidGate,
                      {{origin.x + 650.0F, origin.y + 40.0F},
                       {300.0F, 130.0F}}}};
@@ -852,7 +859,7 @@ std::size_t BaseWorld::playerAnimationFrame() const noexcept
     return playerMovementAnimator_.currentFrameIndex();
 }
 
-const std::array<BaseFacility, 8> &BaseWorld::facilities() const noexcept
+const std::array<BaseFacility, 9> &BaseWorld::facilities() const noexcept
 {
     return facilities_;
 }
@@ -1177,6 +1184,8 @@ const char *baseFacilityName(BaseFacilityKind kind) noexcept
         return "WORKSHOP & PRODUCTION";
     case BaseFacilityKind::RaidGate:
         return "RAID DEPLOYMENT";
+    case BaseFacilityKind::Generator:
+        return "GENERATOR ROOM";
     }
     return "UNKNOWN";
 }

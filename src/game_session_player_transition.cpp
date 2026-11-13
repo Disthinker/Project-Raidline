@@ -1,6 +1,6 @@
 #include "game_session.h"
 #include "base_world.h"
-#include "base_morale_domain.h"
+#include "base_emergency_power_domain.h"
 #include <algorithm>
 #include <limits>
 #include <utility>
@@ -35,10 +35,7 @@ bool GameSession::prepareDailyOutingEndCandidate(ProfileState &candidate,BaseWor
         if(!recovered.succeeded){persistenceMessage_=recovered.message;return false;}
         if(candidate.basePlayerEffects)candidate.basePlayerEffects->medical.reset();
     }
-    static_cast<void>(synchronizeBaseDailySystemsThrough(candidate,content));
-    static_cast<void>(applyBaseConstructionThrough(candidate,content));
-    static_cast<void>(applyBaseManufacturingThrough(candidate,content));
-    static_cast<void>(applyResidentTreatmentThrough(candidate));
+    static_cast<void>(synchronizeBaseWorkThrough(candidate, content, result.minutesApplied));
     static_cast<void>(applyRecoveryTaskThrough(candidate));
     if(!captureBasePlayerEffects(candidate))return false;
     if(rescued && candidate.basePlayerEffects) {
@@ -47,6 +44,8 @@ bool GameSession::prepareDailyOutingEndCandidate(ProfileState &candidate,BaseWor
         effects.controlRemainingSeconds=effects.impactSlowRemainingSeconds=0;
         effects.dailyDamageProtectionSeconds=.25F;
     }
+    if (rescued || baseWorld.playerSafetyZone() == HomeRegionSafetyZone::SafeCore)
+        static_cast<void>(tryStartAutomaticResidentTreatment(candidate, content));
     const auto valid=validateProfileState(candidate,content);
     if(!valid.valid){persistenceMessage_=valid.message;return false;}
     return true;
@@ -249,6 +248,7 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
         worldConfig.noiseDecoyEnabled = !snapshot.selfRecovery && !snapshot.outpostRestoration &&
             !snapshot.baseSiteClearance && !snapshot.basePerimeterSweep;
         worldConfig.grenadeEnabled = worldConfig.noiseDecoyEnabled;
+        worldConfig.freightBreachEnabled = snapshot.freightBreachEnabled;
         worldConfig.lightConeObservationEnabled =
             candidate.pendingRaid->mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"} ||
             candidate.pendingRaid->mapDefinitionId == MapDefinitionId{"map.raid.hospital_district"};
@@ -435,11 +435,68 @@ ProfileUiSubmission GameSession::requestOrdinarySurvivorRescue()
     return enqueuePreparedProfileUi(std::move(live),std::move(recovery),ProfileUiCompletionKind::Rescue,std::nullopt,std::move(prepared));
 }
 
+bool GameSession::tryLearnHospitalFloorplan(
+    AssetInstanceId assetId, bool inventoryOpen, const RaidObservationKey &observation)
+{
+    const auto *asset = profile_.assets.find(assetId);
+    if (!asset || asset->definitionId != kHospitalFloorplanItemId ||
+        !profile_.pendingRaid || profile_.pendingRaid->mapDefinitionId != kHospitalFloorplanMapId ||
+        world_->activeRaidSpaceId() != kHospitalFloorplanSpaceId ||
+        profile_.raidInteriorIntelligence.knows(kHospitalFloorplanSpaceId))
+        return false;
+
+    if (!raidWorldInteractionAvailable(inventoryOpen) || world_->player().isControlled())
+        return true;
+    if (!activeRaidRecoveryProfile_ ||
+        activeRaidRecoveryProfile_->revision == std::numeric_limits<ProfileRevision>::max())
+    {
+        persistenceMessage_ = "Save protection is waiting for retry";
+        return true;
+    }
+
+    ProfileState live = profile_;
+    const auto interior = std::find_if(live.pendingRaid->interiors.begin(),
+        live.pendingRaid->interiors.end(), [](const RaidInteriorSnapshot &snapshot) {
+            return snapshot.id == kHospitalFloorplanSpaceId;
+        });
+    if (interior == live.pendingRaid->interiors.end())
+        return true;
+
+    // Inventory validates the same candidate that will publish the learned layout.
+    // The frozen loot validator ties the floorplan to the reception slot.
+    live.raidInteriorIntelligence.knownLayouts.insert(kHospitalFloorplanSpaceId);
+    interior->layoutKnown = true;
+    const auto &content = publishedContentRegistry();
+    const auto receipt = pickupRaidLoot(live, content, assetId,
+        {profile_.revision, nextRaidTransaction("pickup")},
+        &world_->raidObservation(), &observation);
+    if (!receipt.succeeded)
+    {
+        persistenceMessage_ = receipt.message;
+        return true;
+    }
+
+    // Checkpoint only permanent knowledge onto the pre-Raid recovery state.
+    // All live loot, health and time remain subject to normal Raid settlement.
+    ProfileState recovery = *activeRaidRecoveryProfile_;
+    recovery.raidInteriorIntelligence.knownLayouts.insert(kHospitalFloorplanSpaceId);
+    ++recovery.revision;
+    auto prepared = std::make_shared<PreparedPlayerTransition>();
+    prepared->kind = PreparedPlayerTransition::Kind::HospitalFloorplan;
+    prepared->raidRecoveryProfile = recovery;
+    const auto submitted = enqueuePreparedProfileUi(std::move(live), std::move(recovery),
+        ProfileUiCompletionKind::HospitalFloorplan, std::nullopt, std::move(prepared));
+    if (!submitted.accepted)
+        persistenceMessage_ = submitted.message;
+    return true;
+}
+
 void GameSession::completePreparedPlayerTransition(const std::shared_ptr<PreparedPlayerTransition> &prepared)
 {
     if(!prepared)return;
     if(prepared->kind==PreparedPlayerTransition::Kind::Deploy) {
     freightUnlock_ = {};
+    freightBreach_ = {};
     if (basePlayerWorld_)
         basePlayerWorld_->commitThrownIllumination({});
     world_=std::move(prepared->world);
@@ -454,6 +511,7 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     raidActionState_.cancel();
     weaponTriggerGate_.reset();
     droppedRaidMagazineIds_.clear();
+    droppedRaidBackpackIds_.clear();
     medicalTickAccumulatorSeconds_ = 0.0F;
     medicalRandomSequence_ = 0;
     woundRandomSequence_ = 0;
@@ -477,6 +535,7 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     if(prepared->requirePhysicalRelease)cancelPlayerControlIntent();
     } else if(prepared->kind==PreparedPlayerTransition::Kind::RaidSettlement) {
     freightUnlock_ = {};
+    freightBreach_ = {};
     cancelWeaponLightInput();
     world_->commitNoiseDecoy({});
     world_->commitGrenade({});
@@ -485,6 +544,7 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     raidActionState_.cancel();
     weaponTriggerGate_.reset();
     droppedRaidMagazineIds_.clear();
+    droppedRaidBackpackIds_.clear();
     weaponClearGesture_.reset();
     raidElapsedSeconds_ = 0.0F;
     selfRecoveryInteractionSeconds_ = 0.0F;
@@ -505,6 +565,10 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     } else if(prepared->kind==PreparedPlayerTransition::Kind::Rescue) {
         activeRaidRecoveryProfile_=std::move(prepared->raidRecoveryProfile);
         world_->confirmOrdinarySurvivorRescue();presentationEvents_.push_back(GameSessionPresentationEvent::RescueSecured);
+    } else if (prepared->kind == PreparedPlayerTransition::Kind::HospitalFloorplan) {
+        activeRaidRecoveryProfile_ = std::move(prepared->raidRecoveryProfile);
+        world_->confirmRaidInteriorLayout(kHospitalFloorplanSpaceId);
+        presentationEvents_.push_back(GameSessionPresentationEvent::LootPickedUp);
     } else if(prepared->kind==PreparedPlayerTransition::Kind::DefenseStart) {
         raidActionState_.cancel();cancelPlayerControlIntent();
         if(basePlayerWorld_ && !restoreBaseDefenseRuntime(*basePlayerWorld_))baseDefenseSaveBlocked_=true;

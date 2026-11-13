@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -63,6 +64,12 @@ struct RaidFreightUnlockProjection
 {
     AssetInstanceId containerAssetId{};
     bool hasKey{};
+    float progress{};
+};
+
+struct RaidFreightBreachProjection
+{
+    bool hasTool{};
     float progress{};
 };
 
@@ -286,7 +293,7 @@ public:
     [[nodiscard]] bool finishFirstRaidHints();
     [[nodiscard]] bool continueProfile();
 
-    void advanceBaseWorldClock(float deltaTime);
+    void advanceBaseWorldClock(float deltaTime, bool allowAutomaticAdmission = true);
     [[nodiscard]] bool startBaseRealtimeDefense(BaseWorld &world);
     [[nodiscard]] bool restoreBaseDefenseRuntime(BaseWorld &world);
     [[nodiscard]] bool abandonBaseRealtimeDefense();
@@ -361,6 +368,10 @@ public:
     [[nodiscard]] std::optional<WeaponFireMode> weaponFireMode(
         AssetInstanceId weaponAssetId) const noexcept;
     [[nodiscard]] std::vector<AssetInstanceId> droppedRaidMagazineIds() const;
+    [[nodiscard]] InventoryReceipt dropRaidBackpack(AssetInstanceId, const CommandContext &);
+    [[nodiscard]] std::span<const AssetInstanceId> droppedRaidBackpackIds() const noexcept
+    { return droppedRaidBackpackIds_; }
+    [[nodiscard]] std::optional<Vec2> observableRaidBackpackPosition(AssetInstanceId) const;
     [[nodiscard]] bool startAlphaLoadMagazine(
         AssetInstanceId ammunitionAssetId,
         AssetInstanceId magazineAssetId,
@@ -414,6 +425,8 @@ public:
     [[nodiscard]] bool canOpenRaidSceneContainer(AssetInstanceId id) const;
     [[nodiscard]] bool isRaidFreightCrate(AssetInstanceId id) const noexcept;
     [[nodiscard]] std::optional<RaidFreightUnlockProjection> raidFreightUnlock() const;
+    [[nodiscard]] std::optional<RaidFreightBreachProjection> raidFreightBreach() const;
+    void cancelRaidFreightBreach() noexcept;
     [[nodiscard]] std::optional<AssetInstanceId> takeOpenedRaidFreightCrate() noexcept;
     void cancelRaidFreightUnlock() noexcept;
     [[nodiscard]] InventoryPlan queryRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command) const;
@@ -624,6 +637,7 @@ private:
     friend struct GrenadeTestAccess;
     friend struct RunnerInfectedTestAccess;
     friend struct WeaponHandlingTestAccess;
+    friend struct RaidCarryWeightTestAccess;
     friend struct InventoryCheckpointTestAccess;
     friend struct ProfileUiPersistenceTestAccess;
     friend struct RunnerInfectedUiTestAccess;
@@ -652,6 +666,8 @@ private:
         const RaidDeploymentProgressCallback &);
     [[nodiscard]] ProfileUiSubmission requestRaidSettlement(RaidResultOutcome);
     [[nodiscard]] ProfileUiSubmission requestOrdinarySurvivorRescue();
+    [[nodiscard]] bool tryLearnHospitalFloorplan(
+        AssetInstanceId, bool inventoryOpen, const RaidObservationKey &);
     [[nodiscard]] bool prepareRaidSettlementCandidate(RaidResultOutcome, ProfileState &);
     [[nodiscard]] bool prepareOrdinarySurvivorRescueCandidate(ProfileState &, ProfileState &);
     [[nodiscard]] ProfileState inventoryCheckpointCandidate(const ProfileState &current);
@@ -686,6 +702,13 @@ private:
         float elapsedSeconds{};
         bool consumesInteraction{};
     } freightUnlock_;
+    struct RaidFreightBreachRuntime
+    {
+        std::optional<AssetInstanceId> tool;
+        float elapsedSeconds{};
+        int startingHealth{};
+        bool consumesInteraction{};
+    } freightBreach_;
     bool outpostRestorationObjectiveSecured_{};
     bool baseSiteClearanceObjectiveSecured_{};
     bool basePerimeterSweepObjectiveSecured_{};
@@ -697,6 +720,7 @@ private:
     WeaponTriggerGate weaponTriggerGate_;
     // Updated only by actual drop/pickup receipts, never a per-frame Registry scan.
     std::vector<AssetInstanceId> droppedRaidMagazineIds_;
+    std::vector<AssetInstanceId> droppedRaidBackpackIds_;
     [[nodiscard]] bool beginAlphaReload(AssetInstanceId, AssetInstanceId, RaidReloadSource);
     [[nodiscard]] bool cancelActiveRaidAction();
     [[nodiscard]] bool advanceRaidWeaponAction(float deltaTime, bool interrupted);
@@ -717,6 +741,14 @@ private:
         const RaidObservationKey &key) const;
     void prepareWeaponTrigger(GameplayInput &, const GameplayInput &,
         std::optional<AssetInstanceId> weapon, bool controlsAvailable);
+    struct CarriedWeightCache
+    {
+        ProfileRevision revision{};
+        std::uint64_t profileEpoch{};
+        std::size_t assetCount{};
+        std::uint64_t grams{};
+    };
+    mutable std::optional<CarriedWeightCache> carriedWeightCache_;
     mutable WeaponLightBinding weaponLightBinding_;
     mutable ProfileRevision weaponLightBindingRevision_{};
     mutable NightVisionBinding nightVisionBinding_;
@@ -809,7 +841,8 @@ private:
     void refreshLoadoutTutorial();
     void advanceWorldClockFromSimulation(
         float deltaTime,
-        bool allowPeriodicCheckpoint);
+        bool allowPeriodicCheckpoint,
+        bool allowAutomaticAdmission = false);
     void advanceBaseSiegeFromSimulation(float deltaTime);
     void resetWorldClockRuntime() noexcept;
     void recordBaseCompletionEvents(
@@ -839,6 +872,10 @@ private:
     [[nodiscard]] std::optional<AssetInstanceId> nearbyLockedFreightCrate() const;
     void prepareRaidFreightUnlock(const GameplayInput &rawInput, GameplayInput &input, GameplayInput &simulationInput);
     void advanceRaidFreightUnlock(float deltaTime);
+    [[nodiscard]] bool freightBreachToolCarried(AssetInstanceId) const noexcept;
+    [[nodiscard]] std::optional<AssetInstanceId> carriedFreightBreachTool() const;
+    void prepareRaidFreightBreach(const GameplayInput &rawInput, GameplayInput &input, GameplayInput &simulationInput);
+    void advanceRaidFreightBreach(float deltaTime);
     [[nodiscard]] bool selfRecoveryCacheInRange() const noexcept;
     [[nodiscard]] bool raidWorldInteractionAvailable(bool inventoryOpen) const noexcept;
 };

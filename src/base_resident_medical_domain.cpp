@@ -2,12 +2,17 @@
 
 #include <algorithm>
 #include <limits>
+#include <tuple>
 
 #include "base_construction_domain.h"
+#include "base_emergency_power_domain.h"
 #include "base_workforce_domain.h"
 
 namespace
 {
+const BaseFacilityDefinitionId kMedicalFacility{"base_facility.medical"};
+constexpr std::uint32_t kTreatmentCharges{2U};
+
 bool hasChildren(const ProfileState &profile, AssetInstanceId ownerId) noexcept
 {
     return std::any_of(
@@ -44,22 +49,201 @@ ResidentTreatmentPlan failure(
 }
 
 BaseResidentProfession nextInjuredProfession(
-    const BasePopulationState &population) noexcept
+    const BasePopulationState &population,
+    const ResidentMedicalReservePolicy &policy) noexcept
 {
-    for (BaseResidentProfession profession : {
-             BaseResidentProfession::Medical,
-             BaseResidentProfession::Engineering,
-             BaseResidentProfession::Combat,
-             BaseResidentProfession::General})
+    for (const BaseResidentProfession profession : policy.professionPriority)
     {
-        if (population.injuredByProfession[
-                baseProfessionIndex(profession)] > 0U)
+        const auto index = baseProfessionIndex(profession);
+        if (index < kBaseResidentProfessionCount && population.injuredByProfession[index] != 0U)
         {
             return profession;
         }
     }
     return BaseResidentProfession::General;
 }
+
+bool validMedicalReservePolicy(const ResidentMedicalReservePolicy &policy) noexcept
+{
+    std::array<bool, kBaseResidentProfessionCount> seen{};
+    for (const auto profession : policy.professionPriority)
+    {
+        const auto index = baseProfessionIndex(profession);
+        if (index >= seen.size() || seen[index])
+            return false;
+        seen[index] = true;
+    }
+    return true;
+}
+
+MedicalReservePlan reserveAccess(const ProfileState &profile, const ContentRegistry &content)
+{
+    if (!supportsHospitalMedicalReserveContent(content.contentVersion()) || !profile.homeFounding.established)
+        return {false, DomainErrorCode::IllegalDestination, "The public medicine cabinet is unavailable"};
+    if (profile.pendingRaid || profile.activeBaseDefense)
+        return {false, DomainErrorCode::IllegalDestination, "The public medicine cabinet is unavailable during an activity"};
+    if (!baseFacilityInstalled(profile, kMedicalFacility))
+        return {false, DomainErrorCode::IllegalDestination, "the medical facility is stored in the facility reserve"};
+    return {true, DomainErrorCode::None, {}};
+}
+
+std::optional<MedicalReserveReceipt> checkReserveContext(
+    const ProfileState &profile, const CommandContext &context)
+{
+    if (context.transactionId.empty())
+        return MedicalReserveReceipt{false, false, DomainErrorCode::InvalidTransaction,
+            "transaction ID must not be empty", profile.revision};
+    if (profile.committedTransactions.contains(context.transactionId))
+        return MedicalReserveReceipt{true, true, DomainErrorCode::None, {}, profile.revision};
+    if (context.expectedRevision != profile.revision)
+        return MedicalReserveReceipt{false, false, DomainErrorCode::StaleRevision,
+            "profile revision is stale", profile.revision};
+    if (profile.revision == std::numeric_limits<ProfileRevision>::max())
+        return MedicalReserveReceipt{false, false, DomainErrorCode::RevisionOverflow,
+            "profile revision cannot advance", profile.revision};
+    return std::nullopt;
+}
+
+MedicalReserveReceipt commitReserveCommand(
+    ProfileState &profile, ProfileState &candidate,
+    const ContentRegistry &content, const CommandContext &context)
+{
+    candidate.committedTransactions.insert(context.transactionId);
+    ++candidate.revision;
+    const auto validation = validateProfileState(candidate, content);
+    if (!validation.valid)
+        return {false, false, DomainErrorCode::InvalidProfile, validation.message, profile.revision};
+    profile = std::move(candidate);
+    return {true, false, DomainErrorCode::None, {}, profile.revision};
+}
+
+void planMedicalReserveCost(const ProfileState &profile, ResidentTreatmentPlan &plan)
+{
+    const auto assets = assetsInContainer(profile, ProfileContainerId::medicalReserve());
+    const AssetRecord *firstAidStock = nullptr;
+    std::vector<const AssetRecord *> chargeAssets;
+    for (const AssetRecord *asset : assets)
+    {
+        if (asset->definitionId == kHospitalFirstAidStockId && asset->quantity != 0U)
+        {
+            if (!firstAidStock || asset->instanceId < firstAidStock->instanceId)
+                firstAidStock = asset;
+        }
+        else if (isMedicalReserveItem(asset->definitionId) && asset->remainingCharges != 0U)
+        {
+            chargeAssets.push_back(asset);
+        }
+    }
+    if (firstAidStock)
+    {
+        plan.supplies.push_back({firstAidStock->instanceId, firstAidStock->definitionId, 1U, 0U, 0U});
+        plan.canCommit = true;
+        return;
+    }
+    std::sort(chargeAssets.begin(), chargeAssets.end(), [](const AssetRecord *left, const AssetRecord *right) {
+        return std::tie(left->remainingCharges, left->instanceId) <
+            std::tie(right->remainingCharges, right->instanceId);
+    });
+    std::uint32_t remaining = kTreatmentCharges;
+    for (const auto *asset : chargeAssets)
+    {
+        const auto used = std::min(remaining, asset->remainingCharges);
+        plan.supplies.push_back({asset->instanceId, asset->definitionId, 0U, 0U, used});
+        remaining -= used;
+        if (remaining == 0U)
+        {
+            plan.canCommit = true;
+            return;
+        }
+    }
+    plan.supplies.clear();
+    plan.error = DomainErrorCode::Capacity;
+    plan.message = "The public medicine cabinet needs one first aid stock or two medicine uses";
+}
+
+void enforceTreatmentQuote(ResidentTreatmentPlan &plan, const StartResidentTreatmentCommand &command)
+{
+    if (plan.canCommit &&
+        ((command.expectedPatient && command.expectedPatient != plan.patientProfession) ||
+         (command.expectedSupplies && *command.expectedSupplies != plan.supplies)))
+    {
+        plan.canCommit = false;
+        plan.error = DomainErrorCode::StaleRevision;
+        plan.message = "resident treatment supply changed";
+    }
+}
+}
+
+MedicalReservePlan queryMoveMedicalReserveAsset(
+    const ProfileState &profile,
+    const ContentRegistry &content,
+    const MoveMedicalReserveAssetCommand &command)
+{
+    const auto access = reserveAccess(profile, content);
+    if (!access.canCommit)
+        return access;
+    const auto stash = ProfileContainerId::stash();
+    const auto cabinet = ProfileContainerId::medicalReserve();
+    const bool deposit = command.source.container == stash && command.destination.container == cabinet;
+    const bool withdraw = command.source.container == cabinet && command.destination.container == stash;
+    if (!deposit && !withdraw)
+        return {false, DomainErrorCode::IllegalDestination, "Move medicine between the warehouse and public cabinet"};
+
+    const AssetRecord *asset = profile.assets.find(command.assetId);
+    if (!asset)
+        return {false, DomainErrorCode::MissingAsset, "The selected medicine is no longer available"};
+    const auto *stored = std::get_if<StoredAssetLocation>(&asset->location);
+    if (!stored || *stored != command.source)
+        return {false, DomainErrorCode::StaleRevision, "The selected medicine has moved"};
+    if (!isMedicalReserveItem(asset->definitionId) ||
+        (asset->definitionId != kHospitalFirstAidStockId && asset->remainingCharges == 0U))
+        return {false, DomainErrorCode::IllegalDestination, "The public medicine cabinet does not accept this item"};
+
+    const auto &definition = content.item(asset->definitionId);
+    if (!profilePlacementFits(profile, content, command.destination.container,
+            command.destination.origin, definition, asset->orientation))
+        return {false, DomainErrorCode::Capacity, deposit
+            ? "No space at the selected public cabinet position" : "No space at the selected warehouse position"};
+    return {true, DomainErrorCode::None, {}};
+}
+
+MedicalReserveReceipt executeMoveMedicalReserveAsset(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    const MoveMedicalReserveAssetCommand &command,
+    const CommandContext &context)
+{
+    if (const auto checked = checkReserveContext(profile, context))
+        return *checked;
+    const auto plan = queryMoveMedicalReserveAsset(profile, content, command);
+    if (!plan.canCommit)
+        return {false, false, plan.error, plan.message, profile.revision};
+
+    ProfileState candidate = profile;
+    candidate.assets.findMutable(command.assetId)->location = command.destination;
+    return commitReserveCommand(profile, candidate, content, context);
+}
+
+MedicalReserveReceipt executeSetResidentMedicalReservePolicy(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    const SetResidentMedicalReservePolicyCommand &command,
+    const CommandContext &context)
+{
+    if (const auto checked = checkReserveContext(profile, context))
+        return *checked;
+    const auto access = reserveAccess(profile, content);
+    if (!access.canCommit)
+        return {false, false, access.error, access.message, profile.revision};
+    if (!validMedicalReservePolicy(command.policy))
+        return {false, false, DomainErrorCode::IllegalDestination,
+            "The resident treatment priority is invalid", profile.revision};
+    if (command.policy == profile.residentMedicalReservePolicy)
+        return {true, true, DomainErrorCode::None, {}, profile.revision};
+
+    ProfileState candidate = profile;
+    candidate.residentMedicalReservePolicy = command.policy;
+    return commitReserveCommand(profile, candidate, content, context);
 }
 
 BaseResidentMedicalProjection projectBaseResidentMedical(
@@ -72,12 +256,16 @@ BaseResidentMedicalProjection projectBaseResidentMedical(
                   profile.basePopulation.injuredResidents
             : 0U;
     std::uint64_t remaining{};
-    if (profile.residentMedical.activeTreatment.has_value() &&
-        profile.residentMedical.activeTreatment->completionWorldMinute >
-            profile.worldClock.elapsedWorldMinutes)
+    if (const auto &treatment = profile.residentMedical.activeTreatment)
     {
-        remaining = profile.residentMedical.activeTreatment
-            ->completionWorldMinute - profile.worldClock.elapsedWorldMinutes;
+        std::uint64_t progressWorldMinute = profile.worldClock.elapsedWorldMinutes;
+        if (treatment->usesMedicalReserve || treatment->emergencyPowerBonusMinutes != 0U)
+        {
+            progressWorldMinute = baseFacilityReserveStartedWorldMinute(
+                profile, kMedicalFacility).value_or(progressWorldMinute);
+        }
+        remaining = remainingBaseEmergencyPowerWork(
+            treatment->completionWorldMinute, treatment->emergencyPowerBonusMinutes, progressWorldMinute);
     }
     return {
         profile.basePopulation.ordinaryResidents,
@@ -90,9 +278,10 @@ BaseResidentMedicalProjection projectBaseResidentMedical(
 ResidentTreatmentPlan queryStartResidentTreatment(
     const ProfileState &profile,
     const ContentRegistry &content,
-    const StartResidentTreatmentCommand &)
+    const StartResidentTreatmentCommand &command)
 {
     const ResidentMedicalDefinition &definition = content.residentMedical();
+    const bool usesReserve = supportsHospitalMedicalReserveContent(content.contentVersion());
     if (profile.pendingRaid.has_value())
     {
         return failure(
@@ -100,6 +289,11 @@ ResidentTreatmentPlan queryStartResidentTreatment(
             DomainErrorCode::IllegalDestination,
             "resident treatment is unavailable during a Raid",
             definition);
+    }
+    if (usesReserve && (!profile.homeFounding.established || profile.activeBaseDefense))
+    {
+        return failure(profile, DomainErrorCode::IllegalDestination,
+            "The public medicine cabinet is unavailable during an activity", definition);
     }
     if (profile.residentMedical.activeTreatment.has_value())
     {
@@ -109,9 +303,7 @@ ResidentTreatmentPlan queryStartResidentTreatment(
             "resident treatment is already active",
             definition);
     }
-    if (!baseFacilityInstalled(
-            profile,
-            BaseFacilityDefinitionId{"base_facility.medical"}))
+    if (!baseFacilityInstalled(profile, kMedicalFacility))
     {
         return failure(
             profile,
@@ -148,8 +340,8 @@ ResidentTreatmentPlan queryStartResidentTreatment(
             "the assigned medical worker is not healthy",
             definition);
     }
-    const BaseResidentProfession patientProfession =
-        nextInjuredProfession(profile.basePopulation);
+    const auto patientProfession = nextInjuredProfession(profile.basePopulation,
+        usesReserve ? profile.residentMedicalReservePolicy : ResidentMedicalReservePolicy{});
     const std::uint32_t adjustedDuration = applyBaseFacilityTaskDuration(
         definition.durationMinutes,
         BaseFacilityStaffingKind::Medical,
@@ -176,6 +368,19 @@ ResidentTreatmentPlan queryStartResidentTreatment(
             DomainErrorCode::RevisionOverflow,
             "resident treatment state cannot advance",
             definition);
+    }
+
+    if (usesReserve)
+    {
+        ResidentTreatmentPlan plan;
+        plan.revision = profile.revision;
+        plan.durationMinutes = adjustedDuration;
+        plan.patientProfession = patientProfession;
+        plan.workerProfession = workerProfession;
+        plan.usesMedicalReserve = true;
+        planMedicalReserveCost(profile, plan);
+        enforceTreatmentQuote(plan, command);
+        return plan;
     }
 
     struct Candidate
@@ -261,6 +466,7 @@ ResidentTreatmentPlan queryStartResidentTreatment(
         plan.error = DomainErrorCode::None;
         plan.message.clear();
     }
+    enforceTreatmentQuote(plan, command);
     return plan;
 }
 
@@ -295,13 +501,15 @@ ResidentTreatmentReceipt executeStartResidentTreatment(
     for (const ResidentMedicalSupplySelection &selection : plan.supplies)
     {
         AssetRecord *asset = candidate.assets.findMutable(selection.assetId);
-        if (asset == nullptr || asset->quantity < selection.quantity)
+        if (asset == nullptr || asset->quantity < selection.quantity ||
+            asset->remainingCharges < selection.charges)
         {
             return {false, false, DomainErrorCode::MissingAsset,
                     "resident treatment supply changed", profile.revision};
         }
         asset->quantity -= selection.quantity;
-        if (asset->quantity == 0U)
+        asset->remainingCharges -= selection.charges;
+        if (asset->quantity == 0U || (selection.charges != 0U && asset->remainingCharges == 0U))
         {
             static_cast<void>(candidate.assets.erase(selection.assetId));
         }
@@ -313,7 +521,9 @@ ResidentTreatmentReceipt executeStartResidentTreatment(
         candidate.worldClock.elapsedWorldMinutes + plan.durationMinutes,
         plan.plannedContribution,
         plan.patientProfession,
-        plan.workerProfession};
+        plan.workerProfession,
+        0U,
+        plan.usesMedicalReserve};
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
     const ProfileValidationResult validation = validateProfileState(
@@ -335,12 +545,30 @@ ResidentTreatmentReceipt executeStartResidentTreatment(
         profile.residentMedical.activeTreatment->completionWorldMinute};
 }
 
+bool tryStartAutomaticResidentTreatment(ProfileState &candidate, const ContentRegistry &content)
+{
+    if (!candidate.residentMedicalReservePolicy.automaticAdmission ||
+        candidate.residentMedical.activeTreatment || candidate.pendingRaid ||
+        candidate.activeBaseDefense || candidate.baseSiege.warningActive ||
+        candidate.homePerimeter.activeOuting ||
+        candidate.basePopulation.injuredResidents == 0U || !candidate.baseWorkforce.medicalWorker ||
+        !baseFacilityInstalled(candidate, kMedicalFacility) ||
+        !supportsHospitalMedicalReserveContent(content.contentVersion()))
+        return false;
+    const auto receipt = executeStartResidentTreatment(candidate, content, {},
+        {candidate.revision, "resident-medical:auto:" + std::to_string(candidate.nextBaseServiceJobId)});
+    return receipt.succeeded && !receipt.alreadyCommitted;
+}
+
 ResidentTreatmentAdvanceResult applyResidentTreatmentThrough(
     ProfileState &profile) noexcept
 {
-    if (!profile.residentMedical.activeTreatment.has_value() ||
-        profile.residentMedical.activeTreatment->completionWorldMinute >
-            profile.worldClock.elapsedWorldMinutes)
+    const auto &treatment = profile.residentMedical.activeTreatment;
+    if (!treatment || ((treatment->usesMedicalReserve || treatment->emergencyPowerBonusMinutes != 0U) &&
+                       !baseFacilityInstalled(profile, kMedicalFacility)) ||
+        remainingBaseEmergencyPowerWork(treatment->completionWorldMinute,
+                                       treatment->emergencyPowerBonusMinutes,
+                                       profile.worldClock.elapsedWorldMinutes) != 0U)
     {
         return {};
     }
@@ -358,5 +586,6 @@ ResidentTreatmentAdvanceResult applyResidentTreatmentThrough(
         --profile.basePopulation.injuredByProfession[professionIndex];
     }
     profile.residentMedical.activeTreatment.reset();
+    pauseBaseEmergencyPowerForFacility(profile, kMedicalFacility);
     return {true, jobId, profile.basePopulation.injuredResidents};
 }

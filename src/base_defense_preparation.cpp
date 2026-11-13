@@ -24,7 +24,8 @@ BaseDefenseWarningSnapshot prepareBaseDefenseWarning(const ProfileState &p,
                  {"base_facility.medical", BaseFacilityKind::Medical},
                  {"base_facility.dormitory", BaseFacilityKind::Dormitory},
                  {"base_facility.kitchen_water", BaseFacilityKind::KitchenWater},
-                 {"base_facility.workshop", BaseFacilityKind::Workshop}})
+                 {"base_facility.workshop", BaseFacilityKind::Workshop},
+                 {"base_facility.generator", BaseFacilityKind::Generator}})
             if (f.facilityDefinitionId.value() == id)
                 overrides.push_back({kind, f.worldCenter, baseFacilityInstalled(p, f.facilityDefinitionId)});
     world.configureSite(site.value(), std::move(overrides), plot);

@@ -48,7 +48,11 @@ std::optional<ThrownIlluminationLanding> GameplayWorld::previewThrownIlluminatio
 void GameplayWorld::commitGrenade(RaidGrenadeRuntime prepared) noexcept
 {
     grenade_=std::move(prepared);
-    if(!grenade_.active())grenadeInvestigations_.clear();
+    if (!grenade_.active())
+    {
+        std::erase_if(localNoiseInvestigations_,
+            [](const auto &entry) { return entry.second.fromGrenade; });
+    }
     if(grenade_.active()) {
         // A zero-time observation cancels only the player's extraction progress.
         // Existing signal/high-risk facts remain authoritative.
@@ -164,20 +168,20 @@ void GameplayWorld::emitGrenadeNoise(Vec2 source,float radius)
            (!group.empty() && std::find(groups.begin(),groups.end(),group)!=groups.end())) {
             noiseDecoy_.forget(enemy.combatTargetId());
             enemy.investigateSound(source);
-            grenadeInvestigations_.insert_or_assign(enemy.combatTargetId(),
-                GrenadeInvestigation{activeRaidSpaceId(),source,enemy.searchTimeRemaining()});
+            localNoiseInvestigations_.insert_or_assign(enemy.combatTargetId(),
+                LocalNoiseInvestigation{activeRaidSpaceId(),source,enemy.searchTimeRemaining(),true});
         }
     }
 }
 
-void GameplayWorld::updateGrenadeInvestigations(float seconds)
+void GameplayWorld::updateLocalNoiseInvestigations(float seconds)
 {
-    if(grenadeInvestigations_.empty() || !std::isfinite(seconds) || seconds<=0)return;
+    if(localNoiseInvestigations_.empty() || !std::isfinite(seconds) || seconds<=0)return;
     const auto space=activeRaidSpaceId();
-    for(auto it=grenadeInvestigations_.begin();it!=grenadeInvestigations_.end();) {
+    for(auto it=localNoiseInvestigations_.begin();it!=localNoiseInvestigations_.end();) {
         if(it->second.space!=space){++it;continue;}
         it->second.remaining=std::max(0.0F,it->second.remaining-seconds);
-        if(it->second.remaining<=0 || !activeEnemies().find(it->first))it=grenadeInvestigations_.erase(it);
+        if(it->second.remaining<=0 || !activeEnemies().find(it->first))it=localNoiseInvestigations_.erase(it);
         else ++it;
     }
 }

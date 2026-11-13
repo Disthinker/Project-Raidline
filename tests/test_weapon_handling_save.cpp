@@ -405,7 +405,7 @@ TEST_F(WeaponHandlingSaveTest, AmmoLoopUpgradeKeepsOldOrderAndPendingRaidAndArch
     EXPECT_EQ(readBytes(archive(false, primary)), primary);
     EXPECT_EQ(readBytes(archive(true, backup)), backup);
     const auto upgraded = Json::parse(readBytes(repository.primaryPath()));
-    EXPECT_EQ(upgraded.at("schema_version"), 65U);
+    EXPECT_EQ(upgraded.at("schema_version"), 66U);
     EXPECT_EQ(upgraded.at("content_version").get<std::string>(), kAmmoLoopContentVersion);
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile) << reopened.message;
@@ -509,7 +509,7 @@ TEST_F(WeaponHandlingSaveTest, FreightUpgradeKeepsFrozenSchema61CratesAndHospita
         const auto reopened = repository.load(content);
         ASSERT_TRUE(reopened.profile && reopened.profile->pendingRaid) << reopened.message;
         ASSERT_TRUE(reopened.sourceEnvelope);
-        EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 65U);
+        EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 66U);
         EXPECT_EQ(reopened.sourceEnvelope->contentVersion, kCrossMapFreightContentVersion);
         EXPECT_EQ(reopened.profile->pendingRaid->loot, oldProfile.pendingRaid->loot);
         EXPECT_FALSE(reopened.profile->pendingRaid->freightKeyLootSlotId);
@@ -565,8 +565,9 @@ TEST_F(WeaponHandlingSaveTest, FreightSchema62RoundTripsStableIdentityAndRejects
 TEST_F(WeaponHandlingSaveTest, FuelSchema63RoundTripsFrozenLootAndRejectsInvalidIdentityOrVersion)
 {
     const auto &content = publishedContentRegistry();
-    auto profile = fresh();
-    const auto deployed = executeDeploy(profile, content, {"fuel-save", "fuel-save-end", 42U, kFreightCrateMapId},
+    const auto historical = contentBeforeArmorReadiness();
+    auto profile = makeNewAlphaProfile("weapon-handling-save", historical);
+    const auto deployed = executeDeploy(profile, historical, {"fuel-save", "fuel-save-end", 42U, kFreightCrateMapId},
         {profile.revision, "fuel-save-deploy"});
     ASSERT_TRUE(deployed.succeeded) << deployed.message;
     ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->fuelExtractionLootAssetId);
@@ -722,7 +723,7 @@ TEST_F(WeaponHandlingSaveTest, FuelUpgradeKeepsFrozenSchema62FreightAndArchivesB
 
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile && reopened.profile->pendingRaid && reopened.sourceEnvelope) << reopened.message;
-    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 65U);
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 66U);
     EXPECT_EQ(reopened.sourceEnvelope->contentVersion, kFuelExtractionContentVersion);
     EXPECT_FALSE(reopened.profile->pendingRaid->fuelExtractionLootAssetId);
     EXPECT_EQ(reopened.profile->pendingRaid->loot, profile.pendingRaid->loot);
@@ -782,7 +783,7 @@ TEST_F(WeaponHandlingSaveTest, ArmorReadinessUpgradePreservesFrozenFuelAndActive
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile && reopened.sourceEnvelope && reopened.profile->pendingRaid)
         << reopened.message;
-    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 65U);
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 66U);
     EXPECT_EQ(reopened.sourceEnvelope->contentVersion, kArmorReadinessContentVersion);
     EXPECT_EQ(reopened.profile->baseManufacturing, profile.baseManufacturing);
     EXPECT_EQ(reopened.profile->pendingRaid->fuelExtractionLootAssetId,

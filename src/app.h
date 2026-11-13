@@ -30,6 +30,7 @@
 #include "profile_container_presentation.h"
 #include "raid_camera.h"
 #include "raid_pointer_capture.h"
+#include "raid_tactical_map_presentation.h"
 #include "texture.h"
 #include "ui_text_renderer.h"
 #include "ui_item_context_presentation.h"
@@ -366,9 +367,15 @@ private:
     void resetBaseWorkshopUi();
     void refreshBaseWorkshopUi(bool force = false);
     void handleBaseWorkshopEvent(const UiWorkshopEvent &);
+    UiDiscretePress generatorPress_;
+    std::string generatorFeedback_;
+    std::vector<UiWorkshopEvent> pendingGeneratorEvents_;
+    void resetBaseGeneratorUi();
+    void handleBaseGeneratorEvent(const UiWorkshopEvent &);
     UiBaseSupplyState supplyUi_;
     UiBaseMedicalState medicalUi_;
     UiBaseMedicalProjection medicalProjection_;
+    std::optional<UiBaseMedicalTransferProjection> medicalTransferProjection_;
     std::optional<ProfileRevision> medicalProjectionRevision_;
     UiLanguage medicalProjectionLanguage_{};
     std::uint64_t medicalProjectionGeneration_{};
@@ -376,6 +383,7 @@ private:
     std::vector<UiBaseMedicalEvent> pendingMedicalEvents_;
     void resetBaseMedicalUi();
     void refreshBaseMedicalUi(bool force = false);
+    [[nodiscard]] const UiBaseMedicalTransferProjection &medicalTransferProjection();
     void handleBaseMedicalEvent(const UiBaseMedicalEvent &);
     std::vector<UiBaseSupplyEvent> pendingSupplyEvents_;
     std::vector<UiBaseSupplyRow> supplyRows_;
@@ -567,6 +575,15 @@ private:
     void updateRaidReloadInput(GameplayInput &);
     void cancelMagazineWheel();
     bool tacticalMapOpen_{};
+    struct RaidChalkContext
+    {
+        RaidChalkSpace space;
+        RaidTacticalMapChart chart;
+    };
+    RaidChalkRoutes raidChalkRoutes_;
+    UiDiscretePress raidChalkPress_;
+    std::string raidChalkRaidId_;
+    bool raidChalkAimBlockedUntilRelease_{};
     std::vector<AssetInstanceId> medicalWheelOptions_;
     std::size_t medicalWheelSelectedIndex_{};
     std::optional<std::array<bool, 3>> savedRangeDeveloperSettings_;
@@ -833,6 +850,7 @@ private:
     void renderBaseMedicalService();
     void renderBaseDormitory();
     void renderBaseWorkshop();
+    void renderBaseGenerator();
     void renderBaseDeployment();
     void renderRegionalOperations();
     void renderBaseSiegeQueuedNotice();
@@ -901,6 +919,11 @@ private:
     [[nodiscard]] float baseConstructionZoom() const noexcept;
     [[nodiscard]] Vec2 baseScreenToWorld(Vec2 screenPosition) const noexcept;
     void renderRaidTacticalMap();
+    [[nodiscard]] std::optional<RaidChalkContext> raidChalkContext() const;
+    void syncRaidChalkRoutes();
+    [[nodiscard]] bool routeRaidChalkEvent(const SDL_Event &event);
+    void renderRaidChalkLines(const RaidChalkContext &context);
+    void renderRaidChalkFooter(RaidChalkSpace space);
     void renderScreenPrimaryButton(
         const char *label);
     void renderBackground(bool drawOutdoorDetails = true, bool terrainOnly = false,

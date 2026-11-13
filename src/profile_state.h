@@ -34,8 +34,11 @@ enum class ProfileContainerKind
     Stash,
     BaseIntake,
     AssetCompartment,
-    LegacyOverflow
+    LegacyOverflow,
+    MedicalReserve
 };
+
+inline constexpr InventoryGridSize kMedicalReserveGridSize{4U, 4U};
 
 struct ProfileContainerId
 {
@@ -46,6 +49,7 @@ struct ProfileContainerId
     [[nodiscard]] static ProfileContainerId stash() noexcept;
     [[nodiscard]] static ProfileContainerId baseIntake() noexcept;
     [[nodiscard]] static ProfileContainerId legacyOverflow() noexcept;
+    [[nodiscard]] static ProfileContainerId medicalReserve() noexcept;
     [[nodiscard]] static ProfileContainerId compartment(
         AssetInstanceId ownerAssetId,
         std::uint32_t compartmentIndex) noexcept;
@@ -295,6 +299,20 @@ struct RetainedRaidMagazineLocation
                            const RetainedRaidMagazineLocation &) = default;
 };
 
+struct RaidDroppedBackpackLocation
+{
+    std::string raidId;
+    RaidSpaceDefinitionId spaceId;
+    Vec2 position{};
+
+    friend bool operator==(const RaidDroppedBackpackLocation &left,
+                           const RaidDroppedBackpackLocation &right) noexcept
+    {
+        return left.raidId == right.raidId && left.spaceId == right.spaceId &&
+            left.position.x == right.position.x && left.position.y == right.position.y;
+    }
+};
+
 using AssetLocation = std::variant<
     StoredAssetLocation,
     EquippedAssetLocation,
@@ -315,7 +333,8 @@ using AssetLocation = std::variant<
     BaseReloadHeldMagazineLocation,
     TrainingHeldMagazineLocation,
     TrainingDroppedMagazineLocation,
-    InstalledHelmetDeviceLocation>;
+    InstalledHelmetDeviceLocation,
+    RaidDroppedBackpackLocation>;
 
 struct MagazineRoundRecord
 {
@@ -627,6 +646,16 @@ inline constexpr std::size_t kBaseResidentProfessionCount = 4U;
 using BaseProfessionCounts =
     std::array<std::uint32_t, kBaseResidentProfessionCount>;
 
+struct ResidentMedicalReservePolicy
+{
+    bool automaticAdmission{};
+    std::array<BaseResidentProfession, kBaseResidentProfessionCount> professionPriority{
+        BaseResidentProfession::Medical, BaseResidentProfession::Engineering,
+        BaseResidentProfession::Combat, BaseResidentProfession::General};
+
+    friend bool operator==(const ResidentMedicalReservePolicy &, const ResidentMedicalReservePolicy &) = default;
+};
+
 struct RaidRescueSnapshot
 {
     RescueDefinitionId definitionId;
@@ -823,6 +852,18 @@ struct BaseCommunityEventState
         const BaseCommunityEventState &) = default;
 };
 
+enum class BaseEmergencyPowerTarget { Workshop, ResidentMedical };
+
+struct BaseEmergencyPowerState
+{
+    BaseEmergencyPowerTarget target{BaseEmergencyPowerTarget::Workshop};
+    std::uint32_t remainingMinutes{};
+    std::optional<BaseServiceJobId> activeJobId;
+    std::uint64_t advancedThroughWorldMinute{};
+
+    friend bool operator==(const BaseEmergencyPowerState &, const BaseEmergencyPowerState &) = default;
+};
+
 struct ActiveResidentTreatment
 {
     BaseServiceJobId jobId{};
@@ -831,6 +872,8 @@ struct ActiveResidentTreatment
     std::uint32_t consumedContribution{};
     BaseResidentProfession patientProfession{BaseResidentProfession::General};
     BaseResidentProfession workerProfession{BaseResidentProfession::General};
+    std::uint32_t emergencyPowerBonusMinutes{};
+    bool usesMedicalReserve{};
 
     friend bool operator==(
         const ActiveResidentTreatment &,
@@ -857,6 +900,7 @@ struct BaseManufacturingOrder
     std::vector<AssetInstanceId> inputAssetIds;
     AssetInstanceId outputAssetId{};
     bool outputReady{};
+    std::uint32_t emergencyPowerBonusMinutes{};
 
     friend bool operator==(
         const BaseManufacturingOrder &,
@@ -1066,6 +1110,8 @@ struct RaidTravelSnapshot
     std::vector<RegionRouteDefinitionId> routeIds;
     RegionalOperationsState startingRegionalOperations;
     BaseSiegeState startingBaseSiege;
+    std::optional<BaseEmergencyPowerState> startingEmergencyPower;
+    std::uint32_t startingManufacturingPowerBonusMinutes{};
 
     friend bool operator==(
         const RaidTravelSnapshot &,
@@ -1187,7 +1233,7 @@ struct PendingRaidSnapshot
     std::vector<RaidEnemySnapshot> enemies;
     std::vector<RaidEncounterGroupSnapshot> encounterGroups;
     std::vector<RaidLootSnapshot> loot;
-    std::optional<AssetRegistry> startingAssets; // schema 51: exact pre-deploy assets for scene-container rollback
+    std::optional<AssetRegistry> startingAssets; // Exact pre-deploy assets for Raid rollback.
     std::optional<RaidRescueSnapshot> rescue;
     std::optional<RaidCredentialExtractionSnapshot> credentialExtraction;
     std::optional<RaidSelfRecoverySnapshot> selfRecovery;
@@ -1207,6 +1253,9 @@ struct PendingRaidSnapshot
     std::optional<std::string> freightKeyLootSlotId;
     std::optional<RaidSealedFreightCrateSnapshot> sealedFreightCrate;
     std::optional<AssetInstanceId> fuelExtractionLootAssetId;
+    bool backpackRecoveryEnabled{};
+    bool freightBreachEnabled{};
+    bool hospitalMedicalReserveEnabled{};
 };
 
 struct LastRaidResult
@@ -1255,7 +1304,9 @@ struct ProfileState
     BaseMoraleState baseMorale;
     BaseCommunityEventState baseCommunityEvent;
     BaseResidentMedicalState residentMedical;
+    ResidentMedicalReservePolicy residentMedicalReservePolicy;
     BaseManufacturingState baseManufacturing;
+    std::optional<BaseEmergencyPowerState> emergencyPower;
     BaseConstructionState baseConstruction;
     BaseFacilityLayoutState baseFacilityLayout;
     BasePriorityState basePriority;
@@ -1353,11 +1404,18 @@ grantDeveloperWarehouseCatalog(
     const ProfileState &profile,
     AssetInstanceId instanceId) noexcept;
 
+[[nodiscard]] bool isMedicalReserveItem(const ItemDefinitionId &definitionId) noexcept;
+[[nodiscard]] bool isMedicalReserveAsset(const AssetRecord &asset) noexcept;
+
 [[nodiscard]] std::vector<AssetInstanceId> carriedAssetIds(
     const ProfileState &profile);
 
 // Gross carried mass includes equipped roots, nested carried contents,
 // installed magazines, magazine rounds, and chambered rounds exactly once.
+[[nodiscard]] std::optional<AssetInstanceId> raidDroppedBackpackRoot(
+    const ProfileState &profile, AssetInstanceId assetId) noexcept;
+[[nodiscard]] bool raidBackpackHasDeploymentOrigin(
+    const PendingRaidSnapshot &raid, const AssetRecord &asset) noexcept;
 [[nodiscard]] std::uint64_t carriedWeightGrams(
     const ProfileState &profile,
     const ContentRegistry &content) noexcept;

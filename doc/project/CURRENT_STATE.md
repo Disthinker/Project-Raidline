@@ -1,12 +1,73 @@
-# 当前 · 野战照明弹与暗区搜索 v1 已验收
+# 当前 · 医院救援与公共医疗储备 v1 已验收
+
+去医院救出一名受伤的医疗专业居民。把带回的药品分给公共药柜或留作随身药，治好居民后可安排上岗。[具体开发方案](../exec-plans/active/hospital-rescue-and-medical-reserve-v1.md)
+
+- task_id `hospital-rescue-and-medical-reserve-v1`，plan_version `RL-HOSPITAL-RESCUE-AND-MEDICAL-RESERVE-v1`，state `accepted`。approval_source 为 2026-11-13 用户对本方案回复“批准”。candidate_id `RL-HOSPITAL-RESCUE-AND-MEDICAL-RESERVE-v1-local-f2b2da563d9b`。accepted_candidate_id `RL-HOSPITAL-RESCUE-AND-MEDICAL-RESERVE-v1-local-f2b2da563d9b`。acceptance_source 为 2026-11-13 用户回复“验收通过”，按既定约定提交并推送。
+- 基线 `origin/main@302901a5c2d8b3a1e810bfa83f654bd99729267e` 的 Windows 与 Ubuntu CI 已核对通过。独立工作树从已验收并推送的供电版本 `d6034ef08309f7917089c0bb427cd3b70a4154a6` 开发，包含三个此前已验收的依赖。
+- 原策划线程已回复 `MAIN-NEXT-STAGE-20261113-AFTER-EMERGENCY-POWER-01`，任务 `raid-next-stage-after-emergency-power`，协议 `RL-NEXT-STAGE-REQUEST-v1`，turn `01a1d3b4-e0ab-7f90-ac2b-9289e4c33062`，基线一致。2026-11-13 用户要求扩大开发步长并先确认方案。
+- 固定入口已更新。Windows 全量 3295/3295，14 项 3 ms 检查通过，旧档副本升级回读一致。[联合验收](../acceptance/hospital-rescue-and-medical-reserve-v1.md)
+
+---
+
+# 当前 · 基地应急供电与燃油后勤 v1 已验收
+
+在灰烬工场搜建材，去边境交换站取油，选择燃油撤离或带回加快工坊和居民治疗。[具体开发方案](../exec-plans/active/base-emergency-power-and-fuel-logistics-v1.md)
+
+- task_id `base-emergency-power-and-fuel-logistics-v1`，plan_version `RL-BASE-EMERGENCY-POWER-AND-FUEL-LOGISTICS-v1`，state `accepted`。approval_source 为 2026-11-13 用户对该版本回复“批准”。candidate_id `RL-BASE-EMERGENCY-POWER-AND-FUEL-LOGISTICS-v1-local-3347520a33e0`。accepted_candidate_id `RL-BASE-EMERGENCY-POWER-AND-FUEL-LOGISTICS-v1-local-3347520a33e0`。acceptance_source 为 2026-11-13 用户回复“基地应急供电与燃油后勤 v1 验收通过，请提交并推送。”
+- 基线 `origin/main@302901a5c2d8b3a1e810bfa83f654bd99729267e` 的 Windows 和 Ubuntu CI 已通过。隔离工作树分支 `codex/base-emergency-power-and-fuel-logistics-v1` 基于已验收的 `c05a227`，包含同样已验收的 `6c0df90` 与 `7206b3f`。三阶段均已推送，仍在分支上。
+- 原策划线程已回复请求 `MAIN-NEXT-STAGE-20261113-AFTER-FREIGHT-BREACH-01`，任务 `raid-next-stage-after-freight-breach-route`，协议 `RL-NEXT-STAGE-REQUEST-v1`，turn `01a1d2e8-c208-7340-a451-9dc3fa763af7`，基线一致。
+- 固定入口已更新。Windows 全量 3281/3281，14 项 3 ms 检查通过，旧档副本升级回读一致。[联合验收](../acceptance/base-emergency-power-and-fuel-logistics-v1.md)
+
+---
+
+# 当前 · 货运装卸间破拆捷径 v1 已验收
+
+用外勤带回的工业材料做楔组，下次到「货运装卸间」可以绕行，也可以破拆中央检修门。[具体开发方案](../exec-plans/active/raid-freight-breach-route-v1.md)
+
+- task_id `raid-freight-breach-route-v1`，plan_version `RL-RAID-FREIGHT-BREACH-ROUTE-v1`，state `accepted`。approval_source 为 2026-11-12 用户回复“批准”。candidate_id `RL-RAID-FREIGHT-BREACH-ROUTE-v1-local-70145f994893`。accepted_candidate_id `RL-RAID-FREIGHT-BREACH-ROUTE-v1-local-70145f994893`。acceptance_source 为 2026-11-13 用户回复“验收通过”，按既定约定提交并推送。
+- 基线 `origin/main@302901a5c2d8b3a1e810bfa83f654bd99729267e` 的 Windows 和 Ubuntu CI 已通过。负重与图纸已验收推送 `7206b3f` 和 `6c0df90`，均在独立远端分支。本地候选基于已验收的 `6c0df90` 构建。[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43145371432)
+- 原策划线程已回复请求 `MAIN-NEXT-STAGE-20261112-AFTER-HOSPITAL-FLOORPLAN-01`，任务 `raid-next-stage-after-hospital-floorplan-routes`，协议 `RL-NEXT-STAGE-REQUEST-v1`，turn `01a1cf77-42f4-7450-92dd-d5c78dea4551`，基线一致。
+- 隔离工作树 `E:\WorkPlace\Projects\C\Project Raidline-raid-freight-breach-route-v1`，分支 `codex/raid-freight-breach-route-v1`，HEAD 为 `6c0df90`。
+- 固定入口已更新。Windows 全量 3266/3266，14 项 3 ms 检查通过。旧档副本升级回读一致。[联合验收](../acceptance/raid-freight-breach-route-v1.md)
+
+---
+
+# 当前 · 区医院图纸搜获与粉笔路线 v1 已验收
+
+在医院找到图纸后当场掌握内部布局。下一趟进医院，在战术地图上画自己的搜索和撤离路线。 [具体开发方案](../exec-plans/active/raid-hospital-floorplan-routes-v1.md)
+
+- task_id `raid-hospital-floorplan-routes-v1`，plan_version `RL-RAID-HOSPITAL-FLOORPLAN-ROUTES-v1`，state `accepted`。approval_source 为 2026-11-12 用户对该版本回复“批准”。candidate_id `RL-RAID-HOSPITAL-FLOORPLAN-ROUTES-v1-local-6925381e36f6`。accepted_candidate_id `RL-RAID-HOSPITAL-FLOORPLAN-ROUTES-v1-local-6925381e36f6`。acceptance_source 为 2026-11-12 用户回复“验收通过”，按既定约定提交并推送。
+- 基线 `origin/main@302901a5c2d8b3a1e810bfa83f654bd99729267e` 双平台 CI 通过。外勤负重与战术卸包 v1 已验收并推送 `7206b3f`，仍为独立分支。本轮从已验收负重提交创建独立分支，统一验证负重行为与 82／66 存档兼容性。 [主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43145371432)
+- 原策划线程已回复请求 `MAIN-NEXT-STAGE-20261112-AFTER-PACK-01`，协调任务 `raid-next-stage-after-load-pack-recovery`，协议 `RL-NEXT-STAGE-REQUEST-v1`，turn `01a1cf3c-99ff-7ee0-9e4f-b91a4a2aba95`，基线一致。
+- 隔离分支 `codex/raid-hospital-floorplan-routes-v1`，依赖已验收提交 `7206b3f`。
+- 固定入口已更新。Windows 全量 3252/3252，14 项 3 ms 检查通过，旧玩家档和负重档副本升级回读一致。[联合验收](../acceptance/raid-hospital-floorplan-routes-v1.md)
+
+---
+# 当前 · 外勤负重与战术卸包 v1 已验收
+
+携包奔跑有负重取舍，交战时可卸下整包，再决定回头取包还是轻装撤离。 [具体开发方案](../exec-plans/active/raid-load-and-pack-recovery-v1.md)
+
+- task_id `raid-load-and-pack-recovery-v1`，plan_version `RL-RAID-LOAD-AND-PACK-RECOVERY-v1`，state `accepted_pushed`。approval_source 为 2026-11-12 用户明确回复“批准”。candidate_id `RL-RAID-LOAD-AND-PACK-RECOVERY-v1-local-5bca52fd76c9`。accepted_candidate_id `RL-RAID-LOAD-AND-PACK-RECOVERY-v1-local-5bca52fd76c9`。acceptance_source 为 2026-11-12 用户明确回复“验收通过”，按其已明确的约定提交并推送。
+- 基线 `origin/main@302901a5c2d8b3a1e810bfa83f654bd99729267e`。照明弹 PR #207 已合并，合并前 Windows 与 Ubuntu 各通过 3226 项及全部 14 项 3 ms 检查。 [主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43145371432)
+- 原策划线程已回复请求 `MAIN-NEXT-STAGE-20261112-AFTER-ILLUMINATION-01`，协调任务 `raid-next-stage-after-thrown-illumination`，协议 `RL-NEXT-STAGE-REQUEST-v1`，turn `01a1cdb4-d985-70c3-a844-7f17e0cb237a`，基线一致。
+- 隔离工作树 `E:\WorkPlace\Projects\C\Project Raidline-raid-load-and-pack-recovery-v1`，分支 `codex/raid-load-and-pack-recovery-v1`。
+- 固定入口已更新。Windows 全量 3243/3243，14 项 3 ms 检查通过。旧档副本迁移回读一致。[联合验收](../acceptance/raid-load-and-pack-recovery-v1.md)
+- 基线主线 CI 的 Windows 和 Ubuntu 均已通过。
+
+---
+
+# 当前 · 野战照明弹与暗区搜索 v1 已验收并合并
 
 搜回电料制成照明弹，下一次出击借远处短时光照判断路线和搜索机会。 [具体开发方案](../exec-plans/active/raid-thrown-illumination-v1.md)
 
-- task_id `raid-thrown-illumination-v1`，plan_version `RL-RAID-THROWN-ILLUMINATION-v1`，state `accepted_pending_remote_authorization`。approval_source 为 2026-11-11 用户对 RL-RAID-THROWN-ILLUMINATION-v1 明确回复“批准”。candidate_id `RL-RAID-THROWN-ILLUMINATION-v1-local-233ad40a1e95`。accepted_candidate_id `RL-RAID-THROWN-ILLUMINATION-v1-local-233ad40a1e95`。acceptance_source 为 2026-11-11 用户明确回复“验收通过”。2026-11-11 用户要求主线 CI 通过后协调策划，给出更大步长的具体方案，确认后实施。
+- task_id `raid-thrown-illumination-v1`，plan_version `RL-RAID-THROWN-ILLUMINATION-v1`，state `merged`。approval_source 为 2026-11-11 用户对 RL-RAID-THROWN-ILLUMINATION-v1 明确回复“批准”。candidate_id `RL-RAID-THROWN-ILLUMINATION-v1-local-233ad40a1e95`。accepted_candidate_id `RL-RAID-THROWN-ILLUMINATION-v1-local-233ad40a1e95`。acceptance_source 为 2026-11-11 用户明确回复“验收通过”。2026-11-11 用户要求主线 CI 通过后协调策划，给出更大步长的具体方案，确认后实施。
 - 基线 `origin/main@d6544fb5d61c77cc920c3db3ce6706adba706148`。工坊蓝图研究与防具整备 PR #206 已验收合并，Windows 和 Ubuntu 各 3212/3212，13 项 3ms 检查通过。 [主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43014163163)
 - 原策划线程 `019feff4-477c-75c2-bf31-3f09ff1e3891` 已回复 `MAIN-NEXT-STAGE-20261111-AFTER-ARMOR-01`，协调任务 `raid-next-stage-after-armor-readiness`，协议 `RL-NEXT-STAGE-REQUEST-v1`，回复基线一致，状态 `proposal_ready_awaiting_human_approval`。隔离工作树 E:\WorkPlace\Projects\C\Project Raidline-raid-thrown-illumination-v1，分支 `codex/raid-thrown-illumination-v1`。
 - 固定入口已更新。Windows 全量 3226/3226，原 13 项及新增 1 项 3ms 检查通过。玩家旧档副本迁移回读一致。[联合验收](../acceptance/raid-thrown-illumination-v1.md)
-- 本地提交仅包含已验收候选和验收记录。远端交付待本阶段推送授权及双平台 CI。
+- 本地提交 `cf22d96` 仅包含已验收候选和验收记录。2026-11-11 用户明确说明“验收通过”即授权提交并推送。已核对 GitHub 远端分支 `codex/raid-thrown-illumination-v1` 指向 `cf22d96`，主线仍为 `d6544fb`。
+- 2026-11-11 用户授权创建 PR 并在 Windows 和 Ubuntu CI 通过后合并。
+- [PR #207](https://github.com/Disthinker/Project-Raidline/pull/207) 已合入 `main@302901a`。合并树与已验收提交一致。Windows 和 Ubuntu 各通过 3226 项测试及全部 14 项 3 ms 检查。首轮 Ubuntu 因依赖镜像域名解析失败，对同一提交单独重跑后通过。[双平台 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43052486566)。合并后[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43145371432)已触发。
+- 2026-11-12 按用户要求，在 PR #207 合并后向原策划线程发出下一阶段请求。请求 `MAIN-NEXT-STAGE-20261112-AFTER-ILLUMINATION-01`，任务 `raid-next-stage-after-thrown-illumination`，协议 `RL-NEXT-STAGE-REQUEST-v1`，基线 `origin/main@302901a5c2d8b3a1e810bfa83f654bd99729267e`。策划已按同一基线回复，推荐外勤负重与战术卸包 v1。 [下一阶段方案](../exec-plans/active/raid-load-and-pack-recovery-v1.md)
 
 ---
 

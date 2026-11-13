@@ -6,14 +6,17 @@
 #include "base_wish_expedition.h"
 
 #include "base_construction_domain.h"
+#include "base_emergency_power_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_morale_domain.h"
 #include "base_siege_domain.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <numeric>
 #include <set>
+#include <type_traits>
 
 #include "base_resource_domain.h"
 #include "regional_operations_domain.h"
@@ -287,10 +290,7 @@ bool advanceProfileWorldTime(
     {
         return false;
     }
-    static_cast<void>(synchronizeBaseDailySystemsThrough(profile, content));
-    static_cast<void>(applyBaseConstructionThrough(profile, content));
-    static_cast<void>(applyBaseManufacturingThrough(profile, content));
-    static_cast<void>(applyResidentTreatmentThrough(profile));
+    static_cast<void>(synchronizeBaseWorkThrough(profile, content, advanced.minutesApplied));
     return true;
 }
 
@@ -715,6 +715,16 @@ DeployReceipt executeDeploy(
     snapshot.wishFocus = freezeBaseWishFocus(candidate, content);
     snapshot.raidId = command.raidId;
     snapshot.settlementId = command.settlementId;
+    snapshot.backpackRecoveryEnabled = regionalMissionCount == 0U &&
+        supportsRaidBackpackRecoveryContent(content.contentVersion());
+    snapshot.freightBreachEnabled = regionalMissionCount == 0U &&
+        command.mapDefinitionId == kFreightCrateMapId &&
+        supportsFreightBreachContent(content.contentVersion());
+    snapshot.hospitalMedicalReserveEnabled = regionalMissionCount == 0U &&
+        command.mapDefinitionId == kHospitalFloorplanMapId &&
+        supportsHospitalMedicalReserveContent(content.contentVersion());
+    if (snapshot.backpackRecoveryEnabled)
+        snapshot.startingAssets = profile.assets;
     const bool corpseTrial = command.mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"} &&
         std::any_of(map->proceduralOutdoor.encounterArchetypes.begin(), map->proceduralOutdoor.encounterArchetypes.end(),
             [](const auto &group) { return group.id == "encounter.frontier.resource_guard" && group.armoredMemberDefinition.has_value(); });
@@ -762,6 +772,10 @@ DeployReceipt executeDeploy(
     snapshot.travel.startingRegionalOperations =
         candidate.regionalOperations;
     snapshot.travel.startingBaseSiege = candidate.baseSiege;
+    snapshot.travel.startingEmergencyPower = candidate.emergencyPower;
+    if (candidate.baseManufacturing.activeOrder)
+        snapshot.travel.startingManufacturingPowerBonusMinutes =
+            candidate.baseManufacturing.activeOrder->emergencyPowerBonusMinutes;
     snapshot.outpostRestoration = std::move(outpostRestoration);
     snapshot.baseSiteClearance = std::move(baseSiteClearance);
     snapshot.basePerimeterSweep = std::move(basePerimeterSweep);
@@ -792,6 +806,7 @@ DeployReceipt executeDeploy(
         candidate.raidIntelligence.counts.erase(found);
     }
     if (map->rescue.has_value() &&
+        (map->rescue->id != kHospitalMedicalRescueId || snapshot.hospitalMedicalReserveEnabled) &&
         !candidate.committedRescues.contains(map->rescue->id))
     {
         snapshot.rescue = RaidRescueSnapshot{
@@ -1076,6 +1091,8 @@ DeployReceipt executeDeploy(
         map->highRisk.advancedLootSlots.size();
     const bool nightVisionLootRules = regionalMissionCount == 0U &&
         hospitalNightCompatibleContent(content.contentVersion());
+    const bool hospitalFloorplanLootRules = regionalMissionCount == 0U &&
+        supportsHospitalFloorplanRoutesContent(content.contentVersion());
     const bool sealedFreightRules = freightAccessRules && map->id == kFreightCrateMapId;
     const bool fuelExtractionRules = sealedFreightRules &&
         supportsFuelExtractionContent(content.contentVersion());
@@ -1098,17 +1115,24 @@ DeployReceipt executeDeploy(
             // Keep both original random draws for fixed rewards.
             const bool nightVisionSlot = nightVisionLootRules &&
                 isHospitalNightVisionLootSlot(map->id, interior.id, slot.id);
+            const bool hospitalFloorplanSlot = hospitalFloorplanLootRules &&
+                isHospitalFloorplanLootSlot(map->id, interior.id, slot.id);
+            const bool hospitalPharmacySlot = snapshot.hospitalMedicalReserveEnabled &&
+                isHospitalPharmacyLootSlot(map->id, interior.id, slot.id);
             const bool sealedFreightSlot = sealedFreightRules && interior.id == kFreightCrateSpaceId &&
                 slot.id == kFreightCrateSlotId;
             const bool fuelSlot = fuelExtractionRules && interior.id == kFreightCrateSpaceId &&
                 slot.id == kRaidFuelLootSlotId;
             const ItemDefinitionId &item = nightVisionSlot
                 ? kHospitalNightVisionId
+                : hospitalFloorplanSlot ? kHospitalFloorplanItemId
+                : hospitalPharmacySlot ? kHospitalFirstAidStockId
                 : sealedFreightSlot ? kFreightCrateSupplyId
                 : fuelSlot ? kRaidFuelCanId : entry.itemDefinitionId;
             if (nightVisionSlot)
                 snapshot.hospitalNightVisionLoot = true;
-            if (nightVisionSlot || sealedFreightSlot || fuelSlot)
+            if (nightVisionSlot || hospitalFloorplanSlot || hospitalPharmacySlot ||
+                sealedFreightSlot || fuelSlot)
                 quantity = 1U;
             const AssetInstanceId assetId = candidate.assets.create(
                 content.item(item),
@@ -1246,7 +1270,7 @@ DeployReceipt executeDeploy(
         addRequest(std::string{kRaidAnchorAdvancedResource},
                    RaidMapAnchorKind::AdvancedResource,
                    map->highRisk.advancedResourceArea.size);
-        if (snapshot.rescue.has_value())
+        if (snapshot.rescue.has_value() && snapshot.rescue->definitionId != kHospitalMedicalRescueId)
         {
             addRequest(std::string{kRaidAnchorRescue},
                        RaidMapAnchorKind::Rescue,
@@ -1433,6 +1457,18 @@ DeployReceipt executeDeploy(
         progress, 0.30F, RaidDeploymentProgressStage::GeneratingLayout);
     snapshot.spatialLayout = generateRaidMapLayout(
         *map, snapshot.seed, generationAnchors);
+    if (snapshot.rescue && snapshot.rescue->definitionId == kHospitalMedicalRescueId)
+    {
+        // Choose a reachable transfer point on the finished map without
+        // rerolling the existing entrances, extractions, props or loot.
+        auto anchor = selectHospitalRescueAnchor(*map, snapshot.spatialLayout,
+                                                snapshot.rescue->transferPoint.size);
+        if (!anchor)
+            return deployFailure(RaidLifecycleError::InvalidCommand,
+                "generated hospital has no reachable rescue site", profile.revision);
+        snapshot.spatialLayout.anchorPlacements.push_back(std::move(*anchor));
+        snapshot.spatialLayout.layoutHash = raidMapLayoutHash(snapshot.spatialLayout);
+    }
     reportRaidDeploymentProgress(
         progress, 0.68F, RaidDeploymentProgressStage::FreezingLoot);
 
@@ -2036,17 +2072,20 @@ RaidSettlementReceipt settlePendingRaid(
     ProfileState candidate = profile;
     // Abandoned overflow cells are not rewards or carried loss roots.
     std::vector<AssetInstanceId> abandonedCells;
+    bool hasDroppedBackpacks{};
     for (const auto &[id, asset] : candidate.assets.records())
+    {
         if (std::holds_alternative<RaidDroppedBatteryLocation>(asset.location) ||
             std::holds_alternative<RaidDroppedMagazineLocation>(asset.location)) abandonedCells.push_back(id);
+        hasDroppedBackpacks = hasDroppedBackpacks ||
+            std::holds_alternative<RaidDroppedBackpackLocation>(asset.location);
+    }
     for (auto id : abandonedCells) static_cast<void>(candidate.assets.erase(id));
 
     const PendingRaidSnapshot raidSnapshot = *candidate.pendingRaid;
-    if (raidSnapshot.credentialExtraction || fuel)
+    if (raidSnapshot.credentialExtraction || fuel || hasDroppedBackpacks)
     {
-        // Pending is removed before final validation below. Validate its
-        // credential contract while it still exists so forged facts cannot
-        // turn into a valid permanent permission during settlement.
+        // Validate pending-only facts before settlement removes their sources.
         const ProfileValidationResult validation =
             validateProfileState(profile, content);
         if (!validation.valid)
@@ -2089,6 +2128,7 @@ RaidSettlementReceipt settlePendingRaid(
     {
         const bool onGround =
             std::holds_alternative<RaidGroundAssetLocation>(asset.location) ||
+            std::holds_alternative<RaidDroppedBackpackLocation>(asset.location) ||
             std::holds_alternative<RaidSceneContainerAssetLocation>(asset.location) ||
             std::holds_alternative<RaidCorpseContainerAssetLocation>(asset.location);
         if (onGround)
@@ -2396,6 +2436,14 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     candidate.baseMorale = startingBaseMorale;
     candidate.baseCommunityEvent = startingBaseCommunityEvent;
     candidate.baseConstruction = startingBaseConstruction;
+    if (!candidate.baseConstruction.facilities.contains(kBaseGeneratorFacilityId))
+    {
+        for (auto &[site, placements] : candidate.baseFacilityLayout.placements)
+        {
+            static_cast<void>(site);
+            placements.erase(kBaseGeneratorFacilityId);
+        }
+    }
     candidate.baseWorkforce = startingBaseWorkforce;
     candidate.basePopulation.bedCapacity = startingBedCapacity;
     candidate.basePopulation.injuredResidents = startingInjuredResidents;
@@ -2408,6 +2456,10 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
         candidate.regionalOperations = startingRegionalOperations;
     }
     candidate.baseSiege = startingBaseSiege;
+    candidate.emergencyPower = candidate.pendingRaid->travel.startingEmergencyPower;
+    if (candidate.baseManufacturing.activeOrder)
+        candidate.baseManufacturing.activeOrder->emergencyPowerBonusMinutes =
+            candidate.pendingRaid->travel.startingManufacturingPowerBonusMinutes;
     candidate.pendingRaid.reset();
     candidate.lastRaidResult.reset();
     ++candidate.revision;
@@ -2423,6 +2475,164 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     return {true, RaidLifecycleError::None, {}, profile.revision};
 }
 
+bool raidBackpackPlacementValid(
+    const PendingRaidSnapshot &raid,
+    const MapDefinition &map,
+    const RaidDroppedBackpackLocation &location) noexcept
+{
+    if (!raid.backpackRecoveryEnabled || location.raidId != raid.raidId ||
+        !std::isfinite(location.position.x) || !std::isfinite(location.position.y))
+        return false;
+
+    ContentRect walkable = map.walkableBounds;
+    std::span<const ContentRect> blockers{raid.spatialLayout.ballisticBlockers};
+    if (location.spaceId != outdoorRaidSpaceId())
+    {
+        const auto interior = std::find_if(raid.interiors.begin(), raid.interiors.end(),
+            [&](const auto &space) { return space.id == location.spaceId; });
+        if (interior == raid.interiors.end())
+            return false;
+        walkable = {{}, interior->worldSize};
+        blockers = interior->ballisticBlockers;
+    }
+
+    const Rect bounds = raidBackpackGroundBounds(location.position);
+    if (bounds.position.x < walkable.position.x || bounds.position.y < walkable.position.y ||
+        bounds.position.x + bounds.size.x > walkable.position.x + walkable.size.x ||
+        bounds.position.y + bounds.size.y > walkable.position.y + walkable.size.y)
+        return false;
+    return std::none_of(blockers.begin(), blockers.end(), [&](const ContentRect &blocker) {
+        return bounds.position.x < blocker.position.x + blocker.size.x &&
+            bounds.position.x + bounds.size.x > blocker.position.x &&
+            bounds.position.y < blocker.position.y + blocker.size.y &&
+            bounds.position.y + bounds.size.y > blocker.position.y;
+    });
+}
+
+namespace
+{
+InventoryReceipt backpackFailure(
+    const ProfileState &profile, DomainErrorCode error, const char *message)
+{
+    return {false, false, error, message, profile.revision};
+}
+
+bool backpackAccessMatches(const ProfileState &profile, const RaidReloadWorldAccess &access)
+{
+    return profile.pendingRaid && profile.pendingRaid->backpackRecoveryEnabled &&
+        access.activity && access.activity->activity == WeaponActionActivity::Raid &&
+        weaponActionScopeMatches(profile, *access.activity) &&
+        access.observation && access.currentObservation &&
+        access.observation->matches(*access.currentObservation) &&
+        access.observation->spaceId == access.spaceId &&
+        access.observation->observer.x == access.playerCenter.x &&
+        access.observation->observer.y == access.playerCenter.y;
+}
+
+std::optional<InventoryReceipt> backpackTransactionStatus(
+    const ProfileState &profile, const CommandContext &context)
+{
+    if (context.transactionId.empty())
+        return backpackFailure(profile, DomainErrorCode::InvalidTransaction, "transaction ID must not be empty");
+    if (profile.committedTransactions.contains(context.transactionId))
+        return InventoryReceipt{true, true, DomainErrorCode::None, {}, profile.revision};
+    if (context.expectedRevision != profile.revision)
+        return backpackFailure(profile, DomainErrorCode::StaleRevision, "profile revision is stale");
+    if (profile.revision == std::numeric_limits<ProfileRevision>::max())
+        return backpackFailure(profile, DomainErrorCode::RevisionOverflow, "profile revision cannot advance");
+    return std::nullopt;
+}
+
+bool backpackInReach(Vec2 point, Vec2 player) noexcept
+{
+    const float dx = point.x - player.x, dy = point.y - player.y;
+    return dx * dx + dy * dy <= kRaidBackpackInteractionRange * kRaidBackpackInteractionRange;
+}
+
+InventoryReceipt moveBackpack(
+    ProfileState &profile, AssetRecord &asset, AssetLocation location, const CommandContext &context)
+{
+    static_assert(std::is_nothrow_move_assignable_v<AssetLocation>);
+    // Allocate the transaction record before the single no-throw ownership change.
+    profile.committedTransactions.insert(context.transactionId);
+    asset.location = std::move(location);
+    ++profile.revision;
+    return {true, false, DomainErrorCode::None, {}, profile.revision};
+}
+}
+
+InventoryReceipt dropRaidBackpack(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId assetId,
+    Vec2 landing,
+    const CommandContext &context,
+    const RaidReloadWorldAccess &access,
+    std::span<const AssetInstanceId> lockedAssets)
+{
+    if (!backpackAccessMatches(profile, access))
+        return backpackFailure(profile, DomainErrorCode::IllegalDestination,
+            "backpack recovery requires current Raid access");
+    if (const auto receipt = backpackTransactionStatus(profile, context))
+        return *receipt;
+
+    auto *asset = profile.assets.findMutable(assetId);
+    const auto *equipped = asset ? std::get_if<EquippedAssetLocation>(&asset->location) : nullptr;
+    const auto &raid = *profile.pendingRaid;
+    if (!asset || !equipped || equipped->slot != EquipmentSlotKind::Backpack ||
+        asset->quantity != 1U || !itemCanEquipInSlot(content.item(asset->definitionId), EquipmentSlotKind::Backpack) ||
+        !raidBackpackHasDeploymentOrigin(raid, *asset))
+        return backpackFailure(profile, DomainErrorCode::MissingAsset, "equipped backpack is unavailable");
+    if (!lockedAssets.empty())
+    {
+        const auto tree = assetTreeIds(profile, assetId);
+        if (std::any_of(lockedAssets.begin(), lockedAssets.end(),
+            [&](AssetInstanceId id) { return tree.contains(id); }))
+            return backpackFailure(profile, DomainErrorCode::IllegalDestination, "backpack is in use");
+    }
+
+    RaidDroppedBackpackLocation location{raid.raidId, access.spaceId, landing};
+    const bool atFeet = landing.x == access.playerCenter.x && landing.y == access.playerCenter.y;
+    if (!backpackInReach(landing, access.playerCenter) ||
+        !raidBackpackPlacementValid(raid, content.map(raid.mapDefinitionId), location) ||
+        (!atFeet && !access.observation->pointVisible(landing)))
+        return backpackFailure(profile, DomainErrorCode::IllegalDestination, "backpack drop position is blocked");
+    return moveBackpack(profile, *asset, std::move(location), context);
+}
+
+InventoryReceipt pickupRaidBackpack(
+    ProfileState &profile,
+    const ContentRegistry &content,
+    AssetInstanceId assetId,
+    const CommandContext &context,
+    const RaidReloadWorldAccess &access)
+{
+    if (!backpackAccessMatches(profile, access))
+        return backpackFailure(profile, DomainErrorCode::IllegalDestination,
+            "backpack recovery requires current Raid access");
+    if (const auto receipt = backpackTransactionStatus(profile, context))
+        return *receipt;
+
+    auto *asset = profile.assets.findMutable(assetId);
+    const auto *ground = asset ? std::get_if<RaidDroppedBackpackLocation>(&asset->location) : nullptr;
+    const auto &raid = *profile.pendingRaid;
+    if (!ground || ground->raidId != raid.raidId || ground->spaceId != access.spaceId)
+        return backpackFailure(profile, DomainErrorCode::IllegalDestination,
+            "backpack is outside current observation");
+    if (!backpackInReach(ground->position, access.playerCenter))
+        return backpackFailure(profile, DomainErrorCode::IllegalDestination, "backpack is too far away");
+    if (asset->quantity != 1U || !itemCanEquipInSlot(content.item(asset->definitionId), EquipmentSlotKind::Backpack) ||
+        !raidBackpackHasDeploymentOrigin(raid, *asset) ||
+        !raidBackpackPlacementValid(raid, content.map(raid.mapDefinitionId), *ground))
+        return backpackFailure(profile, DomainErrorCode::InvalidProfile, "dropped Raid backpack is invalid");
+    if (!access.observation->pointVisible(ground->position))
+        return backpackFailure(profile, DomainErrorCode::IllegalDestination,
+            "backpack is outside current observation");
+    if (equippedAsset(profile, EquipmentSlotKind::Backpack))
+        return backpackFailure(profile, DomainErrorCode::Capacity, "backpack slot must be empty");
+    return moveBackpack(profile, *asset, EquippedAssetLocation{EquipmentSlotKind::Backpack}, context);
+}
+
 InventoryReceipt pickupRaidLoot(
     ProfileState &profile,
     const ContentRegistry &content,
@@ -2432,6 +2642,14 @@ InventoryReceipt pickupRaidLoot(
     const RaidObservationKey *currentObservation,
     const RaidReloadWorldAccess *reloadAccess)
 {
+    if (const auto *backpack = profile.assets.find(assetId);
+        backpack && std::holds_alternative<RaidDroppedBackpackLocation>(backpack->location))
+    {
+        if (!reloadAccess)
+            return backpackFailure(profile, DomainErrorCode::IllegalDestination,
+                "backpack recovery requires current Raid access");
+        return pickupRaidBackpack(profile, content, assetId, context, *reloadAccess);
+    }
     if (const auto *magazine = profile.assets.find(assetId);
         magazine && std::holds_alternative<RaidDroppedMagazineLocation>(magazine->location))
     {

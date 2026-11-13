@@ -7,7 +7,7 @@
 
 enum class ProfileUiCompletionKind {
     Command, WorldBarrier, Deploy, RaidSettlement, Rescue, DefenseStart,
-    TimedBaseCompletion, BaseSnapshot, DailyEnd
+    TimedBaseCompletion, BaseSnapshot, DailyEnd, HospitalFloorplan
 };
 
 // Accepted means that the private candidate was queued. Only a completion

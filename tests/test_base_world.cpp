@@ -265,7 +265,7 @@ TEST(BaseWorldTest, InteractionRequiresProximityAndExplicitInput)
 TEST(BaseWorldTest, ExposesDedicatedAllocationFacility)
 {
     const BaseWorld world;
-    ASSERT_EQ(world.facilities().size(), 8U);
+    ASSERT_EQ(world.facilities().size(), 9U);
     EXPECT_NE(
         std::find_if(
             world.facilities().begin(),

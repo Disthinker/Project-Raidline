@@ -395,10 +395,6 @@ bool GameSession::finalizeBaseDefense(BaseDefenseEndReason reason,bool wait)
         persistenceMessage_ = receipt.message;
         return false;
     }
-    static_cast<void>(synchronizeBaseDailySystemsThrough(candidate, publishedContentRegistry()));
-    static_cast<void>(applyBaseConstructionThrough(candidate, publishedContentRegistry()));
-    static_cast<void>(applyBaseManufacturingThrough(candidate, publishedContentRegistry()));
-    static_cast<void>(applyResidentTreatmentThrough(candidate));
     static_cast<void>(applyRecoveryTaskThrough(candidate));
     if(reason==BaseDefenseEndReason::PlayerDown && candidate.basePlayerEffects && basePlayerWorld_) {
         candidate.basePlayerEffects->playerPosition=basePlayerWorld_->medicalRespawnPosition();

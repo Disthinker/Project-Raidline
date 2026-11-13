@@ -1402,6 +1402,8 @@ ContentRegistry ContentRegistry::fromJson(
         {
             fail("Base construction material capacity is invalid");
         }
+        const bool hasEmergencyPower =
+            supportsEmergencyPowerContent(registry.contentVersion());
         std::size_t requiredMigrationFacilities{};
         for (const Json &facilityValue :
              requiredArray(baseConstruction, "facilities"))
@@ -1413,6 +1415,13 @@ ContentRegistry ContentRegistry::fromJson(
                 requiredBool(facilityValue, "required_for_migration"),
                 requiredBool(facilityValue, "initially_owned"),
                 requiredBool(facilityValue, "initially_installed")};
+            if (definition.id == kBaseGeneratorFacilityId)
+            {
+                if (!hasEmergencyPower)
+                    continue;
+                if (definition.requiredForMigration || definition.initiallyOwned)
+                    fail("Generator facility must start unowned and be optional for migration");
+            }
             if (!hasPrefix(definition.id.value(), "base_facility.") ||
                 definition.displayName.empty() ||
                 (definition.initiallyInstalled && !definition.initiallyOwned))
@@ -1430,7 +1439,8 @@ ContentRegistry ContentRegistry::fromJson(
             registry.baseFacilities_.push_back(std::move(definition));
         }
         if (registry.baseFacilities_.empty() ||
-            requiredMigrationFacilities != 4U)
+            requiredMigrationFacilities != 4U ||
+            (hasEmergencyPower && !registry.baseFacilityIndex_.contains(kBaseGeneratorFacilityId)))
         {
             fail("Base facility definitions are incomplete");
         }
@@ -1449,6 +1459,10 @@ ContentRegistry ContentRegistry::fromJson(
             {
                 fail("Base construction project must be an object");
             }
+            const BaseConstructionProjectDefinitionId projectId{
+                requiredString(projectValue, "id")};
+            if (!hasEmergencyPower && projectId == kBaseGeneratorProjectId)
+                continue;
             const std::string targetFacility = requiredString(
                 projectValue, "target_facility");
             BaseFacilityUpgradeTarget target{};
@@ -1468,13 +1482,16 @@ ContentRegistry ContentRegistry::fromJson(
             {
                 target = BaseFacilityUpgradeTarget::Medical;
             }
+            else if (targetFacility == "generator" && hasEmergencyPower)
+            {
+                target = BaseFacilityUpgradeTarget::Generator;
+            }
             else
             {
                 fail("Base construction target facility is invalid");
             }
             BaseConstructionProjectDefinition definition{
-                BaseConstructionProjectDefinitionId{
-                    requiredString(projectValue, "id")},
+                projectId,
                 requiredString(projectValue, "display_name"),
                 target,
                 optionalUint(projectValue, "required_level"),
@@ -1498,6 +1515,14 @@ ContentRegistry ContentRegistry::fromJson(
             {
                 fail("Base construction project definition is invalid");
             }
+            if ((definition.target == BaseFacilityUpgradeTarget::Generator) !=
+                    (definition.id == kBaseGeneratorProjectId) ||
+                (definition.target == BaseFacilityUpgradeTarget::Generator &&
+                 (definition.requiredLevel != 0U || definition.materialCost != 6U ||
+                  definition.workerCount != 2U || definition.durationMinutes != 480U)))
+            {
+                fail("Generator construction project definition is invalid");
+            }
             const std::size_t index =
                 registry.baseConstructionProjects_.size();
             if (!registry.baseConstructionProjectIndex_
@@ -1512,6 +1537,11 @@ ContentRegistry ContentRegistry::fromJson(
         if (registry.baseConstructionProjects_.empty())
         {
             fail("at least one Base construction project is required");
+        }
+        if (hasEmergencyPower &&
+            !registry.baseConstructionProjectIndex_.contains(kBaseGeneratorProjectId))
+        {
+            fail("Generator construction project is missing");
         }
 
         std::set<std::string> resources;
@@ -2482,8 +2512,12 @@ ContentRegistry ContentRegistry::fromJson(
                     requiredPositiveUint(inputValue, "quantity")};
                 const ItemDefinition &item = registry.item(
                     input.itemDefinitionId);
+                const bool quantityAllowed = definition.id == kFreightBreachRecipeId
+                    ? (input.itemDefinitionId.value() == "item.loot.scrap_parts" && input.quantity == 2U) ||
+                      (input.itemDefinitionId.value() == "item.loot.industrial_fasteners" && input.quantity == 1U)
+                    : input.quantity == 1U && item.maxStackSize == 1U;
                 if (!inputIds.insert(input.itemDefinitionId).second ||
-                    input.quantity != 1U || item.maxStackSize != 1U ||
+                    !quantityAllowed ||
                     !item.containerCompartments.empty())
                 {
                     fail("Base manufacturing input contract is invalid");
@@ -3202,7 +3236,9 @@ ContentRegistry ContentRegistry::fromJson(
                     "extraction_duration_seconds",
                     true)};
 
-            if (mapValue.contains("rescue"))
+            if (mapValue.contains("rescue") &&
+                (definition.id != kHospitalFloorplanMapId ||
+                 supportsHospitalMedicalReserveContent(registry.contentVersion())))
             {
                 const Json &rescue = requiredObject(mapValue, "rescue");
                 const std::string subjectKind =
@@ -4417,6 +4453,87 @@ ContentRegistry ContentRegistry::fromJson(
                         return entry.outputItemDefinitionId == kThrownIlluminationItemId;
                     }) != 1)
                 fail("field flare is workshop-only");
+        }
+        if (supportsHospitalFloorplanRoutesContent(registry.contentVersion()))
+        {
+            if (!registry.itemIndex_.contains(kHospitalFloorplanItemId))
+                fail("hospital floor plan requires a physical item");
+            const auto &floorplan = registry.item(kHospitalFloorplanItemId);
+            if (floorplan.category != ItemCategory::Loot || floorplan.inventoryWidthCells != 1 ||
+                floorplan.inventoryHeightCells != 1 || floorplan.maxStackSize != 1 ||
+                floorplan.marketBuyPrice || floorplan.marketRecyclePrice != 35U ||
+                floorplan.baseContribution || floorplan.baseConstructionMaterialValue)
+                fail("hospital floor plan definition is invalid");
+
+            if (registry.mapIndex_.contains(kHospitalFloorplanMapId))
+            {
+                const auto &hospital = registry.map(kHospitalFloorplanMapId);
+                const bool hasReceptionSlot = std::any_of(
+                    hospital.interiors.begin(), hospital.interiors.end(), [&](const auto &interior) {
+                        return std::any_of(interior.lootSlots.begin(), interior.lootSlots.end(),
+                            [&](const auto &slot) {
+                                return isHospitalFloorplanLootSlot(hospital.id, interior.id, slot.id);
+                            });
+                    });
+                if (!hasReceptionSlot) fail("hospital floor plan reception slot is missing");
+            }
+            if (std::any_of(registry.lootTables_.begin(), registry.lootTables_.end(), [](const auto &table) {
+                    return std::any_of(table.entries.begin(), table.entries.end(), [](const auto &entry) {
+                        return entry.itemDefinitionId == kHospitalFloorplanItemId;
+                    });
+                }) || std::any_of(registry.maps_.begin(), registry.maps_.end(), [](const auto &map) {
+                    return std::any_of(map.groundItems.begin(), map.groundItems.end(), [](const auto &item) {
+                        return item.itemDefinitionId == kHospitalFloorplanItemId;
+                    });
+                }) || std::any_of(registry.baseManufacturingRecipes_.begin(),
+                    registry.baseManufacturingRecipes_.end(), [](const auto &recipe) {
+                        return recipe.outputItemDefinitionId == kHospitalFloorplanItemId;
+                    }))
+                fail("hospital floor plan requires its fixed reception source");
+        }
+        if (supportsFreightBreachContent(registry.contentVersion()))
+        {
+            if (!registry.itemIndex_.contains(kFreightBreachWedgesId) ||
+                !registry.baseManufacturingRecipeIndex_.contains(kFreightBreachRecipeId))
+                fail("freight breach requires workshop wedges");
+            const auto &wedges = registry.item(kFreightBreachWedgesId);
+            const auto &recipe = registry.baseManufacturingRecipe(kFreightBreachRecipeId);
+            if (wedges.category != ItemCategory::Loot || wedges.inventoryWidthCells != 1 ||
+                wedges.inventoryHeightCells != 1 || wedges.maxStackSize != 1 ||
+                wedges.marketBuyPrice || recipe.inputs.size() != 2U ||
+                recipe.outputItemDefinitionId != kFreightBreachWedgesId ||
+                recipe.outputQuantity != 1U || recipe.workerCount != 1U || recipe.durationMinutes != 90U)
+                fail("freight breach wedges contract is invalid");
+        }
+        if (supportsHospitalMedicalReserveContent(registry.contentVersion()) &&
+            registry.mapIndex_.contains(kHospitalFloorplanMapId))
+        {
+            const auto &hospital = registry.map(kHospitalFloorplanMapId);
+            const auto &districts = hospital.proceduralOutdoor.districtArchetypes;
+            const auto hasDistrict = [&](std::string_view id)
+            {
+                return std::any_of(districts.begin(), districts.end(),
+                    [id](const auto &district) {
+                        return district.id == id && district.instanceCount == 1U;
+                    });
+            };
+            const bool hasPharmacySlot = std::any_of(
+                hospital.interiors.begin(), hospital.interiors.end(), [&](const auto &interior) {
+                    return std::any_of(interior.lootSlots.begin(), interior.lootSlots.end(),
+                        [&](const auto &slot) {
+                            return isHospitalPharmacyLootSlot(hospital.id, interior.id, slot.id);
+                        });
+                });
+            if (!hospital.rescue || hospital.rescue->id != kHospitalMedicalRescueId ||
+                hospital.rescue->profession != BaseResidentProfession::Medical ||
+                hospital.rescue->ordinaryResidentCount != 1U ||
+                hospital.rescue->injuredResidentCount != 1U ||
+                hospital.rescue->interactionDurationSeconds != 2.0F ||
+                hospital.proceduralOutdoor.layoutVersion < 3U ||
+                !hasDistrict(kHospitalRescueParkingDistrict) ||
+                !hasDistrict(kHospitalRescueCampusDistrict) ||
+                !hasPharmacySlot || !registry.itemIndex_.contains(kHospitalFirstAidStockId))
+                fail("hospital rescue and pharmacy require their published content");
         }
         return registry;
     }

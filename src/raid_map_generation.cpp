@@ -473,15 +473,15 @@ std::optional<Cell> cellForPoint(
                  static_cast<std::uint32_t>((point.y - origin.y) / height))};
 }
 
-bool layoutConnects(
+std::vector<bool> reachableLayoutCells(
     const MapDefinition &map,
     const RaidGeneratedMapLayout &layout,
-    const RaidMapGenerationAnchors &anchors) noexcept
+    Vec2 playerSpawn)
 {
     const ProceduralOutdoorDefinition &definition = map.proceduralOutdoor;
     if (definition.columns == 0U || definition.rows == 0U)
     {
-        return false;
+        return {};
     }
     const std::size_t cellCount = static_cast<std::size_t>(
         definition.columns) * definition.rows;
@@ -539,16 +539,16 @@ bool layoutConnects(
         }
     }
 
-    const auto start = cellForPoint(map, definition, anchors.playerSpawn);
+    const auto start = cellForPoint(map, definition, playerSpawn);
     if (!start.has_value())
     {
-        return false;
+        return {};
     }
     const std::size_t startIndex = static_cast<std::size_t>(start->row) *
         definition.columns + start->column;
     if (blocked[startIndex])
     {
-        return false;
+        return {};
     }
     std::vector<bool> visited(cellCount, false);
     std::queue<Cell> open;
@@ -580,6 +580,18 @@ bool layoutConnects(
         }
     }
 
+    return visited;
+}
+
+bool layoutConnects(
+    const MapDefinition &map,
+    const RaidGeneratedMapLayout &layout,
+    const RaidMapGenerationAnchors &anchors) noexcept
+{
+    const ProceduralOutdoorDefinition &definition = map.proceduralOutdoor;
+    const auto visited = reachableLayoutCells(map, layout, anchors.playerSpawn);
+    if (visited.empty())
+        return false;
     std::vector<Vec2> required = anchors.reachablePoints;
     required.push_back({
         anchors.extractionPoint.position.x + anchors.extractionPoint.size.x * 0.5F,
@@ -2013,6 +2025,80 @@ const RaidAnchorPlacementSnapshot *findRaidAnchorPlacement(
         [&](const RaidAnchorPlacementSnapshot &placement)
         { return placement.id == id; });
     return found == layout.anchorPlacements.end() ? nullptr : &*found;
+}
+
+std::optional<RaidAnchorPlacementSnapshot> selectHospitalRescueAnchor(
+    const MapDefinition &map, const RaidGeneratedMapLayout &layout, Vec2 size)
+{
+    const auto *spawn = findRaidAnchorPlacement(layout, kRaidAnchorPlayerSpawn);
+    if (spawn == nullptr || !finitePositive(size))
+        return std::nullopt;
+    const auto reachable = reachableLayoutCells(map, layout, spawn->bounds.position);
+    if (reachable.empty())
+        return std::nullopt;
+
+    const auto &definition = map.proceduralOutdoor;
+    const auto &walkable = map.walkableBounds;
+    const float cellWidth = walkable.size.x / static_cast<float>(definition.columns);
+    const float cellHeight = walkable.size.y / static_cast<float>(definition.rows);
+    for (std::string_view districtId : {kHospitalRescueParkingDistrict, kHospitalRescueCampusDistrict})
+    {
+        const auto district = std::find_if(layout.districts.begin(), layout.districts.end(),
+            [districtId](const RaidDistrictSnapshot &entry) {
+                return isHospitalRescueDistrictInstance(entry.definitionId, districtId);
+            });
+        if (district == layout.districts.end())
+            continue;
+
+        std::optional<ContentRect> selected;
+        float nearest = std::numeric_limits<float>::infinity();
+        for (std::uint32_t row = 0; row < definition.rows; ++row)
+        {
+            const std::uint32_t districtRow = row * definition.districtRows / definition.rows;
+            for (const RaidGridSpan &span : district->cells)
+            {
+                if (span.row != districtRow)
+                    continue;
+                const auto firstColumn = (span.firstColumn * definition.columns +
+                    definition.districtColumns - 1U) / definition.districtColumns;
+                const auto endColumn = ((span.firstColumn + span.length) * definition.columns +
+                    definition.districtColumns - 1U) / definition.districtColumns;
+                for (std::uint32_t column = firstColumn; column < endColumn; ++column)
+                {
+                    if (!reachable[cellIndex(definition, column, row)])
+                        continue;
+                    const Vec2 center{walkable.position.x + (column + 0.5F) * cellWidth,
+                                      walkable.position.y + (row + 0.5F) * cellHeight};
+                    const float dx = center.x - district->labelPosition.x;
+                    const float dy = center.y - district->labelPosition.y;
+                    const float distance = dx * dx + dy * dy;
+                    if (distance >= nearest)
+                        continue;
+
+                    const ContentRect bounds{{center.x - size.x * 0.5F,
+                                              center.y - size.y * 0.5F}, size};
+                    const ContentRect clearance = inflated(bounds, 25.0F);
+                    if (clearance.position.x < walkable.position.x ||
+                        clearance.position.y < walkable.position.y ||
+                        clearance.position.x + clearance.size.x > walkable.position.x + walkable.size.x ||
+                        clearance.position.y + clearance.size.y > walkable.position.y + walkable.size.y ||
+                        std::any_of(layout.ballisticBlockers.begin(), layout.ballisticBlockers.end(),
+                            [&](ContentRect blocker) { return overlaps(clearance, blocker); }) ||
+                        std::any_of(layout.anchorPlacements.begin(), layout.anchorPlacements.end(),
+                            [&](const RaidAnchorPlacementSnapshot &anchor) {
+                                return overlaps(bounds, inflated(anchor.bounds, 100.0F));
+                            }))
+                        continue;
+                    selected = bounds;
+                    nearest = distance;
+                }
+            }
+        }
+        if (selected)
+            return RaidAnchorPlacementSnapshot{std::string{kRaidAnchorRescue}, RaidMapAnchorKind::Rescue,
+                                              *selected, district->instanceId};
+    }
+    return std::nullopt;
 }
 
 Vec2 raidResourcePointLootPosition(

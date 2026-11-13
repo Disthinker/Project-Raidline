@@ -233,6 +233,13 @@ bool validateCandidate(
         {
             continue;
         }
+        if (isMedicalReserveAsset(asset) && (asset.quantity != 1U ||
+            (definition->medicalUse && asset.remainingCharges == 0U)))
+        {
+            receipt = failure(DomainErrorCode::IllegalDestination,
+                "medical reserve asset is invalid", candidate.revision);
+            return false;
+        }
         if(!profilePlacementWithinContainer(candidate,content,stored->container,stored->origin,*definition,asset.orientation))
         {
             receipt=failure(DomainErrorCode::IllegalDestination,"asset placement is invalid",candidate.revision);return false;
@@ -667,8 +674,15 @@ InventoryReceipt apply(
             const auto &typedCommand)
         {
             using Command = std::decay_t<decltype(typedCommand)>;
+            const auto *source = candidate.assets.find(typedCommand.instanceId);
+            if (source && isMedicalReserveAsset(*source))
+                return failure(DomainErrorCode::IllegalDestination,
+                    "medical reserve requires its own transfer", candidate.revision);
             if constexpr (std::is_same_v<Command, InventoryMoveCommand>)
             {
+                if (typedCommand.destination.container.kind == ProfileContainerKind::MedicalReserve)
+                    return failure(DomainErrorCode::IllegalDestination,
+                        "medical reserve requires its own transfer", candidate.revision);
                 return applyMove(
                     candidate,
                     content,
@@ -804,10 +818,16 @@ bool sceneCommandAllowed(const ProfileState &profile, const InventoryCommand &co
 {
     const auto sourceId = std::visit([](const auto &value) { return value.instanceId; }, command);
     if (profile.pendingRaid && assetIsLegacyOverflowAsset(profile, sourceId)) return false;
+    if (raidDroppedBackpackRoot(profile, sourceId)) return false;
     const auto sourceRoot = raidSceneContainerRoot(profile, sourceId);
     std::optional<AssetInstanceId> destinationRoot;
-    if (const auto *move = std::get_if<InventoryMoveCommand>(&command); move && move->destination.container.kind == ProfileContainerKind::AssetCompartment)
-        destinationRoot = raidSceneContainerRoot(profile, move->destination.container.ownerAssetId);
+    if (const auto *move = std::get_if<InventoryMoveCommand>(&command);
+        move && move->destination.container.kind == ProfileContainerKind::AssetCompartment)
+    {
+        const auto owner = move->destination.container.ownerAssetId;
+        if (raidDroppedBackpackRoot(profile, owner)) return false;
+        destinationRoot = raidSceneContainerRoot(profile, owner);
+    }
     if (!sourceRoot && !destinationRoot) return true;
     if (!access || !raidSceneContainerAccessible(profile, *access)) return false;
     if ((sourceRoot && *sourceRoot != access->containerAssetId) || (destinationRoot && *destinationRoot != access->containerAssetId)) return false;

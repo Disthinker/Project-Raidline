@@ -108,7 +108,14 @@ bool App::updateBaseSiegeWarning(float deltaTime)
     // A deliberate choice wins over the automatic preset at the same deadline.
     // On a rejected choice retain the warning/message for retry, without auto-settling.
     if (!action || *action == SiegeWarningAction::Dismiss || *action == SiegeWarningAction::Reopen)
-        gameSession_.advanceBaseWorldClock(deltaTime);
+    {
+        const bool allowAutomaticAdmission =
+            windowHasInputFocus_ && !pauseMenu_.isOpen() && !settingsOpen_ &&
+            !inventoryOverlayState_.isOpen() && !gameFlow_.activeBaseFacility() &&
+            !baseConstructionPanelOpen_ && !baseFixedFacilityPlacementState_ &&
+            !basePlacementState_ && !quickWheelOpen();
+        gameSession_.advanceBaseWorldClock(deltaTime, allowAutomaticAdmission);
+    }
     syncBaseSiegeWarningUi();
     const bool visible = baseSiegeWarningVisible();
     if (wasVisible || visible)

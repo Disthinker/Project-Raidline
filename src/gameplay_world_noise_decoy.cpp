@@ -39,11 +39,11 @@ void GameplayWorld::updateNoiseDecoy(float seconds)
 std::optional<Vec2> GameplayWorld::noiseInvestigationGoal(Enemy &enemy,bool visible,Vec2 playerPosition)
 {
     const auto id=enemy.combatTargetId();
-    if(const auto investigation=grenadeInvestigations_.find(id);investigation!=grenadeInvestigations_.end()) {
+    if(const auto investigation=localNoiseInvestigations_.find(id);investigation!=localNoiseInvestigations_.end()) {
         const bool discovered=visible && std::hypot(center(enemy).x-playerPosition.x,center(enemy).y-playerPosition.y)
             <=enemy.acquireTargetDistance();
         if(enemy.isDead() || enemy.awarenessState()==EnemyAwarenessState::Alerted ||
-           enemy.attackPhase()!=EnemyAttackPhase::Idle || discovered)grenadeInvestigations_.erase(investigation);
+           enemy.attackPhase()!=EnemyAttackPhase::Idle || discovered)localNoiseInvestigations_.erase(investigation);
         else if(investigation->second.space==activeRaidSpaceId()) {
             const auto goal=investigation->second.point;
             return std::hypot(center(enemy).x-goal.x,center(enemy).y-goal.y)<=20 ? center(enemy):goal;

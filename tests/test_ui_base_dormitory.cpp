@@ -39,7 +39,6 @@ struct UiBaseDormitoryTestAccess {
 };
 namespace {
 using A = UiBaseDormitoryTestAccess; using Control = UiDormitoryControl;
-const ItemDefinitionId paper{"item.loot.toilet_paper"};
 Vec2 center(SDL_FRect r) { return {r.x + r.w / 2, r.y + r.h / 2}; }
 void pointer(Vec2 p, bool down) {
     SDL_Event e{}; e.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
@@ -167,7 +166,9 @@ TEST_F(UiBaseDormitoryTest, RestCompletesDueConstructionManufacturingAndResident
     const auto output=profile().baseManufacturing.activeOrder->outputAssetId;
     profile().basePopulation.injuredResidents=1;
     profile().basePopulation.injuredByProfession[baseProfessionIndex(BaseResidentProfession::General)]=1;
-    create(paper,2); create(paper,2); profile().baseSupplyPolicy.assignments[paper]=BaseSupplyCategory::Medical; ++profile().revision;
+    ASSERT_NE(profile().assets.create(content.item(kHospitalFirstAidStockId),
+        StoredAssetLocation{ProfileContainerId::medicalReserve(), {0, 0}}), 0U);
+    ++profile().revision;
     ASSERT_TRUE(A::session(*app).executeStartResidentTreatment("care-before-rest").succeeded);
     control(Control::Rest); control(Control::Hour12); control(Control::StartRest);
     EXPECT_FALSE(profile().baseConstruction.activeProject); EXPECT_EQ(profile().baseConstruction.dormitoryLevel,2U);

@@ -329,6 +329,13 @@ WeaponAmmoReceipt applyChamber(
             WeaponAmmoResult::Chambered, std::nullopt};
 }
 
+bool weaponStoredInDroppedBackpack(const ProfileState &profile, const AssetRecord &weapon) noexcept
+{
+    const auto *stored = std::get_if<StoredAssetLocation>(&weapon.location);
+    return stored && stored->container.kind == ProfileContainerKind::AssetCompartment &&
+        raidDroppedBackpackRoot(profile, stored->container.ownerAssetId).has_value();
+}
+
 WeaponAmmoReceipt applyFire(
     ProfileState &candidate,
     const ContentRegistry &content,
@@ -343,6 +350,8 @@ WeaponAmmoReceipt applyFire(
         return failure(DomainErrorCode::MissingAsset,
                        "weapon does not exist", candidate.revision);
     }
+    if (weaponStoredInDroppedBackpack(candidate, *weapon))
+        return failure(DomainErrorCode::IllegalDestination, "PICK UP BACKPACK FIRST", candidate.revision);
     const ItemDefinition &definition = content.item(weapon->definitionId);
     if (definition.category != ItemCategory::Weapon ||
         definition.compatibleMagazineDefinitionIds.empty() ||
@@ -481,6 +490,8 @@ WeaponAmmoReceipt inspectFire(
         return failure(DomainErrorCode::MissingAsset,
                        "weapon does not exist", profile.revision);
     }
+    if (weaponStoredInDroppedBackpack(profile, *weapon))
+        return failure(DomainErrorCode::IllegalDestination, "PICK UP BACKPACK FIRST", profile.revision);
     const ItemDefinition &definition = content.item(weapon->definitionId);
     if (definition.category != ItemCategory::Weapon ||
         definition.compatibleMagazineDefinitionIds.empty() ||
@@ -666,6 +677,35 @@ WeaponAmmoReceipt inspectSetMode(const ProfileState &profile, const ContentRegis
             WeaponAmmoResult::FireModeChanged, std::nullopt};
 }
 
+bool ammunitionCommandUsesDroppedBackpack(
+    const ProfileState &profile, const WeaponAmmoCommand &command) noexcept
+{
+    if (!profile.pendingRaid || !profile.pendingRaid->backpackRecoveryEnabled)
+        return false;
+
+    const auto storedInDroppedPack = [&](AssetInstanceId id) {
+        return raidDroppedBackpackRoot(profile, id).has_value();
+    };
+    const auto usesDestination = [&](ProfileContainerId destination) {
+        return destination.kind == ProfileContainerKind::AssetCompartment &&
+            storedInDroppedPack(destination.ownerAssetId);
+    };
+    return std::visit([&](const auto &typed) {
+        bool blocked{};
+        if constexpr (requires { typed.weaponAssetId; })
+            blocked = blocked || storedInDroppedPack(typed.weaponAssetId);
+        if constexpr (requires { typed.magazineAssetId; })
+            blocked = blocked || storedInDroppedPack(typed.magazineAssetId);
+        if constexpr (requires { typed.ammunitionAssetId; })
+            blocked = blocked || storedInDroppedPack(typed.ammunitionAssetId);
+        if constexpr (requires { typed.destination.kind; })
+            blocked = blocked || usesDestination(typed.destination);
+        if constexpr (requires { typed.destination.container; })
+            blocked = blocked || usesDestination(typed.destination.container);
+        return blocked;
+    }, command);
+}
+
 WeaponAmmoReceipt apply(
     ProfileState &candidate,
     const ContentRegistry &content,
@@ -737,6 +777,9 @@ WeaponAmmoPlan queryWeaponAmmo(
     const ContentRegistry &content,
     const WeaponAmmoCommand &command)
 {
+    if (ammunitionCommandUsesDroppedBackpack(profile, command))
+        return {false, DomainErrorCode::IllegalDestination, "PICK UP BACKPACK FIRST",
+                profile.revision, WeaponAmmoResult::Dry};
     if (const auto *mode = std::get_if<SetWeaponFireModeCommand>(&command))
     {
         const auto receipt = inspectSetMode(profile, content, *mode);
@@ -783,6 +826,8 @@ WeaponAmmoReceipt executeWeaponAmmo(
                        "profile revision cannot advance", profile.revision);
     }
 
+    if (ammunitionCommandUsesDroppedBackpack(profile, command))
+        return failure(DomainErrorCode::IllegalDestination, "PICK UP BACKPACK FIRST", profile.revision);
     if (const auto *mode = std::get_if<SetWeaponFireModeCommand>(&command))
     {
         auto receipt = inspectSetMode(profile, content, *mode);

@@ -25,6 +25,10 @@ namespace
     constexpr float kEnemyNavigationRefreshSeconds{0.10F};
     constexpr float kEnemyNavigationGoalRefreshDistance{32.0F};
     constexpr float kMinimumHighRiskSpawnDistance{260.0F};
+    constexpr ContentRect kFreightDivider{{700.0F, 160.0F}, {80.0F, 220.0F}};
+    constexpr ContentRect kFreightBreachDoor{{700.0F, 210.0F}, {80.0F, 100.0F}};
+    constexpr float kFreightBreachReach{72.0F};
+    constexpr float kFreightBreachNoiseRadius{300.0F};
 
     constexpr int kScorePerEnemy{100};
 
@@ -803,6 +807,10 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
             interior.ballisticBlockers,
             interior.enemies.view());
     }
+    if (config.freightBreachEnabled)
+    {
+        prepareFreightBreachDoor();
+    }
     if (!raidSession_.start())
     {
         throw std::logic_error{"Alpha Raid session failed to start"};
@@ -1119,7 +1127,7 @@ void GameplayWorld::update(
         noiseDecoy_.clear();
         grenade_.clear();
         thrownIllumination_.clear();
-        grenadeInvestigations_.clear();
+        localNoiseInvestigations_.clear();
         return;
     }
 
@@ -1280,7 +1288,7 @@ void GameplayWorld::update(
                 highRiskTimeBeforeUpdate));
 
     updateNoiseDecoy(deltaTime);
-    updateGrenadeInvestigations(deltaTime);
+    updateLocalNoiseInvestigations(deltaTime);
     if(grenadeEnabled_)grenade_.advance(activeRaidSpaceId(),deltaTime);
     // Service-owned Profile damage joins this one immediate simulation event.
     // The callback is never retained by a world/copy. Retire blast victims
@@ -1312,6 +1320,8 @@ void GameplayWorld::update(
         activeBallisticBlockers();
     const RaidSpaceBlockerIndex &activeStaticBlockers =
         activeBlockerIndex();
+    const bool soundActionsEnabled = noiseDecoyEnabled_ || grenadeEnabled_ ||
+        !localNoiseInvestigations_.empty();
     simulationWorkloadLastUpdate_.activeEnemies = activeEnemySet.size();
     simulationWorkloadLastUpdate_.activeBlockers =
         activeStaticBlockers.blockerCount();
@@ -1405,8 +1415,8 @@ void GameplayWorld::update(
 
             const Vec2 enemyPosition = snapshot.position;
             const bool hasNoiseInvestigation=noiseDecoy_.investigations().contains(targetId) ||
-                grenadeInvestigations_.contains(targetId);
-            const bool investigatingNoise=(noiseDecoyEnabled_ || grenadeEnabled_) && hasNoiseInvestigation;
+                localNoiseInvestigations_.contains(targetId);
+            const bool investigatingNoise=soundActionsEnabled && hasNoiseInvestigation;
             const bool outsideAcquisition=distanceSquared(enemyPosition,playerPosition) >
                 enemy.acquireTargetDistance()*enemy.acquireTargetDistance();
             // Unaware actors cannot acquire a player beyond acquisition range;
@@ -1418,7 +1428,7 @@ void GameplayWorld::update(
                  (snapshot.awareness==EnemyAwarenessState::Unaware &&
                   ((encounter.kind==RaidEncounterKind::Patrol && !encounter.patrolPoints.empty()) ||
                    (encounter.kind==RaidEncounterKind::Guard && distanceSquared(enemyPosition,encounter.home)>64.0F*64.0F))));
-            const bool skipNoiseSight=(noiseDecoyEnabled_ || grenadeEnabled_) && !existingRouteNeedsSight && outsideAcquisition &&
+            const bool skipNoiseSight=soundActionsEnabled && !existingRouteNeedsSight && outsideAcquisition &&
                 (snapshot.awareness==EnemyAwarenessState::Unaware ||
                  (investigatingNoise && snapshot.awareness==EnemyAwarenessState::Searching)) &&
                 snapshot.attackPhase==EnemyAttackPhase::Idle;
@@ -1831,7 +1841,7 @@ GameplayWorld::activeThrownIlluminationCoverage() const
         return inactive;
     const auto &landing = source->landing;
     return getRaidIlluminationCoverage(thrownIlluminationCoverage_, activeBlockerIndex(),
-        landing.space, 1, landing.effectIdentity, landing.point, landing.use.radius);
+        landing.space, activeGeometryRevision_, landing.effectIdentity, landing.point, landing.use.radius);
 }
 
 const std::array<RaidVisibilityProjection, 2> &
@@ -1899,7 +1909,7 @@ RaidObservationKey GameplayWorld::raidObservationKey() const
             parameters.angleDegrees,
             parameters.maximumDistance,
             currentObservationEnvironment(),
-            1, weaponLightDevice_, weaponLightBattery_, weaponLightAngle_, weaponLightDistance_,
+            activeGeometryRevision_, weaponLightDevice_, weaponLightBattery_, weaponLightAngle_, weaponLightDistance_,
             currentThrownIlluminationObservation()};
 }
 
@@ -1927,13 +1937,13 @@ const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
         indoorObservationCache_.maximumDistance != parameters.maximumDistance ||
         indoorObservationCache_.environment !=
             currentObservationEnvironment() ||
-        indoorObservationCache_.geometryRevision != 1 || indoorObservationCache_.lightAssetId != weaponLightDevice_ ||
+        indoorObservationCache_.geometryRevision != activeGeometryRevision_ || indoorObservationCache_.lightAssetId != weaponLightDevice_ ||
         indoorObservationCache_.lightBatteryId != weaponLightBattery_ || indoorObservationCache_.lightAngleDegrees != weaponLightAngle_ ||
         indoorObservationCache_.lightDistance != weaponLightDistance_ ||
         indoorObservationCache_.illuminationKey != illumination)
     {
         const RaidObservationKey key{activeRaidSpaceId(), center, direction, parameters.angleDegrees,
-            parameters.maximumDistance, currentObservationEnvironment(), 1, weaponLightDevice_,
+            parameters.maximumDistance, currentObservationEnvironment(), activeGeometryRevision_, weaponLightDevice_,
             weaponLightBattery_, weaponLightAngle_, weaponLightDistance_, illumination};
         enemyObservationCache_.clear();
         enemyObservationIndexReady_ = false;
@@ -1941,8 +1951,11 @@ const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
             indoorObservationCache_ = buildRaidSpaceConeVisibility(
                 activeBlockerIndex(), key, &observationWork_);
         else if (!inOutdoorRaidSpace())
+        {
             indoorObservationCache_ = buildRaidSpaceVisibility(
                 activeBlockerIndex(), activeRaidSpaceId(), center);
+            indoorObservationCache_.geometryRevision = activeGeometryRevision_;
+        }
         else
         {
             // Out-of-scope activities retain their existing unobstructed
@@ -1951,7 +1964,7 @@ const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
             indoorObservationCache_.spaceId = activeRaidSpaceId();
             indoorObservationCache_.observer = center;
             indoorObservationCache_.worldSize = activeWorldSize();
-            indoorObservationCache_.geometryRevision = 1;
+            indoorObservationCache_.geometryRevision = activeGeometryRevision_;
             const auto size = activeWorldSize();
             indoorObservationCache_.boundary = {
                 {0, 0}, {size.x, 0}, size, {0, size.y}};
@@ -1967,7 +1980,7 @@ const RaidVisibilityProjection &GameplayWorld::indoorObservation() const
             for (std::size_t side=0; side<2; ++side)
             {
                 RaidObservationKey near{activeRaidSpaceId(), center, {side ? -1.0F : 1.0F,0}, 180,
-                                        weaponLightBackgroundRadius_, currentObservationEnvironment(),1};
+                                        weaponLightBackgroundRadius_, currentObservationEnvironment(),activeGeometryRevision_};
                 RaidObservationWork nearWork;
                 weaponLightBackgroundCache_[side]=buildRaidSpaceConeVisibility(activeBlockerIndex(),near,&nearWork);
                 observationWork_.localBlockers+=nearWork.localBlockers; observationWork_.rays+=nearWork.rays;
@@ -2146,6 +2159,188 @@ GameplayWorld::activeInteriorMapProjection() const noexcept
         interior.layoutKnown ? ContentRect{{}, interior.worldSize}
             : ContentRect{minimum, {maximum.x - minimum.x, maximum.y - minimum.y}},
         interior.layoutKnown};
+}
+
+void GameplayWorld::prepareFreightBreachDoor()
+{
+    const auto room = std::find_if(interiors_.begin(), interiors_.end(),
+        [](const InteriorRuntime &interior) { return interior.id == kFreightCrateSpaceId; });
+    if (room == interiors_.end())
+    {
+        throw std::invalid_argument{"Freight breach requires its freight interior"};
+    }
+    PreparedFreightBreach open;
+    open.interiorIndex = static_cast<std::size_t>(room - interiors_.begin());
+    open.blockers = room->ballisticBlockers;
+    const auto divider = std::find_if(open.blockers.begin(), open.blockers.end(),
+        [](const BallisticBlocker &blocker)
+        {
+            const auto &bounds = blocker.bounds;
+            return bounds.position.x == kFreightDivider.position.x &&
+                bounds.position.y == kFreightDivider.position.y &&
+                bounds.size.x == kFreightDivider.size.x &&
+                bounds.size.y == kFreightDivider.size.y;
+        });
+    const auto lastId = std::max_element(open.blockers.begin(), open.blockers.end(),
+        [](const BallisticBlocker &left, const BallisticBlocker &right) { return left.id < right.id; });
+    if (divider == open.blockers.end() ||
+        lastId->id == std::numeric_limits<BallisticBlockerId>::max())
+    {
+        throw std::invalid_argument{"Freight breach divider is invalid"};
+    }
+    const auto lowerId = lastId->id + 1U;
+    divider->bounds.size.y = kFreightBreachDoor.position.y - kFreightDivider.position.y;
+    const float lowerY = kFreightBreachDoor.position.y + kFreightBreachDoor.size.y;
+    open.blockers.push_back({lowerId, {{kFreightDivider.position.x, lowerY},
+        {kFreightDivider.size.x, kFreightDivider.position.y + kFreightDivider.size.y - lowerY}}});
+    open.blockerIndex = RaidSpaceBlockerIndex::build(room->worldSize, open.blockers);
+    if (!open.blockerIndex)
+    {
+        throw std::invalid_argument{"Freight breach blocker index is invalid"};
+    }
+    for (const auto &closed : navigationFieldCache_)
+    {
+        if (closed.spaceId != room->id)
+        {
+            continue;
+        }
+        auto field = RaidSpaceNavigationField::build(closed.actorSize, room->worldSize, open.blockers, 2.0F);
+        if (!field)
+        {
+            throw std::invalid_argument{"Freight breach navigation field is invalid"};
+        }
+        open.navigationFields.push_back({room->id, closed.actorSize, std::move(*field)});
+    }
+    preparedFreightBreach_ = std::move(open);
+}
+
+std::optional<ContentRect> GameplayWorld::freightBreachDoorBounds() const noexcept
+{
+    if (!preparedFreightBreach_ || activeInteriorIndex_ != preparedFreightBreach_->interiorIndex)
+    {
+        return std::nullopt;
+    }
+    return kFreightBreachDoor;
+}
+
+std::optional<ContentRect> GameplayWorld::nearbyFreightBreachDoor() const
+{
+    const auto door = freightBreachDoorBounds();
+    if (!door || !raidSession_.isActive() || player_.isDead() || player_.isControlled())
+    {
+        return std::nullopt;
+    }
+    const Vec2 center = playerCenter(player_);
+    const float left = door->position.x;
+    const float right = left + door->size.x;
+    if (center.x >= left && center.x <= right)
+    {
+        return std::nullopt;
+    }
+    const bool fromLeft = center.x < left;
+    const float faceX = fromLeft ? left : right;
+    const Vec2 face{faceX, std::clamp(center.y, door->position.y, door->position.y + door->size.y)};
+    if (distanceSquared(center, face) > kFreightBreachReach * kFreightBreachReach)
+    {
+        return std::nullopt;
+    }
+    // Observe the near surface without casting into the closed divider itself.
+    const Vec2 visibleFace{face.x + (fromLeft ? -1.0F : 1.0F), face.y};
+    if (!activeBlockerIndex().hasLineOfSight(center, visibleFace))
+    {
+        return std::nullopt;
+    }
+    static_cast<void>(raidObservation());
+    return observationBoundsQuery_.pointVisible(visibleFace) ? door : std::nullopt;
+}
+
+bool GameplayWorld::tryOpenFreightBreachDoor(const std::function<bool()> &commitWedge)
+{
+    const auto door = nearbyFreightBreachDoor();
+    if (!door || !commitWedge)
+    {
+        return false;
+    }
+    auto &room = interiors_[*activeInteriorIndex_];
+    const Vec2 noise{door->position.x + door->size.x * 0.5F,
+                     door->position.y + door->size.y * 0.5F};
+    // Prepare nodes before the asset transaction so publishing the pulse and
+    // installing the prebuilt geometry need no allocations after consumption.
+    decltype(localNoiseInvestigations_) listeners;
+    for (const Enemy &enemy : room.enemies)
+    {
+        const auto id = enemy.combatTargetId();
+        if (!enemy.isDead() && room.enemies.state(id).noiseResponsive &&
+            enemy.awarenessState() != EnemyAwarenessState::Alerted &&
+            enemy.attackPhase() == EnemyAttackPhase::Idle &&
+            distanceSquared(enemyCenter(enemy), noise) <= kFreightBreachNoiseRadius * kFreightBreachNoiseRadius)
+        {
+            listeners.emplace(id, LocalNoiseInvestigation{room.id, noise, 0.0F, false});
+        }
+    }
+    if (!commitWedge())
+    {
+        return false;
+    }
+
+    auto &open = *preparedFreightBreach_;
+    room.ballisticBlockers = std::move(open.blockers);
+    room.blockerIndex = std::move(open.blockerIndex);
+    for (auto &field : navigationFieldCache_)
+    {
+        if (field.spaceId != room.id)
+        {
+            continue;
+        }
+        const auto prepared = std::find_if(open.navigationFields.begin(), open.navigationFields.end(),
+            [&](const NavigationFieldCache &entry)
+            { return entry.actorSize.x == field.actorSize.x && entry.actorSize.y == field.actorSize.y; });
+        if (prepared != open.navigationFields.end())
+        {
+            field.field = std::move(prepared->field);
+        }
+    }
+    // No stale field may survive if an unprepared footprint was queried
+    // before the door opened. Normal freight actors have prebuilt fields.
+    std::erase_if(navigationFieldCache_, [&](const NavigationFieldCache &field)
+    {
+        return field.spaceId == room.id &&
+            std::none_of(open.navigationFields.begin(), open.navigationFields.end(),
+                [&](const NavigationFieldCache &entry)
+                { return entry.actorSize.x == field.actorSize.x && entry.actorSize.y == field.actorSize.y; });
+    });
+    preparedFreightBreach_.reset();
+    activeGeometryRevision_ = ++room.geometryRevision;
+    indoorObservationCacheReady_ = false;
+    enemyObservationIndexReady_ = false;
+    for (Enemy &enemy : room.enemies)
+    {
+        const auto id = enemy.combatTargetId();
+        auto &navigation = room.enemies.state(id).navigation;
+        navigation.waypoint.reset();
+        navigation.initialized = false;
+        if (auto listener = listeners.find(id); listener != listeners.end())
+        {
+            noiseDecoy_.forget(id);
+            enemy.investigateSound(noise);
+            listener->second.remaining = enemy.searchTimeRemaining();
+            localNoiseInvestigations_.erase(id);
+        }
+    }
+    localNoiseInvestigations_.merge(listeners);
+    return true;
+}
+
+void GameplayWorld::confirmRaidInteriorLayout(const RaidSpaceDefinitionId &spaceId) noexcept
+{
+    for (InteriorRuntime &interior : interiors_)
+    {
+        if (interior.id == spaceId)
+        {
+            interior.layoutKnown = true;
+            return;
+        }
+    }
 }
 
 const RaidOutdoorPresentationProjection &GameplayWorld::outdoorPresentation(
@@ -3412,6 +3607,7 @@ bool GameplayWorld::tryTransitionRaidSpace(
         const Vec2 returnPosition = interior.exteriorReturn;
         if (beforeSpaceTransition && !beforeSpaceTransition()) return false;
         activeInteriorIndex_.reset();
+        activeGeometryRevision_ = 1;
         static_cast<void>(player_.setPosition(returnPosition));
     }
     else
@@ -3427,6 +3623,7 @@ bool GameplayWorld::tryTransitionRaidSpace(
         if (beforeSpaceTransition && !beforeSpaceTransition()) return false;
         activeInteriorIndex_ = static_cast<std::size_t>(
             std::distance(interiors_.begin(), interior));
+        activeGeometryRevision_ = interior->geometryRevision;
         static_cast<void>(player_.setPosition(interior->interiorSpawn));
     }
     clearSpatialTransientPresentation();
@@ -3700,7 +3897,7 @@ void GameplayWorld::consumeEnemyRemovals(std::span<const EnemyRemovalFact> death
     for (const auto &death:deaths)
     {
         noiseDecoy_.forget(death.id);
-        grenadeInvestigations_.erase(death.id);
+        localNoiseInvestigations_.erase(death.id);
         if (death.reason!=EnemyRemovalReason::Death) continue;
         if(developerRange_)trainingCorpseDeaths_.push_back({death.id,{death.position.x+25.0F,death.position.y+25.0F},{50,50}});
         score_+=kScorePerEnemy;

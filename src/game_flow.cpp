@@ -21,6 +21,8 @@ std::optional<BaseFacilityDefinitionId> facilityDefinitionId(
         return BaseFacilityDefinitionId{"base_facility.kitchen_water"};
     case BaseFacilityKind::Workshop:
         return BaseFacilityDefinitionId{"base_facility.workshop"};
+    case BaseFacilityKind::Generator:
+        return kBaseGeneratorFacilityId;
     case BaseFacilityKind::Supply:
     case BaseFacilityKind::Allocation:
     case BaseFacilityKind::RaidGate:
@@ -43,6 +45,8 @@ std::optional<BaseFacilityKind> facilityKind(
         return BaseFacilityKind::KitchenWater;
     if (definitionId == BaseFacilityDefinitionId{"base_facility.workshop"})
         return BaseFacilityKind::Workshop;
+    if (definitionId == kBaseGeneratorFacilityId)
+        return BaseFacilityKind::Generator;
     return std::nullopt;
 }
 }

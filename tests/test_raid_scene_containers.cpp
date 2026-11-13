@@ -235,6 +235,7 @@ TEST_F(RaidSceneContainerTest, Schema51RoundtripAndAbnormalRollbackRestoreExactO
     auto loaded=deserializeProfileEnvelope(serializeProfileEnvelope(p,content.contentVersion()),content);
     ASSERT_TRUE(loaded.profile)<<loaded.message; EXPECT_EQ(profileStateFingerprint(p),profileStateFingerprint(*loaded.profile));
     auto legacy=p;legacy.stashLayoutVersion=0;
+    legacy.pendingRaid->backpackRecoveryEnabled = false;
     stripCredentialExtractionForLegacySnapshot(legacy);
     EXPECT_THROW(serializeProfileEnvelope(legacy,content.contentVersion(),50),std::invalid_argument);
     const auto r=rollbackPendingRaidToBase(*loaded.profile,content); ASSERT_TRUE(r.succeeded)<<r.message;

@@ -46,6 +46,23 @@ TEST(RaidLifecycleTest, HospitalRealDeployHasReachableConsumersAcross128Seeds)
         EXPECT_EQ(raid.interiors.front().worldSize.x, 2400);
         EXPECT_TRUE(raid.highRiskCrisis.has_value());
         EXPECT_TRUE(raid.hospitalNightVisionLoot);
+        EXPECT_TRUE(raid.hospitalMedicalReserveEnabled);
+        ASSERT_TRUE(raid.rescue);
+        EXPECT_EQ(raid.rescue->definitionId, kHospitalMedicalRescueId);
+        EXPECT_EQ(raid.rescue->profession, BaseResidentProfession::Medical);
+        EXPECT_EQ(raid.rescue->ordinaryResidentCount, 1U);
+        EXPECT_EQ(raid.rescue->injuredResidentCount, 1U);
+        EXPECT_FLOAT_EQ(raid.rescue->interactionDurationSeconds, 2.0F);
+        const auto *rescue = findRaidAnchorPlacement(raid.spatialLayout, kRaidAnchorRescue);
+        ASSERT_NE(rescue, nullptr);
+        EXPECT_EQ(rescue->bounds, raid.rescue->transferPoint);
+        const auto district = std::find_if(raid.spatialLayout.districts.begin(),
+            raid.spatialLayout.districts.end(), [rescue](const RaidDistrictSnapshot &entry) {
+                return entry.instanceId == rescue->districtInstanceId;
+            });
+        ASSERT_NE(district, raid.spatialLayout.districts.end());
+        EXPECT_TRUE(isHospitalRescueDistrictInstance(district->definitionId, kHospitalRescueParkingDistrict) ||
+                    isHospitalRescueDistrictInstance(district->definitionId, kHospitalRescueCampusDistrict));
         EXPECT_EQ(std::count_if(raid.loot.begin(), raid.loot.end(), [](const auto &loot) {
             return loot.definitionId == kHospitalNightVisionId;
         }), 1);
@@ -59,9 +76,93 @@ TEST(RaidLifecycleTest, HospitalRealDeployHasReachableConsumersAcross128Seeds)
     EXPECT_GT(hashes.size(), 96U);
 }
 
-TEST(RaidLifecycleTest, HospitalNightVisionChangesOnlyTheFrozenServiceSlotByDayOrNight)
+TEST(RaidLifecycleTest, HospitalMedicalReserveAddsOnlyRescueAndFixedPharmacyStock)
 {
     const auto &current = publishedContentRegistry();
+    const auto previous = ContentRegistry::fromJson(contentBeforeHospitalMedicalReserveJson().dump());
+    const auto &interior = current.map(kHospitalFloorplanMapId).interiors.front();
+    const auto pharmacy = std::find_if(interior.lootSlots.begin(), interior.lootSlots.end(),
+        [&](const auto &slot) {
+            return isHospitalPharmacyLootSlot(kHospitalFloorplanMapId, interior.id, slot.id);
+        });
+    ASSERT_NE(pharmacy, interior.lootSlots.end());
+    for (const auto seed : {9U, 42U, 9917U, 47091U})
+    {
+        SCOPED_TRACE(seed);
+        auto legacy = makeNewAlphaProfile("hospital-medical-compare", previous);
+        auto active = makeNewAlphaProfile("hospital-medical-compare", current);
+        const DeployCommand deploy{"hospital-medical-compare", "hospital-medical-return", seed, kHospitalFloorplanMapId};
+        const auto oldDeploy = executeDeploy(legacy, previous, deploy, {legacy.revision, "hospital-medical-deploy"});
+        const auto newDeploy = executeDeploy(active, current, deploy, {active.revision, "hospital-medical-deploy"});
+        ASSERT_TRUE(oldDeploy.succeeded) << oldDeploy.message;
+        ASSERT_TRUE(newDeploy.succeeded) << newDeploy.message;
+        const auto &oldRaid = *legacy.pendingRaid;
+        const auto &newRaid = *active.pendingRaid;
+        ASSERT_FALSE(oldRaid.rescue);
+        ASSERT_TRUE(newRaid.rescue);
+        EXPECT_FALSE(oldRaid.hospitalMedicalReserveEnabled);
+        EXPECT_TRUE(newRaid.hospitalMedicalReserveEnabled);
+        auto layout = newRaid.spatialLayout;
+        ASSERT_EQ(layout.anchorPlacements.back().id, kRaidAnchorRescue);
+        layout.anchorPlacements.pop_back();
+        layout.layoutHash = raidMapLayoutHash(layout);
+        EXPECT_EQ(layout, oldRaid.spatialLayout);
+        EXPECT_EQ(newRaid.enemies, oldRaid.enemies);
+        EXPECT_EQ(newRaid.interiors, oldRaid.interiors);
+        ASSERT_EQ(newRaid.loot.size(), oldRaid.loot.size());
+        std::size_t pharmacySlots{};
+        for (std::size_t index{}; index < oldRaid.loot.size(); ++index)
+        {
+            auto expected = oldRaid.loot[index];
+            if (expected.spaceId == interior.id &&
+                expected.position.x == pharmacy->position.x && expected.position.y == pharmacy->position.y)
+            {
+                ++pharmacySlots;
+                expected.definitionId = kHospitalFirstAidStockId;
+                expected.quantity = 1U;
+            }
+            EXPECT_EQ(newRaid.loot[index], expected);
+        }
+        EXPECT_EQ(pharmacySlots, 1U);
+        EXPECT_TRUE(validateProfileState(legacy, current).valid);
+    }
+}
+
+TEST(RaidLifecycleTest, HospitalRescueUsesReachableCampusWhenParkingUnavailable)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("hospital-rescue-fallback", content);
+    const auto receipt = executeDeploy(profile, content,
+        {"hospital-rescue-fallback", "hospital-rescue-return", 42U, kHospitalFloorplanMapId},
+        {profile.revision, "hospital-rescue-deploy"});
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    const auto &raid = *profile.pendingRaid;
+    ASSERT_TRUE(raid.rescue);
+    auto layout = raid.spatialLayout;
+    ASSERT_EQ(layout.anchorPlacements.back().id, kRaidAnchorRescue);
+    layout.anchorPlacements.pop_back();
+    const auto parking = std::find_if(layout.districts.begin(), layout.districts.end(),
+        [](const RaidDistrictSnapshot &district) {
+            return isHospitalRescueDistrictInstance(district.definitionId, kHospitalRescueParkingDistrict);
+        });
+    ASSERT_NE(parking, layout.districts.end());
+    parking->cells.clear();
+    const auto &map = content.map(kHospitalFloorplanMapId);
+    const auto anchor = selectHospitalRescueAnchor(map, layout, raid.rescue->transferPoint.size);
+    ASSERT_TRUE(anchor);
+    const auto campus = std::find_if(layout.districts.begin(), layout.districts.end(),
+        [](const RaidDistrictSnapshot &district) {
+            return isHospitalRescueDistrictInstance(district.definitionId, kHospitalRescueCampusDistrict);
+        });
+    ASSERT_NE(campus, layout.districts.end());
+    EXPECT_EQ(anchor->districtInstanceId, campus->instanceId);
+    layout.anchorPlacements.push_back(*anchor);
+    EXPECT_TRUE(raidMapLayoutConnectsAnchors(map, layout, {}));
+}
+
+TEST(RaidLifecycleTest, HospitalNightVisionChangesOnlyTheFrozenServiceSlotByDayOrNight)
+{
+    const auto current = contentBeforeHospitalFloorplanRoutes();
     const auto previous = contentBeforeHospitalNightOperations();
     const MapDefinitionId hospital{"map.raid.hospital_district"};
     const auto &interior = current.map(hospital).interiors.front();
@@ -108,6 +209,62 @@ TEST(RaidLifecycleTest, HospitalNightVisionChangesOnlyTheFrozenServiceSlotByDayO
         EXPECT_TRUE(validateProfileState(oldProfile, current).valid);
         newRaid.hospitalNightVisionLoot = false;
         EXPECT_FALSE(validateProfileState(newProfile, current).valid);
+    }
+}
+
+TEST(RaidLifecycleTest, HospitalFloorplanChangesOnlyTheFrozenReceptionSlot)
+{
+    const auto current = ContentRegistry::fromJson(contentBeforeHospitalMedicalReserveJson().dump());
+    const auto previous = contentBeforeHospitalFloorplanRoutes();
+    const auto &interior = current.map(kHospitalFloorplanMapId).interiors.front();
+    const auto reception = std::find_if(interior.lootSlots.begin(), interior.lootSlots.end(),
+        [&](const auto &slot) {
+            return isHospitalFloorplanLootSlot(kHospitalFloorplanMapId, interior.id, slot.id);
+        });
+    ASSERT_NE(reception, interior.lootSlots.end());
+    EXPECT_EQ(reception->position.x, 880.0F);
+    EXPECT_EQ(reception->position.y, 1200.0F);
+
+    for (const auto seed : {9U, 9917U, 47091U})
+    {
+        SCOPED_TRACE(seed);
+        auto oldProfile = makeNewAlphaProfile("hospital-floorplan-loot", previous);
+        auto newProfile = makeNewAlphaProfile("hospital-floorplan-loot", current);
+        const DeployCommand deploy{"floorplan-raid", "floorplan-settlement", seed, kHospitalFloorplanMapId};
+        const auto oldResult = executeDeploy(oldProfile, previous, deploy,
+            {oldProfile.revision, "old-floorplan-deploy"});
+        const auto newResult = executeDeploy(newProfile, current, deploy,
+            {newProfile.revision, "new-floorplan-deploy"});
+        ASSERT_TRUE(oldResult.succeeded) << oldResult.message;
+        ASSERT_TRUE(newResult.succeeded) << newResult.message;
+        ASSERT_TRUE(oldProfile.pendingRaid);
+        ASSERT_TRUE(newProfile.pendingRaid);
+        const auto &oldRaid = *oldProfile.pendingRaid;
+        const auto &newRaid = *newProfile.pendingRaid;
+        EXPECT_TRUE(oldRaid.backpackRecoveryEnabled);
+        EXPECT_TRUE(newRaid.backpackRecoveryEnabled);
+        EXPECT_TRUE(oldRaid.hospitalNightVisionLoot);
+        EXPECT_TRUE(newRaid.hospitalNightVisionLoot);
+        EXPECT_EQ(oldRaid.enemies, newRaid.enemies);
+        EXPECT_EQ(oldRaid.spatialLayout.layoutHash, newRaid.spatialLayout.layoutHash);
+        ASSERT_EQ(oldRaid.loot.size(), newRaid.loot.size());
+        std::size_t replacements{};
+        for (std::size_t i{}; i < oldRaid.loot.size(); ++i)
+        {
+            auto expected = oldRaid.loot[i];
+            if (expected.spaceId == interior.id && expected.position.x == reception->position.x &&
+                expected.position.y == reception->position.y)
+            {
+                EXPECT_NE(expected.definitionId, kHospitalFloorplanItemId);
+                expected.definitionId = kHospitalFloorplanItemId;
+                expected.quantity = 1U;
+                ++replacements;
+            }
+            EXPECT_EQ(expected, newRaid.loot[i]);
+        }
+        EXPECT_EQ(replacements, 1U);
+        EXPECT_TRUE(validateProfileState(oldProfile, current).valid);
+        EXPECT_TRUE(validateProfileState(newProfile, current).valid);
     }
 }
 
@@ -2321,6 +2478,52 @@ TEST(RaidLifecycleTest, DeathTransfersCarriedAssetsToLostRecordAndResetsHealth)
         static_cast<void>(id);
         EXPECT_FALSE(std::holds_alternative<RaidGroundAssetLocation>(asset.location));
     }
+}
+
+TEST(RaidLifecycleTest, OutboundGeneratorCompletionRollsBackWithoutDuplicateThreat)
+{
+    const auto &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("raid-generator-rollback", content);
+    profile.baseConstruction.materialUnits = 6U;
+    const auto start = executeStartBaseConstruction(profile, content, {kBaseGeneratorProjectId},
+        {profile.revision, "generator-before-deployment"});
+    ASSERT_TRUE(start.succeeded) << start.message;
+    const auto startingProject = profile.baseConstruction.activeProject;
+    static_cast<void>(advanceWorldClock(profile.worldClock, 479U));
+    const auto startClock = profile.worldClock;
+    const auto startThreat = profile.baseSiege.siteThreatUnits;
+
+    const MapDefinitionId hospital{"map.raid.hospital_district"};
+    const auto outbound = executeDeploy(profile, content,
+        {"generator-raid-a", "generator-settlement-a", 9001U, hospital},
+        {profile.revision, "generator-deploy-a"});
+    ASSERT_TRUE(outbound.succeeded) << outbound.message;
+    ASSERT_TRUE(profile.pendingRaid);
+    EXPECT_EQ(profile.baseConstruction.facilities.at(kBaseGeneratorFacilityId),
+              BaseConstructionState::FacilityPlacement::Reserve);
+    EXPECT_EQ(profile.baseSiege.siteThreatUnits, startThreat + 2U);
+    EXPECT_FALSE(profile.baseConstruction.activeProject);
+    EXPECT_FALSE(profile.pendingRaid->travel.startingBaseConstruction.facilities.contains(kBaseGeneratorFacilityId));
+
+    const auto rollback = rollbackPendingRaidToBase(profile, content);
+    ASSERT_TRUE(rollback.succeeded) << rollback.message;
+    EXPECT_EQ(profile.worldClock, startClock);
+    EXPECT_EQ(profile.baseSiege.siteThreatUnits, startThreat);
+    EXPECT_EQ(profile.baseConstruction.activeProject, startingProject);
+    EXPECT_FALSE(baseFacilityOwned(profile, kBaseGeneratorFacilityId));
+    for (const auto &[site, placements] : profile.baseFacilityLayout.placements)
+    {
+        static_cast<void>(site);
+        EXPECT_FALSE(placements.contains(kBaseGeneratorFacilityId));
+    }
+
+    const auto retried = executeDeploy(profile, content,
+        {"generator-raid-b", "generator-settlement-b", 9001U, hospital},
+        {profile.revision, "generator-deploy-b"});
+    ASSERT_TRUE(retried.succeeded) << retried.message;
+    EXPECT_EQ(profile.baseConstruction.facilities.at(kBaseGeneratorFacilityId),
+              BaseConstructionState::FacilityPlacement::Reserve);
+    EXPECT_EQ(profile.baseSiege.siteThreatUnits, startThreat + 2U);
 }
 
 TEST(RaidLifecycleTest, LegacyPendingRaidRollbackKeepsEntryLoadout)

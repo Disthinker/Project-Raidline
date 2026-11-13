@@ -31,10 +31,33 @@ inline constexpr std::string_view kArmorReadinessContentVersion{
     "base-research-armor-readiness-content-80"};
 inline constexpr std::string_view kThrownIlluminationContentVersion{
     "raid-thrown-illumination-content-81"};
+inline constexpr std::string_view kRaidBackpackRecoveryContentVersion{
+    "raid-load-and-pack-recovery-content-82"};
+inline constexpr std::string_view kHospitalFloorplanRoutesContentVersion{
+    "raid-hospital-floorplan-routes-content-83"};
+inline constexpr std::string_view kFreightBreachContentVersion{
+    "raid-freight-breach-route-content-84"};
+inline constexpr std::string_view kEmergencyPowerContentVersion{
+    "base-emergency-power-and-fuel-logistics-content-85"};
+inline constexpr std::string_view kHospitalMedicalReserveContentVersion{
+    "hospital-rescue-and-medical-reserve-content-86"};
+inline const BaseFacilityDefinitionId kBaseGeneratorFacilityId{"base_facility.generator"};
+inline const BaseConstructionProjectDefinitionId kBaseGeneratorProjectId{
+    "base_construction.generator.level_1"};
 inline const ItemDefinitionId kFixedRaidOpticId{"item.component.optic_4x_5_45"};
 inline const ItemDefinitionId kExpanding545AmmunitionId{"item.ammunition.5_45x39_expanding"};
 inline const ItemDefinitionId kHospitalNightVisionId{"item.device.night_vision_basic"};
+inline const ItemDefinitionId kHospitalFloorplanItemId{"item.intelligence.hospital_floorplan"};
+inline const MapDefinitionId kHospitalFloorplanMapId{"map.raid.hospital_district"};
+inline const RaidSpaceDefinitionId kHospitalFloorplanSpaceId{"raid_space.hospital_district.main_building"};
+inline const RescueDefinitionId kHospitalMedicalRescueId{"rescue.ordinary.hospital_district"};
+inline const ItemDefinitionId kHospitalFirstAidStockId{"item.loot.first_aid_stock"};
+inline constexpr std::string_view kHospitalRescueParkingDistrict{"district.hospital.parking"};
+inline constexpr std::string_view kHospitalRescueCampusDistrict{"district.hospital.campus"};
 inline const ItemDefinitionId kFreightCrateKeyId{"item.loot.freight_crate_key"};
+inline const ItemDefinitionId kFreightBreachWedgesId{"item.loot.freight_breach_wedges"};
+inline const BaseManufacturingRecipeDefinitionId kFreightBreachRecipeId{
+    "base_manufacturing.freight_breach_wedges"};
 inline const ItemDefinitionId kFreightCrateSupplyId{"item.loot.precision_components"};
 inline const ItemDefinitionId kRaidFuelCanId{"item.loot.extraction_fuel_can"};
 inline const ItemDefinitionId kArmorRepairBlueprintId{"item.loot.armor_repair_blueprint"};
@@ -61,9 +84,55 @@ inline constexpr std::string_view kRaidFuelLootSlotId{"freight_manifest"};
         slotId == "hospital_service";
 }
 
+[[nodiscard]] inline bool isHospitalFloorplanLootSlot(
+    const MapDefinitionId &map, const RaidSpaceDefinitionId &space, std::string_view slotId)
+{
+    return map == kHospitalFloorplanMapId && space == kHospitalFloorplanSpaceId &&
+        slotId == "hospital_reception";
+}
+
+[[nodiscard]] inline bool isHospitalPharmacyLootSlot(
+    const MapDefinitionId &map, const RaidSpaceDefinitionId &space, std::string_view slotId)
+{
+    return map == kHospitalFloorplanMapId && space == kHospitalFloorplanSpaceId &&
+        slotId == "hospital_pharmacy";
+}
+
+[[nodiscard]] inline bool isHospitalRescueDistrictInstance(
+    std::string_view instanceId, std::string_view archetypeId) noexcept
+{
+    return instanceId.starts_with(archetypeId) &&
+        instanceId.substr(archetypeId.size()) == ".1";
+}
+
+[[nodiscard]] inline bool supportsHospitalMedicalReserveContent(std::string_view version) noexcept
+{
+    return version == kHospitalMedicalReserveContentVersion;
+}
+
+[[nodiscard]] inline bool supportsEmergencyPowerContent(std::string_view version) noexcept
+{
+    return version == kEmergencyPowerContentVersion || supportsHospitalMedicalReserveContent(version);
+}
+
+[[nodiscard]] inline bool supportsFreightBreachContent(std::string_view version) noexcept
+{
+    return version == kFreightBreachContentVersion || supportsEmergencyPowerContent(version);
+}
+
+[[nodiscard]] inline bool supportsHospitalFloorplanRoutesContent(std::string_view version) noexcept
+{
+    return version == kHospitalFloorplanRoutesContentVersion || supportsFreightBreachContent(version);
+}
+
+[[nodiscard]] inline bool supportsRaidBackpackRecoveryContent(std::string_view version) noexcept
+{
+    return version == kRaidBackpackRecoveryContentVersion || supportsHospitalFloorplanRoutesContent(version);
+}
+
 [[nodiscard]] inline bool supportsThrownIlluminationContent(std::string_view version) noexcept
 {
-    return version == kThrownIlluminationContentVersion;
+    return version == kThrownIlluminationContentVersion || supportsRaidBackpackRecoveryContent(version);
 }
 
 [[nodiscard]] inline bool supportsArmorReadinessContent(std::string_view version) noexcept
@@ -566,7 +635,8 @@ enum class BaseFacilityUpgradeTarget
     Dormitory,
     KitchenWater,
     Workshop,
-    Medical
+    Medical,
+    Generator
 };
 
 struct BaseFacilityDefinition

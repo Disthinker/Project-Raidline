@@ -308,7 +308,8 @@ HealReceipt executeHeal(
     AssetRecord *medkit = candidate.assets.findMutable(medkitAssetId);
     if (medkit == nullptr)
         return fail(DomainErrorCode::MissingAsset, "Medkit does not exist");
-    if (std::holds_alternative<BaseServiceAssetLocation>(medkit->location))
+    if (isMedicalReserveAsset(*medkit) ||
+        std::holds_alternative<BaseServiceAssetLocation>(medkit->location))
         return fail(DomainErrorCode::IllegalDestination,
                     "Medkit is reserved by a Base service");
     const ItemDefinition &definition = content.item(medkit->definitionId);

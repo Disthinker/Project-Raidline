@@ -152,7 +152,7 @@ TEST(RaidCredentialData, Schema57RoundTripsPermanentArchiveAndResultSummary)
     profile.lastRaidResult->unlockedExtractionPermissions.push_back(kPermission);
     ASSERT_TRUE(validateProfileState(profile, content).valid);
     const auto serialized = serializeProfileEnvelope(profile, content.contentVersion());
-    EXPECT_EQ(Json::parse(serialized).at("schema_version"), 65);
+    EXPECT_EQ(Json::parse(serialized).at("schema_version"), 68);
     const auto loaded = deserializeProfileEnvelope(serialized, content);
     ASSERT_TRUE(loaded.profile) << loaded.message;
     EXPECT_EQ(loaded.profile->raidExtractionPermissions, profile.raidExtractionPermissions);
@@ -221,6 +221,7 @@ TEST(RaidCredentialData, DowngradeRejectsAnyCredentialFact)
     profile.lastRaidResult->unlockedExtractionPermissions.push_back(kPermission);
     EXPECT_THROW(serializeProfileEnvelope(profile, content.contentVersion(), 56), std::invalid_argument);
     profile = deployedCredentialProfile();
+    profile.pendingRaid->backpackRecoveryEnabled = false;
     EXPECT_THROW(serializeProfileEnvelope(profile, content.contentVersion(), 56), std::invalid_argument);
 }
 
@@ -301,8 +302,8 @@ TEST(RaidCredentialData, UpgradePreservesBothLegacySourcesAcrossTwoRollingSaves)
     ASSERT_TRUE(repository.save(profile, content.contentVersion()).succeeded);
     EXPECT_EQ(readBytes(preservedSourcePath(directory, false, primary)), primary);
     EXPECT_EQ(readBytes(preservedSourcePath(directory, true, backup)), backup);
-    EXPECT_EQ(Json::parse(readBytes(repository.primaryPath())).at("schema_version"), 65);
-    EXPECT_EQ(Json::parse(readBytes(repository.backupPath())).at("schema_version"), 65);
+    EXPECT_EQ(Json::parse(readBytes(repository.primaryPath())).at("schema_version"), 68);
+    EXPECT_EQ(Json::parse(readBytes(repository.backupPath())).at("schema_version"), 68);
 }
 
 TEST(RaidCredentialData, UpgradePreservesLegacySourcesBeforePendingRaidMirrorsBothFiles)

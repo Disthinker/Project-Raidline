@@ -24,7 +24,7 @@ struct AlphaDeployRequest
 // The persistence owner holds it without touching its prepared world.
 struct PreparedPlayerTransition
 {
-    enum class Kind { Deploy, RaidSettlement, Rescue, DefenseStart, TimedBaseCompletion, BaseSnapshot, DailyEnd };
+    enum class Kind { Deploy, RaidSettlement, Rescue, DefenseStart, TimedBaseCompletion, BaseSnapshot, DailyEnd, HospitalFloorplan };
     Kind kind{Kind::Deploy};
     std::unique_ptr<GameplayWorld> world;
     std::optional<ProfileState> raidRecoveryProfile;

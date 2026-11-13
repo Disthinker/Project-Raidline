@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-thrown-illumination-content-81",
+  "content_version": "hospital-rescue-and-medical-reserve-content-86",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -169,7 +169,8 @@
       {"id": "base_facility.dormitory", "display_name": "Dormitory", "required_for_migration": true, "initially_owned": true, "initially_installed": true},
       {"id": "base_facility.kitchen_water", "display_name": "Kitchen & Water Station", "required_for_migration": true, "initially_owned": false, "initially_installed": false},
       {"id": "base_facility.medical", "display_name": "Medical Facility", "required_for_migration": true, "initially_owned": true, "initially_installed": true},
-      {"id": "base_facility.workshop", "display_name": "Workshop", "required_for_migration": false, "initially_owned": true, "initially_installed": true}
+      {"id": "base_facility.workshop", "display_name": "Workshop", "required_for_migration": false, "initially_owned": true, "initially_installed": true},
+      {"id": "base_facility.generator", "display_name": "Generator Room", "required_for_migration": false, "initially_owned": false, "initially_installed": false}
     ],
     "projects": [
       {
@@ -212,6 +213,16 @@
         "material_cost": 6,
         "worker_count": 3,
         "duration_minutes": 720
+      },
+      {
+        "id": "base_construction.generator.level_1",
+        "display_name": "Generator Room",
+        "target_facility": "generator",
+        "required_level": 0,
+        "target_level": 1,
+        "material_cost": 6,
+        "worker_count": 2,
+        "duration_minutes": 480
       }
     ]
   },
@@ -309,6 +320,17 @@
           {"item": "item.loot.electronics", "quantity": 1}
         ],
         "output": {"item": "item.throwable.field_flare", "quantity": 2},
+        "worker_count": 1,
+        "duration_minutes": 90
+      },
+      {
+        "id": "base_manufacturing.freight_breach_wedges",
+        "display_name": "Breach Wedges",
+        "inputs": [
+          {"item": "item.loot.scrap_parts", "quantity": 2},
+          {"item": "item.loot.industrial_fasteners", "quantity": 1}
+        ],
+        "output": {"item": "item.loot.freight_breach_wedges", "quantity": 1},
         "worker_count": 1,
         "duration_minutes": 90
       }
@@ -1867,6 +1889,37 @@
       "inventory": {"width": 1, "height": 1, "can_rotate": false},
       "max_stack_size": 1,
       "unit_weight_grams": 50,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 24, "y": 24},
+        "pickup_size": {"x": 32, "y": 32}
+      },
+      "inventory_texture": "items/inventory/unpublished_precision_components.png",
+      "world_texture": "items/world/unpublished_precision_components.png"
+    },
+    {
+      "id": "item.intelligence.hospital_floorplan",
+      "display_name": "District Hospital Floor Plan",
+      "category": "loot",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 50,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 24, "y": 24},
+        "pickup_size": {"x": 32, "y": 32}
+      },
+      "inventory_texture": "items/inventory/unpublished_precision_components.png",
+      "world_texture": "items/world/unpublished_precision_components.png",
+      "market_recycle_price": 35
+    },
+    {
+      "id": "item.loot.freight_breach_wedges",
+      "display_name": "Breach Wedges",
+      "category": "loot",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 350,
       "visual_assets_published": false,
       "world": {
         "render_size": {"x": 24, "y": 24},
@@ -3570,6 +3623,15 @@
       "recovery": {
         "service_fee": 130,
         "duration_minutes": 720
+      },
+      "rescue": {
+        "id": "rescue.ordinary.hospital_district",
+        "subject_kind": "ordinary_residents",
+        "transfer_point": {"position": {"x": 1180, "y": 520}, "size": {"x": 170, "y": 100}},
+        "interaction_duration_seconds": 2,
+        "ordinary_resident_count": 1,
+        "injured_resident_count": 1,
+        "profession": "medical"
       },
       "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
       "background_tint": {

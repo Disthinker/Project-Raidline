@@ -243,6 +243,7 @@ TEST(PersistentSessionTest, DeveloperCatalogGrantPersistsAndIsIdempotent)
                   session.profile(),
                   ItemDefinitionId{"item.weapon.lmg_7_62x51_service"}),
               0U);
+    EXPECT_EQ(findDefinition(session.profile(), kHospitalFloorplanItemId), 0U);
     const std::uint64_t grantedFingerprint =
         profileStateFingerprint(session.profile());
 
@@ -1640,9 +1641,8 @@ TEST(PersistentSessionTest,
     initial.basePopulation.injuredResidents = 1U;
     initial.basePopulation.injuredByProfession[baseProfessionIndex(
         BaseResidentProfession::General)] = 1U;
-    initial.baseSupplyPolicy.assignments.emplace(
-        ItemDefinitionId{"item.medical.medkit_alpha"},
-        BaseSupplyCategory::Medical);
+    ASSERT_NE(initial.assets.create(publishedContentRegistry().item(kHospitalFirstAidStockId),
+        StoredAssetLocation{ProfileContainerId::medicalReserve(), {0, 0}}), 0U);
     SaveRepository repository{temporary.path()};
     ASSERT_TRUE(repository.save(
         initial,
@@ -1687,9 +1687,8 @@ TEST(PersistentSessionTest,
     initial.basePopulation.injuredResidents = 1U;
     initial.basePopulation.injuredByProfession[baseProfessionIndex(
         BaseResidentProfession::General)] = 1U;
-    initial.baseSupplyPolicy.assignments.emplace(
-        ItemDefinitionId{"item.medical.medkit_alpha"},
-        BaseSupplyCategory::Medical);
+    ASSERT_NE(initial.assets.create(publishedContentRegistry().item(kHospitalFirstAidStockId),
+        StoredAssetLocation{ProfileContainerId::medicalReserve(), {0, 0}}), 0U);
     SaveRepository repository{temporary.path()};
     ASSERT_TRUE(repository.save(
         initial,

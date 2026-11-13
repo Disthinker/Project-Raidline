@@ -42,6 +42,7 @@ std::string compactUiItemName(const ItemDefinition &d,UiLanguage language) {
         {"item.throwable.field_flare","Flare","照明弹"},
         {"item.component.suppressor_5_45","Suppressor","消音器"},
         {"item.loot.freight_crate_key","Key","货箱钥匙"},
+        {"item.intelligence.hospital_floorplan","Floor Plan","医院图纸"},
         {"item.container.chest_rig_small","Light rig","小胸挂"},
         {"item.container.chest_rig_patrol","Patrol rig","巡逻胸挂"},
         {"item.container.chest_rig_assault","Assault rig","突击胸挂"}
@@ -130,6 +131,9 @@ std::vector<UiItemActionEntry> projectUiItemActions(
         result = {{UiItemAction::HelmetDetails, "HELMET DETAILS"}};
     else if (definition.definitionId == kFreightCrateKeyId)
         result = {{UiItemAction::FreightKeyDetails, "FREIGHT CRATE KEY DETAILS"}};
+    if (inRaid && profile.pendingRaid && profile.pendingRaid->backpackRecoveryEnabled &&
+        equippedAsset(profile, EquipmentSlotKind::Backpack) == id)
+        result.push_back({UiItemAction::DropBackpack, "DROP BACKPACK"});
     if (const auto action = queryProfileContextAction(profile, content, id, inRaid)) {
         switch (*action) {
         case ProfileContextActionKind::UnloadMagazine:

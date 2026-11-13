@@ -6,6 +6,9 @@
 
 #include "inventory_domain.h"
 
+inline constexpr Vec2 kBaseGeneratorFootprint{180.0F, 120.0F};
+inline constexpr Vec2 kBaseGeneratorDefaultCenter{0.65F, 2.0F / 7.0F};
+
 struct BaseFacilityLayoutAccess
 {
     RegionalBaseSiteDefinitionId baseSiteDefinitionId;

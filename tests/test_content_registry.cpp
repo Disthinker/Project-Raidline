@@ -83,6 +83,24 @@ TEST(ContentRegistryTest, HospitalAnchorConstraintsRejectTyposAndMissingKinds)
     EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(root.dump())), ContentRegistryError);
 }
 
+TEST(ContentRegistryTest, HospitalMedicalReserveRequiresInjuredMedicAndFixedPharmacy)
+{
+    const auto original = hospitalContentCandidateJson();
+    auto missingRescue = original;
+    missingRescue["maps"].back().erase("rescue");
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(missingRescue.dump())), ContentRegistryError);
+
+    auto wrongPatient = original;
+    wrongPatient["maps"].back()["rescue"]["profession"] = "engineering";
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(wrongPatient.dump())), ContentRegistryError);
+
+    auto missingPharmacy = original;
+    auto &slots = missingPharmacy["maps"].back()["interiors"][0]["loot_slots"];
+    std::erase_if(slots.get_ref<nlohmann::json::array_t &>(),
+        [](const auto &slot) { return slot.at("id") == "hospital_pharmacy"; });
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(missingPharmacy.dump())), ContentRegistryError);
+}
+
 TEST(ContentRegistryTest, AuthoredLandmarkFootprintsAreValidatedAndPreserved)
 {
     const auto load = [](std::string_view structures)
@@ -127,7 +145,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        kThrownIlluminationContentVersion);
+        kHospitalMedicalReserveContentVersion);
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -209,8 +227,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(registry.baseOperations().supportedAtReserveDays, 7U);
     EXPECT_EQ(registry.basePriorityCycleMinutes(), 7200U);
     EXPECT_EQ(registry.maximumBaseConstructionMaterials(), 100U);
-    ASSERT_EQ(registry.baseConstructionProjects().size(), 4U);
-    EXPECT_EQ(registry.baseFacilities().size(), 5U);
+    ASSERT_EQ(registry.baseConstructionProjects().size(), 5U);
+    EXPECT_EQ(registry.baseFacilities().size(), 6U);
     EXPECT_TRUE(registry.baseFacility(BaseFacilityDefinitionId{
         "base_facility.kitchen_water"}).requiredForMigration);
     EXPECT_FALSE(registry.baseFacility(BaseFacilityDefinitionId{
@@ -231,7 +249,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(registry.baseWorkforce().generalFallbackDurationPercent, 150U);
     EXPECT_EQ(registry.baseWorkforce().workshopLevel2DurationPercent, 85U);
     EXPECT_EQ(registry.baseWorkforce().medicalLevel2DurationPercent, 85U);
-    ASSERT_EQ(registry.baseManufacturingRecipes().size(), 9U);
+    ASSERT_EQ(registry.baseManufacturingRecipes().size(), 10U);
     const BaseManufacturingRecipeDefinition &manufacturing =
         registry.baseManufacturingRecipe(
             BaseManufacturingRecipeDefinitionId{
@@ -259,7 +277,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.category, BaseSupplyCategory::Recreation);
     EXPECT_EQ(comfort.requiredContribution, 14U);
     EXPECT_FALSE(comfort.sourceHint.empty());
-    ASSERT_EQ(registry.items().size(), 69U);
+    ASSERT_EQ(registry.items().size(), 71U);
     const auto &light = registry.item(ItemDefinitionId{"item.component.weapon_flashlight_basic"});
     const auto &battery = registry.item(ItemDefinitionId{"item.battery.universal"});
     ASSERT_TRUE(light.weaponLight);
@@ -443,8 +461,6 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         EXPECT_EQ(publishedMap.highRisk.advancedLootSlots.size(), 2U);
         EXPECT_EQ(publishedMap.highRisk.advancedLootTableId,
                   LootTableDefinitionId{hospital ? "loot.hospital.high_risk_v1" : "loot.raid.high_risk_v1"});
-        if (!hospital)
-        {
         ASSERT_TRUE(publishedMap.rescue.has_value());
         EXPECT_EQ(
             publishedMap.rescue->subjectKind,
@@ -453,10 +469,11 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         EXPECT_FLOAT_EQ(
             publishedMap.rescue->interactionDurationSeconds,
             2.0F);
-        }
-        else
+        if (hospital)
         {
-            EXPECT_FALSE(publishedMap.rescue.has_value());
+            EXPECT_EQ(publishedMap.rescue->id, kHospitalMedicalRescueId);
+            EXPECT_EQ(publishedMap.rescue->profession, BaseResidentProfession::Medical);
+            EXPECT_EQ(publishedMap.rescue->injuredResidentCount, 1U);
         }
         EXPECT_TRUE(mapIds.insert(publishedMap.id).second);
         for (const EnemyDeploymentDefinitionId &deploymentId :
@@ -1922,6 +1939,18 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
                 return isHospitalNightVisionLootSlot(hospital.id, interior.id, slot.id);
             });
         });
+    const bool floorplanSlot = std::any_of(hospital.interiors.begin(), hospital.interiors.end(),
+        [&](const auto &interior) {
+            return std::any_of(interior.lootSlots.begin(), interior.lootSlots.end(), [&](const auto &slot) {
+                return isHospitalFloorplanLootSlot(hospital.id, interior.id, slot.id);
+            });
+        });
+    const bool pharmacySlot = std::any_of(hospital.interiors.begin(), hospital.interiors.end(),
+        [&](const auto &interior) {
+            return std::any_of(interior.lootSlots.begin(), interior.lootSlots.end(), [&](const auto &slot) {
+                return isHospitalPharmacyLootSlot(hospital.id, interior.id, slot.id);
+            });
+        });
     for (const ItemDefinition &item : registry.items())
     {
         const bool lootSource = std::any_of(
@@ -1950,6 +1979,8 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
         const bool fixedResourceSource =
             item.definitionId == kFixedRaidOpticId ||
             (item.definitionId == kHospitalNightVisionId && nightVisionSlot) ||
+            (item.definitionId == kHospitalFloorplanItemId && floorplanSlot) ||
+            (item.definitionId == kHospitalFirstAidStockId && pharmacySlot) ||
             (item.definitionId == kFreightCrateKeyId && freightKeySlot) ||
             (item.definitionId == kRaidFuelCanId && fuelSlot) ||
             (item.definitionId == kArmorRepairBlueprintId && blueprintSlot);
@@ -1975,6 +2006,7 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
             item.category != ItemCategory::Loot ||
             item.nightVision.has_value() ||
             item.definitionId == kFreightCrateKeyId ||
+            item.definitionId == kFreightBreachWedgesId ||
             item.definitionId == kRaidFuelCanId ||
             item.definitionId == kArmorRepairBlueprintId ||
             item.baseContribution.has_value() ||
@@ -2027,7 +2059,9 @@ TEST(ContentRegistryTest, FieldMedicalRecipesPreserveExistingProductionAndSingle
         {"base_manufacturing.armor_repair_tool", "item.maintenance.armor_kit_basic", 1, 240,
          {{ItemDefinitionId{"item.loot.copper_wire_spool"}, 1}, {ItemDefinitionId{"item.loot.scrap_parts"}, 1}}},
         {"base_manufacturing.field_flare", "item.throwable.field_flare", 2, 90,
-         {{ItemDefinitionId{"item.loot.copper_wire_spool"}, 1}, {ItemDefinitionId{"item.loot.electronics"}, 1}}}};
+         {{ItemDefinitionId{"item.loot.copper_wire_spool"}, 1}, {ItemDefinitionId{"item.loot.electronics"}, 1}}},
+        {"base_manufacturing.freight_breach_wedges", "item.loot.freight_breach_wedges", 1, 90,
+         {{ItemDefinitionId{"item.loot.scrap_parts"}, 2}, {ItemDefinitionId{"item.loot.industrial_fasteners"}, 1}}}};
     ASSERT_EQ(content.baseManufacturingRecipes().size(), std::size(expected));
     for (const auto &entry : expected)
     {
@@ -2239,7 +2273,7 @@ TEST(ContentRegistryTest, OpticDefinitionsSeparateTheReceiverMountAndOpticModes)
 TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDefinitions)
 {
     const auto original = hospitalContentCandidateJson();
-    ASSERT_EQ(original.at("content_version").get<std::string>(), kThrownIlluminationContentVersion);
+    ASSERT_EQ(original.at("content_version").get<std::string>(), kHospitalMedicalReserveContentVersion);
     for (const auto *required : {"fortifications", "enemy_combat_definitions"})
     {
         SCOPED_TRACE(required);

@@ -1,6 +1,7 @@
 #include "base_siege_domain.h"
 #include "base_corpse_domain.h"
 #include "base_defense_ownership.h"
+#include "base_emergency_power_domain.h"
 
 #include "base_workforce_domain.h"
 #include "home_perimeter_domain.h"
@@ -306,6 +307,12 @@ void applySettledRaidBaseThreat(ProfileState &profile) noexcept
         profile.baseSiege,
         profile.baseSiege.raidThreatUnits,
         kBaseSiegeRaidThreatUnits));
+}
+
+void addBaseSiteThreat(ProfileState &profile, std::uint32_t units) noexcept
+{
+    static_cast<void>(addThreatWithinSharedCapacity(
+        profile.baseSiege, profile.baseSiege.siteThreatUnits, units));
 }
 
 std::uint32_t applyBasePerimeterSweepThreatReduction(
@@ -670,6 +677,8 @@ BaseAutoDefenseReceipt executeBaseRealtimeDefenseSettlement(
     candidate.baseSiege.lastSecuritySpent = 0U;
     applyDefenseOutcome(candidate, content, reason == BaseDefenseEndReason::Completed);
     candidate.activeBaseDefense.reset();
+    static_cast<void>(synchronizeBaseWorkThrough(
+        candidate, content, down ? kHomePerimeterRescueMinutes : 0U));
     if (candidate.basePlayerEffects)
     {
         auto &effects=*candidate.basePlayerEffects;

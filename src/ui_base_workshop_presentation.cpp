@@ -50,7 +50,7 @@ std::string uiWorkshopActionKey(const UiWorkshopHit &hit,const UiWorkshopProject
     if(hit.control==UiWorkshopControl::Main || hit.control==UiWorkshopControl::Cancel) {
         key+=fmt::format(":{}:{}:{}:{}:{}:{}:{}",p.selection?p.selection->value():"",p.order?p.order->jobId:0,
             p.order && p.order->outputReady,p.start.canCommit,p.start.durationMinutes,p.start.workerCount,static_cast<int>(p.start.workerProfession));
-        for(const auto &input:p.start.inputs)key+=fmt::format(":{}:{}",input.assetId,input.definitionId.value());
+        for(const auto &input:p.start.inputs)key+=fmt::format(":{}:{}:{}",input.assetId,input.definitionId.value(),input.quantity);
         key+=fmt::format(":{}",p.returns.canCommit);
         for(const auto &s:p.returns.returns)key+=fmt::format(":{}:{}:{}:{}:{}:{}",s.assetId,static_cast<int>(s.destination.container.kind),s.destination.container.ownerAssetId,s.destination.container.compartmentIndex,s.destination.origin.x,s.destination.origin.y);
         if(p.order)key+=fmt::format(":{}",p.order->outputAssetId);

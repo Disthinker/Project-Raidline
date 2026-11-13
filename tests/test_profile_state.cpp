@@ -125,7 +125,7 @@ TEST(ProfileStateTest, NewPublishedProfileCreatesLegacyCatalogAndExcludesPurchas
         "published-profile-test", content);
 
     EXPECT_EQ(profile.revision, 1U);
-    // Purchased additions and manufactured rolls preserve the accepted bootstrap inventory.
+    // Purchased, manufactured and fixed field items preserve the accepted bootstrap inventory.
     EXPECT_EQ(profile.assets.records().size(), 59U);
     EXPECT_EQ(profile.assets.nextAssetId(), 60U);
     EXPECT_TRUE(profile.committedTransactions.contains(
@@ -156,6 +156,8 @@ TEST(ProfileStateTest, NewPublishedProfileCreatesLegacyCatalogAndExcludesPurchas
             definition.definitionId == kFreightCrateKeyId ||
             definition.definitionId == kRaidFuelCanId ||
             definition.definitionId == kArmorRepairBlueprintId ||
+            definition.definitionId == kHospitalFloorplanItemId ||
+            definition.definitionId == kFreightBreachWedgesId ||
             definition.definitionId == kThrownIlluminationItemId) {
             EXPECT_EQ(stored, profile.assets.records().end()) << definition.definitionId.value();
             continue;
