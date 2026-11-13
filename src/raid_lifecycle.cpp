@@ -720,6 +720,9 @@ DeployReceipt executeDeploy(
     snapshot.freightBreachEnabled = regionalMissionCount == 0U &&
         command.mapDefinitionId == kFreightCrateMapId &&
         supportsFreightBreachContent(content.contentVersion());
+    snapshot.hospitalMedicalReserveEnabled = regionalMissionCount == 0U &&
+        command.mapDefinitionId == kHospitalFloorplanMapId &&
+        supportsHospitalMedicalReserveContent(content.contentVersion());
     if (snapshot.backpackRecoveryEnabled)
         snapshot.startingAssets = profile.assets;
     const bool corpseTrial = command.mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"} &&
@@ -803,6 +806,7 @@ DeployReceipt executeDeploy(
         candidate.raidIntelligence.counts.erase(found);
     }
     if (map->rescue.has_value() &&
+        (map->rescue->id != kHospitalMedicalRescueId || snapshot.hospitalMedicalReserveEnabled) &&
         !candidate.committedRescues.contains(map->rescue->id))
     {
         snapshot.rescue = RaidRescueSnapshot{
@@ -1113,6 +1117,8 @@ DeployReceipt executeDeploy(
                 isHospitalNightVisionLootSlot(map->id, interior.id, slot.id);
             const bool hospitalFloorplanSlot = hospitalFloorplanLootRules &&
                 isHospitalFloorplanLootSlot(map->id, interior.id, slot.id);
+            const bool hospitalPharmacySlot = snapshot.hospitalMedicalReserveEnabled &&
+                isHospitalPharmacyLootSlot(map->id, interior.id, slot.id);
             const bool sealedFreightSlot = sealedFreightRules && interior.id == kFreightCrateSpaceId &&
                 slot.id == kFreightCrateSlotId;
             const bool fuelSlot = fuelExtractionRules && interior.id == kFreightCrateSpaceId &&
@@ -1120,11 +1126,13 @@ DeployReceipt executeDeploy(
             const ItemDefinitionId &item = nightVisionSlot
                 ? kHospitalNightVisionId
                 : hospitalFloorplanSlot ? kHospitalFloorplanItemId
+                : hospitalPharmacySlot ? kHospitalFirstAidStockId
                 : sealedFreightSlot ? kFreightCrateSupplyId
                 : fuelSlot ? kRaidFuelCanId : entry.itemDefinitionId;
             if (nightVisionSlot)
                 snapshot.hospitalNightVisionLoot = true;
-            if (nightVisionSlot || hospitalFloorplanSlot || sealedFreightSlot || fuelSlot)
+            if (nightVisionSlot || hospitalFloorplanSlot || hospitalPharmacySlot ||
+                sealedFreightSlot || fuelSlot)
                 quantity = 1U;
             const AssetInstanceId assetId = candidate.assets.create(
                 content.item(item),
@@ -1262,7 +1270,7 @@ DeployReceipt executeDeploy(
         addRequest(std::string{kRaidAnchorAdvancedResource},
                    RaidMapAnchorKind::AdvancedResource,
                    map->highRisk.advancedResourceArea.size);
-        if (snapshot.rescue.has_value())
+        if (snapshot.rescue.has_value() && snapshot.rescue->definitionId != kHospitalMedicalRescueId)
         {
             addRequest(std::string{kRaidAnchorRescue},
                        RaidMapAnchorKind::Rescue,
@@ -1449,6 +1457,18 @@ DeployReceipt executeDeploy(
         progress, 0.30F, RaidDeploymentProgressStage::GeneratingLayout);
     snapshot.spatialLayout = generateRaidMapLayout(
         *map, snapshot.seed, generationAnchors);
+    if (snapshot.rescue && snapshot.rescue->definitionId == kHospitalMedicalRescueId)
+    {
+        // Choose a reachable transfer point on the finished map without
+        // rerolling the existing entrances, extractions, props or loot.
+        auto anchor = selectHospitalRescueAnchor(*map, snapshot.spatialLayout,
+                                                snapshot.rescue->transferPoint.size);
+        if (!anchor)
+            return deployFailure(RaidLifecycleError::InvalidCommand,
+                "generated hospital has no reachable rescue site", profile.revision);
+        snapshot.spatialLayout.anchorPlacements.push_back(std::move(*anchor));
+        snapshot.spatialLayout.layoutHash = raidMapLayoutHash(snapshot.spatialLayout);
+    }
     reportRaidDeploymentProgress(
         progress, 0.68F, RaidDeploymentProgressStage::FreezingLoot);
 

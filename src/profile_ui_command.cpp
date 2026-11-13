@@ -111,6 +111,7 @@ ProfileUiPrepared prepareProfileUiCommand(ProfileState &candidate, const Content
     ProfileUiPrepared prepared;
     try
     {
+        const bool admissionWasEnabled = candidate.residentMedicalReservePolicy.automaticAdmission;
         // All alternatives are Base operations. The activity owner performs
         // its boundary barrier before handing this isolated candidate here.
         if (candidate.pendingRaid)
@@ -181,6 +182,10 @@ ProfileUiPrepared prepareProfileUiCommand(ProfileState &candidate, const Content
             }
             else if constexpr (std::is_same_v<Command, StartResidentTreatmentCommand>)
                 return resultOf(executeStartResidentTreatment(candidate, content, typed, context));
+            else if constexpr (std::is_same_v<Command, MoveMedicalReserveAssetCommand>)
+                return resultOf(executeMoveMedicalReserveAsset(candidate, content, typed, context));
+            else if constexpr (std::is_same_v<Command, SetResidentMedicalReservePolicyCommand>)
+                return resultOf(executeSetResidentMedicalReservePolicy(candidate, content, typed, context));
             else if constexpr (std::is_same_v<Command, StartGunsmithMaintenanceCommand>)
             {
                 auto receipt = executeGunsmithMaintenance(candidate, content, typed, context);
@@ -373,6 +378,26 @@ ProfileUiPrepared prepareProfileUiCommand(ProfileState &candidate, const Content
             }
             else static_assert(!sizeof(Command), "unhandled Profile UI command");
         }, command);
+        if (world && world->playerSafetyZone() == HomeRegionSafetyZone::SafeCore &&
+            world->siteDefinitionId() == candidate.regionalOperations.technologyCore.baseSiteDefinitionId.value() &&
+            profileUiReceiptSucceeded(prepared.result.receipt) && !profileUiReceiptAlreadyCommitted(prepared.result.receipt))
+        {
+            const auto *move = std::get_if<MoveMedicalReserveAssetCommand>(&command);
+            const auto *assign = std::get_if<ProfileUiAssignWorkerCommand>(&command);
+            const bool enablesAdmission = !admissionWasEnabled &&
+                std::holds_alternative<SetResidentMedicalReservePolicyCommand>(command);
+            if (enablesAdmission || (move && move->destination.container == ProfileContainerId::medicalReserve()) ||
+                (assign && assign->facility == BaseFacilityStaffingKind::Medical) ||
+                std::holds_alternative<ProfileUiAutoFillWorkersCommand>(command) ||
+                std::holds_alternative<BaseRestCommand>(command) ||
+                std::holds_alternative<BaseSiteFeatureRepairCommand>(command))
+            {
+                if (tryStartAutomaticResidentTreatment(candidate, content))
+                    std::visit([&](auto &receipt) {
+                        if constexpr (requires { receipt.revision; }) receipt.revision = candidate.revision;
+                    }, prepared.result.receipt);
+            }
+        }
     }
     catch (const std::exception &error)
     {

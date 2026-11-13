@@ -1403,7 +1403,7 @@ ContentRegistry ContentRegistry::fromJson(
             fail("Base construction material capacity is invalid");
         }
         const bool hasEmergencyPower =
-            registry.contentVersion() == kEmergencyPowerContentVersion;
+            supportsEmergencyPowerContent(registry.contentVersion());
         std::size_t requiredMigrationFacilities{};
         for (const Json &facilityValue :
              requiredArray(baseConstruction, "facilities"))
@@ -3236,7 +3236,9 @@ ContentRegistry ContentRegistry::fromJson(
                     "extraction_duration_seconds",
                     true)};
 
-            if (mapValue.contains("rescue"))
+            if (mapValue.contains("rescue") &&
+                (definition.id != kHospitalFloorplanMapId ||
+                 supportsHospitalMedicalReserveContent(registry.contentVersion())))
             {
                 const Json &rescue = requiredObject(mapValue, "rescue");
                 const std::string subjectKind =
@@ -4502,6 +4504,36 @@ ContentRegistry ContentRegistry::fromJson(
                 recipe.outputItemDefinitionId != kFreightBreachWedgesId ||
                 recipe.outputQuantity != 1U || recipe.workerCount != 1U || recipe.durationMinutes != 90U)
                 fail("freight breach wedges contract is invalid");
+        }
+        if (supportsHospitalMedicalReserveContent(registry.contentVersion()) &&
+            registry.mapIndex_.contains(kHospitalFloorplanMapId))
+        {
+            const auto &hospital = registry.map(kHospitalFloorplanMapId);
+            const auto &districts = hospital.proceduralOutdoor.districtArchetypes;
+            const auto hasDistrict = [&](std::string_view id)
+            {
+                return std::any_of(districts.begin(), districts.end(),
+                    [id](const auto &district) {
+                        return district.id == id && district.instanceCount == 1U;
+                    });
+            };
+            const bool hasPharmacySlot = std::any_of(
+                hospital.interiors.begin(), hospital.interiors.end(), [&](const auto &interior) {
+                    return std::any_of(interior.lootSlots.begin(), interior.lootSlots.end(),
+                        [&](const auto &slot) {
+                            return isHospitalPharmacyLootSlot(hospital.id, interior.id, slot.id);
+                        });
+                });
+            if (!hospital.rescue || hospital.rescue->id != kHospitalMedicalRescueId ||
+                hospital.rescue->profession != BaseResidentProfession::Medical ||
+                hospital.rescue->ordinaryResidentCount != 1U ||
+                hospital.rescue->injuredResidentCount != 1U ||
+                hospital.rescue->interactionDurationSeconds != 2.0F ||
+                hospital.proceduralOutdoor.layoutVersion < 3U ||
+                !hasDistrict(kHospitalRescueParkingDistrict) ||
+                !hasDistrict(kHospitalRescueCampusDistrict) ||
+                !hasPharmacySlot || !registry.itemIndex_.contains(kHospitalFirstAidStockId))
+                fail("hospital rescue and pharmacy require their published content");
         }
         return registry;
     }

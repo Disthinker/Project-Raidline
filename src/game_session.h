@@ -293,7 +293,7 @@ public:
     [[nodiscard]] bool finishFirstRaidHints();
     [[nodiscard]] bool continueProfile();
 
-    void advanceBaseWorldClock(float deltaTime);
+    void advanceBaseWorldClock(float deltaTime, bool allowAutomaticAdmission = true);
     [[nodiscard]] bool startBaseRealtimeDefense(BaseWorld &world);
     [[nodiscard]] bool restoreBaseDefenseRuntime(BaseWorld &world);
     [[nodiscard]] bool abandonBaseRealtimeDefense();
@@ -841,7 +841,8 @@ private:
     void refreshLoadoutTutorial();
     void advanceWorldClockFromSimulation(
         float deltaTime,
-        bool allowPeriodicCheckpoint);
+        bool allowPeriodicCheckpoint,
+        bool allowAutomaticAdmission = false);
     void advanceBaseSiegeFromSimulation(float deltaTime);
     void resetWorldClockRuntime() noexcept;
     void recordBaseCompletionEvents(

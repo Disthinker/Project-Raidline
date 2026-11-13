@@ -3664,7 +3664,7 @@ GameSession::ordinarySurvivorRescuePlan() const
             rescue.injuredResidentCount});
 }
 
-void GameSession::advanceBaseWorldClock(float deltaTime)
+void GameSession::advanceBaseWorldClock(float deltaTime, bool allowAutomaticAdmission)
 {
     if(profileUiCommitPending())return;
     // The safe, pre-base survey has no operating Base or catch-up debt.
@@ -3679,7 +3679,7 @@ void GameSession::advanceBaseWorldClock(float deltaTime)
         return;
     }
     advanceBaseSiegeFromSimulation(deltaTime);
-    advanceWorldClockFromSimulation(deltaTime, true);
+    advanceWorldClockFromSimulation(deltaTime, true, allowAutomaticAdmission);
 }
 
 WarehouseCatalogGrantReceipt GameSession::grantDeveloperWarehouseCatalog()
@@ -3868,7 +3868,8 @@ RecoveryTaskReceipt GameSession::collectRecoveryTask(
 
 void GameSession::advanceWorldClockFromSimulation(
     float deltaTime,
-    bool allowPeriodicCheckpoint)
+    bool allowPeriodicCheckpoint,
+    bool allowAutomaticAdmission)
 {
     if (profileUiCommitPending() || baseDailySaveBlocked_ || !std::isfinite(deltaTime) || deltaTime <= 0.0F)
     {
@@ -3965,6 +3966,11 @@ void GameSession::advanceWorldClockFromSimulation(
                 }
                 ++candidate.revision;
             }
+            const bool treatmentStarted = allowAutomaticAdmission &&
+                candidate.residentMedicalReservePolicy.automaticAdmission && basePlayerWorld_ &&
+                basePlayerWorld_->playerSafetyZone() == HomeRegionSafetyZone::SafeCore &&
+                basePlayerWorld_->siteDefinitionId() == candidate.regionalOperations.technologyCore.baseSiteDefinitionId.value() &&
+                tryStartAutomaticResidentTreatment(candidate, publishedContentRegistry());
             const ProfileValidationResult validation = validateProfileState(
                 candidate,
                 publishedContentRegistry());
@@ -3975,7 +3981,7 @@ void GameSession::advanceWorldClockFromSimulation(
                 return;
             }
             if (construction.completed || manufacturing.completed ||
-                residentTreatment.completed || recovery.becameReady)
+                residentTreatment.completed || recovery.becameReady || treatmentStarted)
             {
                 auto prepared=std::make_shared<PreparedPlayerTransition>();
                 prepared->kind=PreparedPlayerTransition::Kind::TimedBaseCompletion;

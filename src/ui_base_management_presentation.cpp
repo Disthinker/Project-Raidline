@@ -193,7 +193,7 @@ std::string uiBaseQuickActionTitle(BaseFacilityQuickActionKind kind,UiLanguage l
     case BaseFacilityQuickActionKind::CancelUpgrade:return t("Cancel upgrade","取消升级");
     case BaseFacilityQuickActionKind::CollectManufacturing:return t("Collect output","领取产物");
     case BaseFacilityQuickActionKind::CancelManufacturing:return t("Cancel production","取消生产");
-    case BaseFacilityQuickActionKind::StartResidentTreatment:return t("Treat residents","治疗居民");
+    case BaseFacilityQuickActionKind::StartResidentTreatment:return t("Resident care","居民医疗");
     case BaseFacilityQuickActionKind::AutoFillWorkers:return t("Fill vacant jobs","自动补齐岗位");
     }
     return t("Unavailable","不可用");

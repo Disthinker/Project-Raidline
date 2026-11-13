@@ -39,6 +39,8 @@ inline constexpr std::string_view kFreightBreachContentVersion{
     "raid-freight-breach-route-content-84"};
 inline constexpr std::string_view kEmergencyPowerContentVersion{
     "base-emergency-power-and-fuel-logistics-content-85"};
+inline constexpr std::string_view kHospitalMedicalReserveContentVersion{
+    "hospital-rescue-and-medical-reserve-content-86"};
 inline const BaseFacilityDefinitionId kBaseGeneratorFacilityId{"base_facility.generator"};
 inline const BaseConstructionProjectDefinitionId kBaseGeneratorProjectId{
     "base_construction.generator.level_1"};
@@ -48,6 +50,10 @@ inline const ItemDefinitionId kHospitalNightVisionId{"item.device.night_vision_b
 inline const ItemDefinitionId kHospitalFloorplanItemId{"item.intelligence.hospital_floorplan"};
 inline const MapDefinitionId kHospitalFloorplanMapId{"map.raid.hospital_district"};
 inline const RaidSpaceDefinitionId kHospitalFloorplanSpaceId{"raid_space.hospital_district.main_building"};
+inline const RescueDefinitionId kHospitalMedicalRescueId{"rescue.ordinary.hospital_district"};
+inline const ItemDefinitionId kHospitalFirstAidStockId{"item.loot.first_aid_stock"};
+inline constexpr std::string_view kHospitalRescueParkingDistrict{"district.hospital.parking"};
+inline constexpr std::string_view kHospitalRescueCampusDistrict{"district.hospital.campus"};
 inline const ItemDefinitionId kFreightCrateKeyId{"item.loot.freight_crate_key"};
 inline const ItemDefinitionId kFreightBreachWedgesId{"item.loot.freight_breach_wedges"};
 inline const BaseManufacturingRecipeDefinitionId kFreightBreachRecipeId{
@@ -85,9 +91,33 @@ inline constexpr std::string_view kRaidFuelLootSlotId{"freight_manifest"};
         slotId == "hospital_reception";
 }
 
+[[nodiscard]] inline bool isHospitalPharmacyLootSlot(
+    const MapDefinitionId &map, const RaidSpaceDefinitionId &space, std::string_view slotId)
+{
+    return map == kHospitalFloorplanMapId && space == kHospitalFloorplanSpaceId &&
+        slotId == "hospital_pharmacy";
+}
+
+[[nodiscard]] inline bool isHospitalRescueDistrictInstance(
+    std::string_view instanceId, std::string_view archetypeId) noexcept
+{
+    return instanceId.starts_with(archetypeId) &&
+        instanceId.substr(archetypeId.size()) == ".1";
+}
+
+[[nodiscard]] inline bool supportsHospitalMedicalReserveContent(std::string_view version) noexcept
+{
+    return version == kHospitalMedicalReserveContentVersion;
+}
+
+[[nodiscard]] inline bool supportsEmergencyPowerContent(std::string_view version) noexcept
+{
+    return version == kEmergencyPowerContentVersion || supportsHospitalMedicalReserveContent(version);
+}
+
 [[nodiscard]] inline bool supportsFreightBreachContent(std::string_view version) noexcept
 {
-    return version == kFreightBreachContentVersion || version == kEmergencyPowerContentVersion;
+    return version == kFreightBreachContentVersion || supportsEmergencyPowerContent(version);
 }
 
 [[nodiscard]] inline bool supportsHospitalFloorplanRoutesContent(std::string_view version) noexcept

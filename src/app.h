@@ -375,6 +375,7 @@ private:
     UiBaseSupplyState supplyUi_;
     UiBaseMedicalState medicalUi_;
     UiBaseMedicalProjection medicalProjection_;
+    std::optional<UiBaseMedicalTransferProjection> medicalTransferProjection_;
     std::optional<ProfileRevision> medicalProjectionRevision_;
     UiLanguage medicalProjectionLanguage_{};
     std::uint64_t medicalProjectionGeneration_{};
@@ -382,6 +383,7 @@ private:
     std::vector<UiBaseMedicalEvent> pendingMedicalEvents_;
     void resetBaseMedicalUi();
     void refreshBaseMedicalUi(bool force = false);
+    [[nodiscard]] const UiBaseMedicalTransferProjection &medicalTransferProjection();
     void handleBaseMedicalEvent(const UiBaseMedicalEvent &);
     std::vector<UiBaseSupplyEvent> pendingSupplyEvents_;
     std::vector<UiBaseSupplyRow> supplyRows_;

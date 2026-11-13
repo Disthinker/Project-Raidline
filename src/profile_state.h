@@ -34,8 +34,11 @@ enum class ProfileContainerKind
     Stash,
     BaseIntake,
     AssetCompartment,
-    LegacyOverflow
+    LegacyOverflow,
+    MedicalReserve
 };
+
+inline constexpr InventoryGridSize kMedicalReserveGridSize{4U, 4U};
 
 struct ProfileContainerId
 {
@@ -46,6 +49,7 @@ struct ProfileContainerId
     [[nodiscard]] static ProfileContainerId stash() noexcept;
     [[nodiscard]] static ProfileContainerId baseIntake() noexcept;
     [[nodiscard]] static ProfileContainerId legacyOverflow() noexcept;
+    [[nodiscard]] static ProfileContainerId medicalReserve() noexcept;
     [[nodiscard]] static ProfileContainerId compartment(
         AssetInstanceId ownerAssetId,
         std::uint32_t compartmentIndex) noexcept;
@@ -642,6 +646,16 @@ inline constexpr std::size_t kBaseResidentProfessionCount = 4U;
 using BaseProfessionCounts =
     std::array<std::uint32_t, kBaseResidentProfessionCount>;
 
+struct ResidentMedicalReservePolicy
+{
+    bool automaticAdmission{};
+    std::array<BaseResidentProfession, kBaseResidentProfessionCount> professionPriority{
+        BaseResidentProfession::Medical, BaseResidentProfession::Engineering,
+        BaseResidentProfession::Combat, BaseResidentProfession::General};
+
+    friend bool operator==(const ResidentMedicalReservePolicy &, const ResidentMedicalReservePolicy &) = default;
+};
+
 struct RaidRescueSnapshot
 {
     RescueDefinitionId definitionId;
@@ -859,6 +873,7 @@ struct ActiveResidentTreatment
     BaseResidentProfession patientProfession{BaseResidentProfession::General};
     BaseResidentProfession workerProfession{BaseResidentProfession::General};
     std::uint32_t emergencyPowerBonusMinutes{};
+    bool usesMedicalReserve{};
 
     friend bool operator==(
         const ActiveResidentTreatment &,
@@ -1240,6 +1255,7 @@ struct PendingRaidSnapshot
     std::optional<AssetInstanceId> fuelExtractionLootAssetId;
     bool backpackRecoveryEnabled{};
     bool freightBreachEnabled{};
+    bool hospitalMedicalReserveEnabled{};
 };
 
 struct LastRaidResult
@@ -1288,6 +1304,7 @@ struct ProfileState
     BaseMoraleState baseMorale;
     BaseCommunityEventState baseCommunityEvent;
     BaseResidentMedicalState residentMedical;
+    ResidentMedicalReservePolicy residentMedicalReservePolicy;
     BaseManufacturingState baseManufacturing;
     std::optional<BaseEmergencyPowerState> emergencyPower;
     BaseConstructionState baseConstruction;
@@ -1386,6 +1403,9 @@ grantDeveloperWarehouseCatalog(
 [[nodiscard]] bool assetIsBaseAccessible(
     const ProfileState &profile,
     AssetInstanceId instanceId) noexcept;
+
+[[nodiscard]] bool isMedicalReserveItem(const ItemDefinitionId &definitionId) noexcept;
+[[nodiscard]] bool isMedicalReserveAsset(const AssetRecord &asset) noexcept;
 
 [[nodiscard]] std::vector<AssetInstanceId> carriedAssetIds(
     const ProfileState &profile);

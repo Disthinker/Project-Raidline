@@ -40,6 +40,8 @@ struct UiBaseMedicalTestAccess {
 namespace {
 using A = UiBaseMedicalTestAccess; using Control = UiBaseMedicalControl; using Tab = UiBaseMedicalTab;
 const ItemDefinitionId paper{"item.loot.toilet_paper"};
+const ItemDefinitionId bandage{"item.medical.bandage_basic"};
+const ItemDefinitionId firstAidStock{"item.loot.first_aid_stock"};
 Vec2 center(SDL_FRect r) { return {r.x + r.w / 2, r.y + r.h / 2}; }
 void pointer(Vec2 p, bool down) {
     SDL_Event e{}; e.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
@@ -90,19 +92,28 @@ protected:
         detach(); if(app)A::bindWindow(*app,nullptr);SDL_DestroyWindow(window);window=nullptr;app.reset(); SDL_Quit();
         ASSERT_NO_THROW(saveDirectory.cleanup());
     }
-    void control(Control c) { auto point = center(uiBaseMedicalControlRect(c)); pointer(point, true); pointer(point, false); A::frame(*app); }
+    void control(Control c) { auto point = center(uiBaseMedicalControlRect(c, A::state(*app).tab)); pointer(point, true); pointer(point, false); A::frame(*app); }
+    void click(SDL_FRect rect) { const auto point = center(rect); pointer(point, true); pointer(point, false); A::frame(*app); }
+    SDL_FRect cabinetCell(int x, int y) {
+        const auto grid = uiBaseMedicalReserveRect();
+        const auto size = kUiBaseMedicalReserveCellSize;
+        return {grid.x + x * size, grid.y + y * size, size, size};
+    }
     void down(Control c = Control::Main) { pointer(center(uiBaseMedicalControlRect(c)), true); A::frame(*app); }
     void up(Control c = Control::Main) { pointer(center(uiBaseMedicalControlRect(c)), false); A::frame(*app); }
-    AssetInstanceId create(const ItemDefinitionId &id, std::uint32_t n) {
-        const auto &d = content.item(id); const auto fit = findFirstProfileFit(profile(), content, ProfileContainerId::stash(), d, ItemOrientation::Degrees0);
-        if (!fit) { ADD_FAILURE() << "fixture Stash is full"; return 0; }
-        const auto result = profile().assets.create(d, StoredAssetLocation{ProfileContainerId::stash(), *fit}, n); ++profile().revision; return result;
+    AssetInstanceId create(const ItemDefinitionId &id, std::uint32_t n,
+        ProfileContainerId container = ProfileContainerId::stash()) {
+        const auto &d = content.item(id);
+        const auto fit = findFirstProfileFit(profile(), content, container, d, ItemOrientation::Degrees0);
+        if (!fit) { ADD_FAILURE() << "fixture container is full"; return 0; }
+        const auto result = profile().assets.create(d, StoredAssetLocation{container, *fit}, n); ++profile().revision; return result;
     }
     std::uint64_t quantity(const ItemDefinitionId &id) {
         std::uint64_t result = 0; for (const auto &[n, a] : profile().assets.records()) if (a.definitionId == id) result += a.quantity; return result;
     }
     void supplies() {
-        create(paper, 2); create(paper, 2); profile().baseSupplyPolicy.assignments[paper] = BaseSupplyCategory::Medical; ++profile().revision;
+        create(bandage, 1, ProfileContainerId::medicalReserve());
+        create(bandage, 1, ProfileContainerId::medicalReserve());
         ASSERT_TRUE(queryStartResidentTreatment(profile(), content).canCommit);
     }
     void wheel(Vec2 p) {
@@ -128,11 +139,20 @@ TEST_F(UiBaseMedicalTest, HealthyAndInsufficientFundsHaveDifferentReasonsAndNoCh
     EXPECT_EQ(profileStateFingerprint(profile()), poor); EXPECT_NE(A::message(*app).find("insufficient"), std::string::npos);
 }
 TEST_F(UiBaseMedicalTest, ResidentPlanGroupsRowsButPreservesOriginalIdsAndConsumesAuthorizedItemsOnce) {
+    const auto personal = create(bandage, 1);
+    ASSERT_NE(personal, 0U);
+    const auto personalQuantity = quantity(bandage);
     supplies(); control(Control::Residents);
-    const auto &view = A::projection(*app); ASSERT_EQ(view.supplies.size(), 1U); EXPECT_EQ(view.supplies[0].quantity, 4U); ASSERT_EQ(view.resident.supplies.size(), 2U);
+    const auto &view = A::projection(*app);
+    ASSERT_EQ(view.supplies.size(), 1U);
+    EXPECT_EQ(view.supplies[0].charges, 2U);
+    ASSERT_EQ(view.resident.supplies.size(), 2U);
     const auto currency = profile().currency; const auto drugs = quantity(alpha_content::medkit); const auto minute = profile().worldClock.elapsedWorldMinutes;
-    down(); EXPECT_EQ(quantity(paper), 4U); up(); ASSERT_TRUE(profile().residentMedical.activeTreatment);
-    EXPECT_EQ(quantity(paper), 0U); EXPECT_EQ(quantity(alpha_content::medkit), drugs); EXPECT_EQ(profile().currency, currency);
+    down(); EXPECT_EQ(quantity(bandage), personalQuantity + 2U); up(); ASSERT_TRUE(profile().residentMedical.activeTreatment);
+    EXPECT_EQ(quantity(bandage), personalQuantity);
+    ASSERT_TRUE(profile().assets.find(personal));
+    EXPECT_EQ(profile().assets.find(personal)->remainingCharges, 1U);
+    EXPECT_EQ(quantity(alpha_content::medkit), drugs); EXPECT_EQ(profile().currency, currency);
     EXPECT_EQ(profile().worldClock.elapsedWorldMinutes, minute); EXPECT_EQ(profile().basePopulation.injuredResidents, 1U);
     const auto fp = profileStateFingerprint(profile()); up(); control(Control::Main); EXPECT_EQ(profileStateFingerprint(profile()), fp);
 }
@@ -268,8 +288,11 @@ TEST_F(UiBaseMedicalTest, ExistingBleedingPriceAndPainkillerEffectArePreserved) 
     EXPECT_EQ(profile().medicalStatus.painkillerRemainingMs, 120000U);
 }
 TEST_F(UiBaseMedicalTest, PartialSuppliesAndNoPatientCannotSpendAnything) {
-    create(paper, 1); profile().baseSupplyPolicy.assignments[paper] = BaseSupplyCategory::Medical; ++profile().revision;
-    control(Control::Residents); EXPECT_FALSE(A::projection(*app).resident.canCommit); ASSERT_FALSE(A::projection(*app).supplies.empty());
+    create(bandage, 1, ProfileContainerId::medicalReserve());
+    create(paper, 1);
+    profile().baseSupplyPolicy.assignments[paper] = BaseSupplyCategory::Medical;
+    ++profile().revision;
+    control(Control::Residents); EXPECT_FALSE(A::projection(*app).resident.canCommit); EXPECT_TRUE(A::projection(*app).supplies.empty());
     const auto partial = profileStateFingerprint(profile()); control(Control::Main); EXPECT_EQ(profileStateFingerprint(profile()), partial);
     profile().basePopulation.injuredResidents = 0; profile().basePopulation.injuredByProfession.fill(0); ++profile().revision;
     control(Control::Main); EXPECT_NE(A::message(*app).find("no injured"), std::string::npos);
@@ -282,6 +305,63 @@ TEST_F(UiBaseMedicalTest, LongFeedbackCanBeScrolledWithoutLosingOrExecutingIt) {
     wheel(center(uiBaseMedicalFeedbackRect())); EXPECT_GT(A::state(*app).feedbackScroll, 0);
     A::draw(*app); EXPECT_EQ(A::message(*app), all); EXPECT_EQ(profileStateFingerprint(profile()), fp);
 }
+TEST_F(UiBaseMedicalTest, CabinetMovesTheSelectedInstanceAndShowsItsDestinationBeforeSpending)
+{
+    const auto id = create(firstAidStock, 1);
+    const auto other = create(firstAidStock, 1);
+    ASSERT_NE(id, 0U);
+    ASSERT_NE(other, 0U);
+    control(Control::Residents);
+    const auto &items = A::projection(*app).warehouseMedicine;
+    const auto item = std::ranges::find_if(items, [id](const auto &row) { return row.id == id; });
+    ASSERT_NE(item, items.end());
+    const auto index = static_cast<std::size_t>(item - items.begin());
+    A::state(*app).warehousePage = index / kUiBaseMedicalWarehouseRows;
+    click(uiBaseMedicalWarehouseRowRect(index % kUiBaseMedicalWarehouseRows));
+    click(cabinetCell(2, 3));
+    ASSERT_EQ(A::state(*app).selectedMedicine, id);
+    const StoredAssetLocation exactCabinet{ProfileContainerId::medicalReserve(), {2, 3}};
+    const auto preview = projectUiBaseMedicalTransfer(profile(), content, A::state(*app), A::projection(*app));
+    ASSERT_TRUE(preview.canCommit) << preview.message;
+    EXPECT_EQ(preview.command->destination, exactCabinet);
+    const auto before = profileStateFingerprint(profile());
+    down(Control::ReserveTransfer);
+    EXPECT_EQ(profileStateFingerprint(profile()), before);
+    up(Control::ReserveTransfer);
+    const auto *asset = profile().assets.find(id);
+    ASSERT_TRUE(asset);
+    EXPECT_EQ(std::get<StoredAssetLocation>(asset->location), exactCabinet);
+    EXPECT_TRUE(assetIsBaseAccessible(profile(), other));
+    EXPECT_FALSE(assetIsBaseAccessible(profile(), id));
+    click(cabinetCell(3, 3));
+    EXPECT_EQ(A::state(*app).selectedMedicine, id);
+    const auto back = projectUiBaseMedicalTransfer(profile(), content, A::state(*app), A::projection(*app));
+    ASSERT_TRUE(back.canCommit) << back.message;
+    control(Control::ReserveTransfer);
+    ASSERT_TRUE(profile().assets.find(id));
+    EXPECT_EQ(std::get<StoredAssetLocation>(profile().assets.find(id)->location), back.command->destination);
+    EXPECT_TRUE(assetIsBaseAccessible(profile(), id));
+}
+
+TEST_F(UiBaseMedicalTest, CabinetPriorityAndAutomaticAdmissionPersistWithoutChangingExistingJob)
+{
+    supplies();
+    control(Control::Residents);
+    control(Control::Main);
+    ASSERT_TRUE(profile().residentMedical.activeTreatment);
+    const auto job = *profile().residentMedical.activeTreatment;
+    control(Control::Priority);
+    click(uiBaseMedicalPriorityButtonRect(Control::MoveEarlier, 1));
+    EXPECT_EQ(profile().residentMedicalReservePolicy.professionPriority.front(), BaseResidentProfession::Engineering);
+    control(Control::AutoAdmission);
+    EXPECT_TRUE(profile().residentMedicalReservePolicy.automaticAdmission);
+    EXPECT_EQ(profile().residentMedical.activeTreatment, job);
+    const auto reloaded = SaveRepository(path).load(content);
+    ASSERT_TRUE(reloaded.profile) << reloaded.message;
+    EXPECT_EQ(reloaded.profile->residentMedicalReservePolicy, profile().residentMedicalReservePolicy);
+    EXPECT_EQ(reloaded.profile->residentMedical.activeTreatment, job);
+}
+
 TEST_F(UiBaseMedicalTest, OffscreenStateMatrixHasNoSideEffects) {
     supplies(); const ProfileState seed = profile();
     const char *output = std::getenv("RAIDLINE_MEDICAL_PREVIEW_DIR");
@@ -291,8 +371,8 @@ TEST_F(UiBaseMedicalTest, OffscreenStateMatrixHasNoSideEffects) {
         ASSERT_TRUE(destination.filename().string().starts_with("raidline-medical-review-"));
         std::filesystem::create_directories(destination);
     }
-    constexpr const char *names[]{"personal", "healthy", "poor", "bleeding", "resident", "missing-worker", "partial", "active", "upgrade"};
-    for (int scenario = 0; scenario < 9; ++scenario) {
+    constexpr const char *names[]{"personal", "healthy", "poor", "bleeding", "resident", "missing-worker", "partial", "active", "upgrade", "admission", "cabinet-placement"};
+    for (int scenario = 0; scenario < static_cast<int>(std::size(names)); ++scenario) {
         profile() = seed;
         if (scenario == 1) profile().currentHealth = 100;
         if (scenario == 2) profile().currency = 0;
@@ -305,12 +385,20 @@ TEST_F(UiBaseMedicalTest, OffscreenStateMatrixHasNoSideEffects) {
             const auto projection = projectUiBaseMedical(profile(), content, UiLanguage::English); ASSERT_TRUE(projection.upgradeId);
             ASSERT_TRUE(A::session(*app).executeStartBaseConstruction(*projection.upgradeId, "matrix-upgrade").succeeded);
         }
+        const auto deposit = scenario == 10 ? create(firstAidStock, 1) : 0;
         ++profile().revision;
         const auto fp = profileStateFingerprint(profile());
         for (auto size : kUiWindowSizes) for (auto language : {UiLanguage::SimplifiedChinese, UiLanguage::English}) {
             detach(); attach(size.width, size.height); A::text(*app).setLanguage(language);
             A::state(*app) = {}; A::state(*app).tab = scenario < 4 ? Tab::Personal : Tab::Residents;
-            A::state(*app).facilities = true; A::state(*app).details = {true, true}; A::refresh(*app);
+            A::state(*app).facilities = scenario == 8;
+            A::state(*app).priorityOpen = scenario == 9;
+            A::state(*app).details = {true, true};
+            if (deposit) {
+                A::state(*app).selectedMedicine = deposit;
+                A::state(*app).reserveDestination = GridPosition{1, 2};
+            }
+            A::refresh(*app);
             SDL_SetRenderDrawColor(renderer, 10, 16, 18, 255); SDL_RenderClear(renderer); A::draw(*app); SDL_RenderPresent(renderer);
             EXPECT_EQ(profileStateFingerprint(profile()), fp);
             if (!destination.empty()) {

@@ -1,3 +1,14 @@
+# 当前 · 医院救援与公共医疗储备 v1 已验收
+
+去医院救出一名受伤的医疗专业居民。把带回的药品分给公共药柜或留作随身药，治好居民后可安排上岗。[具体开发方案](../exec-plans/active/hospital-rescue-and-medical-reserve-v1.md)
+
+- task_id `hospital-rescue-and-medical-reserve-v1`，plan_version `RL-HOSPITAL-RESCUE-AND-MEDICAL-RESERVE-v1`，state `accepted`。approval_source 为 2026-11-13 用户对本方案回复“批准”。candidate_id `RL-HOSPITAL-RESCUE-AND-MEDICAL-RESERVE-v1-local-f2b2da563d9b`。accepted_candidate_id `RL-HOSPITAL-RESCUE-AND-MEDICAL-RESERVE-v1-local-f2b2da563d9b`。acceptance_source 为 2026-11-13 用户回复“验收通过”，按既定约定提交并推送。
+- 基线 `origin/main@302901a5c2d8b3a1e810bfa83f654bd99729267e` 的 Windows 与 Ubuntu CI 已核对通过。独立工作树从已验收并推送的供电版本 `d6034ef08309f7917089c0bb427cd3b70a4154a6` 开发，包含三个此前已验收的依赖。
+- 原策划线程已回复 `MAIN-NEXT-STAGE-20261113-AFTER-EMERGENCY-POWER-01`，任务 `raid-next-stage-after-emergency-power`，协议 `RL-NEXT-STAGE-REQUEST-v1`，turn `01a1d3b4-e0ab-7f90-ac2b-9289e4c33062`，基线一致。2026-11-13 用户要求扩大开发步长并先确认方案。
+- 固定入口已更新。Windows 全量 3295/3295，14 项 3 ms 检查通过，旧档副本升级回读一致。[联合验收](../acceptance/hospital-rescue-and-medical-reserve-v1.md)
+
+---
+
 # 当前 · 基地应急供电与燃油后勤 v1 已验收
 
 在灰烬工场搜建材，去边境交换站取油，选择燃油撤离或带回加快工坊和居民治疗。[具体开发方案](../exec-plans/active/base-emergency-power-and-fuel-logistics-v1.md)

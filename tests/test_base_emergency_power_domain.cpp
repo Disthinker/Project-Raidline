@@ -243,9 +243,8 @@ TEST(BaseEmergencyPowerDomainTest, ResidentTreatmentAcceleratesAndPausesWithoutC
     ProfileState profile = makeGeneratorProfile();
     profile.basePopulation.injuredResidents = 1U;
     profile.basePopulation.injuredByProfession[baseProfessionIndex(BaseResidentProfession::General)] = 1U;
-    const ItemDefinitionId medkit{"item.medical.medkit_alpha"};
-    addToStash(profile, medkit);
-    profile.baseSupplyPolicy.assignments[medkit] = BaseSupplyCategory::Medical;
+    ASSERT_NE(profile.assets.create(content.item(kHospitalFirstAidStockId),
+        StoredAssetLocation{ProfileContainerId::medicalReserve(), {0, 0}}), 0U);
     const auto treatment = executeStartResidentTreatment(
         profile, content, {}, {profile.revision, "treatment"});
     ASSERT_TRUE(treatment.succeeded) << treatment.message;

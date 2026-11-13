@@ -547,3 +547,68 @@ TEST_F(ProfileUiPersistenceTest, RealBleedingTickInCoreKeepsOneHealthAndCheckpoi
     const auto saved=SaveRepository{directory.path()}.load(content);ASSERT_TRUE(saved.profile)<<saved.message;
     EXPECT_EQ(profileStateFingerprint(*saved.profile),profileStateFingerprint(session().profile()));
 }
+
+TEST_F(ProfileUiPersistenceTest, CabinetDepositAndAutomaticAdmissionRetryAsOneDurableOperation)
+{
+    auto candidate = session().profile();
+    candidate.residentMedicalReservePolicy.automaticAdmission = true;
+    candidate.basePopulation.injuredResidents = 1U;
+    candidate.basePopulation.injuredByProfession[baseProfessionIndex(BaseResidentProfession::General)] = 1U;
+    const auto &stock = content.item(kHospitalFirstAidStockId);
+    const auto stash = ProfileContainerId::stash();
+    const auto fit = findFirstProfileFit(candidate, content, stash, stock, ItemOrientation::Degrees0);
+    ASSERT_TRUE(fit);
+    const StoredAssetLocation source{stash, *fit};
+    const auto id = candidate.assets.create(stock, source);
+    loadFixture(std::move(candidate));
+    ASSERT_EQ(flow.baseWorld().playerSafetyZone(), HomeRegionSafetyZone::SafeCore);
+    const auto before = profileStateFingerprint(session().profile());
+    const auto minute = session().profile().worldClock.elapsedWorldMinutes;
+    const auto jobId = session().profile().nextBaseServiceJobId;
+    store->fail = true;
+
+    const MoveMedicalReserveAssetCommand deposit{id, source, {ProfileContainerId::medicalReserve(), {0, 0}}};
+    const auto request = session().requestProfileUiCommand(deposit, "auto-care-deposit");
+    ASSERT_TRUE(request.accepted) << request.message;
+    EXPECT_FALSE(session().requestProfileUiCommand(deposit, "duplicate-auto-care").accepted);
+    EXPECT_FALSE(session().profile().residentMedical.activeTreatment);
+    ASSERT_NE(session().profile().assets.find(id), nullptr);
+    failAndRetryRuntimeCandidate(before, ProfileUiCompletionKind::Command);
+
+    EXPECT_EQ(session().profile().assets.find(id), nullptr);
+    ASSERT_TRUE(session().profile().residentMedical.activeTreatment);
+    EXPECT_EQ(session().profile().residentMedical.activeTreatment->jobId, jobId);
+    EXPECT_EQ(session().profile().residentMedical.activeTreatment->startedWorldMinute, minute);
+    EXPECT_EQ(session().profile().nextBaseServiceJobId, jobId + 1U);
+    EXPECT_TRUE(session().profile().committedTransactions.contains("auto-care-deposit"));
+}
+
+TEST_F(ProfileUiPersistenceTest, RestCompletesOneTreatmentAndStartsNextAtArrival)
+{
+    auto candidate = session().profile();
+    candidate.basePopulation.injuredResidents = 2U;
+    candidate.basePopulation.injuredByProfession[baseProfessionIndex(BaseResidentProfession::General)] = 2U;
+    const auto &stock = content.item(kHospitalFirstAidStockId);
+    const auto cabinet = ProfileContainerId::medicalReserve();
+    ASSERT_NE(candidate.assets.create(stock, StoredAssetLocation{cabinet, {0, 0}}), 0U);
+    const auto nextStock = candidate.assets.create(stock, StoredAssetLocation{cabinet, {2, 0}});
+    const auto started = executeStartResidentTreatment(candidate, content, {},
+        {candidate.revision, "rest-fixture-treatment"});
+    ASSERT_TRUE(started.succeeded) << started.message;
+    candidate.residentMedicalReservePolicy.automaticAdmission = true;
+    const auto arrival = candidate.worldClock.elapsedWorldMinutes + 12U * 60U;
+    loadFixture(std::move(candidate));
+    ASSERT_EQ(flow.baseWorld().playerSafetyZone(), HomeRegionSafetyZone::SafeCore);
+    const auto request = session().requestProfileUiCommand(BaseRestCommand{12U}, "auto-care-rest");
+    ASSERT_TRUE(request.accepted) << request.message;
+    store->release();
+    ASSERT_TRUE(settle()) << session().persistenceMessage();
+
+    const auto &after = session().profile();
+    EXPECT_EQ(after.worldClock.elapsedWorldMinutes, arrival);
+    EXPECT_EQ(after.basePopulation.injuredResidents, 1U);
+    ASSERT_TRUE(after.residentMedical.activeTreatment);
+    EXPECT_NE(after.residentMedical.activeTreatment->jobId, started.jobId);
+    EXPECT_EQ(after.residentMedical.activeTreatment->startedWorldMinute, arrival);
+    EXPECT_EQ(after.assets.find(nextStock), nullptr);
+}

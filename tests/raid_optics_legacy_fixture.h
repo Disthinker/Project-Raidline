@@ -4,9 +4,19 @@
 #include <algorithm>
 #include <nlohmann/json.hpp>
 
-inline nlohmann::json contentBeforeEmergencyPowerJson()
+inline nlohmann::json contentBeforeHospitalMedicalReserveJson()
 {
     auto document = nlohmann::json::parse(publishedContentJson());
+    document["content_version"] = kEmergencyPowerContentVersion;
+    for (auto &map : document.at("maps"))
+        if (map.at("id") == std::string{kHospitalFloorplanMapId.value()})
+            map.erase("rescue");
+    return document;
+}
+
+inline nlohmann::json contentBeforeEmergencyPowerJson()
+{
+    auto document = contentBeforeHospitalMedicalReserveJson();
     document["content_version"] = kFreightBreachContentVersion;
     auto &construction = document["base_construction"];
     std::erase_if(construction["facilities"].get_ref<nlohmann::json::array_t &>(), [](const auto &facility) {

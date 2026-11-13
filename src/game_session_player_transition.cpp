@@ -44,6 +44,8 @@ bool GameSession::prepareDailyOutingEndCandidate(ProfileState &candidate,BaseWor
         effects.controlRemainingSeconds=effects.impactSlowRemainingSeconds=0;
         effects.dailyDamageProtectionSeconds=.25F;
     }
+    if (rescued || baseWorld.playerSafetyZone() == HomeRegionSafetyZone::SafeCore)
+        static_cast<void>(tryStartAutomaticResidentTreatment(candidate, content));
     const auto valid=validateProfileState(candidate,content);
     if(!valid.valid){persistenceMessage_=valid.message;return false;}
     return true;

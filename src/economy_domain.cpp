@@ -224,7 +224,7 @@ EconomyReceipt applyRecycle(
             return failure(DomainErrorCode::IllegalDestination, "REMOVE NIGHT VISION DEVICE BEFORE RECYCLING", candidate.revision);
     }
     const ItemDefinition &definition = content.item(asset->definitionId);
-    if (asset->reliefBatchId.has_value() ||
+    if (isMedicalReserveAsset(*asset) || asset->reliefBatchId.has_value() ||
         definition.marketRecyclePrice == 0 ||
         hasChildren(candidate, asset->instanceId))
     {

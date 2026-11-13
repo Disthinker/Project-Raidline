@@ -268,6 +268,9 @@ inline constexpr std::string_view kRaidAnchorSelfRecovery{"self_recovery"};
     const RaidGeneratedMapLayout &layout,
     std::string_view id) noexcept;
 
+[[nodiscard]] std::optional<RaidAnchorPlacementSnapshot> selectHospitalRescueAnchor(
+    const MapDefinition &map, const RaidGeneratedMapLayout &layout, Vec2 size);
+
 [[nodiscard]] Vec2 raidResourcePointLootPosition(
     const RaidResourcePointSnapshot &resourcePoint,
     std::uint32_t slotIndex) noexcept;

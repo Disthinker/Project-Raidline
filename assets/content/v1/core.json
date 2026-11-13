@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "base-emergency-power-and-fuel-logistics-content-85",
+  "content_version": "hospital-rescue-and-medical-reserve-content-86",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -3623,6 +3623,15 @@
       "recovery": {
         "service_fee": 130,
         "duration_minutes": 720
+      },
+      "rescue": {
+        "id": "rescue.ordinary.hospital_district",
+        "subject_kind": "ordinary_residents",
+        "transfer_point": {"position": {"x": 1180, "y": 520}, "size": {"x": 170, "y": 100}},
+        "interaction_duration_seconds": 2,
+        "ordinary_resident_count": 1,
+        "injured_resident_count": 1,
+        "profession": "medical"
       },
       "background_texture": "backgrounds/project_raidline_test_map_1280x720.png",
       "background_tint": {

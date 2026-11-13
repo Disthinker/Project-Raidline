@@ -10864,6 +10864,16 @@ bool App::handleBaseFacilityInspectorClick(MousePosition position)
                 continue;
             const BaseFacilityQuickActionProjection &action =
                 projection.quickActions[index];
+            if (action.kind == BaseFacilityQuickActionKind::StartResidentTreatment)
+            {
+                openBaseFixedFacility(BaseFacilityKind::Medical);
+                if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Medical)
+                {
+                    medicalUi_.tab = UiBaseMedicalTab::Residents;
+                    medicalUi_.details[static_cast<std::size_t>(UiBaseMedicalTab::Residents)] = true;
+                }
+                return true;
+            }
             if (!action.canCommit)
             {
                 uiMessage_ = action.message;
@@ -10880,7 +10890,6 @@ bool App::handleBaseFacilityInspectorClick(MousePosition position)
                 case BaseFacilityQuickActionKind::CancelUpgrade:success="BASE FACILITY UPGRADE CANCELLED";break;
                 case BaseFacilityQuickActionKind::CollectManufacturing:success="MANUFACTURED ITEM COLLECTED";break;
                 case BaseFacilityQuickActionKind::CancelManufacturing:success="MANUFACTURING CANCELLED | INPUTS RETURNED";break;
-                case BaseFacilityQuickActionKind::StartResidentTreatment:success="RESIDENT TREATMENT STARTED";break;
                 case BaseFacilityQuickActionKind::AutoFillWorkers:success="BASE FACILITY WORKERS AUTO-FILLED";break;
                 default:break;
                 }
@@ -10905,7 +10914,7 @@ bool App::handleBaseFacilityInspectorClick(MousePosition position)
                     :ProfileUiCommand{CancelBaseConstructionCommand{*action.constructionProjectId}},tx,finish);break;
             case BaseFacilityQuickActionKind::CollectManufacturing:submitProfileUi<BaseManufacturingReceipt>(ProfileUiCollectManufacturingCommand{},tx,finish);break;
             case BaseFacilityQuickActionKind::CancelManufacturing:submitProfileUi<BaseManufacturingReceipt>(ProfileUiCancelManufacturingCommand{},tx,finish);break;
-            case BaseFacilityQuickActionKind::StartResidentTreatment:submitProfileUi<ResidentTreatmentReceipt>(StartResidentTreatmentCommand{},tx,finish);break;
+            case BaseFacilityQuickActionKind::StartResidentTreatment: return true;
             case BaseFacilityQuickActionKind::AutoFillWorkers:submitProfileUi<BaseWorkforceReceipt>(ProfileUiAutoFillWorkersCommand{},tx,finish);break;
             }
             return true;
@@ -11643,8 +11652,9 @@ void App::renderBaseFacilityInspector()
         uiFinalTextAt(renderer_,uiTextRenderer_,box.x+16,box.y+101,secondary,box.w-32,13);
         for(std::size_t i=0;i<p.quickActions.size();++i) {
             const auto &action=p.quickActions[i];auto label=uiBaseQuickActionTitle(action.kind,language);
-            if(!action.canCommit)label+=tr(" · unavailable"," · 不可用");
-            renderFoundationButton(20200+static_cast<int>(i),baseFacilityQuickActionButton(i),label,action.canCommit,
+            const bool canActivate = action.kind == BaseFacilityQuickActionKind::StartResidentTreatment || action.canCommit;
+            if(!canActivate)label+=tr(" · unavailable"," · 不可用");
+            renderFoundationButton(20200+static_cast<int>(i),baseFacilityQuickActionButton(i),label,canActivate,
                 action.kind==BaseFacilityQuickActionKind::CancelUpgrade || action.kind==BaseFacilityQuickActionKind::CancelManufacturing,
                 false,localizeUiText(language,action.message),13);
         }

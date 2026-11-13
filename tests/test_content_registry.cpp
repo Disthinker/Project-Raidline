@@ -83,6 +83,24 @@ TEST(ContentRegistryTest, HospitalAnchorConstraintsRejectTyposAndMissingKinds)
     EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(root.dump())), ContentRegistryError);
 }
 
+TEST(ContentRegistryTest, HospitalMedicalReserveRequiresInjuredMedicAndFixedPharmacy)
+{
+    const auto original = hospitalContentCandidateJson();
+    auto missingRescue = original;
+    missingRescue["maps"].back().erase("rescue");
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(missingRescue.dump())), ContentRegistryError);
+
+    auto wrongPatient = original;
+    wrongPatient["maps"].back()["rescue"]["profession"] = "engineering";
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(wrongPatient.dump())), ContentRegistryError);
+
+    auto missingPharmacy = original;
+    auto &slots = missingPharmacy["maps"].back()["interiors"][0]["loot_slots"];
+    std::erase_if(slots.get_ref<nlohmann::json::array_t &>(),
+        [](const auto &slot) { return slot.at("id") == "hospital_pharmacy"; });
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(missingPharmacy.dump())), ContentRegistryError);
+}
+
 TEST(ContentRegistryTest, AuthoredLandmarkFootprintsAreValidatedAndPreserved)
 {
     const auto load = [](std::string_view structures)
@@ -127,7 +145,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        kEmergencyPowerContentVersion);
+        kHospitalMedicalReserveContentVersion);
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -443,8 +461,6 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         EXPECT_EQ(publishedMap.highRisk.advancedLootSlots.size(), 2U);
         EXPECT_EQ(publishedMap.highRisk.advancedLootTableId,
                   LootTableDefinitionId{hospital ? "loot.hospital.high_risk_v1" : "loot.raid.high_risk_v1"});
-        if (!hospital)
-        {
         ASSERT_TRUE(publishedMap.rescue.has_value());
         EXPECT_EQ(
             publishedMap.rescue->subjectKind,
@@ -453,10 +469,11 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         EXPECT_FLOAT_EQ(
             publishedMap.rescue->interactionDurationSeconds,
             2.0F);
-        }
-        else
+        if (hospital)
         {
-            EXPECT_FALSE(publishedMap.rescue.has_value());
+            EXPECT_EQ(publishedMap.rescue->id, kHospitalMedicalRescueId);
+            EXPECT_EQ(publishedMap.rescue->profession, BaseResidentProfession::Medical);
+            EXPECT_EQ(publishedMap.rescue->injuredResidentCount, 1U);
         }
         EXPECT_TRUE(mapIds.insert(publishedMap.id).second);
         for (const EnemyDeploymentDefinitionId &deploymentId :
@@ -1928,6 +1945,12 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
                 return isHospitalFloorplanLootSlot(hospital.id, interior.id, slot.id);
             });
         });
+    const bool pharmacySlot = std::any_of(hospital.interiors.begin(), hospital.interiors.end(),
+        [&](const auto &interior) {
+            return std::any_of(interior.lootSlots.begin(), interior.lootSlots.end(), [&](const auto &slot) {
+                return isHospitalPharmacyLootSlot(hospital.id, interior.id, slot.id);
+            });
+        });
     for (const ItemDefinition &item : registry.items())
     {
         const bool lootSource = std::any_of(
@@ -1957,6 +1980,7 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
             item.definitionId == kFixedRaidOpticId ||
             (item.definitionId == kHospitalNightVisionId && nightVisionSlot) ||
             (item.definitionId == kHospitalFloorplanItemId && floorplanSlot) ||
+            (item.definitionId == kHospitalFirstAidStockId && pharmacySlot) ||
             (item.definitionId == kFreightCrateKeyId && freightKeySlot) ||
             (item.definitionId == kRaidFuelCanId && fuelSlot) ||
             (item.definitionId == kArmorRepairBlueprintId && blueprintSlot);
@@ -2249,7 +2273,7 @@ TEST(ContentRegistryTest, OpticDefinitionsSeparateTheReceiverMountAndOpticModes)
 TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDefinitions)
 {
     const auto original = hospitalContentCandidateJson();
-    ASSERT_EQ(original.at("content_version").get<std::string>(), kEmergencyPowerContentVersion);
+    ASSERT_EQ(original.at("content_version").get<std::string>(), kHospitalMedicalReserveContentVersion);
     for (const auto *required : {"fortifications", "enemy_combat_definitions"})
     {
         SCOPED_TRACE(required);

@@ -173,6 +173,15 @@ bool validPowerJobBonus(std::uint32_t bonus, std::uint64_t start, std::uint64_t 
         bonus <= (finish - start) / 2U + (finish - start) % 2U;
 }
 
+bool validResidentTreatmentCost(
+    const ActiveResidentTreatment &treatment, const ContentRegistry &content)
+{
+    if (treatment.usesMedicalReserve)
+        return supportsHospitalMedicalReserveContent(content.contentVersion()) &&
+            treatment.consumedContribution == 0U;
+    return treatment.consumedContribution >= content.residentMedical().requiredContribution;
+}
+
 bool validEmergencyPower(
     const BaseEmergencyPowerState &power, const BaseConstructionState &construction,
     std::uint64_t minute, std::optional<BaseServiceJobId> workshop,
@@ -206,6 +215,8 @@ bool containerAccepts(
     ProfileContainerId container,
     const ItemDefinition &item)
 {
+    if (container.kind == ProfileContainerKind::MedicalReserve)
+        return isMedicalReserveItem(item.definitionId);
     if (container.kind != ProfileContainerKind::AssetCompartment)
     {
         return true;
@@ -500,6 +511,25 @@ ProfileContainerId ProfileContainerId::legacyOverflow() noexcept
     return ProfileContainerId{ProfileContainerKind::LegacyOverflow, 0, 0};
 }
 
+ProfileContainerId ProfileContainerId::medicalReserve() noexcept
+{
+    return {ProfileContainerKind::MedicalReserve, 0, 0};
+}
+
+bool isMedicalReserveItem(const ItemDefinitionId &definitionId) noexcept
+{
+    const auto value = definitionId.value();
+    return definitionId == kHospitalFirstAidStockId || value == "item.medical.bandage_roll_basic" ||
+        definitionId == alpha_content::medkit || definitionId == alpha_content::bandage ||
+        definitionId == alpha_content::tourniquet;
+}
+
+bool isMedicalReserveAsset(const AssetRecord &asset) noexcept
+{
+    const auto *stored = std::get_if<StoredAssetLocation>(&asset.location);
+    return stored && stored->container.kind == ProfileContainerKind::MedicalReserve;
+}
+
 ProfileContainerId ProfileContainerId::compartment(
     AssetInstanceId ownerAssetId,
     std::uint32_t compartmentIndex) noexcept
@@ -785,6 +815,12 @@ InventoryGridSize profileContainerSize(
     if (container.kind == ProfileContainerKind::BaseIntake)
     {
         return kBaseIntakeSize;
+    }
+    if (container.kind == ProfileContainerKind::MedicalReserve)
+    {
+        if (!supportsHospitalMedicalReserveContent(content.contentVersion()))
+            throw std::out_of_range{"medical reserve is unavailable in this content version"};
+        return kMedicalReserveGridSize;
     }
     if (container.kind != ProfileContainerKind::AssetCompartment)
         throw std::out_of_range{"unknown container kind"};
@@ -1950,17 +1986,27 @@ ProfileValidationResult validateProfileState(
         const auto workshop = order && !order->outputReady && order->recipeDefinitionId != kArmorRepairResearchId
             ? std::optional{order->jobId} : std::nullopt;
         const auto medical = treatment ? std::optional{treatment->jobId} : std::nullopt;
-        if (content.contentVersion() != kEmergencyPowerContentVersion ||
+        if (!supportsEmergencyPowerContent(content.contentVersion()) ||
             !validEmergencyPower(*profile.emergencyPower, profile.baseConstruction,
                                  profile.worldClock.elapsedWorldMinutes, workshop, medical))
             return {false, "Base emergency power state is invalid"};
+    }
+    if (profile.residentMedicalReservePolicy != ResidentMedicalReservePolicy{})
+    {
+        auto priority = profile.residentMedicalReservePolicy.professionPriority;
+        auto expected = ResidentMedicalReservePolicy{}.professionPriority;
+        std::sort(priority.begin(), priority.end());
+        std::sort(expected.begin(), expected.end());
+        if (!supportsHospitalMedicalReserveContent(content.contentVersion()) ||
+            !profile.homeFounding.established || priority != expected)
+            return {false, "Resident medical reserve policy is invalid"};
     }
     if (profile.residentMedical.activeTreatment.has_value())
     {
         const ActiveResidentTreatment &treatment =
             *profile.residentMedical.activeTreatment;
         const ResidentMedicalDefinition &definition = content.residentMedical();
-        const auto treatmentMinute = treatment.emergencyPowerBonusMinutes
+        const auto treatmentMinute = (treatment.usesMedicalReserve || treatment.emergencyPowerBonusMinutes)
             ? baseFacilityReserveStartedWorldMinute(profile, BaseFacilityDefinitionId{"base_facility.medical"})
                   .value_or(profile.worldClock.elapsedWorldMinutes)
             : profile.worldClock.elapsedWorldMinutes;
@@ -1980,8 +2026,7 @@ ProfileValidationResult validateProfileState(
                     treatment.workerProfession,
                     profile.baseConstruction.medicalLevel,
                     content.baseWorkforce()) ||
-            treatment.consumedContribution <
-                definition.requiredContribution ||
+            !validResidentTreatmentCost(treatment, content) ||
             profile.basePopulation.injuredResidents == 0U ||
             baseProfessionIndex(treatment.patientProfession) >=
                 kBaseResidentProfessionCount ||
@@ -2385,6 +2430,10 @@ ProfileValidationResult validateProfileState(
         }
 
         const auto &stored = std::get<StoredAssetLocation>(asset.location);
+        if (isMedicalReserveAsset(asset) &&
+            (!profile.homeFounding.established || asset.quantity != 1U ||
+             (definition->medicalUse && asset.remainingCharges == 0U)))
+            return {false, "medical reserve asset is invalid"};
         if (!placementFits(
                 profile,
                 content,
@@ -3098,6 +3147,15 @@ ProfileValidationResult validateProfileState(
         {
             return {false, "pending Raid mission modes cannot be combined"};
         }
+        if (raid.hospitalMedicalReserveEnabled &&
+            (!supportsHospitalMedicalReserveContent(content.contentVersion()) ||
+             raid.mapDefinitionId != kHospitalFloorplanMapId || regionalMissionCount != 0U ||
+             (!raid.rescue && !profile.committedRescues.contains(kHospitalMedicalRescueId))))
+            return {false, "pending Raid hospital medical reserve is outside ordinary hospital activity"};
+        if (raid.rescue && raid.rescue->definitionId == kHospitalMedicalRescueId &&
+            (!raid.hospitalMedicalReserveEnabled || raid.rescue->ordinaryResidentCount != 1U ||
+             raid.rescue->injuredResidentCount != 1U || raid.rescue->interactionDurationSeconds != 2.0F))
+            return {false, "pending Raid hospital rescue is invalid"};
         if (raid.freightBreachEnabled &&
             (regionalMissionCount != 0U || raid.mapDefinitionId != kFreightCrateMapId ||
              !supportsFreightBreachContent(content.contentVersion()) ||
@@ -3669,10 +3727,23 @@ ProfileValidationResult validateProfileState(
                         raid.spatialLayout.resourcePoints.empty();
                 }
                 if (raid.rescue.has_value())
+                {
                     districtSnapshotValid = districtSnapshotValid &&
                         matchesRect(kRaidAnchorRescue,
                                     RaidMapAnchorKind::Rescue,
                                     raid.rescue->transferPoint);
+                    if (raid.rescue->definitionId == kHospitalMedicalRescueId)
+                    {
+                        const auto *anchor = findRaidAnchorPlacement(raid.spatialLayout, kRaidAnchorRescue);
+                        districtSnapshotValid = districtSnapshotValid && anchor &&
+                            std::any_of(raid.spatialLayout.districts.begin(), raid.spatialLayout.districts.end(),
+                                [anchor](const auto &district) {
+                                    return district.instanceId == anchor->districtInstanceId &&
+                                        (isHospitalRescueDistrictInstance(district.definitionId, kHospitalRescueParkingDistrict) ||
+                                         isHospitalRescueDistrictInstance(district.definitionId, kHospitalRescueCampusDistrict));
+                                });
+                    }
+                }
                 if (encounterEcologyRules)
                 {
                     const auto *playerAnchor = findRaidAnchorPlacement(
@@ -4306,7 +4377,7 @@ ProfileValidationResult validateProfileState(
                     content.residentMedical();
                 const auto reserve = raid.travel.startingBaseConstruction.facilityReserveStartedWorldMinutes.find(
                     BaseFacilityDefinitionId{"base_facility.medical"});
-                const auto treatmentMinute = treatment.emergencyPowerBonusMinutes &&
+                const auto treatmentMinute = (treatment.usesMedicalReserve || treatment.emergencyPowerBonusMinutes) &&
                     reserve != raid.travel.startingBaseConstruction.facilityReserveStartedWorldMinutes.end()
                     ? reserve->second : raid.travel.startingWorldClock.elapsedWorldMinutes;
                 startingResidentMedicalValid =
@@ -4327,8 +4398,7 @@ ProfileValidationResult validateProfileState(
                             treatment.workerProfession,
                             raid.travel.startingBaseConstruction.medicalLevel,
                             content.baseWorkforce()) &&
-                    treatment.consumedContribution >=
-                        definition.requiredContribution &&
+                    validResidentTreatmentCost(treatment, content) &&
                     raid.travel.startingInjuredResidents > 0U;
             }
             const auto &startingPower = raid.travel.startingEmergencyPower;
@@ -4440,6 +4510,7 @@ ProfileValidationResult validateProfileState(
         std::set<AssetInstanceId> snapshotLoot;
         std::set<std::uint32_t> snapshotSlots;
         bool foundNightVisionSlot{};
+        bool foundHospitalPharmacySlot{};
         bool foundSealedCrateLoot{};
         bool foundFuelLoot{};
         std::optional<std::uint32_t> firstSelectedFreightKeySlot;
@@ -4472,6 +4543,7 @@ ProfileValidationResult validateProfileState(
             bool validPosition{};
             bool nightVisionSlot{};
             bool hospitalFloorplanSlot{};
+            bool hospitalPharmacySlot{};
             bool freightKeySlot{};
             bool sealedFreightSlot{};
             bool fuelSlot{};
@@ -4658,6 +4730,7 @@ ProfileValidationResult validateProfileState(
                                 loot.position.y == expected.y;
                             nightVisionSlot = isHospitalNightVisionLootSlot(raid.mapDefinitionId, interior.id, slot.id);
                             hospitalFloorplanSlot = isHospitalFloorplanLootSlot(raid.mapDefinitionId, interior.id, slot.id);
+                            hospitalPharmacySlot = isHospitalPharmacyLootSlot(raid.mapDefinitionId, interior.id, slot.id);
                             sealedFreightSlot = raid.sealedFreightCrate && interior.id == kFreightCrateSpaceId &&
                                 slot.id == kFreightCrateSlotId;
                             fuelSlot = raid.fuelExtractionLootAssetId && interior.id == kFreightCrateSpaceId &&
@@ -4776,6 +4849,13 @@ ProfileValidationResult validateProfileState(
                  loot.requiresHighRisk || loot.sceneContainerAssetId ||
                  !supportsHospitalFloorplanRoutesContent(content.contentVersion())))
                 return {false, "pending Raid hospital floor plan is outside its fixed loot slot"};
+            if (hospitalPharmacySlot && raid.hospitalMedicalReserveEnabled)
+            {
+                if (loot.definitionId != kHospitalFirstAidStockId || loot.quantity != 1U ||
+                    loot.requiresHighRisk || loot.sceneContainerAssetId)
+                    return {false, "pending Raid hospital pharmacy slot is invalid"};
+                foundHospitalPharmacySlot = true;
+            }
             if (freightKeySlot)
             {
                 if (loot.definitionId != kFreightCrateKeyId || loot.quantity != 1U || loot.sceneContainerAssetId)
@@ -4805,6 +4885,8 @@ ProfileValidationResult validateProfileState(
         }
         if (raid.hospitalNightVisionLoot && !foundNightVisionSlot)
             return {false, "pending hospital night vision slot is missing"};
+        if (raid.hospitalMedicalReserveEnabled && !foundHospitalPharmacySlot)
+            return {false, "pending Raid hospital pharmacy slot is missing"};
         if (raid.freightKeyLootSlotId && (!firstSelectedFreightKeySlot ||
             raidMap->raidLootSlots[*firstSelectedFreightKeySlot].id != *raid.freightKeyLootSlotId))
             return {false, "pending Raid freight key source is not its first selected central slot"};
@@ -5475,6 +5557,8 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, treatment.startedWorldMinute);
         hashInteger(hash, treatment.completionWorldMinute);
         hashInteger(hash, treatment.consumedContribution);
+        if (treatment.usesMedicalReserve)
+            hashBytes(hash, "resident-treatment-medical-reserve-v1");
         hashInteger(hash, static_cast<std::uint32_t>(
             treatment.patientProfession));
         hashInteger(hash, static_cast<std::uint32_t>(
@@ -5484,6 +5568,13 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashBytes(hash, "base-medical-power-bonus-v1");
             hashInteger(hash, treatment.emergencyPowerBonusMinutes);
         }
+    }
+    if (profile.residentMedicalReservePolicy != ResidentMedicalReservePolicy{})
+    {
+        hashBytes(hash, "resident-medical-reserve-policy-v1");
+        hashInteger(hash, profile.residentMedicalReservePolicy.automaticAdmission ? 1U : 0U);
+        for (const auto profession : profile.residentMedicalReservePolicy.professionPriority)
+            hashInteger(hash, static_cast<std::uint32_t>(profession));
     }
     if (profile.emergencyPower)
         hashEmergencyPower(hash, *profile.emergencyPower);
@@ -5824,6 +5915,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashBytes(hash, raid.rulesVersion);
         if (raid.backpackRecoveryEnabled) hashBytes(hash, "raid-backpack-recovery-v1");
         if (raid.freightBreachEnabled) hashBytes(hash, "raid-freight-breach-route-v1");
+        if (raid.hospitalMedicalReserveEnabled) hashBytes(hash, "hospital-medical-reserve-v1");
         if (raid.hospitalNightVisionLoot) hashBytes(hash, "hospital-night-vision-loot-v1");
         if (raid.freightKeyLootSlotId)
         {
@@ -6354,6 +6446,8 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, treatment.startedWorldMinute);
             hashInteger(hash, treatment.completionWorldMinute);
             hashInteger(hash, treatment.consumedContribution);
+            if (treatment.usesMedicalReserve)
+                hashBytes(hash, "resident-treatment-medical-reserve-v1");
             hashInteger(hash, static_cast<std::uint32_t>(
                 treatment.patientProfession));
             hashInteger(hash, static_cast<std::uint32_t>(

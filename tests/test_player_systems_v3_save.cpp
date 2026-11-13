@@ -10,6 +10,11 @@
 #include "base_emergency_power_domain.h"
 #include "base_facility_layout_domain.h"
 #include "base_manufacturing_domain.h"
+#include "base_resident_medical_domain.h"
+#include "base_workforce_domain.h"
+#include "economy_domain.h"
+#include "medical_domain.h"
+#include "raid_action.h"
 #include "raid_optics_legacy_fixture.h"
 #include "raid_visibility_fixture.h"
 #include "home_perimeter_domain.h"
@@ -125,7 +130,7 @@ protected:
 TEST_F(PlayerSystemsV3SaveTest, CurrentSchemaRequiresAllThreeBaseFieldsAndLegacy59DefaultsEmpty)
 {
     const auto current=Json::parse(serializeProfileEnvelope(profile,content.contentVersion()));
-    EXPECT_EQ(current.at("schema_version"),67U);
+    EXPECT_EQ(current.at("schema_version"),68U);
     EXPECT_TRUE(current.at("payload").at("base_reload_recovery").is_null());
     EXPECT_TRUE(current.at("payload").at("base_player_effects").is_null());
     EXPECT_TRUE(current.at("payload").at("base_corpses").empty());
@@ -456,7 +461,7 @@ TEST_F(PlayerSystemsV3SaveTest, EmergencyPowerUpgradeKeepsFrozenBreachAndArchive
     ASSERT_TRUE(loaded.profile && loaded.profile->pendingRaid) << loaded.message;
     EXPECT_FALSE(loaded.profile->emergencyPower);
     EXPECT_FALSE(loaded.profile->baseConstruction.facilities.contains(kBaseGeneratorFacilityId));
-    ASSERT_TRUE(repository.save(*loaded.profile, content.contentVersion()).succeeded);
+    ASSERT_TRUE(repository.save(*loaded.profile, kEmergencyPowerContentVersion).succeeded);
     EXPECT_EQ(readBytes(directory.path() /
         ("profile.pre-base-emergency-power-and-fuel-logistics-v1." + digest(primary) + ".json")), primary);
     EXPECT_EQ(readBytes(directory.path() /
@@ -521,6 +526,124 @@ TEST_F(PlayerSystemsV3SaveTest, EmergencyPowerTravelRoundTripRestoresExactPreRai
     auto invalid = Json::parse(serialized);
     invalid["payload"]["pending_raid"]["travel"]["starting_emergency_power"]["remaining_minutes"] = 181U;
     EXPECT_FALSE(deserializeProfileEnvelope(checked(invalid), content).profile);
+}
+
+TEST_F(PlayerSystemsV3SaveTest, MedicalReserveUpgradeKeepsExactLegacyTreatmentAndEmergencyPower)
+{
+    const auto historical = ContentRegistry::fromJson(contentBeforeHospitalMedicalReserveJson().dump());
+    profile = makeNewAlphaProfile("old-treatment-power", historical);
+    profile.basePopulation.injuredResidents = 1U;
+    profile.basePopulation.injuredByProfession[baseProfessionIndex(BaseResidentProfession::General)] = 1U;
+    profile.baseSupplyPolicy.assignments[alpha_content::medkit] = BaseSupplyCategory::Medical;
+    profile.baseConstruction.facilities.emplace(kBaseGeneratorFacilityId,
+        BaseConstructionState::FacilityPlacement::Installed);
+    initializeBaseFacilityLayouts(profile, historical);
+    const auto stash = ProfileContainerId::stash();
+    const auto store = [&](const ItemDefinitionId &id) {
+        const auto &item = historical.item(id);
+        const auto fit = findFirstProfileFit(profile, historical, stash, item, ItemOrientation::Degrees0);
+        return fit ? profile.assets.create(item, StoredAssetLocation{stash, *fit}) : 0U;
+    };
+    ASSERT_NE(store(alpha_content::medkit), 0U);
+    const auto spare = store(alpha_content::bandage);
+    const auto fuel = store(kRaidFuelCanId);
+    ASSERT_NE(spare, 0U);
+    ASSERT_NE(fuel, 0U);
+    const auto treatment = executeStartResidentTreatment(profile, historical, {},
+        {profile.revision, "old-treatment"});
+    ASSERT_TRUE(treatment.succeeded) << treatment.message;
+    const auto started = executeBaseEmergencyPower(profile, historical,
+        StartBaseEmergencyPowerCommand{BaseEmergencyPowerTarget::ResidentMedical, fuel, treatment.jobId},
+        {profile.revision, "old-power"});
+    ASSERT_TRUE(started.succeeded) << started.message;
+    static_cast<void>(advanceWorldClock(profile.worldClock, 10U));
+    static_cast<void>(synchronizeBaseWorkThrough(profile, historical, 10U));
+    auto paused = profile;
+    pauseBaseEmergencyPower(paused);
+    const auto primary = serializeProfileEnvelope(profile, kEmergencyPowerContentVersion);
+    const auto backup = serializeProfileEnvelope(paused, kEmergencyPowerContentVersion);
+    SaveRepository repository{directory.path()};
+    writeBytes(repository.primaryPath(), primary);
+    writeBytes(repository.backupPath(), backup);
+
+    const auto loaded = repository.load(content);
+    ASSERT_TRUE(loaded.profile && loaded.sourceEnvelope) << loaded.message;
+    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 67U);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+    const auto loadedBackup = deserializeProfileEnvelope(backup, content);
+    ASSERT_TRUE(loadedBackup.profile) << loadedBackup.message;
+    EXPECT_EQ(loadedBackup.profile->emergencyPower, paused.emergencyPower);
+    EXPECT_EQ(loaded.profile->residentMedicalReservePolicy, ResidentMedicalReservePolicy{});
+    EXPECT_TRUE(assetsInContainer(*loaded.profile, ProfileContainerId::medicalReserve()).empty());
+    ASSERT_TRUE(repository.save(*loaded.profile, content.contentVersion()).succeeded);
+    EXPECT_EQ(readBytes(directory.path() /
+        ("profile.pre-hospital-rescue-and-medical-reserve-v1." + digest(primary) + ".json")), primary);
+    EXPECT_EQ(readBytes(directory.path() /
+        ("profile.backup.pre-hospital-rescue-and-medical-reserve-v1." + digest(backup) + ".json")), backup);
+    auto reopened = repository.load(content);
+    ASSERT_TRUE(reopened.profile && reopened.sourceEnvelope) << reopened.message;
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 68U);
+    EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
+    static_cast<void>(advanceWorldClock(reopened.profile->worldClock, 360U));
+    EXPECT_TRUE(synchronizeBaseWorkThrough(*reopened.profile, content, 360U).residentTreatment.completed);
+    ASSERT_NE(reopened.profile->assets.find(spare), nullptr);
+    EXPECT_EQ(reopened.profile->assets.find(spare)->location, profile.assets.find(spare)->location);
+}
+
+TEST_F(PlayerSystemsV3SaveTest, MedicalReserveRoundTripKeepsCabinetPolicyAndReservedTreatment)
+{
+    const auto reserve = ProfileContainerId::medicalReserve();
+    const auto &medkit = content.item(alpha_content::medkit);
+    const auto stock = profile.assets.create(content.item(kHospitalFirstAidStockId),
+        StoredAssetLocation{reserve, {0, 0}});
+    const auto partial = profile.assets.create(medkit, StoredAssetLocation{reserve, {2, 0}});
+    profile.assets.findMutable(partial)->remainingCharges = 1U;
+    profile.currentHealth = 70;
+    profile.basePopulation.injuredResidents = 1U;
+    profile.basePopulation.injuredByProfession[baseProfessionIndex(BaseResidentProfession::General)] = 1U;
+    std::swap(profile.residentMedicalReservePolicy.professionPriority[0],
+              profile.residentMedicalReservePolicy.professionPriority[3]);
+    const auto started = executeStartResidentTreatment(profile, content, {},
+        {profile.revision, "reserve-treatment"});
+    ASSERT_TRUE(started.succeeded) << started.message;
+    ASSERT_TRUE(profile.residentMedical.activeTreatment->usesMedicalReserve);
+    EXPECT_EQ(profile.assets.find(stock), nullptr);
+    profile.residentMedicalReservePolicy.automaticAdmission = true;
+
+    const auto blocked = profileStateFingerprint(profile);
+    EXPECT_FALSE(queryMedicalUse(profile, content, partial, MedicalAccess::AnyOwned).canCommit);
+    EXPECT_FALSE(executeHeal(profile, content, partial, HealAccess::AnyOwned,
+        {profile.revision, "illegal-cabinet-heal"}).succeeded);
+    EXPECT_FALSE(executeEconomy(profile, content, RecycleCommand{partial},
+        {profile.revision, "illegal-cabinet-recycle"}).succeeded);
+    EXPECT_FALSE(queryInventory(profile, content,
+        InventoryMoveCommand{partial, 0U, {ProfileContainerId::stash(), {0, 0}}}).canCommit);
+    EXPECT_EQ(profileStateFingerprint(profile), blocked);
+    const auto preRaid = profile;
+    const auto deployed = executeDeploy(profile, content,
+        {"reserve-roundtrip", "reserve-result", 42U, kHospitalFloorplanMapId},
+        {profile.revision, "reserve-deploy"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->hospitalMedicalReserveEnabled);
+    const auto serialized = serializeProfileEnvelope(profile, content.contentVersion());
+    auto loaded = deserializeProfileEnvelope(serialized, content);
+    ASSERT_TRUE(loaded.profile) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+    EXPECT_TRUE(loaded.profile->pendingRaid->travel.startingResidentMedical.activeTreatment->usesMedicalReserve);
+    const auto rolled = rollbackPendingRaidToBase(*loaded.profile, content);
+    ASSERT_TRUE(rolled.succeeded) << rolled.message;
+    EXPECT_EQ(loaded.profile->residentMedical, preRaid.residentMedical);
+    EXPECT_EQ(loaded.profile->residentMedicalReservePolicy, preRaid.residentMedicalReservePolicy);
+    ASSERT_NE(loaded.profile->assets.find(partial), nullptr);
+    EXPECT_EQ(loaded.profile->assets.find(partial)->remainingCharges, 1U);
+    EXPECT_EQ(loaded.profile->assets.find(partial)->location, preRaid.assets.find(partial)->location);
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(preRaid, kEmergencyPowerContentVersion, 67U)),
+                 std::invalid_argument);
+
+    auto forged = Json::parse(serialized);
+    auto &priority = forged["payload"]["resident_medical_reserve_policy"]["profession_priority"];
+    priority[1] = priority[0];
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(forged), content).profile);
 }
 
 TEST_F(PlayerSystemsV3SaveTest, FreightBreachWorkshopOrderKeepsExactReservedUnits)
@@ -594,7 +717,7 @@ TEST_F(PlayerSystemsV3SaveTest, BackpackRecoveryRoundTripAndRollbackKeepWholeAss
     ASSERT_TRUE(validateProfileState(profile, content).valid);
     const auto bytes = serializeProfileEnvelope(profile, content.contentVersion());
     const auto envelope = Json::parse(bytes);
-    EXPECT_EQ(envelope.at("schema_version"), 67U);
+    EXPECT_EQ(envelope.at("schema_version"), 68U);
     EXPECT_EQ(envelope.at("payload").at("pending_raid").at("backpack_recovery_enabled"), true);
 
     auto restored = deserializeProfileEnvelope(bytes, content);
@@ -689,7 +812,7 @@ TEST_F(PlayerSystemsV3SaveTest, UpgradeArchivesExact59PrimaryAndBackupBeforeRota
     EXPECT_EQ(readBytes(archive(directory.path(),false,primary)),primary);EXPECT_EQ(readBytes(archive(directory.path(),true,backup)),backup);
     ++profile.revision;ASSERT_TRUE(repository.save(profile,content.contentVersion()).succeeded);
     EXPECT_EQ(readBytes(archive(directory.path(),false,primary)),primary);EXPECT_EQ(readBytes(archive(directory.path(),true,backup)),backup);
-    EXPECT_EQ(Json::parse(readBytes(repository.primaryPath()))["schema_version"],67U);
+    EXPECT_EQ(Json::parse(readBytes(repository.primaryPath()))["schema_version"],68U);
 }
 
 TEST_F(PlayerSystemsV3SaveTest, BackupRecoveryArchivesCorruptPrimaryAnd59BackupByteForByte)
