@@ -1,6 +1,6 @@
 #include "game_session.h"
 #include "base_world.h"
-#include "base_morale_domain.h"
+#include "base_emergency_power_domain.h"
 #include <algorithm>
 #include <limits>
 #include <utility>
@@ -35,10 +35,7 @@ bool GameSession::prepareDailyOutingEndCandidate(ProfileState &candidate,BaseWor
         if(!recovered.succeeded){persistenceMessage_=recovered.message;return false;}
         if(candidate.basePlayerEffects)candidate.basePlayerEffects->medical.reset();
     }
-    static_cast<void>(synchronizeBaseDailySystemsThrough(candidate,content));
-    static_cast<void>(applyBaseConstructionThrough(candidate,content));
-    static_cast<void>(applyBaseManufacturingThrough(candidate,content));
-    static_cast<void>(applyResidentTreatmentThrough(candidate));
+    static_cast<void>(synchronizeBaseWorkThrough(candidate, content, result.minutesApplied));
     static_cast<void>(applyRecoveryTaskThrough(candidate));
     if(!captureBasePlayerEffects(candidate))return false;
     if(rescued && candidate.basePlayerEffects) {

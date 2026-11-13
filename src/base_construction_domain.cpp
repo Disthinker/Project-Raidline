@@ -1,6 +1,7 @@
 #include "base_construction_domain.h"
 
 #include "base_facility_layout_domain.h"
+#include "base_siege_domain.h"
 
 #include "base_workforce_domain.h"
 
@@ -60,6 +61,8 @@ BaseFacilityDefinitionId baseFacilityDefinitionId(
     return BaseFacilityDefinitionId{"base_facility.workshop"};
   case BaseFacilityUpgradeTarget::Medical:
     return BaseFacilityDefinitionId{"base_facility.medical"};
+  case BaseFacilityUpgradeTarget::Generator:
+    return kBaseGeneratorFacilityId;
   }
   return {};
 }
@@ -194,6 +197,8 @@ std::uint32_t baseFacilityLevel(const BaseConstructionState &state,
     return state.workshopLevel;
   case BaseFacilityUpgradeTarget::Medical:
     return state.medicalLevel;
+  case BaseFacilityUpgradeTarget::Generator:
+    return state.facilities.contains(kBaseGeneratorFacilityId) ? 1U : 0U;
   }
   return 0U;
 }
@@ -213,6 +218,9 @@ void setFacilityLevel(BaseConstructionState &state,
     break;
   case BaseFacilityUpgradeTarget::Medical:
     state.medicalLevel = level;
+    break;
+  case BaseFacilityUpgradeTarget::Generator:
+    // Ownership records the generator's only construction level.
     break;
   }
 }
@@ -415,6 +423,12 @@ queryStartBaseConstruction(const ProfileState &profile,
   } catch (...) {
     return constructionFailure(DomainErrorCode::IllegalDestination,
                                "construction project does not exist",
+                               profile.revision);
+  }
+  if (definition->target == BaseFacilityUpgradeTarget::Generator &&
+      !profile.homeFounding.established) {
+    return constructionFailure(DomainErrorCode::IllegalDestination,
+                               "establish a Base before building the generator",
                                profile.revision);
   }
   if (profile.baseSiege.warningActive || profile.activeBaseDefense) {
@@ -666,6 +680,9 @@ applyBaseConstructionThrough(ProfileState &profile,
   if (definition.target == BaseFacilityUpgradeTarget::Dormitory) {
     profile.basePopulation.bedCapacity = definition.bedCapacityAfter;
   }
+  if (definition.target == BaseFacilityUpgradeTarget::Generator) {
+    addBaseSiteThreat(profile, 2U);
+  }
   profile.baseConstruction.activeProject.reset();
   return {true,
           definition.id,
@@ -745,6 +762,11 @@ InstallBaseFacilityReceipt executeInstallBaseFacility(
   if (profile.revision == std::numeric_limits<ProfileRevision>::max()) {
     return {false, false, DomainErrorCode::RevisionOverflow,
             "profile revision cannot advance", profile.revision,
+            command.definitionId};
+  }
+  if (command.definitionId == kBaseGeneratorFacilityId) {
+    return {false, false, DomainErrorCode::IllegalDestination,
+            "Generator requires a physical placement", profile.revision,
             command.definitionId};
   }
   const InstallBaseFacilityPlan plan = queryInstallBaseFacility(

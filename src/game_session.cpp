@@ -5,6 +5,7 @@
 #include "home_founding_domain.h"
 
 #include "base_construction_domain.h"
+#include "base_emergency_power_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_morale_domain.h"
 #include "base_resident_medical_domain.h"
@@ -3911,17 +3912,8 @@ void GameSession::advanceWorldClockFromSimulation(
                 pendingWorldSeconds_ = scaledSeconds;
                 return;
             }
-            const BaseDailySystemsResult daily =
-                synchronizeBaseDailySystemsThrough(
-                    profile_, publishedContentRegistry());
-            const BaseConstructionAdvanceResult construction =
-                applyBaseConstructionThrough(
-                    profile_, publishedContentRegistry());
-            const BaseManufacturingAdvanceResult manufacturing =
-                applyBaseManufacturingThrough(
-                    profile_, publishedContentRegistry());
-            const ResidentTreatmentAdvanceResult residentTreatment =
-                applyResidentTreatmentThrough(profile_);
+            const auto [demand, construction, manufacturing, residentTreatment] =
+                synchronizeBaseWorkThrough(profile_, publishedContentRegistry(), advanced.minutesApplied);
             const RecoveryTaskAdvanceResult recovery =
                 applyRecoveryTaskThrough(profile_);
             const bool revisionRequired =
@@ -3945,7 +3937,7 @@ void GameSession::advanceWorldClockFromSimulation(
                 manufacturing,
                 residentTreatment,
                 alphaRaidActive_);
-            static_cast<void>(daily);
+            static_cast<void>(demand);
             worldClockDirty_ = true;
             pendingWorldSeconds_ = remainingWorldSeconds;
             return;
@@ -3956,19 +3948,8 @@ void GameSession::advanceWorldClockFromSimulation(
             advanceWorldClock(candidate.worldClock, minutes);
         if (advanced.minutesApplied > 0U)
         {
-            static_cast<void>(synchronizeBaseDailySystemsThrough(
-                candidate,
-                publishedContentRegistry()));
-            const BaseConstructionAdvanceResult construction =
-                applyBaseConstructionThrough(
-                    candidate,
-                    publishedContentRegistry());
-            const BaseManufacturingAdvanceResult manufacturing =
-                applyBaseManufacturingThrough(
-                    candidate,
-                    publishedContentRegistry());
-            const ResidentTreatmentAdvanceResult residentTreatment =
-                applyResidentTreatmentThrough(candidate);
+            const auto [demand, construction, manufacturing, residentTreatment] =
+                synchronizeBaseWorkThrough(candidate, publishedContentRegistry(), advanced.minutesApplied);
             const RecoveryTaskAdvanceResult recovery =
                 applyRecoveryTaskThrough(candidate);
             if (construction.completed || manufacturing.completed ||
@@ -4157,6 +4138,8 @@ void GameSession::recordBaseCompletionEvents(
         case BaseFacilityUpgradeTarget::Medical:
             events.push_back(
                 GameSessionPresentationEvent::BaseMedicalUpgradeCompleted);
+            break;
+        case BaseFacilityUpgradeTarget::Generator:
             break;
         }
     }

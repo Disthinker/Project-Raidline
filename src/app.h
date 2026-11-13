@@ -367,6 +367,11 @@ private:
     void resetBaseWorkshopUi();
     void refreshBaseWorkshopUi(bool force = false);
     void handleBaseWorkshopEvent(const UiWorkshopEvent &);
+    UiDiscretePress generatorPress_;
+    std::string generatorFeedback_;
+    std::vector<UiWorkshopEvent> pendingGeneratorEvents_;
+    void resetBaseGeneratorUi();
+    void handleBaseGeneratorEvent(const UiWorkshopEvent &);
     UiBaseSupplyState supplyUi_;
     UiBaseMedicalState medicalUi_;
     UiBaseMedicalProjection medicalProjection_;
@@ -843,6 +848,7 @@ private:
     void renderBaseMedicalService();
     void renderBaseDormitory();
     void renderBaseWorkshop();
+    void renderBaseGenerator();
     void renderBaseDeployment();
     void renderRegionalOperations();
     void renderBaseSiegeQueuedNotice();

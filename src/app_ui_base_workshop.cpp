@@ -137,7 +137,10 @@ void App::renderBaseWorkshop() {
     else if (armorRecipe)
         status = "ARMOR REPAIR RECIPE UNLOCKED";
     text({464,232,728,28},status,16);
-    auto time=p.order?p.order->outputReady?tr("OUTPUT READY | WORKER RELEASED"):fmt::format("{} {}",tr("WORLD TIME REMAINING"),duration(p.production.remainingMinutes)):
+    const auto &power = gameSession_.profile().emergencyPower;
+    const bool powerRunning = p.order && power && power->target == BaseEmergencyPowerTarget::Workshop &&
+        power->activeJobId == p.order->jobId;
+    auto time=p.order?p.order->outputReady?tr("OUTPUT READY | WORKER RELEASED"):fmt::format("{} {}",tr(powerRunning ? "WORK REMAINING" : "WORLD TIME REMAINING"),duration(p.production.remainingMinutes)):
         fmt::format("{} {}",tr(research?"RESEARCH DURATION":"PRODUCTION DURATION"),p.start.canCommit?duration(p.start.durationMinutes):tr("AVAILABLE WITH VALID PLAN"));
     if((!p.order || !p.order->outputReady) && row!=p.recipes.end())
         time+=fmt::format("  |  {} {}",tr(p.order?"WORKERS COMMITTED":"WORKERS REQUIRED"),p.order?p.production.committedWorkers:row->workers);
@@ -156,7 +159,10 @@ void App::renderBaseWorkshop() {
         scroll(uiWorkshopDetailsRect(),p.order && p.order->outputReady?tr("MATERIALS CONSUMED - OUTPUT IS KEPT"):
             row!=p.recipes.end()?row->materials:tr("NO PUBLISHED MANUFACTURING RECIPE"),14,workshopUi_.detailScroll,workshopUi_.detailMaximum);
     }
-    text({464,510,728,22},!p.installed?"INSTALL IT FREE ON THE REGIONAL PAGE TO RESUME EXACT PROGRESS":research?(p.order?"COMPLETION UNLOCKS THE ARMOR REPAIR RECIPE":"LEVEL 2 WORKSHOP · ASSIGNED HEALTHY ENGINEER"):
+    text({464,510,728,22},powerRunning?"ORDER POWERED · DOUBLE PROGRESS":
+        p.order && !p.order->outputReady && !research && power && power->target == BaseEmergencyPowerTarget::Workshop && !power->activeJobId ?
+            "ORDER POWER PAUSED":
+        !p.installed?"INSTALL IT FREE ON THE REGIONAL PAGE TO RESUME EXACT PROGRESS":research?(p.order?"COMPLETION UNLOCKS THE ARMOR REPAIR RECIPE":"LEVEL 2 WORKSHOP · ASSIGNED HEALTHY ENGINEER"):
         p.order?"AUTO STASH ON COMPLETION - COLLECT ONLY WHEN FULL":"RESERVE ON START - COMPLETE USING WORLD TIME",12);
     button(Control::Facilities,workshopUi_.facilities?"HIDE FACILITY AND STAFF":"FACILITY AND STAFF",workshopUi_.facilities);
     if(p.order && !p.order->outputReady)button(Control::Cancel,research?"CANCEL & RETURN BLUEPRINT":"CANCEL & RETURN INPUTS");

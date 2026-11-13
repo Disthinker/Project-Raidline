@@ -116,6 +116,7 @@ struct BasePerimeterSweepPlan
     ProfileState &profile,
     const ContentRegistry &content) noexcept;
 void applySettledRaidBaseThreat(ProfileState &profile) noexcept;
+void addBaseSiteThreat(ProfileState &profile, std::uint32_t units) noexcept;
 [[nodiscard]] std::uint32_t applyBasePerimeterSweepThreatReduction(
     ProfileState &profile,
     std::uint32_t requestedUnits) noexcept;

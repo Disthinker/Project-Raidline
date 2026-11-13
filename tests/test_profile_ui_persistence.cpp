@@ -2,6 +2,8 @@
 
 #include "alpha_content_ids.h"
 #include "base_defense_preparation.h"
+#include "base_emergency_power_domain.h"
+#include "base_facility_layout_domain.h"
 #include "game_flow.h"
 #include "test_temp_directory.h"
 #include <algorithm>
@@ -208,6 +210,51 @@ TEST_F(ProfileUiPersistenceTest, FailureKeepsFullAuthorityAndExplicitRetryUsesTh
     completions=session().takeProfileUiCompletions();ASSERT_EQ(completions.size(),1U);EXPECT_TRUE(completions.front().succeeded);
     EXPECT_EQ(completions.front().requestId,retry.requestId);EXPECT_FALSE(session().profileUiCompletionReady(first.requestId,ProfileUiCompletionKind::Command));
     EXPECT_TRUE(session().profileUiCompletionReady(retry.requestId,ProfileUiCompletionKind::Command));
+}
+
+TEST_F(ProfileUiPersistenceTest, FailedGeneratorStartRetriesTheSameBatchWithoutDoubleCharging)
+{
+    ProfileState fixture = session().profile();
+    fixture.baseConstruction.facilities.emplace(
+        kBaseGeneratorFacilityId, BaseConstructionState::FacilityPlacement::Installed);
+    initializeBaseFacilityLayouts(fixture, content);
+    const auto add = [&](const ItemDefinitionId &item)
+    {
+        const auto &definition = content.item(item);
+        const auto origin = findFirstProfileFit(
+            fixture, content, ProfileContainerId::stash(), definition, ItemOrientation::Degrees0);
+        return origin ? fixture.assets.create(
+            definition, StoredAssetLocation{ProfileContainerId::stash(), *origin}) : 0U;
+    };
+    ASSERT_NE(add(ItemDefinitionId{"item.loot.scrap_parts"}), 0U);
+    ASSERT_NE(add(ItemDefinitionId{"item.loot.electronics"}), 0U);
+    const auto order = executeStartBaseManufacturing(
+        fixture, content, {BaseManufacturingRecipeDefinitionId{"base_manufacturing.weapon_maintenance_kit"}},
+        {fixture.revision, "generator-retry-order"});
+    ASSERT_TRUE(order.succeeded) << order.message;
+    const auto fuel = add(kRaidFuelCanId);
+    const auto otherFuel = add(kRaidFuelCanId);
+    ASSERT_NE(fuel, 0U);
+    ASSERT_NE(otherFuel, 0U);
+    loadFixture(std::move(fixture));
+
+    const auto before = profileStateFingerprint(session().profile());
+    const StartBaseEmergencyPowerCommand command{BaseEmergencyPowerTarget::Workshop, fuel, order.jobId};
+    store->fail = true;
+    ASSERT_TRUE(session().requestProfileUiCommand(command, "generator-retry-start").accepted);
+    ASSERT_TRUE(store->waitCalls());
+    EXPECT_FALSE(session().requestProfileUiCommand(command, "generator-double-click").accepted);
+    EXPECT_NE(session().profile().assets.find(fuel), nullptr);
+    EXPECT_FALSE(session().profile().emergencyPower);
+    failAndRetryRuntimeCandidate(before, ProfileUiCompletionKind::Command);
+
+    const auto &profile = session().profile();
+    ASSERT_TRUE(profile.emergencyPower);
+    EXPECT_EQ(profile.emergencyPower->activeJobId, order.jobId);
+    EXPECT_EQ(profile.emergencyPower->remainingMinutes, kBaseEmergencyPowerBatchMinutes);
+    EXPECT_EQ(profile.assets.find(fuel), nullptr);
+    EXPECT_NE(profile.assets.find(otherFuel), nullptr);
+    EXPECT_EQ(store->snapshot().size(), 2U);
 }
 
 TEST_F(ProfileUiPersistenceTest, MenuTicketRejectsEarlyNavigationAndCompletionPerformsNoSecondSave)

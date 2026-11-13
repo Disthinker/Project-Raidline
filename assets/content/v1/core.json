@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-freight-breach-route-content-84",
+  "content_version": "base-emergency-power-and-fuel-logistics-content-85",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -169,7 +169,8 @@
       {"id": "base_facility.dormitory", "display_name": "Dormitory", "required_for_migration": true, "initially_owned": true, "initially_installed": true},
       {"id": "base_facility.kitchen_water", "display_name": "Kitchen & Water Station", "required_for_migration": true, "initially_owned": false, "initially_installed": false},
       {"id": "base_facility.medical", "display_name": "Medical Facility", "required_for_migration": true, "initially_owned": true, "initially_installed": true},
-      {"id": "base_facility.workshop", "display_name": "Workshop", "required_for_migration": false, "initially_owned": true, "initially_installed": true}
+      {"id": "base_facility.workshop", "display_name": "Workshop", "required_for_migration": false, "initially_owned": true, "initially_installed": true},
+      {"id": "base_facility.generator", "display_name": "Generator Room", "required_for_migration": false, "initially_owned": false, "initially_installed": false}
     ],
     "projects": [
       {
@@ -212,6 +213,16 @@
         "material_cost": 6,
         "worker_count": 3,
         "duration_minutes": 720
+      },
+      {
+        "id": "base_construction.generator.level_1",
+        "display_name": "Generator Room",
+        "target_facility": "generator",
+        "required_level": 0,
+        "target_level": 1,
+        "material_cost": 6,
+        "worker_count": 2,
+        "duration_minutes": 480
       }
     ]
   },

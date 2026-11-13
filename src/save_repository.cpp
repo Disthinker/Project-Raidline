@@ -39,6 +39,60 @@ AssetInstanceId parseNonzeroAssetId(const Json &value)
     return value.get<AssetInstanceId>();
 }
 
+Json emergencyPowerValue(const BaseEmergencyPowerState &power)
+{
+    return {{"target", power.target == BaseEmergencyPowerTarget::Workshop ? "workshop" : "resident_medical"},
+            {"remaining_minutes", power.remainingMinutes},
+            {"active_job_id", power.activeJobId ? Json(*power.activeJobId) : Json(nullptr)},
+            {"advanced_through_world_minute", power.advancedThroughWorldMinute}};
+}
+
+template<class Integer>
+Integer powerInteger(const Json &value)
+{
+    if (!value.is_number_unsigned() || value.get<std::uint64_t>() > std::numeric_limits<Integer>::max())
+        throw std::invalid_argument{"invalid emergency power integer"};
+    return value.get<Integer>();
+}
+
+BaseEmergencyPowerState parseEmergencyPower(const Json &value)
+{
+    BaseEmergencyPowerState power;
+    const auto target = value.at("target").get<std::string>();
+    if (target == "workshop") power.target = BaseEmergencyPowerTarget::Workshop;
+    else if (target == "resident_medical") power.target = BaseEmergencyPowerTarget::ResidentMedical;
+    else throw std::invalid_argument{"invalid emergency power target"};
+    power.remainingMinutes = powerInteger<std::uint32_t>(value.at("remaining_minutes"));
+    if (!value.at("active_job_id").is_null())
+        power.activeJobId = parseNonzeroAssetId(value.at("active_job_id"));
+    power.advancedThroughWorldMinute = powerInteger<std::uint64_t>(value.at("advanced_through_world_minute"));
+    return power;
+}
+
+bool hasGeneratorConstruction(const BaseConstructionState &construction)
+{
+    return construction.facilities.contains(kBaseGeneratorFacilityId) ||
+        (construction.activeProject && construction.activeProject->definitionId == kBaseGeneratorProjectId);
+}
+
+bool requiresEmergencyPowerContract(const ProfileState &profile)
+{
+    const auto &treatment = profile.residentMedical.activeTreatment;
+    const auto &order = profile.baseManufacturing.activeOrder;
+    if (profile.emergencyPower || hasGeneratorConstruction(profile.baseConstruction) ||
+        (treatment && treatment->emergencyPowerBonusMinutes) || (order && order->emergencyPowerBonusMinutes))
+        return true;
+    if (std::any_of(profile.baseFacilityLayout.placements.begin(), profile.baseFacilityLayout.placements.end(),
+        [](const auto &site) { return site.second.contains(kBaseGeneratorFacilityId); }))
+        return true;
+    if (!profile.pendingRaid) return false;
+    const auto &travel = profile.pendingRaid->travel;
+    const auto &startingTreatment = travel.startingResidentMedical.activeTreatment;
+    return travel.startingEmergencyPower || travel.startingManufacturingPowerBonusMinutes ||
+        hasGeneratorConstruction(travel.startingBaseConstruction) ||
+        (startingTreatment && startingTreatment->emergencyPowerBonusMinutes);
+}
+
 std::string_view fireModeName(WeaponFireMode mode)
 {
     switch (mode)
@@ -1839,6 +1893,9 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
                 value["worker_profession"] =
                     baseResidentProfessionValue(treatment.workerProfession);
             }
+            if (treatment.emergencyPowerBonusMinutes)
+                payload["resident_medical"]["active_treatment"]["emergency_power_bonus_minutes"] =
+                    treatment.emergencyPowerBonusMinutes;
         }
         else
         {
@@ -1869,6 +1926,9 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
                     ["worker_profession"] =
                         baseResidentProfessionValue(order.workerProfession);
             }
+            if (order.emergencyPowerBonusMinutes)
+                payload["base_manufacturing"]["active_order"]["emergency_power_bonus_minutes"] =
+                    order.emergencyPowerBonusMinutes;
         }
         else
         {
@@ -1880,6 +1940,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
                 profile.baseManufacturing.armorRepairRecipeUnlocked;
         }
     }
+    if (profile.emergencyPower)
+        payload["emergency_power"] = emergencyPowerValue(*profile.emergencyPower);
     if (schemaVersion >= 18)
     {
         payload["base_morale"] = baseMoraleValue(profile.baseMorale);
@@ -2727,6 +2789,9 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
                                 baseResidentProfessionValue(
                                     treatment.workerProfession);
                         }
+                        if (treatment.emergencyPowerBonusMinutes)
+                            payload["pending_raid"]["travel"]["starting_resident_treatment"]
+                                ["emergency_power_bonus_minutes"] = treatment.emergencyPowerBonusMinutes;
                     }
                     else
                     {
@@ -2736,6 +2801,12 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
                 }
             }
         }
+        if (raid.travel.startingEmergencyPower)
+            payload["pending_raid"]["travel"]["starting_emergency_power"] =
+                emergencyPowerValue(*raid.travel.startingEmergencyPower);
+        if (raid.travel.startingManufacturingPowerBonusMinutes)
+            payload["pending_raid"]["travel"]["starting_manufacturing_power_bonus_minutes"] =
+                raid.travel.startingManufacturingPowerBonusMinutes;
         if (schemaVersion >= 13)
         {
             if (raid.rescue.has_value())
@@ -3033,6 +3104,12 @@ bool isValidEnvelope(
 }
 }
 
+std::string serializeProfileEnvelope(const ProfileState &profile, std::string_view contentVersion)
+{
+    return serializeProfileEnvelope(profile, contentVersion,
+        contentVersion == kEmergencyPowerContentVersion ? 67U : 66U);
+}
+
 std::string serializeProfileEnvelope(
     const ProfileState &profile,
     std::string_view contentVersion,
@@ -3062,11 +3139,15 @@ std::string serializeProfileEnvelope(
         schemaVersion >= 66 && supportsRaidBackpackRecoveryContent(contentVersion);
     if (profile.pendingRaid && profile.pendingRaid->backpackRecoveryEnabled && !backpackContract)
         throw std::invalid_argument{"Raid backpack recovery requires schema 66 and compatible backpack recovery content"};
-    if ((schemaVersion < 66 || contentVersion != kFreightBreachContentVersion) &&
+    if ((schemaVersion < 66 || !supportsFreightBreachContent(contentVersion)) &&
         ((profile.pendingRaid && profile.pendingRaid->freightBreachEnabled) ||
          (profile.baseManufacturing.activeOrder &&
           profile.baseManufacturing.activeOrder->recipeDefinitionId == kFreightBreachRecipeId)))
         throw std::invalid_argument{"freight breach requires schema 66 and compatible content"};
+    if ((schemaVersion == 67 && contentVersion != kEmergencyPowerContentVersion) ||
+        (requiresEmergencyPowerContract(profile) &&
+         (schemaVersion != 67 || contentVersion != kEmergencyPowerContentVersion)))
+        throw std::invalid_argument{"base emergency power requires schema 67 and compatible content"};
     if (!illuminationContract && profile.baseManufacturing.activeOrder &&
         profile.baseManufacturing.activeOrder->recipeDefinitionId == kThrownIlluminationRecipeId)
         throw std::invalid_argument{"field flare manufacturing requires schema 65 and content 81"};
@@ -3091,7 +3172,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66 && schemaVersion != 67)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -3280,7 +3361,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             (schemaVersion >= 64 && contentVersion == kArmorReadinessContentVersion) ||
             (schemaVersion >= 65 && contentVersion == kThrownIlluminationContentVersion) ||
             (schemaVersion >= 66 && contentVersion == kRaidBackpackRecoveryContentVersion) ||
-            (schemaVersion >= 66 && contentVersion == kHospitalFloorplanRoutesContentVersion);
+            (schemaVersion >= 66 && contentVersion == kHospitalFloorplanRoutesContentVersion) ||
+            (schemaVersion >= 66 && contentVersion == kFreightBreachContentVersion);
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -3302,7 +3384,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-               schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66) ||
+               schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66 && schemaVersion != 67) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3321,7 +3403,15 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             schemaVersion >= 65 && supportsThrownIlluminationContent(contentVersion);
         const bool backpackContract =
             schemaVersion >= 66 && supportsRaidBackpackRecoveryContent(contentVersion);
+        const bool powerContract = schemaVersion == 67 && contentVersion == kEmergencyPowerContentVersion;
+        if (schemaVersion == 67 && !powerContract)
+            return {SaveLoadStatus::Failed, std::nullopt, "unsupported emergency power content"};
         ProfileState profile;
+        if (payload.contains("emergency_power"))
+        {
+            if (!powerContract) throw std::invalid_argument{"emergency power requires schema 67"};
+            profile.emergencyPower = parseEmergencyPower(payload.at("emergency_power"));
+        }
         if (schemaVersion >= 57)
         {
             const Json &permissions = payload.at("raid_extraction_permissions");
@@ -3607,6 +3697,9 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                     "completion_world_minute").get<std::uint64_t>();
                 active.consumedContribution = treatment.at(
                     "consumed_contribution").get<std::uint32_t>();
+                if (treatment.contains("emergency_power_bonus_minutes"))
+                    active.emergencyPowerBonusMinutes = powerInteger<std::uint32_t>(
+                        treatment.at("emergency_power_bonus_minutes"));
                 if (schemaVersion >= 19)
                 {
                     active.patientProfession = parseRequiredProfession(
@@ -3655,7 +3748,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                     return {SaveLoadStatus::Failed, std::nullopt,
                             "field flare manufacturing requires schema 65 and content 81"};
                 }
-                if ((schemaVersion < 66 || contentVersion != kFreightBreachContentVersion) &&
+                if ((schemaVersion < 66 || !supportsFreightBreachContent(contentVersion)) &&
                     active.recipeDefinitionId == kFreightBreachRecipeId)
                     return {SaveLoadStatus::Failed, std::nullopt,
                         "freight breach order requires schema 66 and compatible content"};
@@ -3673,6 +3766,9 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                 active.outputAssetId = order.at(
                     "output_asset_id").get<AssetInstanceId>();
                 active.outputReady = order.at("output_ready").get<bool>();
+                if (order.contains("emergency_power_bonus_minutes"))
+                    active.emergencyPowerBonusMinutes = powerInteger<std::uint32_t>(
+                        order.at("emergency_power_bonus_minutes"));
                 profile.baseManufacturing.activeOrder = std::move(active);
             }
         }
@@ -4095,7 +4191,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             if (value.contains("freight_breach_enabled"))
             {
                 const auto &enabled = value.at("freight_breach_enabled");
-                if (schemaVersion < 66 || contentVersion != kFreightBreachContentVersion ||
+                if (schemaVersion < 66 || !supportsFreightBreachContent(contentVersion) ||
                     !enabled.is_boolean())
                     return {SaveLoadStatus::Failed, std::nullopt,
                         "freight breach requires a boolean in schema 66 and compatible content"};
@@ -4649,6 +4745,17 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                                   travel.at("starting_base_priority"),
                                   profile.basePopulation.ordinaryResidents))
                         : BasePriorityState{}};
+                if (travel.contains("starting_emergency_power"))
+                {
+                    if (!powerContract) throw std::invalid_argument{"emergency power requires schema 67"};
+                    raid.travel.startingEmergencyPower = parseEmergencyPower(travel.at("starting_emergency_power"));
+                }
+                if (travel.contains("starting_manufacturing_power_bonus_minutes"))
+                {
+                    if (!powerContract) throw std::invalid_argument{"emergency power requires schema 67"};
+                    raid.travel.startingManufacturingPowerBonusMinutes = powerInteger<std::uint32_t>(
+                        travel.at("starting_manufacturing_power_bonus_minutes"));
+                }
                 if (schemaVersion >= 11 && schemaVersion < 43)
                 {
                     reconcileLegacyBasePriority(
@@ -4834,6 +4941,9 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                                 "completion_world_minute").get<std::uint64_t>();
                             active.consumedContribution = treatment.at(
                                 "consumed_contribution").get<std::uint32_t>();
+                            if (treatment.contains("emergency_power_bonus_minutes"))
+                                active.emergencyPowerBonusMinutes = powerInteger<std::uint32_t>(
+                                    treatment.at("emergency_power_bonus_minutes"));
                             if (schemaVersion >= 19)
                             {
                                 active.patientProfession =
@@ -5150,6 +5260,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             }
         }
         raidline::save60::parsePlayerState(payload, profile, schemaVersion, illuminationContract);
+        if (!powerContract && requiresEmergencyPowerContract(profile))
+            return {SaveLoadStatus::Failed, std::nullopt, "base emergency power requires schema 67 and compatible content"};
         const ProfileValidationResult validation =
             validateProfileState(profile, content);
         if (!validation.valid)
@@ -5319,7 +5431,8 @@ SaveWriteResult SaveRepository::save(
         const bool armor = supportsArmorReadinessContent(contentVersion);
         const bool fuel = supportsFuelExtractionContent(contentVersion);
         const bool freight = crossMapFreightCompatibleContent(contentVersion);
-        const auto schema = backpack ? 66U : illumination ? 65U : armor ? 64U : fuel ? 63U : freight ? 62U : 61U;
+        const bool power = contentVersion == kEmergencyPowerContentVersion;
+        const auto schema = power ? 67U : backpack ? 66U : illumination ? 65U : armor ? 64U : fuel ? 63U : freight ? 62U : 61U;
         const auto isLegacy = [&](const std::optional<SaveEnvelopeMetadata> &source) {
             return source && (source->schemaVersion < schema || source->contentVersion != contentVersion);
         };
@@ -5328,7 +5441,8 @@ SaveWriteResult SaveRepository::save(
         {
             // The former primary can remain in the rolling backup after upgrade.
             const std::string_view marker =
-                contentVersion == kFreightBreachContentVersion ? "raid-freight-breach-route-v1"
+                power ? "base-emergency-power-and-fuel-logistics-v1"
+                : contentVersion == kFreightBreachContentVersion ? "raid-freight-breach-route-v1"
                 : supportsHospitalFloorplanRoutesContent(contentVersion) ? "raid-hospital-floorplan-routes-v1"
                 : backpack ? "raid-load-and-pack-recovery-v1"
                 : illumination ? "raid-thrown-illumination-v1"

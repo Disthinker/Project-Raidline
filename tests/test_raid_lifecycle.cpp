@@ -2379,6 +2379,52 @@ TEST(RaidLifecycleTest, DeathTransfersCarriedAssetsToLostRecordAndResetsHealth)
     }
 }
 
+TEST(RaidLifecycleTest, OutboundGeneratorCompletionRollsBackWithoutDuplicateThreat)
+{
+    const auto &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("raid-generator-rollback", content);
+    profile.baseConstruction.materialUnits = 6U;
+    const auto start = executeStartBaseConstruction(profile, content, {kBaseGeneratorProjectId},
+        {profile.revision, "generator-before-deployment"});
+    ASSERT_TRUE(start.succeeded) << start.message;
+    const auto startingProject = profile.baseConstruction.activeProject;
+    static_cast<void>(advanceWorldClock(profile.worldClock, 479U));
+    const auto startClock = profile.worldClock;
+    const auto startThreat = profile.baseSiege.siteThreatUnits;
+
+    const MapDefinitionId hospital{"map.raid.hospital_district"};
+    const auto outbound = executeDeploy(profile, content,
+        {"generator-raid-a", "generator-settlement-a", 9001U, hospital},
+        {profile.revision, "generator-deploy-a"});
+    ASSERT_TRUE(outbound.succeeded) << outbound.message;
+    ASSERT_TRUE(profile.pendingRaid);
+    EXPECT_EQ(profile.baseConstruction.facilities.at(kBaseGeneratorFacilityId),
+              BaseConstructionState::FacilityPlacement::Reserve);
+    EXPECT_EQ(profile.baseSiege.siteThreatUnits, startThreat + 2U);
+    EXPECT_FALSE(profile.baseConstruction.activeProject);
+    EXPECT_FALSE(profile.pendingRaid->travel.startingBaseConstruction.facilities.contains(kBaseGeneratorFacilityId));
+
+    const auto rollback = rollbackPendingRaidToBase(profile, content);
+    ASSERT_TRUE(rollback.succeeded) << rollback.message;
+    EXPECT_EQ(profile.worldClock, startClock);
+    EXPECT_EQ(profile.baseSiege.siteThreatUnits, startThreat);
+    EXPECT_EQ(profile.baseConstruction.activeProject, startingProject);
+    EXPECT_FALSE(baseFacilityOwned(profile, kBaseGeneratorFacilityId));
+    for (const auto &[site, placements] : profile.baseFacilityLayout.placements)
+    {
+        static_cast<void>(site);
+        EXPECT_FALSE(placements.contains(kBaseGeneratorFacilityId));
+    }
+
+    const auto retried = executeDeploy(profile, content,
+        {"generator-raid-b", "generator-settlement-b", 9001U, hospital},
+        {profile.revision, "generator-deploy-b"});
+    ASSERT_TRUE(retried.succeeded) << retried.message;
+    EXPECT_EQ(profile.baseConstruction.facilities.at(kBaseGeneratorFacilityId),
+              BaseConstructionState::FacilityPlacement::Reserve);
+    EXPECT_EQ(profile.baseSiege.siteThreatUnits, startThreat + 2U);
+}
+
 TEST(RaidLifecycleTest, LegacyPendingRaidRollbackKeepsEntryLoadout)
 {
     ProfileState profile = makeNewAlphaProfile(

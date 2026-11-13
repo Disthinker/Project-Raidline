@@ -169,6 +169,10 @@ ProfileUiPrepared prepareProfileUiCommand(ProfileState &candidate, const Content
                 return resultOf(executeBasePrioritySubmission(candidate, content, typed, context));
             else if constexpr (std::is_same_v<Command, StartBaseManufacturingCommand>)
                 return resultOf(executeStartBaseManufacturing(candidate, content, typed, context));
+            else if constexpr (std::is_same_v<Command, StartBaseEmergencyPowerCommand> ||
+                               std::is_same_v<Command, PauseBaseEmergencyPowerCommand> ||
+                               std::is_same_v<Command, ResumeBaseEmergencyPowerCommand>)
+                return resultOf(executeBaseEmergencyPower(candidate, content, typed, context));
             else if constexpr (std::is_same_v<Command, BaseMedicalServiceCommand>)
             {
                 auto receipt = executeBaseMedicalService(candidate, content, typed, context);

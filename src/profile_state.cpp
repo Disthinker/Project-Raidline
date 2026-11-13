@@ -157,6 +157,44 @@ void hashInteger(std::uint64_t &hash, Integer value) noexcept
     }
 }
 
+void hashEmergencyPower(std::uint64_t &hash, const BaseEmergencyPowerState &power) noexcept
+{
+    hashBytes(hash, "base-emergency-power-v1");
+    hashInteger(hash, static_cast<std::uint32_t>(power.target));
+    hashInteger(hash, power.remainingMinutes);
+    hashInteger(hash, power.activeJobId.value_or(0U));
+    hashInteger(hash, power.advancedThroughWorldMinute);
+}
+
+bool validPowerJobBonus(std::uint32_t bonus, std::uint64_t start, std::uint64_t finish,
+                        std::uint64_t current) noexcept
+{
+    return start <= current && start < finish && bonus <= current - start &&
+        bonus <= (finish - start) / 2U + (finish - start) % 2U;
+}
+
+bool validEmergencyPower(
+    const BaseEmergencyPowerState &power, const BaseConstructionState &construction,
+    std::uint64_t minute, std::optional<BaseServiceJobId> workshop,
+    std::optional<BaseServiceJobId> medical)
+{
+    const auto generator = construction.facilities.find(kBaseGeneratorFacilityId);
+    if (generator == construction.facilities.end() || power.remainingMinutes == 0 ||
+        power.remainingMinutes > 180U || power.advancedThroughWorldMinute > minute ||
+        (power.target != BaseEmergencyPowerTarget::Workshop &&
+         power.target != BaseEmergencyPowerTarget::ResidentMedical))
+        return false;
+    if (!power.activeJobId) return true;
+    const bool isWorkshop = power.target == BaseEmergencyPowerTarget::Workshop;
+    static const BaseFacilityDefinitionId workshopId{"base_facility.workshop"};
+    static const BaseFacilityDefinitionId medicalId{"base_facility.medical"};
+    const auto targetFacility = construction.facilities.find(isWorkshop ? workshopId : medicalId);
+    return generator->second == BaseConstructionState::FacilityPlacement::Installed &&
+        targetFacility != construction.facilities.end() &&
+        targetFacility->second == BaseConstructionState::FacilityPlacement::Installed &&
+        power.activeJobId == (isWorkshop ? workshop : medical);
+}
+
 void hashFloat(std::uint64_t &hash, float value) noexcept
 {
     hashInteger(hash, std::bit_cast<std::uint32_t>(value));
@@ -1905,18 +1943,36 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "Base manufacturing worker state is invalid"};
     }
+    if (profile.emergencyPower)
+    {
+        const auto &order = profile.baseManufacturing.activeOrder;
+        const auto &treatment = profile.residentMedical.activeTreatment;
+        const auto workshop = order && !order->outputReady && order->recipeDefinitionId != kArmorRepairResearchId
+            ? std::optional{order->jobId} : std::nullopt;
+        const auto medical = treatment ? std::optional{treatment->jobId} : std::nullopt;
+        if (content.contentVersion() != kEmergencyPowerContentVersion ||
+            !validEmergencyPower(*profile.emergencyPower, profile.baseConstruction,
+                                 profile.worldClock.elapsedWorldMinutes, workshop, medical))
+            return {false, "Base emergency power state is invalid"};
+    }
     if (profile.residentMedical.activeTreatment.has_value())
     {
         const ActiveResidentTreatment &treatment =
             *profile.residentMedical.activeTreatment;
         const ResidentMedicalDefinition &definition = content.residentMedical();
+        const auto treatmentMinute = treatment.emergencyPowerBonusMinutes
+            ? baseFacilityReserveStartedWorldMinute(profile, BaseFacilityDefinitionId{"base_facility.medical"})
+                  .value_or(profile.worldClock.elapsedWorldMinutes)
+            : profile.worldClock.elapsedWorldMinutes;
         if (treatment.jobId == 0U ||
             treatment.jobId >= profile.nextBaseServiceJobId ||
             treatment.startedWorldMinute >= treatment.completionWorldMinute ||
             treatment.startedWorldMinute >
                 profile.worldClock.elapsedWorldMinutes ||
-            treatment.completionWorldMinute <=
-                profile.worldClock.elapsedWorldMinutes ||
+            !validPowerJobBonus(treatment.emergencyPowerBonusMinutes, treatment.startedWorldMinute,
+                               treatment.completionWorldMinute, treatmentMinute) ||
+            treatment.completionWorldMinute - treatment.emergencyPowerBonusMinutes <=
+                treatmentMinute ||
             treatment.completionWorldMinute - treatment.startedWorldMinute !=
                 applyBaseFacilityTaskDuration(
                     definition.durationMinutes,
@@ -2538,14 +2594,20 @@ ProfileValidationResult validateProfileState(
             order.startedWorldMinute < order.completionWorldMinute &&
             order.startedWorldMinute <=
                 profile.worldClock.elapsedWorldMinutes &&
+            (!order.emergencyPowerBonusMinutes ||
+             (!research && validPowerJobBonus(order.emergencyPowerBonusMinutes, order.startedWorldMinute,
+                                            order.completionWorldMinute, workshopReserveStarted.value_or(
+                                                profile.worldClock.elapsedWorldMinutes)))) &&
             publishedDuration;
+        const auto adjustedCompletion = order.completionWorldMinute >= order.emergencyPowerBonusMinutes
+            ? order.completionWorldMinute - order.emergencyPowerBonusMinutes : 0U;
         const bool phaseValid = order.outputReady
             ? !research && order.committedWorkers == 0U &&
                 order.inputAssetIds.empty() &&
-                order.completionWorldMinute <=
+                adjustedCompletion <=
                     profile.worldClock.elapsedWorldMinutes
             : order.committedWorkers == workerCount &&
-                (order.completionWorldMinute >
+                (adjustedCompletion >
                      workshopReserveStarted.value_or(
                          profile.worldClock.elapsedWorldMinutes) ||
                   profile.pendingRaid.has_value());
@@ -3038,7 +3100,7 @@ ProfileValidationResult validateProfileState(
         }
         if (raid.freightBreachEnabled &&
             (regionalMissionCount != 0U || raid.mapDefinitionId != kFreightCrateMapId ||
-             content.contentVersion() != kFreightBreachContentVersion ||
+             !supportsFreightBreachContent(content.contentVersion()) ||
              std::none_of(raid.interiors.begin(), raid.interiors.end(), [](const auto &interior) {
                  return interior.id == kFreightCrateSpaceId;
              })))
@@ -4242,6 +4304,11 @@ ProfileValidationResult validateProfileState(
                     *raid.travel.startingResidentMedical.activeTreatment;
                 const ResidentMedicalDefinition &definition =
                     content.residentMedical();
+                const auto reserve = raid.travel.startingBaseConstruction.facilityReserveStartedWorldMinutes.find(
+                    BaseFacilityDefinitionId{"base_facility.medical"});
+                const auto treatmentMinute = treatment.emergencyPowerBonusMinutes &&
+                    reserve != raid.travel.startingBaseConstruction.facilityReserveStartedWorldMinutes.end()
+                    ? reserve->second : raid.travel.startingWorldClock.elapsedWorldMinutes;
                 startingResidentMedicalValid =
                     treatment.jobId > 0U &&
                     treatment.jobId < profile.nextBaseServiceJobId &&
@@ -4249,8 +4316,9 @@ ProfileValidationResult validateProfileState(
                         treatment.completionWorldMinute &&
                     treatment.startedWorldMinute <=
                         raid.travel.startingWorldClock.elapsedWorldMinutes &&
-                    treatment.completionWorldMinute >
-                        raid.travel.startingWorldClock.elapsedWorldMinutes &&
+                    validPowerJobBonus(treatment.emergencyPowerBonusMinutes, treatment.startedWorldMinute,
+                                      treatment.completionWorldMinute, treatmentMinute) &&
+                    treatment.completionWorldMinute - treatment.emergencyPowerBonusMinutes > treatmentMinute &&
                     treatment.completionWorldMinute -
                             treatment.startedWorldMinute ==
                         applyBaseFacilityTaskDuration(
@@ -4263,6 +4331,21 @@ ProfileValidationResult validateProfileState(
                         definition.requiredContribution &&
                     raid.travel.startingInjuredResidents > 0U;
             }
+            const auto &startingPower = raid.travel.startingEmergencyPower;
+            const auto &startingTreatment = raid.travel.startingResidentMedical.activeTreatment;
+            const auto &currentOrder = profile.baseManufacturing.activeOrder;
+            const auto startingMinute = raid.travel.startingWorldClock.elapsedWorldMinutes;
+            const auto startingWorkshop = currentOrder && !currentOrder->outputReady &&
+                currentOrder->recipeDefinitionId != kArmorRepairResearchId
+                ? std::optional{currentOrder->jobId} : std::nullopt;
+            if ((startingPower && !validEmergencyPower(*startingPower, raid.travel.startingBaseConstruction,
+                    startingMinute, startingWorkshop,
+                    startingTreatment ? std::optional{startingTreatment->jobId} : std::nullopt)) ||
+                (raid.travel.startingManufacturingPowerBonusMinutes &&
+                 (!currentOrder || raid.travel.startingManufacturingPowerBonusMinutes > currentOrder->emergencyPowerBonusMinutes ||
+                  !validPowerJobBonus(raid.travel.startingManufacturingPowerBonusMinutes, currentOrder->startedWorldMinute,
+                                      currentOrder->completionWorldMinute, startingMinute))))
+                return {false, "pending Raid starting emergency power is invalid"};
             bool regionalTravelValid = true;
             if (raid.rulesVersion == "regional-route-network-17" ||
                 raid.rulesVersion == "regional-outpost-restoration-18" ||
@@ -5396,7 +5479,14 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             treatment.patientProfession));
         hashInteger(hash, static_cast<std::uint32_t>(
             treatment.workerProfession));
+        if (treatment.emergencyPowerBonusMinutes)
+        {
+            hashBytes(hash, "base-medical-power-bonus-v1");
+            hashInteger(hash, treatment.emergencyPowerBonusMinutes);
+        }
     }
+    if (profile.emergencyPower)
+        hashEmergencyPower(hash, *profile.emergencyPower);
     if (profile.baseManufacturing.armorRepairRecipeUnlocked)
     {
         hashBytes(hash, kArmorRepairRecipeId.value());
@@ -5418,6 +5508,11 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         }
         hashInteger(hash, order.outputAssetId);
         hashInteger(hash, order.outputReady ? 1U : 0U);
+        if (order.emergencyPowerBonusMinutes)
+        {
+            hashBytes(hash, "base-workshop-power-bonus-v1");
+            hashInteger(hash, order.emergencyPowerBonusMinutes);
+        }
     }
     hashInteger(hash, profile.basePriority.cycleIndex);
     hashInteger(hash, profile.basePriority.frozenPopulation);
@@ -6263,6 +6358,18 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
                 treatment.patientProfession));
             hashInteger(hash, static_cast<std::uint32_t>(
                 treatment.workerProfession));
+            if (treatment.emergencyPowerBonusMinutes)
+            {
+                hashBytes(hash, "base-medical-power-bonus-v1");
+                hashInteger(hash, treatment.emergencyPowerBonusMinutes);
+            }
+        }
+        if (raid.travel.startingEmergencyPower)
+            hashEmergencyPower(hash, *raid.travel.startingEmergencyPower);
+        if (raid.travel.startingManufacturingPowerBonusMinutes)
+        {
+            hashBytes(hash, "base-workshop-power-bonus-v1");
+            hashInteger(hash, raid.travel.startingManufacturingPowerBonusMinutes);
         }
     }
     if (profile.lastRaidResult.has_value())

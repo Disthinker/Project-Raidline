@@ -1,8 +1,6 @@
 #include "base_site_feature_domain.h"
 
-#include "base_manufacturing_domain.h"
-#include "base_morale_domain.h"
-#include "base_resident_medical_domain.h"
+#include "base_emergency_power_domain.h"
 #include "base_resource_domain.h"
 #include "base_workforce_domain.h"
 #include "recovery_task_domain.h"
@@ -203,10 +201,7 @@ BaseSiteFeatureRepairReceipt executeBaseSiteFeatureRepair(
                 "Base site feature repair time could not be committed",
                 profile.revision, plan.siteDefinitionId};
     }
-    static_cast<void>(synchronizeBaseDailySystemsThrough(candidate, content));
-    static_cast<void>(applyBaseConstructionThrough(candidate, content));
-    static_cast<void>(applyBaseManufacturingThrough(candidate, content));
-    static_cast<void>(applyResidentTreatmentThrough(candidate));
+    static_cast<void>(synchronizeBaseWorkThrough(candidate, content, advanced.minutesApplied));
     static_cast<void>(applyRecoveryTaskThrough(candidate));
     candidate.regionalOperations.baseSites.at(plan.siteDefinitionId)
         .uniqueFeatureRepaired = true;

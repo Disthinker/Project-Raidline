@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "alpha_content_ids.h"
+#include "base_emergency_power_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_migration_domain.h"
 #include "base_facility_layout_domain.h"
@@ -195,6 +196,63 @@ TEST(BaseMigrationDomainTest,
     EXPECT_TRUE(replay.succeeded);
     EXPECT_TRUE(replay.alreadyCommitted);
     EXPECT_EQ(profileStateFingerprint(profile), committed);
+}
+
+TEST(BaseMigrationDomainTest, MigrationPausesGeneratorAndPreservesFuelForReinstallation)
+{
+    const auto &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("generator-migration", content);
+    prepareAshworks(profile);
+    completeKitchenWater(profile);
+    profile.baseConstruction.facilities[kBaseGeneratorFacilityId] =
+        BaseConstructionState::FacilityPlacement::Installed;
+    initializeBaseFacilityLayouts(profile, content);
+
+    addToStash(profile, ItemDefinitionId{"item.loot.scrap_parts"});
+    addToStash(profile, ItemDefinitionId{"item.loot.electronics"});
+    const auto started = executeStartBaseManufacturing(
+        profile, content, {BaseManufacturingRecipeDefinitionId{"base_manufacturing.weapon_maintenance_kit"}},
+        {profile.revision, "order"});
+    ASSERT_TRUE(started.succeeded) << started.message;
+    const auto job = profile.baseManufacturing.activeOrder->jobId;
+    const auto fuel = addToStash(profile, kRaidFuelCanId);
+    const auto powered = executeBaseEmergencyPower(profile, content,
+        StartBaseEmergencyPowerCommand{BaseEmergencyPowerTarget::Workshop, fuel, job},
+        {profile.revision, "power-before-migration"});
+    ASSERT_TRUE(powered.succeeded) << powered.message;
+    static_cast<void>(advanceWorldClock(profile.worldClock, 30U));
+    static_cast<void>(synchronizeBaseWorkThrough(profile, content, 30U));
+    ASSERT_TRUE(profile.emergencyPower);
+    ASSERT_EQ(profile.emergencyPower->remainingMinutes, 150U);
+    ASSERT_EQ(profile.baseManufacturing.activeOrder->emergencyPowerBonusMinutes, 30U);
+
+    const auto migrated = executeBaseMigration(profile, content, {kAshworksSite},
+        {profile.revision, "migrate-powered-base"});
+    ASSERT_TRUE(migrated.succeeded) << migrated.message;
+    EXPECT_EQ(profile.baseConstruction.facilities.at(kBaseGeneratorFacilityId),
+              BaseConstructionState::FacilityPlacement::Reserve);
+    EXPECT_EQ(profile.emergencyPower->remainingMinutes, 150U);
+    EXPECT_FALSE(profile.emergencyPower->activeJobId);
+    EXPECT_EQ(profile.baseManufacturing.activeOrder->emergencyPowerBonusMinutes, 30U);
+    EXPECT_FALSE(queryBaseEmergencyPower(profile, ResumeBaseEmergencyPowerCommand{job}).canCommit);
+
+    const auto installed = executeInstallBaseFacilityAt(profile, content,
+        {kBaseGeneratorFacilityId, {1040.0F, 320.0F}, kBaseGeneratorFootprint,
+         {kAshworksSite, {{0.0F, 0.0F}, {1600.0F, 1120.0F}}, {}}},
+        {profile.revision, "reinstall-generator"});
+    ASSERT_TRUE(installed.succeeded) << installed.message;
+    EXPECT_EQ(profile.emergencyPower->remainingMinutes, 150U);
+    EXPECT_FALSE(profile.emergencyPower->activeJobId);
+    EXPECT_FALSE(queryBaseEmergencyPower(profile, ResumeBaseEmergencyPowerCommand{job}).canCommit);
+
+    const auto workshopInstalled = executeInstallBaseFacility(profile, content, {kWorkshop},
+        {profile.revision, "reinstall-workshop"});
+    ASSERT_TRUE(workshopInstalled.succeeded) << workshopInstalled.message;
+    const auto resumed = executeBaseEmergencyPower(profile, content, ResumeBaseEmergencyPowerCommand{job},
+        {profile.revision, "resume-after-migration"});
+    ASSERT_TRUE(resumed.succeeded) << resumed.message;
+    EXPECT_EQ(profile.emergencyPower->remainingMinutes, 150U);
+    EXPECT_EQ(profile.emergencyPower->activeJobId, job);
 }
 
 TEST(BaseMigrationDomainTest,

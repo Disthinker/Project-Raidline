@@ -1,5 +1,6 @@
 #include "base_construction_domain.h"
 #include "base_defense_serialization.h"
+#include "base_emergency_power_domain.h"
 #include "base_facility_layout_domain.h"
 #include "base_population_domain.h"
 #include "base_siege_domain.h"
@@ -255,6 +256,48 @@ TEST(BaseDefenseDomainTest, PlayerDownRescueAndTimeApplyExactlyOnce)
                                                      {p.revision, "another-down"})
                     .alreadyCommitted);
     EXPECT_EQ(profileStateFingerprint(p), after);
+}
+
+TEST(BaseDefenseDomainTest, PlayerDownRescueCompletesPoweredWorkAndRecordsFuelThreat)
+{
+    const auto &content = publishedContentRegistry();
+    auto p = warningProfile();
+    p.baseConstruction.facilities.emplace(
+        kBaseGeneratorFacilityId, BaseConstructionState::FacilityPlacement::Installed);
+    initializeBaseFacilityLayouts(p, content);
+    const auto add = [&](const ItemDefinitionId &item)
+    {
+        const auto &definition = content.item(item);
+        const auto origin = findFirstProfileFit(
+            p, content, ProfileContainerId::stash(), definition, ItemOrientation::Degrees0);
+        return origin ? p.assets.create(definition, StoredAssetLocation{ProfileContainerId::stash(), *origin}) : 0U;
+    };
+    ASSERT_NE(add(ItemDefinitionId{"item.loot.scrap_parts"}), 0U);
+    ASSERT_NE(add(ItemDefinitionId{"item.loot.electronics"}), 0U);
+    const auto order = executeStartBaseManufacturing(
+        p, content, {BaseManufacturingRecipeDefinitionId{"base_manufacturing.weapon_maintenance_kit"}},
+        {p.revision, "defense-power-order"});
+    ASSERT_TRUE(order.succeeded) << order.message;
+    const auto fuel = add(kRaidFuelCanId);
+    ASSERT_NE(fuel, 0U);
+    const auto started = executeBaseEmergencyPower(
+        p, content, StartBaseEmergencyPowerCommand{BaseEmergencyPowerTarget::Workshop, fuel, order.jobId},
+        {p.revision, "defense-power-start"});
+    ASSERT_TRUE(started.succeeded) << started.message;
+    start(p);
+    p.currentHealth = 0;
+    const auto id = p.activeBaseDefense->eventId;
+    const auto result = executeBaseRealtimeDefenseSettlement(
+        p, content, id, BaseDefenseEndReason::PlayerDown, {p.revision, "defense-power-rescue"});
+    ASSERT_TRUE(result.succeeded) << result.message;
+    EXPECT_FALSE(p.emergencyPower);
+    EXPECT_FALSE(p.baseManufacturing.activeOrder);
+    const auto *output = p.assets.find(*order.outputAssetId);
+    ASSERT_NE(output, nullptr);
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(output->location));
+    EXPECT_EQ(p.baseSiege.siteThreatUnits, 3U);
+    EXPECT_FALSE(activateBaseSiegeWarningIfEligible(p));
+    EXPECT_TRUE(validateProfileState(p, content).valid);
 }
 
 TEST(BaseDefenseDomainTest, ExplicitAbandonUsesSoftFailureNotRaidLoss)

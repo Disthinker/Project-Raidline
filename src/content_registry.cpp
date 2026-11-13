@@ -1402,6 +1402,8 @@ ContentRegistry ContentRegistry::fromJson(
         {
             fail("Base construction material capacity is invalid");
         }
+        const bool hasEmergencyPower =
+            registry.contentVersion() == kEmergencyPowerContentVersion;
         std::size_t requiredMigrationFacilities{};
         for (const Json &facilityValue :
              requiredArray(baseConstruction, "facilities"))
@@ -1413,6 +1415,13 @@ ContentRegistry ContentRegistry::fromJson(
                 requiredBool(facilityValue, "required_for_migration"),
                 requiredBool(facilityValue, "initially_owned"),
                 requiredBool(facilityValue, "initially_installed")};
+            if (definition.id == kBaseGeneratorFacilityId)
+            {
+                if (!hasEmergencyPower)
+                    continue;
+                if (definition.requiredForMigration || definition.initiallyOwned)
+                    fail("Generator facility must start unowned and be optional for migration");
+            }
             if (!hasPrefix(definition.id.value(), "base_facility.") ||
                 definition.displayName.empty() ||
                 (definition.initiallyInstalled && !definition.initiallyOwned))
@@ -1430,7 +1439,8 @@ ContentRegistry ContentRegistry::fromJson(
             registry.baseFacilities_.push_back(std::move(definition));
         }
         if (registry.baseFacilities_.empty() ||
-            requiredMigrationFacilities != 4U)
+            requiredMigrationFacilities != 4U ||
+            (hasEmergencyPower && !registry.baseFacilityIndex_.contains(kBaseGeneratorFacilityId)))
         {
             fail("Base facility definitions are incomplete");
         }
@@ -1449,6 +1459,10 @@ ContentRegistry ContentRegistry::fromJson(
             {
                 fail("Base construction project must be an object");
             }
+            const BaseConstructionProjectDefinitionId projectId{
+                requiredString(projectValue, "id")};
+            if (!hasEmergencyPower && projectId == kBaseGeneratorProjectId)
+                continue;
             const std::string targetFacility = requiredString(
                 projectValue, "target_facility");
             BaseFacilityUpgradeTarget target{};
@@ -1468,13 +1482,16 @@ ContentRegistry ContentRegistry::fromJson(
             {
                 target = BaseFacilityUpgradeTarget::Medical;
             }
+            else if (targetFacility == "generator" && hasEmergencyPower)
+            {
+                target = BaseFacilityUpgradeTarget::Generator;
+            }
             else
             {
                 fail("Base construction target facility is invalid");
             }
             BaseConstructionProjectDefinition definition{
-                BaseConstructionProjectDefinitionId{
-                    requiredString(projectValue, "id")},
+                projectId,
                 requiredString(projectValue, "display_name"),
                 target,
                 optionalUint(projectValue, "required_level"),
@@ -1498,6 +1515,14 @@ ContentRegistry ContentRegistry::fromJson(
             {
                 fail("Base construction project definition is invalid");
             }
+            if ((definition.target == BaseFacilityUpgradeTarget::Generator) !=
+                    (definition.id == kBaseGeneratorProjectId) ||
+                (definition.target == BaseFacilityUpgradeTarget::Generator &&
+                 (definition.requiredLevel != 0U || definition.materialCost != 6U ||
+                  definition.workerCount != 2U || definition.durationMinutes != 480U)))
+            {
+                fail("Generator construction project definition is invalid");
+            }
             const std::size_t index =
                 registry.baseConstructionProjects_.size();
             if (!registry.baseConstructionProjectIndex_
@@ -1512,6 +1537,11 @@ ContentRegistry ContentRegistry::fromJson(
         if (registry.baseConstructionProjects_.empty())
         {
             fail("at least one Base construction project is required");
+        }
+        if (hasEmergencyPower &&
+            !registry.baseConstructionProjectIndex_.contains(kBaseGeneratorProjectId))
+        {
+            fail("Generator construction project is missing");
         }
 
         std::set<std::string> resources;
@@ -4459,7 +4489,7 @@ ContentRegistry ContentRegistry::fromJson(
                     }))
                 fail("hospital floor plan requires its fixed reception source");
         }
-        if (registry.contentVersion() == kFreightBreachContentVersion)
+        if (supportsFreightBreachContent(registry.contentVersion()))
         {
             if (!registry.itemIndex_.contains(kFreightBreachWedgesId) ||
                 !registry.baseManufacturingRecipeIndex_.contains(kFreightBreachRecipeId))

@@ -261,6 +261,7 @@ add_library(raidline_domain STATIC
     src/base_workforce_domain.h
     src/base_resident_medical_domain.cpp
     src/base_manufacturing_domain.cpp
+    src/base_emergency_power_domain.cpp
     src/base_morale_domain.cpp
     src/base_morale_domain.h
     src/base_resident_medical_domain.h
@@ -571,6 +572,7 @@ add_library(raidline_sdl_client STATIC
     src/ui_base_dormitory_presentation.cpp
     src/ui_base_dormitory_presentation.h
     src/app_ui_base_workshop.cpp
+    src/app_ui_base_generator.cpp
     src/ui_base_workshop_presentation.cpp
     src/ui_base_workshop_presentation.h
     src/app_ui_base_medical.cpp
@@ -898,6 +900,10 @@ raidline_add_test(
 raidline_add_test(
     BaseManufacturingDomainTest
     tests/test_base_manufacturing_domain.cpp
+    raidline::domain)
+raidline_add_test(
+    BaseEmergencyPowerDomainTest
+    tests/test_base_emergency_power_domain.cpp
     raidline::domain)
 raidline_add_test(
     FieldMedicalSuppliesTest

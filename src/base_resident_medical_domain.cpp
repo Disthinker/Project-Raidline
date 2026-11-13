@@ -4,6 +4,7 @@
 #include <limits>
 
 #include "base_construction_domain.h"
+#include "base_emergency_power_domain.h"
 #include "base_workforce_domain.h"
 
 namespace
@@ -72,12 +73,16 @@ BaseResidentMedicalProjection projectBaseResidentMedical(
                   profile.basePopulation.injuredResidents
             : 0U;
     std::uint64_t remaining{};
-    if (profile.residentMedical.activeTreatment.has_value() &&
-        profile.residentMedical.activeTreatment->completionWorldMinute >
-            profile.worldClock.elapsedWorldMinutes)
+    if (const auto &treatment = profile.residentMedical.activeTreatment)
     {
-        remaining = profile.residentMedical.activeTreatment
-            ->completionWorldMinute - profile.worldClock.elapsedWorldMinutes;
+        std::uint64_t progressWorldMinute = profile.worldClock.elapsedWorldMinutes;
+        if (treatment->emergencyPowerBonusMinutes != 0U)
+        {
+            progressWorldMinute = baseFacilityReserveStartedWorldMinute(
+                profile, BaseFacilityDefinitionId{"base_facility.medical"}).value_or(progressWorldMinute);
+        }
+        remaining = remainingBaseEmergencyPowerWork(
+            treatment->completionWorldMinute, treatment->emergencyPowerBonusMinutes, progressWorldMinute);
     }
     return {
         profile.basePopulation.ordinaryResidents,
@@ -338,9 +343,12 @@ ResidentTreatmentReceipt executeStartResidentTreatment(
 ResidentTreatmentAdvanceResult applyResidentTreatmentThrough(
     ProfileState &profile) noexcept
 {
-    if (!profile.residentMedical.activeTreatment.has_value() ||
-        profile.residentMedical.activeTreatment->completionWorldMinute >
-            profile.worldClock.elapsedWorldMinutes)
+    const auto &treatment = profile.residentMedical.activeTreatment;
+    if (!treatment || (treatment->emergencyPowerBonusMinutes != 0U &&
+                       !baseFacilityInstalled(profile, BaseFacilityDefinitionId{"base_facility.medical"})) ||
+        remainingBaseEmergencyPowerWork(treatment->completionWorldMinute,
+                                       treatment->emergencyPowerBonusMinutes,
+                                       profile.worldClock.elapsedWorldMinutes) != 0U)
     {
         return {};
     }
@@ -358,5 +366,6 @@ ResidentTreatmentAdvanceResult applyResidentTreatmentThrough(
         --profile.basePopulation.injuredByProfession[professionIndex];
     }
     profile.residentMedical.activeTreatment.reset();
+    pauseBaseEmergencyPowerForFacility(profile, BaseFacilityDefinitionId{"base_facility.medical"});
     return {true, jobId, profile.basePopulation.injuredResidents};
 }

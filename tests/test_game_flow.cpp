@@ -1,6 +1,9 @@
 #include <gtest/gtest.h>
 
 #include "game_flow.h"
+#include "test_temp_directory.h"
+
+#include <algorithm>
 
 namespace
 {
@@ -321,6 +324,96 @@ TEST(GameFlowTest, BaseManagementCanOpenEveryFixedFacilityWithoutProximity)
     ASSERT_TRUE(flow.deploy());
     EXPECT_FALSE(flow.openBaseFacilityForManagement(
         BaseFacilityKind::Workshop));
+}
+
+TEST(GameFlowTest, GeneratorPhysicallyDeploysInEveryPublishedSiteAndPlot)
+{
+    const auto &content = publishedContentRegistry();
+    for (const auto &site : content.regionalOperations().baseSites)
+    {
+        std::vector<std::string> plots{""};
+        if (site.id == kFoundingRegion)
+            for (const auto &plot : homePlotDefinitions())
+                plots.emplace_back(plot.id);
+        for (const auto &plot : plots)
+        {
+            SCOPED_TRACE(std::string{site.id.value()} + ":" + plot);
+            raidline::test::TemporaryDirectory temporary;
+            temporary.claim("raidline-generator-", "physical-placement");
+            ProfileState profile = makeNewAlphaProfile("generator-placement", content);
+            profile.regionalOperations.baseSites.at(site.id).unlocked = true;
+            if (site.outpostDefinitionId)
+                profile.regionalOperations.outposts.at(*site.outpostDefinitionId).unlocked = true;
+            profile.regionalOperations.activeBaseNodeId = site.nodeId;
+            profile.regionalOperations.technologyCore.baseSiteDefinitionId = site.id;
+            if (!plot.empty())
+            {
+                profile.homeFounding.layoutVersion = 2U;
+                profile.homeFounding.plots[site.id] = plot;
+            }
+            profile.baseConstruction.facilities[kBaseGeneratorFacilityId] =
+                BaseConstructionState::FacilityPlacement::Reserve;
+            profile.baseConstruction.facilityReserveStartedWorldMinutes[kBaseGeneratorFacilityId] =
+                profile.worldClock.elapsedWorldMinutes;
+            initializeBaseFacilityLayouts(profile, content);
+            const HomeRegionLayout layout = plot.empty()
+                ? generateHomeRegionLayout(site.id.value())
+                : generateFoundingHomeRegionLayout(site.id.value(), plot);
+            const auto perimeter = ensureHomePerimeterSnapshot(profile, content,
+                {site.id, layout.worldSize, layout.baseParcel, layout.movementBlockers},
+                {profile.revision, "seed-perimeter"});
+            ASSERT_TRUE(perimeter.succeeded) << perimeter.message;
+            const Vec2 center{layout.baseParcel.position.x + 1040.0F,
+                              layout.baseParcel.position.y + 320.0F};
+            const auto ground = profile.assets.create(
+                content.item(ItemDefinitionId{"item.loot.cola_basic"}),
+                BaseGroundAssetLocation{site.id, center});
+            ASSERT_TRUE(SaveRepository{temporary.path()}.save(profile, content.contentVersion()).succeeded);
+
+            GameFlow flow;
+            flow.configurePersistence(temporary.path());
+            ASSERT_TRUE(flow.continueGame()) << flow.gameSession().persistenceMessage();
+            const BaseWorld &world = flow.baseWorld();
+            const auto generator = std::find_if(world.facilities().begin(), world.facilities().end(),
+                [](const BaseFacility &facility) { return facility.kind == BaseFacilityKind::Generator; });
+            ASSERT_NE(generator, world.facilities().end());
+            const Vec2 origin = world.baseParcel().position;
+            EXPECT_FALSE(generator->active);
+            EXPECT_FALSE(flow.openBaseFacilityForManagement(BaseFacilityKind::Generator));
+            EXPECT_FALSE(flow.queryInstallBaseFacilityAt(BaseFacilityKind::Generator, origin).canCommit);
+            EXPECT_FALSE(flow.queryInstallBaseFacilityAt(BaseFacilityKind::Generator, center).canCommit);
+            ASSERT_TRUE(profile.assets.erase(ground));
+            ASSERT_TRUE(SaveRepository{temporary.path()}.save(profile, content.contentVersion()).succeeded);
+            GameFlow clearFlow;
+            clearFlow.configurePersistence(temporary.path());
+            ASSERT_TRUE(clearFlow.continueGame()) << clearFlow.gameSession().persistenceMessage();
+            const BaseWorld &clearWorld = clearFlow.baseWorld();
+            const auto preview = clearFlow.queryInstallBaseFacilityAt(BaseFacilityKind::Generator, center);
+            ASSERT_TRUE(preview.canCommit) << preview.message;
+            const auto installed = clearFlow.installBaseFacilityAt(
+                BaseFacilityKind::Generator, center, "place-generator");
+            ASSERT_TRUE(installed.succeeded) << installed.message;
+            const auto deployed = std::find_if(clearWorld.facilities().begin(), clearWorld.facilities().end(),
+                [](const BaseFacility &facility) { return facility.kind == BaseFacilityKind::Generator; });
+            ASSERT_NE(deployed, clearWorld.facilities().end());
+            EXPECT_TRUE(deployed->active);
+            EXPECT_FLOAT_EQ(deployed->bounds.size.x, 180.0F);
+            EXPECT_FLOAT_EQ(deployed->bounds.size.y, 120.0F);
+            EXPECT_FLOAT_EQ(deployed->bounds.position.x + 90.0F, center.x);
+            EXPECT_FLOAT_EQ(deployed->bounds.position.y + 60.0F, center.y);
+
+            const Vec2 entrance = baseFacilityAccessGeometry(*deployed).entrancePoint;
+            const Vec2 size = clearWorld.playerSize();
+            ASSERT_TRUE(clearFlow.baseWorld().restorePlayerBody(
+                {entrance.x - size.x * 0.5F, entrance.y + 20.0F - size.y * 0.5F},
+                {0.0F, -1.0F}, 0.0F, 0.0F));
+            EXPECT_EQ(clearWorld.interactableFacility(), BaseFacilityKind::Generator);
+            BaseInput input{};
+            input.interactJustPressed = true;
+            clearFlow.updateBase(input, 0.0F);
+            EXPECT_EQ(clearFlow.activeBaseFacility(), BaseFacilityKind::Generator);
+        }
+    }
 }
 
 TEST(GameFlowTest, BaseAndRaidCanReturnToMainMenuWithoutSettlement)

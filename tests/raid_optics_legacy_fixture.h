@@ -4,9 +4,23 @@
 #include <algorithm>
 #include <nlohmann/json.hpp>
 
-inline nlohmann::json contentBeforeFreightBreachJson()
+inline nlohmann::json contentBeforeEmergencyPowerJson()
 {
     auto document = nlohmann::json::parse(publishedContentJson());
+    document["content_version"] = kFreightBreachContentVersion;
+    auto &construction = document["base_construction"];
+    std::erase_if(construction["facilities"].get_ref<nlohmann::json::array_t &>(), [](const auto &facility) {
+        return facility.at("id") == std::string{kBaseGeneratorFacilityId.value()};
+    });
+    std::erase_if(construction["projects"].get_ref<nlohmann::json::array_t &>(), [](const auto &project) {
+        return project.at("id") == std::string{kBaseGeneratorProjectId.value()};
+    });
+    return document;
+}
+
+inline nlohmann::json contentBeforeFreightBreachJson()
+{
+    auto document = contentBeforeEmergencyPowerJson();
     document["content_version"] = kHospitalFloorplanRoutesContentVersion;
     auto &items = document["items"];
     std::erase_if(items.get_ref<nlohmann::json::array_t &>(), [](const auto &item) {

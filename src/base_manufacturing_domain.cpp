@@ -1,6 +1,7 @@
 #include "base_manufacturing_domain.h"
 
 #include "base_construction_domain.h"
+#include "base_emergency_power_domain.h"
 #include "base_morale_domain.h"
 #include "base_site_feature_domain.h"
 #include "base_workforce_domain.h"
@@ -147,11 +148,10 @@ BaseManufacturingProjection projectBaseManufacturing(
     {
         progressWorldMinute = *reserveStarted;
     }
-    if (!order.outputReady &&
-        order.completionWorldMinute > progressWorldMinute)
+    if (!order.outputReady)
     {
-        projection.remainingMinutes = order.completionWorldMinute -
-            progressWorldMinute;
+        projection.remainingMinutes = remainingBaseEmergencyPowerWork(
+            order.completionWorldMinute, order.emergencyPowerBonusMinutes, progressWorldMinute);
     }
     if (order.outputReady)
     {
@@ -557,6 +557,7 @@ BaseManufacturingReceipt executeCancelBaseManufacturing(
         static_cast<void>(candidate.assets.erase(order.outputAssetId));
     }
     candidate.baseManufacturing.activeOrder.reset();
+    pauseBaseEmergencyPowerForFacility(candidate, BaseFacilityDefinitionId{"base_facility.workshop"});
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
     const ProfileValidationResult validation = validateProfileState(
@@ -671,8 +672,9 @@ BaseManufacturingAdvanceResult applyBaseManufacturingThrough(
     }
     BaseManufacturingOrder &order =
         *profile.baseManufacturing.activeOrder;
-    if (order.outputReady || order.completionWorldMinute >
-            profile.worldClock.elapsedWorldMinutes)
+    if (order.outputReady || remainingBaseEmergencyPowerWork(
+            order.completionWorldMinute, order.emergencyPowerBonusMinutes,
+            profile.worldClock.elapsedWorldMinutes) != 0U)
     {
         return {};
     }
@@ -729,8 +731,10 @@ BaseManufacturingAdvanceResult applyBaseManufacturingThrough(
         output->location = StoredAssetLocation{
             ProfileContainerId::stash(), *origin};
         profile.baseManufacturing.activeOrder.reset();
+        pauseBaseEmergencyPowerForFacility(profile, BaseFacilityDefinitionId{"base_facility.workshop"});
         return {true, false, jobId, outputId};
     }
     order.outputReady = true;
+    pauseBaseEmergencyPowerForFacility(profile, BaseFacilityDefinitionId{"base_facility.workshop"});
     return {true, true, jobId, outputId};
 }

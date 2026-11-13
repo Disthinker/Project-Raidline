@@ -24,6 +24,7 @@ struct UiBaseWorkshopTestAccess {
     }
     static void frame(App &a, float dt = 0) { a.processEvents(); a.update(dt); a.input_.endFrame(); settle(a); }
     static void draw(App &a) { a.renderBaseWorkshop(); }
+    static void drawGenerator(App &a) { a.renderBaseGenerator(); }
     static void legacy(App &a, Vec2 p) { a.handleBasePointerClick({{p.x, p.y}}); }
     static void attach(App &a, SDL_Renderer *r, float scale) {
         a.renderer_ = r; ASSERT_TRUE(a.uiTextRenderer_.initialize(r)); a.uiTextRenderer_.setRasterScale(scale);
@@ -370,6 +371,101 @@ TEST_F(UiBaseWorkshopTest, ResearchUsesTheWorkshopControlsAndRevealsTheRecipe) {
     const auto reloaded = SaveRepository(path).load(content);
     ASSERT_TRUE(reloaded.profile);
     EXPECT_TRUE(reloaded.profile->baseManufacturing.armorRepairRecipeUnlocked);
+}
+
+TEST_F(UiBaseWorkshopTest, GeneratorPanelSupportsTargetActionsAtAllWindowSizes) {
+    A::close(*app);
+    auto &flow = A::flow(*app);
+    auto &session = A::session(*app);
+    EXPECT_FALSE(flow.openBaseFacilityForManagement(BaseFacilityKind::Generator));
+    profile().baseConstruction.materialUnits = 6;
+    ASSERT_TRUE(session.executeStartBaseConstruction(kBaseGeneratorProjectId, "generator-ui-build").succeeded);
+    ASSERT_TRUE(session.executeBaseRest(8, "generator-ui-build-rest").succeeded);
+    EXPECT_FALSE(flow.openBaseFacilityForManagement(BaseFacilityKind::Generator));
+    const auto &parcel = flow.baseWorld().baseParcel();
+    const Vec2 placement{parcel.position.x + parcel.size.x * kBaseGeneratorDefaultCenter.x,
+        parcel.position.y + parcel.size.y * kBaseGeneratorDefaultCenter.y};
+    const auto installed = flow.installBaseFacilityAt(BaseFacilityKind::Generator, placement, "generator-ui-install");
+    ASSERT_TRUE(installed.succeeded) << installed.message;
+    supplies();
+    ASSERT_TRUE(session.executeStartBaseManufacturing(content.baseManufacturingRecipes().front().id, "generator-ui-order").succeeded);
+    ASSERT_TRUE(flow.openBaseFacilityForManagement(BaseFacilityKind::Generator));
+    ASSERT_TRUE(profile().baseManufacturing.activeOrder);
+    const auto job = profile().baseManufacturing.activeOrder->jobId;
+
+    std::filesystem::path destination;
+    if (const char *output = std::getenv("RAIDLINE_GENERATOR_PREVIEW_DIR"); output && *output) {
+        destination = std::filesystem::absolute(output).lexically_normal();
+        ASSERT_TRUE(destination.filename().string().starts_with("raidline-generator-review-"));
+        std::filesystem::create_directories(destination);
+    }
+    const auto drawState = [&](std::string_view state) {
+        for (const auto size : kUiWindowSizes) {
+            for (const auto language : {UiLanguage::SimplifiedChinese, UiLanguage::English}) {
+                detach();
+                attach(size.width, size.height);
+                A::text(*app).setLanguage(language);
+                const auto before = profileStateFingerprint(profile());
+                ASSERT_TRUE(SDL_SetRenderDrawColor(renderer, 10, 16, 18, 255));
+                ASSERT_TRUE(SDL_RenderClear(renderer));
+                A::drawGenerator(*app);
+                ASSERT_TRUE(SDL_RenderPresent(renderer));
+                EXPECT_EQ(profileStateFingerprint(profile()), before);
+                if (!destination.empty()) {
+                    const auto file = std::string(state) + "-" + std::to_string(size.width) + "-" + uiLanguageCode(language) + ".png";
+                    ASSERT_TRUE(IMG_SavePNG(surface, (destination / file).string().c_str()));
+                }
+            }
+        }
+    };
+    constexpr Vec2 workshopButton{424, 418};
+    constexpr Vec2 residentButton{856, 418};
+    constexpr Vec2 pauseButton{424, 468};
+    constexpr Vec2 resumeButton{856, 468};
+    const auto click = [&](Vec2 location) {
+        pointer(location, true);
+        pointer(location, false);
+        A::frame(*app);
+    };
+
+    drawState("missing-fuel");
+    click(workshopButton);
+    EXPECT_FALSE(profile().emergencyPower);
+    const auto first = create(kRaidFuelCanId, 1);
+    const auto second = create(kRaidFuelCanId, 1);
+    ASSERT_NE(first, 0U);
+    ASSERT_NE(second, 0U);
+    drawState("ready");
+    click(residentButton);
+    EXPECT_FALSE(profile().emergencyPower);
+
+    pointer(workshopButton, true);
+    A::frame(*app);
+    EXPECT_FALSE(profile().emergencyPower);
+    pointer(workshopButton, false);
+    A::frame(*app);
+    ASSERT_TRUE(profile().emergencyPower);
+    EXPECT_EQ(profile().emergencyPower->activeJobId, job);
+    EXPECT_EQ(profile().assets.find(first), nullptr);
+    EXPECT_NE(profile().assets.find(second), nullptr);
+    drawState("running");
+
+    click(workshopButton);
+    EXPECT_EQ(profile().emergencyPower->activeJobId, job);
+    click(pauseButton);
+    EXPECT_FALSE(profile().emergencyPower->activeJobId);
+    EXPECT_EQ(profile().emergencyPower->remainingMinutes, kBaseEmergencyPowerBatchMinutes);
+    drawState("paused");
+
+    click(pauseButton);
+    EXPECT_FALSE(profile().emergencyPower->activeJobId);
+    click(resumeButton);
+    ASSERT_TRUE(profile().emergencyPower);
+    EXPECT_EQ(profile().emergencyPower->activeJobId, job);
+    EXPECT_NE(profile().assets.find(second), nullptr);
+    const auto saved = SaveRepository(path).load(content);
+    ASSERT_TRUE(saved.profile);
+    EXPECT_EQ(saved.profile->emergencyPower, profile().emergencyPower);
 }
 
 TEST(UiWorkshopGeometryTest, PaginationAndStateActionsRemainSeparate) {

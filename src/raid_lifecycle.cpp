@@ -6,6 +6,7 @@
 #include "base_wish_expedition.h"
 
 #include "base_construction_domain.h"
+#include "base_emergency_power_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_morale_domain.h"
 #include "base_siege_domain.h"
@@ -289,10 +290,7 @@ bool advanceProfileWorldTime(
     {
         return false;
     }
-    static_cast<void>(synchronizeBaseDailySystemsThrough(profile, content));
-    static_cast<void>(applyBaseConstructionThrough(profile, content));
-    static_cast<void>(applyBaseManufacturingThrough(profile, content));
-    static_cast<void>(applyResidentTreatmentThrough(profile));
+    static_cast<void>(synchronizeBaseWorkThrough(profile, content, advanced.minutesApplied));
     return true;
 }
 
@@ -721,7 +719,7 @@ DeployReceipt executeDeploy(
         supportsRaidBackpackRecoveryContent(content.contentVersion());
     snapshot.freightBreachEnabled = regionalMissionCount == 0U &&
         command.mapDefinitionId == kFreightCrateMapId &&
-        content.contentVersion() == kFreightBreachContentVersion;
+        supportsFreightBreachContent(content.contentVersion());
     if (snapshot.backpackRecoveryEnabled)
         snapshot.startingAssets = profile.assets;
     const bool corpseTrial = command.mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"} &&
@@ -771,6 +769,10 @@ DeployReceipt executeDeploy(
     snapshot.travel.startingRegionalOperations =
         candidate.regionalOperations;
     snapshot.travel.startingBaseSiege = candidate.baseSiege;
+    snapshot.travel.startingEmergencyPower = candidate.emergencyPower;
+    if (candidate.baseManufacturing.activeOrder)
+        snapshot.travel.startingManufacturingPowerBonusMinutes =
+            candidate.baseManufacturing.activeOrder->emergencyPowerBonusMinutes;
     snapshot.outpostRestoration = std::move(outpostRestoration);
     snapshot.baseSiteClearance = std::move(baseSiteClearance);
     snapshot.basePerimeterSweep = std::move(basePerimeterSweep);
@@ -2414,6 +2416,14 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     candidate.baseMorale = startingBaseMorale;
     candidate.baseCommunityEvent = startingBaseCommunityEvent;
     candidate.baseConstruction = startingBaseConstruction;
+    if (!candidate.baseConstruction.facilities.contains(kBaseGeneratorFacilityId))
+    {
+        for (auto &[site, placements] : candidate.baseFacilityLayout.placements)
+        {
+            static_cast<void>(site);
+            placements.erase(kBaseGeneratorFacilityId);
+        }
+    }
     candidate.baseWorkforce = startingBaseWorkforce;
     candidate.basePopulation.bedCapacity = startingBedCapacity;
     candidate.basePopulation.injuredResidents = startingInjuredResidents;
@@ -2426,6 +2436,10 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
         candidate.regionalOperations = startingRegionalOperations;
     }
     candidate.baseSiege = startingBaseSiege;
+    candidate.emergencyPower = candidate.pendingRaid->travel.startingEmergencyPower;
+    if (candidate.baseManufacturing.activeOrder)
+        candidate.baseManufacturing.activeOrder->emergencyPowerBonusMinutes =
+            candidate.pendingRaid->travel.startingManufacturingPowerBonusMinutes;
     candidate.pendingRaid.reset();
     candidate.lastRaidResult.reset();
     ++candidate.revision;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base_construction_domain.h"
+#include "base_emergency_power_domain.h"
 #include "base_facility_layout_domain.h"
 #include "base_ground_domain.h"
 #include "base_manufacturing_domain.h"
@@ -65,6 +66,9 @@ using ProfileUiCommand = std::variant<
     RegionalOutpostStaffingCommand,
     SubmitBasePriorityCommand,
     StartBaseManufacturingCommand,
+    StartBaseEmergencyPowerCommand,
+    PauseBaseEmergencyPowerCommand,
+    ResumeBaseEmergencyPowerCommand,
     BaseMedicalServiceCommand,
     StartResidentTreatmentCommand,
     StartGunsmithMaintenanceCommand,
@@ -123,6 +127,7 @@ using ProfileUiReceipt = std::variant<
     RegionalOutpostStaffingReceipt,
     BasePriorityReceipt,
     BaseManufacturingReceipt,
+    BaseEmergencyPowerReceipt,
     BaseMedicalServiceReceipt,
     ResidentTreatmentReceipt,
     GunsmithMaintenanceReceipt,

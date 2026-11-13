@@ -205,10 +205,16 @@ void App::renderBaseMedicalService() {
             text({80, 394, 328, 42}, fmt::format("{} {}", tr("PATIENT PROFESSION"), tr(baseResidentProfessionName(patient))));
         }
         text({464, 200, 728, 28}, p.population.treatmentActive ? "RESIDENT TREATMENT ACTIVE" : p.resident.canCommit ? "THIS TREATMENT: 1 RESIDENT" : "TREATMENT PLAN NOT READY", 16);
+        const auto &power = gameSession_.profile().emergencyPower;
+        const bool powerTarget = p.activeTreatment && power && power->target == BaseEmergencyPowerTarget::ResidentMedical;
+        const bool powerRunning = powerTarget && power->activeJobId == p.activeTreatment->jobId;
         const auto duration = p.population.treatmentActive ? p.population.remainingMinutes : p.resident.durationMinutes;
-        text({464, 240, 728, 28}, fmt::format("{} {}", tr(p.population.treatmentActive ? "WORLD TIME REMAINING" : "TREATMENT DURATION"),
+        text({464, 240, 728, 28}, fmt::format("{} {}", tr(p.population.treatmentActive ?
+            powerRunning ? "WORK REMAINING" : "WORLD TIME REMAINING" : "TREATMENT DURATION"),
             p.population.treatmentActive || p.resident.canCommit ? uiBaseMedicalDuration(duration, language) : tr("AVAILABLE WITH VALID PLAN")), 16);
-        text({464, 278, 728, 22}, "AUTHORIZED MEDICAL ITEMS ONLY - DEDUCTED ON START", 12);
+        text({464, 278, 728, 22}, powerTarget ?
+            powerRunning ? "ORDER POWERED · DOUBLE PROGRESS" : "ORDER POWER PAUSED" :
+            "AUTHORIZED MEDICAL ITEMS ONLY - DEDUCTED ON START", 12);
         button(Control::Details, detailed ? "HIDE MATERIAL DETAILS" : "SHOW MATERIAL DETAILS", detailed);
         if (detailed) {
             std::string materials;

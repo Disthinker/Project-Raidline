@@ -25,6 +25,8 @@ std::optional<BaseFacilityDefinitionId> definitionId(
         return BaseFacilityDefinitionId{"base_facility.kitchen_water"};
     case BaseFacilityKind::Workshop:
         return BaseFacilityDefinitionId{"base_facility.workshop"};
+    case BaseFacilityKind::Generator:
+        return kBaseGeneratorFacilityId;
     case BaseFacilityKind::Supply:
     case BaseFacilityKind::Allocation:
     case BaseFacilityKind::RaidGate:
@@ -48,6 +50,7 @@ std::optional<BaseFacilityWorkSocketKind> workSocketKind(
         return BaseFacilityWorkSocketKind::KitchenProcessing;
     case BaseFacilityKind::Workshop:
         return BaseFacilityWorkSocketKind::WorkshopBench;
+    case BaseFacilityKind::Generator:
     case BaseFacilityKind::Supply:
     case BaseFacilityKind::Allocation:
     case BaseFacilityKind::RaidGate:
@@ -69,6 +72,8 @@ std::optional<BaseFacilityUpgradeTarget> upgradeTarget(
         return BaseFacilityUpgradeTarget::Medical;
     case BaseFacilityKind::Workshop:
         return BaseFacilityUpgradeTarget::Workshop;
+    case BaseFacilityKind::Generator:
+        return BaseFacilityUpgradeTarget::Generator;
     case BaseFacilityKind::Storage:
     case BaseFacilityKind::Supply:
     case BaseFacilityKind::Allocation:
@@ -87,6 +92,7 @@ std::optional<BaseFacilityStaffingKind> staffingKind(
         return BaseFacilityStaffingKind::Workshop;
     case BaseFacilityKind::Medical:
         return BaseFacilityStaffingKind::Medical;
+    case BaseFacilityKind::Generator:
     case BaseFacilityKind::Storage:
     case BaseFacilityKind::Supply:
     case BaseFacilityKind::Allocation:
@@ -243,6 +249,8 @@ std::optional<BaseFacilityKind> facilityKind(
         return BaseFacilityKind::Workshop;
     case BaseFacilityUpgradeTarget::Medical:
         return BaseFacilityKind::Medical;
+    case BaseFacilityUpgradeTarget::Generator:
+        return BaseFacilityKind::Generator;
     }
     return std::nullopt;
 }

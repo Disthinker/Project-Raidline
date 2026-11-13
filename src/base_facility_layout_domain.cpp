@@ -1,6 +1,7 @@
 #include "base_facility_layout_domain.h"
 
 #include "base_construction_domain.h"
+#include "base_ground_domain.h"
 
 #include <algorithm>
 #include <array>
@@ -16,12 +17,13 @@ struct SpatialFacilityDefault
     Vec2 normalizedCenter;
 };
 
-constexpr std::array<SpatialFacilityDefault, 5U> kSpatialFacilities{{
+constexpr std::array<SpatialFacilityDefault, 6U> kSpatialFacilities{{
     {"base_facility.warehouse", {0.14375F, 0.29464287F}},
     {"base_facility.medical", {0.85625F, 0.7589286F}},
     {"base_facility.dormitory", {0.371875F, 0.7723214F}},
     {"base_facility.kitchen_water", {0.375F, 0.35714287F}},
     {"base_facility.workshop", {0.628125F, 0.5401786F}},
+    {"base_facility.generator", kBaseGeneratorDefaultCenter},
 }};
 
 bool finitePositive(Vec2 value) noexcept
@@ -147,6 +149,9 @@ BaseFacilityLayoutPlan queryPlacementGeometry(
         access.baseSiteDefinitionId !=
             profile.regionalOperations.technologyCore.baseSiteDefinitionId ||
         !isSpatialBaseFacility(definitionId) ||
+        (definitionId == kBaseGeneratorFacilityId &&
+         (!profile.homeFounding.established ||
+          footprint.x != kBaseGeneratorFootprint.x || footprint.y != kBaseGeneratorFootprint.y)) ||
         !finitePoint(worldCenter) || !finitePositive(footprint) ||
         !finiteRect(access.baseParcel))
     {
@@ -178,6 +183,24 @@ BaseFacilityLayoutPlan queryPlacementGeometry(
     {
         result.message = "Base facility placement is blocked";
         return result;
+    }
+    if (definitionId == kBaseGeneratorFacilityId)
+    {
+        for (const auto &asset : projectBaseGroundAssets(profile, access.baseSiteDefinitionId))
+        {
+            const auto &definition = content.item(asset.definitionId);
+            const Vec2 physicalSize = definition.basePlacement
+                ? definition.basePlacement->footprint : definition.worldRenderSize;
+            const Vec2 size = orientedSize(
+                {std::max(physicalSize.x, definition.pickupSize.x),
+                 std::max(physicalSize.y, definition.pickupSize.y)}, asset.orientation);
+            const ContentRect bounds = centeredBounds(asset.position, size);
+            if (rectsOverlap(proposed, bounds) || rectsOverlap(facilityAccess.workZone, bounds))
+            {
+                result.message = "Base facility placement is blocked";
+                return result;
+            }
+        }
     }
     result.canCommit = true;
     result.error = DomainErrorCode::None;

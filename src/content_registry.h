@@ -37,6 +37,11 @@ inline constexpr std::string_view kHospitalFloorplanRoutesContentVersion{
     "raid-hospital-floorplan-routes-content-83"};
 inline constexpr std::string_view kFreightBreachContentVersion{
     "raid-freight-breach-route-content-84"};
+inline constexpr std::string_view kEmergencyPowerContentVersion{
+    "base-emergency-power-and-fuel-logistics-content-85"};
+inline const BaseFacilityDefinitionId kBaseGeneratorFacilityId{"base_facility.generator"};
+inline const BaseConstructionProjectDefinitionId kBaseGeneratorProjectId{
+    "base_construction.generator.level_1"};
 inline const ItemDefinitionId kFixedRaidOpticId{"item.component.optic_4x_5_45"};
 inline const ItemDefinitionId kExpanding545AmmunitionId{"item.ammunition.5_45x39_expanding"};
 inline const ItemDefinitionId kHospitalNightVisionId{"item.device.night_vision_basic"};
@@ -80,9 +85,14 @@ inline constexpr std::string_view kRaidFuelLootSlotId{"freight_manifest"};
         slotId == "hospital_reception";
 }
 
+[[nodiscard]] inline bool supportsFreightBreachContent(std::string_view version) noexcept
+{
+    return version == kFreightBreachContentVersion || version == kEmergencyPowerContentVersion;
+}
+
 [[nodiscard]] inline bool supportsHospitalFloorplanRoutesContent(std::string_view version) noexcept
 {
-    return version == kHospitalFloorplanRoutesContentVersion || version == kFreightBreachContentVersion;
+    return version == kHospitalFloorplanRoutesContentVersion || supportsFreightBreachContent(version);
 }
 
 [[nodiscard]] inline bool supportsRaidBackpackRecoveryContent(std::string_view version) noexcept
@@ -595,7 +605,8 @@ enum class BaseFacilityUpgradeTarget
     Dormitory,
     KitchenWater,
     Workshop,
-    Medical
+    Medical,
+    Generator
 };
 
 struct BaseFacilityDefinition

@@ -127,7 +127,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        kFreightBreachContentVersion);
+        kEmergencyPowerContentVersion);
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -209,8 +209,8 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(registry.baseOperations().supportedAtReserveDays, 7U);
     EXPECT_EQ(registry.basePriorityCycleMinutes(), 7200U);
     EXPECT_EQ(registry.maximumBaseConstructionMaterials(), 100U);
-    ASSERT_EQ(registry.baseConstructionProjects().size(), 4U);
-    EXPECT_EQ(registry.baseFacilities().size(), 5U);
+    ASSERT_EQ(registry.baseConstructionProjects().size(), 5U);
+    EXPECT_EQ(registry.baseFacilities().size(), 6U);
     EXPECT_TRUE(registry.baseFacility(BaseFacilityDefinitionId{
         "base_facility.kitchen_water"}).requiredForMigration);
     EXPECT_FALSE(registry.baseFacility(BaseFacilityDefinitionId{
@@ -2249,7 +2249,7 @@ TEST(ContentRegistryTest, OpticDefinitionsSeparateTheReceiverMountAndOpticModes)
 TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDefinitions)
 {
     const auto original = hospitalContentCandidateJson();
-    ASSERT_EQ(original.at("content_version").get<std::string>(), kFreightBreachContentVersion);
+    ASSERT_EQ(original.at("content_version").get<std::string>(), kEmergencyPowerContentVersion);
     for (const auto *required : {"fortifications", "enemy_combat_definitions"})
     {
         SCOPED_TRACE(required);

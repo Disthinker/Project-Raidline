@@ -838,6 +838,18 @@ struct BaseCommunityEventState
         const BaseCommunityEventState &) = default;
 };
 
+enum class BaseEmergencyPowerTarget { Workshop, ResidentMedical };
+
+struct BaseEmergencyPowerState
+{
+    BaseEmergencyPowerTarget target{BaseEmergencyPowerTarget::Workshop};
+    std::uint32_t remainingMinutes{};
+    std::optional<BaseServiceJobId> activeJobId;
+    std::uint64_t advancedThroughWorldMinute{};
+
+    friend bool operator==(const BaseEmergencyPowerState &, const BaseEmergencyPowerState &) = default;
+};
+
 struct ActiveResidentTreatment
 {
     BaseServiceJobId jobId{};
@@ -846,6 +858,7 @@ struct ActiveResidentTreatment
     std::uint32_t consumedContribution{};
     BaseResidentProfession patientProfession{BaseResidentProfession::General};
     BaseResidentProfession workerProfession{BaseResidentProfession::General};
+    std::uint32_t emergencyPowerBonusMinutes{};
 
     friend bool operator==(
         const ActiveResidentTreatment &,
@@ -872,6 +885,7 @@ struct BaseManufacturingOrder
     std::vector<AssetInstanceId> inputAssetIds;
     AssetInstanceId outputAssetId{};
     bool outputReady{};
+    std::uint32_t emergencyPowerBonusMinutes{};
 
     friend bool operator==(
         const BaseManufacturingOrder &,
@@ -1081,6 +1095,8 @@ struct RaidTravelSnapshot
     std::vector<RegionRouteDefinitionId> routeIds;
     RegionalOperationsState startingRegionalOperations;
     BaseSiegeState startingBaseSiege;
+    std::optional<BaseEmergencyPowerState> startingEmergencyPower;
+    std::uint32_t startingManufacturingPowerBonusMinutes{};
 
     friend bool operator==(
         const RaidTravelSnapshot &,
@@ -1273,6 +1289,7 @@ struct ProfileState
     BaseCommunityEventState baseCommunityEvent;
     BaseResidentMedicalState residentMedical;
     BaseManufacturingState baseManufacturing;
+    std::optional<BaseEmergencyPowerState> emergencyPower;
     BaseConstructionState baseConstruction;
     BaseFacilityLayoutState baseFacilityLayout;
     BasePriorityState basePriority;

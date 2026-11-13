@@ -1,3 +1,14 @@
+# 当前 · 基地应急供电与燃油后勤 v1 已验收
+
+在灰烬工场搜建材，去边境交换站取油，选择燃油撤离或带回加快工坊和居民治疗。[具体开发方案](../exec-plans/active/base-emergency-power-and-fuel-logistics-v1.md)
+
+- task_id `base-emergency-power-and-fuel-logistics-v1`，plan_version `RL-BASE-EMERGENCY-POWER-AND-FUEL-LOGISTICS-v1`，state `accepted`。approval_source 为 2026-11-13 用户对该版本回复“批准”。candidate_id `RL-BASE-EMERGENCY-POWER-AND-FUEL-LOGISTICS-v1-local-3347520a33e0`。accepted_candidate_id `RL-BASE-EMERGENCY-POWER-AND-FUEL-LOGISTICS-v1-local-3347520a33e0`。acceptance_source 为 2026-11-13 用户回复“基地应急供电与燃油后勤 v1 验收通过，请提交并推送。”
+- 基线 `origin/main@302901a5c2d8b3a1e810bfa83f654bd99729267e` 的 Windows 和 Ubuntu CI 已通过。隔离工作树分支 `codex/base-emergency-power-and-fuel-logistics-v1` 基于已验收的 `c05a227`，包含同样已验收的 `6c0df90` 与 `7206b3f`。三阶段均已推送，仍在分支上。
+- 原策划线程已回复请求 `MAIN-NEXT-STAGE-20261113-AFTER-FREIGHT-BREACH-01`，任务 `raid-next-stage-after-freight-breach-route`，协议 `RL-NEXT-STAGE-REQUEST-v1`，turn `01a1d2e8-c208-7340-a451-9dc3fa763af7`，基线一致。
+- 固定入口已更新。Windows 全量 3281/3281，14 项 3 ms 检查通过，旧档副本升级回读一致。[联合验收](../acceptance/base-emergency-power-and-fuel-logistics-v1.md)
+
+---
+
 # 当前 · 货运装卸间破拆捷径 v1 已验收
 
 用外勤带回的工业材料做楔组，下次到「货运装卸间」可以绕行，也可以破拆中央检修门。[具体开发方案](../exec-plans/active/raid-freight-breach-route-v1.md)

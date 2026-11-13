@@ -1,9 +1,6 @@
 #include "base_population_domain.h"
 
-#include "base_construction_domain.h"
-#include "base_manufacturing_domain.h"
-#include "base_morale_domain.h"
-#include "base_resident_medical_domain.h"
+#include "base_emergency_power_domain.h"
 #include "recovery_task_domain.h"
 
 #include <limits>
@@ -143,14 +140,7 @@ BaseRestReceipt executeBaseRest(
     ProfileState candidate = profile;
     const WorldClockAdvanceResult advanced = advanceWorldClock(
         candidate.worldClock, plan.worldMinutes);
-    const BaseDailySystemsResult daily =
-        synchronizeBaseDailySystemsThrough(candidate, content);
-    const BaseConstructionAdvanceResult construction =
-        applyBaseConstructionThrough(candidate, content);
-    const BaseManufacturingAdvanceResult manufacturing =
-        applyBaseManufacturingThrough(candidate, content);
-    const ResidentTreatmentAdvanceResult residentTreatment =
-        applyResidentTreatmentThrough(candidate);
+    const BaseWorldWorkAdvanceResult work = synchronizeBaseWorkThrough(candidate, content, advanced.minutesApplied);
     static_cast<void>(applyRecoveryTaskThrough(candidate));
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
@@ -169,9 +159,9 @@ BaseRestReceipt executeBaseRest(
         {},
         profile.revision,
         advanced.minutesApplied,
-        daily.demand.cyclesResolved,
-        daily.demand.latestShortfall,
-        construction,
-        manufacturing,
-        residentTreatment};
+        work.demand.cyclesResolved,
+        work.demand.latestShortfall,
+        work.construction,
+        work.manufacturing,
+        work.residentTreatment};
 }

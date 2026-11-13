@@ -819,7 +819,8 @@ namespace
             facility == BaseFacilityKind::Medical ||
             facility == BaseFacilityKind::Dormitory ||
             facility == BaseFacilityKind::KitchenWater ||
-            facility == BaseFacilityKind::Workshop;
+            facility == BaseFacilityKind::Workshop ||
+            facility == BaseFacilityKind::Generator;
     }
 
     std::optional<BaseFacilityDefinitionId> spatialFacilityDefinitionId(
@@ -837,6 +838,8 @@ namespace
             return BaseFacilityDefinitionId{"base_facility.kitchen_water"};
         case BaseFacilityKind::Workshop:
             return BaseFacilityDefinitionId{"base_facility.workshop"};
+        case BaseFacilityKind::Generator:
+            return kBaseGeneratorFacilityId;
         case BaseFacilityKind::Supply:
         case BaseFacilityKind::Allocation:
         case BaseFacilityKind::RaidGate:
@@ -899,6 +902,8 @@ namespace
             return "MEDICAL";
         case BaseFacilityKind::Workshop:
             return "WORKSHOP";
+        case BaseFacilityKind::Generator:
+            return "GENERATOR ROOM";
         case BaseFacilityKind::Storage:
             return "STORAGE";
         case BaseFacilityKind::Supply:
@@ -922,6 +927,8 @@ namespace
             return "KITCHEN / WATER";
         case BaseFacilityUpgradeTarget::Workshop:
             return "WORKSHOP";
+        case BaseFacilityUpgradeTarget::Generator:
+            return "GENERATOR ROOM";
         case BaseFacilityUpgradeTarget::Medical:
             return "MEDICAL";
         }
@@ -2877,6 +2884,7 @@ void App::updateBase(float deltaTime)
             resetBaseSupplyUi();
             resetBaseMedicalUi();
             resetBaseWorkshopUi();
+            resetBaseGeneratorUi();
             resetBaseDormitoryUi();
         resetBaseAllocationUi();
         resetBaseDeploymentUi();
@@ -2913,6 +2921,9 @@ void App::updateBase(float deltaTime)
         auto workshopEvents = std::move(pendingWorkshopEvents_);
         pendingWorkshopEvents_.clear();
         for (const auto &event : workshopEvents) handleBaseWorkshopEvent(event);
+        auto generatorEvents = std::move(pendingGeneratorEvents_);
+        pendingGeneratorEvents_.clear();
+        for (const auto &event : generatorEvents) handleBaseGeneratorEvent(event);
         auto dormitoryEvents = std::move(pendingDormitoryEvents_);
         pendingDormitoryEvents_.clear();
         for (const auto &event : dormitoryEvents) handleBaseDormitoryEvent(event);
@@ -3055,8 +3066,8 @@ void App::handleBasePointerClick(const BasePointerClick &click)
     // Allocation owns its native down/up queue; no down-only transaction route.
     if (*facility == BaseFacilityKind::Allocation) return;
 
-    // Workshop owns the native down/up queue.
-    if (*facility == BaseFacilityKind::Workshop) return;
+    // These facilities own native down/up queues.
+    if (*facility == BaseFacilityKind::Workshop || *facility == BaseFacilityKind::Generator) return;
 
     // Medical owns its down/up queue; the legacy down-only adapter must
     // never execute the same transaction through a second route.
@@ -4676,6 +4687,7 @@ void App::processEvents()
     pendingSupplyEvents_.clear();
     pendingAllocationEvents_.clear();
     pendingMedicalEvents_.clear(); pendingWorkshopEvents_.clear(); pendingDormitoryEvents_.clear();
+    pendingGeneratorEvents_.clear();
     pendingBaseRightClicks_.clear();
     pendingBaseRotate_ = false;
     pendingMainMenuCommand_.reset();
@@ -4745,9 +4757,13 @@ void App::processEvents()
         }
         if (event.type == SDL_EVENT_WINDOW_MOUSE_LEAVE) {
             allocationUi_.press.reset(); pendingAllocationEvents_.clear();
+            generatorPress_.cancel();
+            pendingGeneratorEvents_.clear();
         }
         if (event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
             medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear(); allocationUi_.press.reset(); pendingAllocationEvents_.clear();
+            generatorPress_.cancel();
+            pendingGeneratorEvents_.clear();
         }
         if((medicalWheelOpen_ || throwableWheelOpen_ || magazineWheelOpen_) && event.type==SDL_EVENT_MOUSE_WHEEL) {
             const auto count=medicalWheelOpen_?medicalWheelOptions_.size():magazineWheelOpen_?magazineWheelOptions_.size():throwableWheelOptions_.size();
@@ -4783,6 +4799,8 @@ void App::processEvents()
                 systemCursorHidden_ = false;
             }
             supplyUi_.press.reset();
+            generatorPress_.cancel();
+            pendingGeneratorEvents_.clear();
             medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear(); allocationUi_.press.reset(); pendingAllocationEvents_.clear();
             componentPress_.reset();
             if (inventoryWeaponComponentsOpen_) pendingInventoryUiEvents_.clear();
@@ -5447,6 +5465,17 @@ void App::processEvents()
                     pendingWorkshopEvents_.push_back({UiWorkshopEventKind::Wheel, windowUiViewport().toLogical({event.wheel.mouse_x, event.wheel.mouse_y}), delta});
                 }
             }
+            else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Generator)
+            {
+                if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) &&
+                    event.button.button == SDL_BUTTON_LEFT) {
+                    input_.suppressPrimaryPointerUntilRelease();
+                    const auto kind = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? UiWorkshopEventKind::Down : UiWorkshopEventKind::Up;
+                    pendingGeneratorEvents_.push_back({kind, {event.button.x, event.button.y}});
+                } else if (event.type == SDL_EVENT_MOUSE_MOTION) {
+                    pendingGeneratorEvents_.push_back({UiWorkshopEventKind::Move, {event.motion.x, event.motion.y}});
+                }
+            }
             else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Medical)
             {
                 if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT) {
@@ -5797,6 +5826,14 @@ void App::update(float deltaTime)
     }
     if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || inventoryOverlayState_.isOpen() || !windowHasInputFocus_) {
         workshopUi_.press.reset(); pendingWorkshopEvents_.clear();
+    }
+    if (gameFlow_.state() != GameFlowState::Base || gameFlow_.activeBaseFacility() != BaseFacilityKind::Generator) {
+        resetBaseGeneratorUi();
+    } else if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || inventoryOverlayState_.isOpen() ||
+        !windowHasInputFocus_ || baseSiegeWarningVisible() || baseDefenseResultVisible_ ||
+        gameSession_.baseDefenseSaveBlocked() || gameSession_.baseDailySaveBlocked()) {
+        generatorPress_.cancel();
+        pendingGeneratorEvents_.clear();
     }
 
     if (gameFlow_.state() != GameFlowState::Base || gameFlow_.activeBaseFacility() != BaseFacilityKind::Medical) {
@@ -10144,6 +10181,9 @@ void App::renderBaseWorldScene(Rect visible, bool terrainOnly, bool drawAvatar)
         case BaseFacilityKind::Workshop:
             SDL_SetRenderDrawColor(renderer_, 80, 66, 44, 255);
             break;
+        case BaseFacilityKind::Generator:
+            SDL_SetRenderDrawColor(renderer_, 74, 78, 52, 255);
+            break;
         case BaseFacilityKind::RaidGate:
             SDL_SetRenderDrawColor(renderer_, 76, 48, 48, 255);
             break;
@@ -10501,12 +10541,13 @@ std::size_t App::baseBuildCatalogEntryCount() const
     }
 
     std::size_t count{};
-    constexpr std::array<BaseFacilityKind, 5U> coreFacilities{
+    constexpr std::array<BaseFacilityKind, 6U> coreFacilities{
         BaseFacilityKind::Storage,
         BaseFacilityKind::Medical,
         BaseFacilityKind::Dormitory,
         BaseFacilityKind::KitchenWater,
-        BaseFacilityKind::Workshop};
+        BaseFacilityKind::Workshop,
+        BaseFacilityKind::Generator};
     for (BaseFacilityKind facility : coreFacilities)
     {
         const auto definitionId = spatialFacilityDefinitionId(facility);
@@ -10629,12 +10670,13 @@ void App::handleBaseConstructionPanelClick(MousePosition position)
         }
         if (baseConstructionPage_ == BaseConstructionPage::Owned)
         {
-            constexpr std::array<BaseFacilityKind, 5U> coreFacilities{
+            constexpr std::array<BaseFacilityKind, 6U> coreFacilities{
                 BaseFacilityKind::Storage,
                 BaseFacilityKind::Medical,
                 BaseFacilityKind::Dormitory,
                 BaseFacilityKind::KitchenWater,
-                BaseFacilityKind::Workshop};
+                BaseFacilityKind::Workshop,
+                BaseFacilityKind::Generator};
             for (BaseFacilityKind facility : coreFacilities)
             {
                 const auto definitionId =
@@ -13209,6 +13251,9 @@ void App::renderBase()
             break;
         case BaseFacilityKind::Workshop:
             renderBaseWorkshop();
+            break;
+        case BaseFacilityKind::Generator:
+            renderBaseGenerator();
             break;
         case BaseFacilityKind::RaidGate:
             renderBaseDeployment();

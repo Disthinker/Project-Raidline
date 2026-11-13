@@ -1,4 +1,5 @@
 #include "base_migration_domain.h"
+#include "base_emergency_power_domain.h"
 #include "base_fortification_domain.h"
 
 #include "base_morale_domain.h"
@@ -161,7 +162,10 @@ BaseMigrationPlan queryBaseMigration(
             return plan;
         }
         plan.arrival = projectWorldClock(arrival);
-        bool deadlinesValid = true;
+        // An unfinished generator room has no owned facility to shift below.
+        bool deadlinesValid = baseFacilityOwned(profile, kBaseGeneratorFacilityId) ||
+            canShiftBaseFacilityTasks(profile, content, kBaseGeneratorFacilityId,
+                                      target.migrationMinutes);
         for (const auto &[definitionId, placement] :
              profile.baseConstruction.facilities)
         {
@@ -236,6 +240,9 @@ BaseMigrationReceipt executeBaseMigration(
     }
 
     ProfileState candidate = profile;
+    pauseBaseEmergencyPower(candidate);
+    if (!baseFacilityOwned(candidate, kBaseGeneratorFacilityId))
+        shiftBaseFacilityTasks(candidate, content, kBaseGeneratorFacilityId, plan.migrationMinutes);
     for (const auto &[definitionId, placement] :
          candidate.baseConstruction.facilities)
     {
