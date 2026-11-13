@@ -1219,6 +1219,17 @@ struct RaidSealedFreightCrateSnapshot
     bool unlocked{};
 };
 
+struct RaidFieldIntelligenceTrade
+{
+    Vec2 position{};
+    RaidIntelligenceCategory extraCategory{RaidIntelligenceCategory::Resource};
+    std::uint32_t balance{};
+    bool fileSold{};
+    bool frontierTransportPurchased{};
+    bool transportPurchased{};
+    bool extraPurchased{};
+};
+
 struct PendingRaidSnapshot
 {
     std::string raidId;
@@ -1256,6 +1267,7 @@ struct PendingRaidSnapshot
     bool backpackRecoveryEnabled{};
     bool freightBreachEnabled{};
     bool hospitalMedicalReserveEnabled{};
+    std::optional<RaidFieldIntelligenceTrade> fieldIntelligenceTrade;
 };
 
 struct LastRaidResult

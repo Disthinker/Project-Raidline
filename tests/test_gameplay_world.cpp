@@ -5305,3 +5305,129 @@ TEST(GameplayWorldRaidTest, FreightBreachMeasuresClosedPublicationAndOpenQueries
               << ", world publication " << percentile(publishUs)
               << ", open queries " << percentile(openUs) << '\n';
 }
+
+TEST(GameplayWorldRaidTest, FieldIntelligenceRequiresNearbyVisibleContact)
+{
+    RaidWorldConfig config;
+    config.playerSpawn = {212.0F, 184.0F}; // Center is exactly 72 units away.
+    config.extractionPoint = {{1080.0F, 520.0F}, {150.0F, 140.0F}};
+    config.fieldIntelligenceContact = Vec2{300.0F, 200.0F};
+    config.ballisticBlockers.push_back({1, {{250.0F, 170.0F}, {12.0F, 60.0F}}});
+    GameplayWorld world{std::move(config)};
+    EXPECT_EQ(world.fieldIntelligenceTradeStatus(), RaidFieldTradeAccess::Obstructed);
+    EXPECT_FALSE(world.visibleFieldIntelligenceContact());
+    world.update(GameplayInput{}, 0.0F);
+    EXPECT_FALSE(world.tacticalMap().discoveredFieldIntelligenceContact());
+
+    auto &player = const_cast<Player &>(world.player());
+    ASSERT_TRUE(player.setPosition({284.0F, 112.0F}));
+    EXPECT_EQ(world.fieldIntelligenceTradeStatus(), RaidFieldTradeAccess::Available);
+    ASSERT_TRUE(world.visibleFieldIntelligenceContact());
+    world.update(GameplayInput{}, 0.0F);
+    const auto contact = world.tacticalMap().discoveredFieldIntelligenceContact();
+    ASSERT_TRUE(contact);
+    EXPECT_FLOAT_EQ(contact->x, 300.0F);
+    EXPECT_FLOAT_EQ(contact->y, 200.0F);
+
+    ASSERT_TRUE(player.setPosition({284.0F, 111.0F}));
+    EXPECT_EQ(world.fieldIntelligenceTradeStatus(), RaidFieldTradeAccess::OutOfRange);
+    ASSERT_TRUE(player.setPosition({50.0F, 60.0F}));
+    world.update(GameplayInput{}, 0.0F);
+    EXPECT_FALSE(world.visibleFieldIntelligenceContact());
+    EXPECT_TRUE(world.tacticalMap().discoveredFieldIntelligenceContact());
+}
+
+TEST(GameplayWorldRaidTest, FieldIntelligenceIgnoresCoveredAndDeadEnemies)
+{
+    RaidWorldConfig config;
+    config.playerSpawn = {284.0F, 284.0F};
+    config.extractionPoint = {{1080.0F, 520.0F}, {150.0F, 140.0F}};
+    config.fieldIntelligenceContact = Vec2{350.0F, 300.0F};
+    config.ballisticBlockers.push_back({1, {{255.0F, 250.0F}, {12.0F, 100.0F}}});
+    config.initialEnemies = {
+        {{185.0F, 275.0F}, {50.0F, 50.0F}, 10},
+        {{456.0F, 275.0F}, {50.0F, 50.0F}, 10}};
+    GameplayWorld world{std::move(config)};
+    EXPECT_EQ(world.fieldIntelligenceTradeStatus(), RaidFieldTradeAccess::Available);
+
+    auto &enemy = const_cast<Enemy &>(world.enemies()[1]);
+    ASSERT_TRUE(enemy.setPosition({455.0F, 275.0F})); // Center at 180.
+    EXPECT_EQ(world.fieldIntelligenceTradeStatus(), RaidFieldTradeAccess::Threatened);
+    ASSERT_TRUE(enemy.takeDamage(10));
+    EXPECT_EQ(world.fieldIntelligenceTradeStatus(), RaidFieldTradeAccess::Available);
+}
+
+TEST(GameplayWorldRaidTest, FieldIntelligenceUpdatesPermissionsWithoutRevealingFog)
+{
+    RaidWorldConfig config;
+    config.playerSpawn = {284.0F, 284.0F};
+    config.extractionPoint = {{1080.0F, 520.0F}, {150.0F, 140.0F}};
+    config.fieldIntelligenceContact = Vec2{350.0F, 300.0F};
+    GameplayWorld world{std::move(config)};
+    world.update(GameplayInput{}, 0.0F);
+    const auto &map = world.tacticalMap();
+    EXPECT_FALSE(map.extractionVisible(RaidMapExtractionKind::Normal));
+    EXPECT_FALSE(map.pointRevealed({1155.0F, 590.0F}));
+    EXPECT_TRUE(map.pointRevealed({300.0F, 300.0F}));
+    ASSERT_TRUE(map.discoveredFieldIntelligenceContact());
+    world.grantFieldIntelligence(RaidIntelligenceCategory::Transport);
+    EXPECT_TRUE(map.extractionVisible(RaidMapExtractionKind::Normal));
+    EXPECT_FALSE(map.hasIntelligence(RaidIntelligenceCategory::Enemy));
+    EXPECT_FALSE(map.hasIntelligence(RaidIntelligenceCategory::Resource));
+    EXPECT_FALSE(map.pointRevealed({1155.0F, 590.0F}));
+    EXPECT_TRUE(map.pointRevealed({300.0F, 300.0F}));
+    EXPECT_TRUE(map.discoveredFieldIntelligenceContact());
+}
+
+TEST(GameplayWorldRaidTest, FieldIntelligenceContactsAreReachableFromEveryPublishedRiversideSpawn)
+{
+    const auto &map = publishedContentRegistry().map(kFieldIntelligenceSourceMapId);
+    ASSERT_EQ(map.fieldIntelligenceTradePositions.size(), 2U);
+    std::vector<BallisticBlocker> blockers;
+    for (const auto &definition : map.ballisticBlockers)
+    {
+        blockers.push_back({static_cast<BallisticBlockerId>(blockers.size() + 1U),
+            {definition.bounds.position, definition.bounds.size}});
+    }
+    const auto navigation = RaidSpaceNavigationField::build({32.0F, 32.0F}, map.worldSize, blockers);
+    ASSERT_TRUE(navigation);
+    for (const auto &pair : map.spawnExtractionPairs)
+    {
+        for (const Vec2 contact : map.fieldIntelligenceTradePositions)
+        {
+            SCOPED_TRACE(pair.id);
+            const Vec2 playerCenter{pair.playerSpawn.x + 16.0F, pair.playerSpawn.y + 16.0F};
+            EXPECT_TRUE(navigation->nextWaypoint(playerCenter, contact, 0.0F));
+            const Vec2 exitCenter{
+                pair.extractionPoint.position.x + pair.extractionPoint.size.x / 2.0F,
+                pair.extractionPoint.position.y + pair.extractionPoint.size.y / 2.0F};
+            EXPECT_TRUE(navigation->nextWaypoint(contact, exitCenter, 0.0F));
+        }
+    }
+}
+
+TEST(GameplayWorldRaidTest, FieldIntelligenceMeasuresOpenContactThreatQuery)
+{
+    RaidWorldConfig config;
+    config.playerSpawn = {284.0F, 284.0F};
+    config.extractionPoint = {{1080.0F, 520.0F}, {150.0F, 140.0F}};
+    config.fieldIntelligenceContact = Vec2{350.0F, 300.0F};
+    config.ballisticBlockers.push_back({1, {{255.0F, 235.0F}, {12.0F, 130.0F}}});
+    for (std::size_t index{}; index < 8U; ++index)
+    {
+        config.initialEnemies.push_back(
+            {{160.0F, 240.0F + 10.0F * static_cast<float>(index)}, {50.0F, 50.0F}, 10});
+    }
+    GameplayWorld world{std::move(config)};
+    std::array<double, 24> samples{};
+    for (double &sample : samples)
+    {
+        const auto start = std::chrono::steady_clock::now();
+        const auto status = world.fieldIntelligenceTradeStatus();
+        sample = std::chrono::duration<double, std::micro>(
+            std::chrono::steady_clock::now() - start).count();
+        ASSERT_EQ(status, RaidFieldTradeAccess::Available);
+    }
+    std::sort(samples.begin(), samples.end());
+    std::cout << "Field intelligence open contact p95 threat query: " << samples[22] << " us\n";
+}

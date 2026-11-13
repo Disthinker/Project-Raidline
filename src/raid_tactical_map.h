@@ -104,6 +104,9 @@ public:
         RaidMapExtractionKind kind) const noexcept;
     [[nodiscard]] bool hasIntelligence(
         RaidIntelligenceCategory category) const noexcept;
+    void grantIntelligence(RaidIntelligenceCategory category) noexcept;
+    void discoverFieldIntelligenceContact(Vec2 position) noexcept;
+    [[nodiscard]] std::optional<Vec2> discoveredFieldIntelligenceContact() const noexcept;
     [[nodiscard]] const ContentRect &normalExtraction() const noexcept;
     [[nodiscard]] const std::optional<ContentRect> &
     emergencyExtraction() const noexcept;
@@ -148,6 +151,7 @@ private:
     std::vector<RaidTacticalWorldLabel> outdoorLabels_;
     std::vector<RaidTacticalResourcePoint> outdoorResourcePoints_;
     std::vector<RaidTacticalObjective> objectives_;
+    std::optional<Vec2> discoveredFieldIntelligenceContact_;
     int columns_{32};
     int rows_{18};
     std::vector<bool> revealed_;

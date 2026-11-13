@@ -1,3 +1,15 @@
+# 当前 · 外勤情报交易与跨图撤离规划 v1 已验收
+
+在「河畔检查站」搜文件，选择带回出售或绕行换取情报，再到「边境交换站」用交通图规划撤离。[具体开发方案](../exec-plans/active/raid-field-intelligence-trade-v1.md)
+
+- task_id `raid-field-intelligence-trade-v1`，plan_version `RL-RAID-FIELD-INTELLIGENCE-TRADE-v1`，state `accepted`。approval_source 为 2026-11-13 用户明确批准 `RL-RAID-FIELD-INTELLIGENCE-TRADE-v1` 整阶段开发，暂不提交、推送或合并。candidate_id `RL-RAID-FIELD-INTELLIGENCE-TRADE-v1-local-1fdd8367f4e9`，accepted_candidate_id `RL-RAID-FIELD-INTELLIGENCE-TRADE-v1-local-1fdd8367f4e9`，acceptance_source 为 2026-11-13 用户回复“验收通过”，按既定约定提交并推送。
+- 基线 `origin/main@05d57bec704988d8c5cc7e1b97d888e80ad21ae7`。Windows 和 Ubuntu 各通过 3295 项，含 14 项 3 ms 性能检查。[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43407867270)
+- 原策划线程已回复请求 `MAIN-NEXT-STAGE-20261113-AFTER-HOSPITAL-MEDICAL-RESERVE-01`，协调任务 `raid-next-stage-after-hospital-medical-reserve`，协议 `RL-NEXT-STAGE-REQUEST-v1`，turn `01a1d482-008c-7153-a639-2d6cefb1fad7`，基线一致。
+- 本阶段已批准局内出售文件。局内收入和跨图情报须成功撤离才带回。
+- 固定入口已更新。Windows 全量 3309/3309，14 项 3 ms 检查通过，旧档副本升级回读一致。[联合验收](../acceptance/raid-field-intelligence-trade-v1.md)
+
+---
+
 # 当前 · 医院救援与公共医疗储备 v1 已验收
 
 去医院救出一名受伤的医疗专业居民。把带回的药品分给公共药柜或留作随身药，治好居民后可安排上岗。[具体开发方案](../exec-plans/active/hospital-rescue-and-medical-reserve-v1.md)

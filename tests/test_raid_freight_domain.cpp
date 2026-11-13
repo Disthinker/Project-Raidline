@@ -69,7 +69,7 @@ struct FreightFixture
 };
 }
 
-TEST(RaidFreightDomainTest, RiversideReplacesOnlyFirstSelectedCentralLootAcrossSpawnPairs)
+TEST(RaidFreightDomainTest, RiversideFreightKeyStaysAtFirstSelectedCentralLootAcrossSpawnPairs)
 {
     const auto historical = contentBeforeCrossMapFreight();
     const auto &slots = content.map(kFreightKeySourceMapId).raidLootSlots;
@@ -106,6 +106,13 @@ TEST(RaidFreightDomainTest, RiversideReplacesOnlyFirstSelectedCentralLootAcrossS
         EXPECT_EQ(slots[source->slotIndex].id, *raid.freightKeyLootSlotId);
         source->definitionId = kFreightCrateKeyId;
         source->quantity = 1;
+        const auto document = std::find_if(expected.begin(), expected.end(), [&](const auto &loot) {
+            return !loot.requiresHighRisk && loot.slotIndex < slots.size() &&
+                slots[loot.slotIndex].route == "resource";
+        });
+        ASSERT_NE(document, expected.end());
+        document->definitionId = kFieldIntelligenceDocumentId;
+        document->quantity = 1;
         EXPECT_EQ(raid.loot, expected);
         EXPECT_TRUE(validateProfileState(old, content).valid);
 

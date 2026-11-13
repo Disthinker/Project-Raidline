@@ -29,6 +29,9 @@ namespace
     constexpr ContentRect kFreightBreachDoor{{700.0F, 210.0F}, {80.0F, 100.0F}};
     constexpr float kFreightBreachReach{72.0F};
     constexpr float kFreightBreachNoiseRadius{300.0F};
+    constexpr float kFieldIntelligenceDiscoveryRadius{145.0F};
+    constexpr float kFieldIntelligenceInteractionRadius{72.0F};
+    constexpr float kFieldIntelligenceThreatRadius{180.0F};
 
     constexpr int kScorePerEnemy{100};
 
@@ -327,6 +330,12 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         throw std::invalid_argument{"RaidWorldConfig is invalid"};
     }
     worldSize_ = config.worldSize;
+    if (config.fieldIntelligenceContact &&
+        !pointInside(ContentRect{{}, worldSize_}, *config.fieldIntelligenceContact))
+    {
+        throw std::invalid_argument{"RaidWorldConfig field intelligence contact is invalid"};
+    }
+    fieldIntelligenceContact_ = config.fieldIntelligenceContact;
     lightConeObservationEnabled_ = config.lightConeObservationEnabled;
     noiseDecoyEnabled_ = config.noiseDecoyEnabled;
     grenadeEnabled_ = config.grenadeEnabled;
@@ -1156,6 +1165,11 @@ void GameplayWorld::update(
     if (exploredOutdoor)
     {
         tacticalMap_.revealAround(explorationCenter);
+        if (fieldIntelligenceContact_ && !tacticalMap_.discoveredFieldIntelligenceContact())
+        {
+            if (const auto contact = visibleFieldIntelligenceContact())
+                tacticalMap_.discoverFieldIntelligenceContact(*contact);
+        }
     }
     if (portalInteractionRequested)
     {
@@ -2656,6 +2670,63 @@ const RaidTacticalMapState &
 GameplayWorld::tacticalMap() const noexcept
 {
     return tacticalMap_;
+}
+
+std::optional<Vec2> GameplayWorld::visibleFieldIntelligenceContact() const noexcept
+{
+    if (!fieldIntelligenceContact_ || !inOutdoorRaidSpace() ||
+        !raidSession_.isActive() || player_.isDead())
+    {
+        return std::nullopt;
+    }
+
+    const Vec2 center = playerCenter(player_);
+    if (distanceSquared(center, *fieldIntelligenceContact_) >
+            kFieldIntelligenceDiscoveryRadius * kFieldIntelligenceDiscoveryRadius ||
+        !activeBlockerIndex().hasLineOfSight(center, *fieldIntelligenceContact_))
+    {
+        return std::nullopt;
+    }
+    return fieldIntelligenceContact_;
+}
+
+RaidFieldTradeAccess GameplayWorld::fieldIntelligenceTradeStatus() const noexcept
+{
+    if (!fieldIntelligenceContact_ || !inOutdoorRaidSpace() ||
+        !raidSession_.isActive() || player_.isDead() || player_.isControlled())
+    {
+        return RaidFieldTradeAccess::Unavailable;
+    }
+
+    const Vec2 center = playerCenter(player_);
+    if (distanceSquared(center, *fieldIntelligenceContact_) >
+        kFieldIntelligenceInteractionRadius * kFieldIntelligenceInteractionRadius)
+    {
+        return RaidFieldTradeAccess::OutOfRange;
+    }
+
+    const auto &blockers = activeBlockerIndex();
+    if (!blockers.hasLineOfSight(center, *fieldIntelligenceContact_))
+        return RaidFieldTradeAccess::Obstructed;
+
+    for (const Enemy &enemy : activeEnemies())
+    {
+        if (enemy.isDead())
+            continue;
+        const Vec2 target = enemyCenter(enemy);
+        if (distanceSquared(center, target) <=
+                kFieldIntelligenceThreatRadius * kFieldIntelligenceThreatRadius &&
+            blockers.hasLineOfSight(center, target))
+        {
+            return RaidFieldTradeAccess::Threatened;
+        }
+    }
+    return RaidFieldTradeAccess::Available;
+}
+
+void GameplayWorld::grantFieldIntelligence(RaidIntelligenceCategory category) noexcept
+{
+    tacticalMap_.grantIntelligence(category);
 }
 
 std::size_t GameplayWorld::aliveEnemyCount() const noexcept

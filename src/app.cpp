@@ -4697,6 +4697,7 @@ void App::processEvents()
     pendingRaidResultEvents_.clear();
     raidResultConfirmRequested_ = false;
     raidResultInputCancelledThisFrame_ = false;
+    fieldIntelligenceTradeUi_.interactRequested = false;
     homeFoundingInputBlockedThisFrame_ = homeFoundingPrompt_.has_value();
     developerWeaponPanelBlocksGameplayThisFrame_ =
         developerWeaponPanelOpen_;
@@ -4726,6 +4727,8 @@ void App::processEvents()
             event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
             raidChalkRoutes_.endStroke();
             raidChalkPress_.cancel();
+            fieldIntelligenceTradeUi_.press.cancel();
+            fieldIntelligenceTradeUi_.pendingRow.reset();
             itemDetailsInteraction_ = {}; deviceBatteryDrag_.reset();
             raidResultUi_.press.reset();
             pendingRaidResultEvents_.clear();
@@ -4789,6 +4792,7 @@ void App::processEvents()
                 gameSession_.cancelRaidFreightUnlock();
                 gameSession_.cancelRaidFreightBreach();
                 gameSession_.cancelRaidFuelExtraction();
+                closeFieldIntelligenceTrade();
                 windowHasInputFocus_ = false;
                 homeFoundingPrompt_.reset();
                 static_cast<void>(
@@ -4869,6 +4873,7 @@ void App::processEvents()
             if ((gameFlow_.state() == GameFlowState::Raid ||
                  gameFlow_.state() == GameFlowState::Base) &&
                 !inventoryOverlayState_.isOpen() &&
+                !fieldIntelligenceTradeUi_.open &&
                 !pauseMenu_.isOpen() &&
                 !developerWeaponPanelOpen_ &&
                 !quickWheelOpen() &&
@@ -4896,6 +4901,7 @@ void App::processEvents()
             requestQuitAfterInventory();
             continue;
         }
+        if (routeFieldIntelligenceTradeInput(event)) continue;
         if((pendingInventoryBarrierAction_ || profileUiBusy()) &&
            (event.type==SDL_EVENT_KEY_DOWN || event.type==SDL_EVENT_MOUSE_BUTTON_DOWN ||
             event.type==SDL_EVENT_MOUSE_BUTTON_UP || event.type==SDL_EVENT_MOUSE_WHEEL)) {
@@ -5712,6 +5718,10 @@ void App::handleDeveloperPanelClick(MousePosition position)
 
 void App::update(float deltaTime)
 {
+    if (gameFlow_.state() != GameFlowState::Raid || pauseMenu_.isOpen() ||
+        !windowHasInputFocus_ || developerWeaponPanelOpen_ || developerRangePanelOpen_ ||
+        raidSaveProtectionVisible())
+        closeFieldIntelligenceTrade();
     updateWeaponOpticPointerGate();
     uiClockSeconds_+=std::max(0.0F,deltaTime);
     updateInventoryUiPersistence(deltaTime);
@@ -5934,6 +5944,7 @@ void App::update(float deltaTime)
         baseDefenseResultVisible_ ||
         baseConstructionPanelOpen_ ||
         inventoryOverlayState_.isOpen() ||
+        fieldIntelligenceTradeUi_.open ||
         basePlacementState_.has_value() ||
         baseFixedFacilityPlacementState_.has_value() ||
         quickWheelOpen() || selectedThrowable_.has_value() ||
@@ -6013,7 +6024,7 @@ void App::update(float deltaTime)
         return;
     }
 
-    const bool tacticalToggle = input_.wasActionJustPressed(
+    const bool tacticalToggle = !fieldIntelligenceTradeUi_.open && input_.wasActionJustPressed(
         GameAction::ToggleTacticalMap);
     if (tacticalMapOpen_ && (tacticalToggle || escapePressed))
     {
@@ -6041,11 +6052,11 @@ void App::update(float deltaTime)
         decideInventoryFrameInput(
             inventoryOverlayState_.isOpen(),
             !developerWeaponPanelBlocksGameplayThisFrame_ &&
-            !tacticalMapOpen_ &&
+            !tacticalMapOpen_ && !fieldIntelligenceTradeUi_.open &&
             raidAcceptsInventoryInput &&
                 input_.wasActionJustPressed(
                     GameAction::ToggleInventory),
-            !developerWeaponPanelBlocksGameplayThisFrame_ &&
+            !developerWeaponPanelBlocksGameplayThisFrame_ && !fieldIntelligenceTradeUi_.open &&
             input_.wasActionJustPressed(
                 GameAction::InventoryCancel));
 
@@ -6170,7 +6181,10 @@ void App::update(float deltaTime)
             gameSession_.world().weaponAimWorldPosition();
         gameplayInput.aimMotionDelta = Vec2{};
     }
-    updatePlayerActionInput(gameplayInput);
+    if (fieldIntelligenceTradeUi_.open)
+        suppressFieldIntelligenceTradeControls(gameplayInput);
+    else
+        updatePlayerActionInput(gameplayInput);
     if (inputDecision.controlAction != InventoryFrameControlAction::None)
     {
         gameplayInput.quitRaidJustPressed = false;
@@ -6195,6 +6209,13 @@ void App::update(float deltaTime)
             const auto inspection=gameSession_.queryBaseCorpseInspection(corpse->corpseId);
             uiMessage_=inspection.canCommit?"CORPSE EMPTY":inspection.message;
             gameplayInput.interactJustPressed=gameplayInput.interactPressed=false;
+        }
+        else if (tryOpenFieldIntelligenceTrade())
+        {
+            if (fieldIntelligenceTradeUi_.open)
+                suppressFieldIntelligenceTradeControls(gameplayInput);
+            else
+                gameplayInput.interactJustPressed = gameplayInput.interactPressed = false;
         }
     }
     const InventoryContainerInteractionDecision
@@ -6230,6 +6251,7 @@ void App::update(float deltaTime)
     gameFlow_.update(
         gameplayInput,
         deltaTime);
+    updateFieldIntelligenceTradeAfterWorld();
     syncRaidChalkRoutes();
     if (!deviceWheelWasOpen && gameSession_.tacticalDeviceWheelOpen()) {
         wheelPointerOffset_ = tacticalDeviceReleasePointer_ = pendingRelativeAimMotion_ = {};
@@ -8941,6 +8963,7 @@ bool App::shouldCaptureWorldPointer() const noexcept
             raidWorldActive || baseWorldActive,
             raidWorldActive || baseWorldActive,
             inventoryOverlayState_.isOpen() ||
+                fieldIntelligenceTradeUi_.open ||
                 basePlacementState_.has_value() ||
                 baseFixedFacilityPlacementState_.has_value() ||
                 baseConstructionPanelOpen_ || homeFoundingPrompt_.has_value(),
@@ -9014,6 +9037,7 @@ void App::renderAimCrosshair()
     const bool inRaidWorld = gameFlow_.isRaidScreen() &&
         gameSession_.world().raidSession().isActive();
     if (inventoryOverlayState_.isOpen() ||
+        fieldIntelligenceTradeUi_.open ||
         basePlacementState_.has_value() ||
         baseFixedFacilityPlacementState_.has_value() ||
         baseConstructionPanelOpen_ ||
@@ -14013,6 +14037,15 @@ void App::renderRaidTacticalMap()
         uiFinalTextAt(renderer_,uiTextRenderer_,marker.x + 5.0F,marker.y + 4.0F,label,std::max(40.0F, 1136.0F-(marker.x + 5.0F)),11,1);
     }
 
+    if (const auto contact = map.discoveredFieldIntelligenceContact())
+    {
+        const Vec2 center = screenPoint(*contact);
+        const SDL_FRect marker{center.x - 4.0F, center.y - 4.0F, 8.0F, 8.0F};
+        SDL_SetRenderDrawColor(renderer_, 126, 224, 200, 245);
+        SDL_RenderRect(renderer_, &marker);
+        uiFinalTextAt(renderer_, uiTextRenderer_, center.x + 9.0F, center.y - 9.0F,
+            "Intelligence contact", chart.x + chart.w - center.x - 9.0F, 11);
+    }
     if (chalk)
         renderRaidChalkLines(*chalk);
     const Player &player = gameSession_.world().player();
@@ -14372,6 +14405,9 @@ void App::renderUnscopedRaidWorld()
 
     if (indoorVisibility) renderPlayer(); // Own avatar is never hidden by its observation cone.
     renderMeleeSwing(gameSession_.world().melee());
+    if (!inventoryOverlayState_.isOpen() && !tacticalMapOpen_ && !quickWheelOpen() &&
+        !pauseMenu_.isOpen())
+        renderFieldIntelligenceContact();
 
     // Crosshair and every UI/modal layer stay in stable screen coordinates;
     // screen shake therefore cannot alter aiming or inventory interaction.
@@ -14433,6 +14469,7 @@ void App::renderRaidScreen()
 
     // Player HUD consumes current public projections; diagnostics use F9.
     renderDebugText();
+    renderFieldIntelligenceTrade();
 }
 
 void App::render()

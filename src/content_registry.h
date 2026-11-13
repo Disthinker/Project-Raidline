@@ -41,6 +41,12 @@ inline constexpr std::string_view kEmergencyPowerContentVersion{
     "base-emergency-power-and-fuel-logistics-content-85"};
 inline constexpr std::string_view kHospitalMedicalReserveContentVersion{
     "hospital-rescue-and-medical-reserve-content-86"};
+inline constexpr std::string_view kFieldIntelligenceTradeContentVersion{
+    "raid-field-intelligence-trade-content-87"};
+inline const ItemDefinitionId kFieldIntelligenceDocumentId{"item.loot.raw_intelligence_document"};
+inline const MapDefinitionId kFieldIntelligenceSourceMapId{"map.raid.riverside"};
+inline const MapDefinitionId kFieldIntelligenceTargetMapId{"map.raid.frontier_exchange"};
+inline constexpr std::uint32_t kFieldIntelligenceSalePrice{72U};
 inline const BaseFacilityDefinitionId kBaseGeneratorFacilityId{"base_facility.generator"};
 inline const BaseConstructionProjectDefinitionId kBaseGeneratorProjectId{
     "base_construction.generator.level_1"};
@@ -107,7 +113,8 @@ inline constexpr std::string_view kRaidFuelLootSlotId{"freight_manifest"};
 
 [[nodiscard]] inline bool supportsHospitalMedicalReserveContent(std::string_view version) noexcept
 {
-    return version == kHospitalMedicalReserveContentVersion;
+    return version == kHospitalMedicalReserveContentVersion ||
+        version == kFieldIntelligenceTradeContentVersion;
 }
 
 [[nodiscard]] inline bool supportsEmergencyPowerContent(std::string_view version) noexcept
@@ -871,6 +878,7 @@ struct MapDefinition
     LootTableDefinitionId raidLootTableId;
     ProceduralOutdoorDefinition proceduralOutdoor;
     std::vector<RaidInteriorDefinition> interiors;
+    std::vector<Vec2> fieldIntelligenceTradePositions;
 };
 
 // A player-facing role target. It describes acceptable published content and

@@ -136,6 +136,15 @@ struct RaidSpacePortalProjection
     bool interactionInRange{};
 };
 
+enum class RaidFieldTradeAccess
+{
+    Unavailable,
+    OutOfRange,
+    Obstructed,
+    Threatened,
+    Available
+};
+
 struct RaidWorldConfig
 {
     Vec2 worldSize{1280.0F, 720.0F};
@@ -167,6 +176,7 @@ struct RaidWorldConfig
     std::optional<RaidCredentialExtractionSnapshot> credentialExtraction;
     bool grenadeEnabled{};
     bool freightBreachEnabled{};
+    std::optional<Vec2> fieldIntelligenceContact;
 };
 
 struct RaidOutdoorLabelProjection
@@ -394,6 +404,9 @@ public:
     [[nodiscard]] bool triggerHighRiskForDeveloper() noexcept;
     [[nodiscard]] const RaidTacticalMapState &
     tacticalMap() const noexcept;
+    [[nodiscard]] std::optional<Vec2> visibleFieldIntelligenceContact() const noexcept;
+    [[nodiscard]] RaidFieldTradeAccess fieldIntelligenceTradeStatus() const noexcept;
+    void grantFieldIntelligence(RaidIntelligenceCategory category) noexcept;
 
     [[nodiscard]] std::size_t aliveEnemyCount() const noexcept;
     [[nodiscard]] std::size_t aliveInitialEnemyCount() const noexcept;
@@ -642,6 +655,7 @@ private:
     std::vector<RaidCorpseDeathFact> pendingCorpseDeaths_;
     std::size_t initialOutdoorEnemyCount_{};
     std::vector<BallisticBlocker> ballisticBlockers_;
+    std::optional<Vec2> fieldIntelligenceContact_;
     RaidGeneratedMapLayout outdoorLayout_;
     std::uint32_t outdoorColumns_{};
     std::uint32_t outdoorRows_{};

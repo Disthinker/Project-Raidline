@@ -723,6 +723,16 @@ DeployReceipt executeDeploy(
     snapshot.hospitalMedicalReserveEnabled = regionalMissionCount == 0U &&
         command.mapDefinitionId == kHospitalFloorplanMapId &&
         supportsHospitalMedicalReserveContent(content.contentVersion());
+    if (regionalMissionCount == 0U && !map->fieldIntelligenceTradePositions.empty())
+    {
+        Pcg32 tradeRandom{command.seed, 0x6669656c642d7472ULL};
+        const auto positionIndex = tradeRandom.bounded(
+            static_cast<std::uint32_t>(map->fieldIntelligenceTradePositions.size()));
+        const auto extraCategory = tradeRandom.bounded(2U) == 0U
+            ? RaidIntelligenceCategory::Resource : RaidIntelligenceCategory::Enemy;
+        snapshot.fieldIntelligenceTrade = RaidFieldIntelligenceTrade{
+            map->fieldIntelligenceTradePositions[positionIndex], extraCategory};
+    }
     if (snapshot.backpackRecoveryEnabled)
         snapshot.startingAssets = profile.assets;
     const bool corpseTrial = command.mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"} &&
@@ -1009,6 +1019,7 @@ DeployReceipt executeDeploy(
                     blueprintRecoverableInBase(candidate, asset);
             });
     bool blueprintPlaced = false;
+    bool intelligenceDocumentPlaced = false;
     if (!resourceEcologyRules)
     {
         for (const std::size_t slotIndex : selectLootSlots(*map, lootRandom))
@@ -1025,14 +1036,19 @@ DeployReceipt executeDeploy(
                 !snapshot.freightKeyLootSlotId;
             const bool blueprintSlot = blueprintSource && !blueprintPlaced &&
                 slot.route == "resource";
+            const bool intelligenceDocumentSlot = snapshot.fieldIntelligenceTrade &&
+                !intelligenceDocumentPlaced && slot.route == "resource";
             const ItemDefinitionId &item = freightKeySlot ? kFreightCrateKeyId
-                : blueprintSlot ? kArmorRepairBlueprintId : entry.itemDefinitionId;
-            if (freightKeySlot || blueprintSlot)
+                : blueprintSlot ? kArmorRepairBlueprintId
+                : intelligenceDocumentSlot ? kFieldIntelligenceDocumentId : entry.itemDefinitionId;
+            if (freightKeySlot || blueprintSlot || intelligenceDocumentSlot)
                 quantity = 1U;
             if (freightKeySlot)
                 snapshot.freightKeyLootSlotId = slot.id;
             if (blueprintSlot)
                 blueprintPlaced = true;
+            if (intelligenceDocumentSlot)
+                intelligenceDocumentPlaced = true;
             const AssetInstanceId assetId = candidate.assets.create(
                 content.item(item),
                 RaidGroundAssetLocation{
@@ -1052,6 +1068,10 @@ DeployReceipt executeDeploy(
     if (freightKeySource && !snapshot.freightKeyLootSlotId)
         return deployFailure(RaidLifecycleError::InvalidProfile,
             "freight crate key source slot was not selected", profile.revision);
+
+    if (snapshot.fieldIntelligenceTrade && !intelligenceDocumentPlaced)
+        return deployFailure(RaidLifecycleError::InvalidProfile,
+            "raw intelligence document source slot was not selected", profile.revision);
 
     if (blueprintSource && !blueprintPlaced)
         return deployFailure(RaidLifecycleError::InvalidProfile,
@@ -2083,7 +2103,8 @@ RaidSettlementReceipt settlePendingRaid(
     for (auto id : abandonedCells) static_cast<void>(candidate.assets.erase(id));
 
     const PendingRaidSnapshot raidSnapshot = *candidate.pendingRaid;
-    if (raidSnapshot.credentialExtraction || fuel || hasDroppedBackpacks)
+    if (raidSnapshot.credentialExtraction || fuel || hasDroppedBackpacks ||
+        raidSnapshot.fieldIntelligenceTrade)
     {
         // Validate pending-only facts before settlement removes their sources.
         const ProfileValidationResult validation =
@@ -2095,6 +2116,25 @@ RaidSettlementReceipt settlePendingRaid(
     }
     if (fuel)
         static_cast<void>(candidate.assets.erase(fuel->fuelAssetId));
+    std::uint32_t fieldTradeBalance{};
+    if (outcome == RaidResultOutcome::Extracted && raidSnapshot.fieldIntelligenceTrade)
+    {
+        const auto &trade = *raidSnapshot.fieldIntelligenceTrade;
+        fieldTradeBalance = trade.balance;
+        if (fieldTradeBalance > std::numeric_limits<std::uint32_t>::max() - candidate.currency)
+            return settlementFailure(RaidLifecycleError::InvalidProfile,
+                "field trade balance exceeds the base currency limit", profile.revision, outcome);
+        if (trade.frontierTransportPurchased)
+        {
+            auto &counts = candidate.raidIntelligence.counts[kFieldIntelligenceTargetMapId];
+            auto &uses = counts[raidIntelligenceCategoryIndex(RaidIntelligenceCategory::Transport)];
+            if (uses >= kRaidIntelligenceArchiveLimit)
+                return settlementFailure(RaidLifecycleError::InvalidProfile,
+                    "field trade exceeds the intelligence archive limit", profile.revision, outcome);
+            ++uses;
+        }
+        candidate.currency += fieldTradeBalance;
+    }
     std::vector<RaidExtractionPermissionDefinitionId> newlyUnlockedPermissions;
     if (outcome == RaidResultOutcome::Extracted &&
         raidSnapshot.credentialExtraction &&
@@ -2275,7 +2315,7 @@ RaidSettlementReceipt settlePendingRaid(
         id,
         outcome,
         std::move(returned),
-        0,
+        fieldTradeBalance,
         travelMinutes,
         raidSnapshot.rescue.has_value() && raidSnapshot.rescue->secured
             ? raidSnapshot.rescue->ordinaryResidentCount
