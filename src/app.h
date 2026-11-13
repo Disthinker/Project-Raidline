@@ -582,6 +582,16 @@ private:
     };
     RaidChalkRoutes raidChalkRoutes_;
     UiDiscretePress raidChalkPress_;
+    struct FieldIntelligenceTradeUi
+    {
+        bool open{};
+        bool interactRequested{};
+        bool closeRequested{};
+        std::size_t focusedRow{};
+        std::optional<std::size_t> pendingRow;
+        UiDiscretePress press;
+        std::string_view feedback;
+    } fieldIntelligenceTradeUi_;
     std::string raidChalkRaidId_;
     bool raidChalkAimBlockedUntilRelease_{};
     std::vector<AssetInstanceId> medicalWheelOptions_;
@@ -919,6 +929,14 @@ private:
     [[nodiscard]] float baseConstructionZoom() const noexcept;
     [[nodiscard]] Vec2 baseScreenToWorld(Vec2 screenPosition) const noexcept;
     void renderRaidTacticalMap();
+    bool routeFieldIntelligenceTradeInput(const SDL_Event &);
+    bool tryOpenFieldIntelligenceTrade();
+    void closeFieldIntelligenceTrade(std::string_view feedback = {});
+    void updateFieldIntelligenceTradeAfterWorld();
+    void suppressFieldIntelligenceTradeControls(GameplayInput &);
+    void renderFieldIntelligenceContact();
+    void renderFieldIntelligenceTrade();
+    void drawFieldIntelligenceTradePanel(const RaidFieldTradeView &);
     [[nodiscard]] std::optional<RaidChalkContext> raidChalkContext() const;
     void syncRaidChalkRoutes();
     [[nodiscard]] bool routeRaidChalkEvent(const SDL_Event &event);

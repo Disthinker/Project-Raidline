@@ -555,6 +555,7 @@ add_library(raidline_sdl_client STATIC
     src/app_ui_weapon_components.cpp
     src/app_ui_regional_operations.cpp
     src/app_ui_raid_result.cpp
+    src/app_ui_raid_field_trade.cpp
     src/ui_raid_result_presentation.cpp
     src/ui_raid_result_presentation.h
     src/ui_regional_operations_presentation.cpp
@@ -669,6 +670,7 @@ raidline_add_test(HomeFoundingTest tests/test_home_founding.cpp raidline::servic
 raidline_add_test(WeaponSupplyProjectionTest tests/test_weapon_supply_projection.cpp raidline::services)
 raidline_add_test(FirstRaidGuidanceTest tests/test_first_raid_guidance.cpp raidline::services)
 raidline_add_test(FirstRaidLifecycleTest tests/test_first_raid_lifecycle.cpp raidline::services)
+raidline_add_test(RaidFieldIntelligenceTradeTest tests/test_raid_field_intelligence_trade.cpp raidline::services)
 raidline_add_test(
     CombatDamageDomainTest
     tests/test_combat_damage_domain.cpp

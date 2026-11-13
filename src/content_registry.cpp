@@ -4084,6 +4084,49 @@ ContentRegistry ContentRegistry::fromJson(
                 definition.credentialExtraction = std::move(credential);
             }
 
+            if (registry.contentVersion() == kFieldIntelligenceTradeContentVersion &&
+                (definition.id == kFieldIntelligenceSourceMapId ||
+                 mapValue.contains("field_intelligence_trade_positions")))
+            {
+                const auto &positions = requiredArray(mapValue, "field_intelligence_trade_positions");
+                if (definition.id != kFieldIntelligenceSourceMapId ||
+                    positions.size() != 2U || definition.proceduralOutdoor.enabled ||
+                    std::none_of(definition.raidLootSlots.begin(), definition.raidLootSlots.end(),
+                        [](const auto &slot) { return slot.route == "resource"; }))
+                    fail("field intelligence trade requires two positions and Riverside resource Loot");
+
+                constexpr float interactionRadius = 72.0F;
+                for (const auto &value : positions)
+                {
+                    const auto position = parseVec2(value, "position");
+                    const ContentRect stand{
+                        {position.x - 12.0F, position.y - 12.0F}, {24.0F, 24.0F}};
+                    const ContentRect interaction{
+                        {position.x - interactionRadius, position.y - interactionRadius},
+                        {2.0F * interactionRadius, 2.0F * interactionRadius}};
+                    if (!rectInside(stand, definition.walkableBounds) ||
+                        pointInside(definition.playerSpawn, interaction) ||
+                        rectsOverlap(interaction, definition.storageCabinet.bounds) ||
+                        rectsOverlap(interaction, definition.extractionPoint) ||
+                        (definition.rescue && rectsOverlap(interaction, definition.rescue->transferPoint)) ||
+                        (definition.highRisk.enabled &&
+                         (rectsOverlap(interaction, definition.highRisk.emergencyExtractionPoint) ||
+                          rectsOverlap(interaction, definition.highRisk.conditionalExtractionPoint) ||
+                          rectsOverlap(interaction, definition.highRisk.activationControlPoint) ||
+                          rectsOverlap(interaction, definition.highRisk.advancedResourceArea))) ||
+                        std::any_of(definition.ballisticBlockers.begin(), definition.ballisticBlockers.end(),
+                            [&](const auto &blocker) { return rectsOverlap(stand, blocker.bounds); }) ||
+                        std::any_of(definition.spawnExtractionPairs.begin(), definition.spawnExtractionPairs.end(),
+                            [&](const auto &pair) { return pointInside(pair.playerSpawn, interaction) ||
+                                rectsOverlap(interaction, pair.extractionPoint); }) ||
+                        std::any_of(definition.fieldIntelligenceTradePositions.begin(),
+                            definition.fieldIntelligenceTradePositions.end(),
+                            [&](Vec2 other) { return pointInside(other, interaction); }))
+                        fail("field intelligence trade position overlaps an existing interaction");
+                    definition.fieldIntelligenceTradePositions.push_back(position);
+                }
+            }
+
             const std::size_t index = registry.maps_.size();
             if (!registry.mapIndex_
                      .emplace(definition.id, index)
@@ -4368,6 +4411,37 @@ ContentRegistry ContentRegistry::fromJson(
                 if (supportsFuelExtractionContent(registry.contentVersion()) &&
                     bay->lootSlots[2].id != kRaidFuelLootSlotId)
                     fail("extraction fuel requires the third service bay Loot slot");
+            }
+        }
+        if (registry.contentVersion() == kFieldIntelligenceTradeContentVersion)
+        {
+            if (!registry.itemIndex_.contains(kFieldIntelligenceDocumentId))
+                fail("field intelligence trade requires a raw intelligence document");
+            const auto &document = registry.item(kFieldIntelligenceDocumentId);
+            if (document.category != ItemCategory::Loot || document.inventoryWidthCells != 1 ||
+                document.inventoryHeightCells != 1 || document.maxStackSize != 1 ||
+                document.marketBuyPrice || document.marketRecyclePrice != 35U ||
+                document.baseContribution || document.baseConstructionMaterialValue)
+                fail("raw intelligence document definition is invalid");
+            if (std::any_of(registry.lootTables_.begin(), registry.lootTables_.end(),
+                    [](const auto &table) { return std::any_of(table.entries.begin(), table.entries.end(),
+                        [](const auto &entry) { return entry.itemDefinitionId == kFieldIntelligenceDocumentId; }); }) ||
+                std::any_of(registry.maps_.begin(), registry.maps_.end(),
+                    [](const auto &map) { return std::any_of(map.groundItems.begin(), map.groundItems.end(),
+                        [](const auto &item) { return item.itemDefinitionId == kFieldIntelligenceDocumentId; }); }) ||
+                std::any_of(registry.baseManufacturingRecipes_.begin(), registry.baseManufacturingRecipes_.end(),
+                    [](const auto &recipe) { return recipe.outputItemDefinitionId == kFieldIntelligenceDocumentId; }))
+                fail("raw intelligence document requires its selected field source");
+            if (registry.mapIndex_.contains(kFieldIntelligenceSourceMapId))
+            {
+                const auto &source = registry.map(kFieldIntelligenceSourceMapId);
+                if (!registry.mapIndex_.contains(kFieldIntelligenceTargetMapId) ||
+                    source.operationBriefing.price(RaidIntelligenceCategory::Transport) != 36U ||
+                    source.operationBriefing.price(RaidIntelligenceCategory::Resource) != 48U ||
+                    source.operationBriefing.price(RaidIntelligenceCategory::Enemy) != 42U ||
+                    registry.map(kFieldIntelligenceTargetMapId).operationBriefing.price(
+                        RaidIntelligenceCategory::Transport) != 58U)
+                    fail("field intelligence trade requires matching briefing prices");
             }
         }
         if (supportsFuelExtractionContent(registry.contentVersion()))

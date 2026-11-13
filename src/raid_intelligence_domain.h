@@ -33,6 +33,28 @@ struct RaidIntelligencePurchaseReceipt
     std::uint32_t ownedAfter{};
 };
 
+struct RaidFieldTradeOffer
+{
+    MapDefinitionId mapId;
+    RaidIntelligenceCategory category{RaidIntelligenceCategory::Transport};
+    std::uint32_t price{};
+    bool purchased{};
+};
+
+struct RaidFieldTradeView
+{
+    std::uint32_t balance{};
+    bool fileSold{};
+    std::optional<AssetInstanceId> sellableFile;
+    std::array<RaidFieldTradeOffer, 3> offers;
+};
+
+[[nodiscard]] std::optional<RaidFieldTradeView> queryRaidFieldTrade(
+    const ProfileState &, const ContentRegistry &);
+[[nodiscard]] bool executeRaidFieldDocumentSale(ProfileState &, AssetInstanceId);
+[[nodiscard]] bool executeRaidFieldIntelligencePurchase(
+    ProfileState &, const ContentRegistry &, std::size_t offerIndex);
+
 struct RaidInteriorIntelligencePurchaseCommand
 {
     RaidSpaceDefinitionId interiorId;

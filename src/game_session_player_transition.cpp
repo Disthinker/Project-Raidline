@@ -305,6 +305,8 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
             map.raidRules.extractionDurationSeconds;
         worldConfig.credentialExtraction = snapshot.credentialExtraction;
         worldConfig.intelligence = snapshot.intelligence;
+        if (snapshot.fieldIntelligenceTrade)
+            worldConfig.fieldIntelligenceContact = snapshot.fieldIntelligenceTrade->position;
         if (snapshot.rescue.has_value() && !snapshot.rescue->secured)
         {
             worldConfig.rescue = RaidWorldConfig::OrdinarySurvivorRescue{

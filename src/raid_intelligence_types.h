@@ -18,6 +18,7 @@ enum class RaidIntelligenceCategory : std::uint8_t
 
 inline constexpr std::size_t kRaidIntelligenceCategoryCount =
     static_cast<std::size_t>(RaidIntelligenceCategory::Count);
+inline constexpr std::uint32_t kRaidIntelligenceArchiveLimit = 1000000U;
 
 [[nodiscard]] constexpr std::size_t raidIntelligenceCategoryIndex(
     RaidIntelligenceCategory category) noexcept

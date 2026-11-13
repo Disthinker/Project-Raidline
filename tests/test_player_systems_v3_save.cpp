@@ -130,7 +130,7 @@ protected:
 TEST_F(PlayerSystemsV3SaveTest, CurrentSchemaRequiresAllThreeBaseFieldsAndLegacy59DefaultsEmpty)
 {
     const auto current=Json::parse(serializeProfileEnvelope(profile,content.contentVersion()));
-    EXPECT_EQ(current.at("schema_version"),68U);
+    EXPECT_EQ(current.at("schema_version"),69U);
     EXPECT_TRUE(current.at("payload").at("base_reload_recovery").is_null());
     EXPECT_TRUE(current.at("payload").at("base_player_effects").is_null());
     EXPECT_TRUE(current.at("payload").at("base_corpses").empty());
@@ -575,7 +575,7 @@ TEST_F(PlayerSystemsV3SaveTest, MedicalReserveUpgradeKeepsExactLegacyTreatmentAn
     EXPECT_EQ(loadedBackup.profile->emergencyPower, paused.emergencyPower);
     EXPECT_EQ(loaded.profile->residentMedicalReservePolicy, ResidentMedicalReservePolicy{});
     EXPECT_TRUE(assetsInContainer(*loaded.profile, ProfileContainerId::medicalReserve()).empty());
-    ASSERT_TRUE(repository.save(*loaded.profile, content.contentVersion()).succeeded);
+    ASSERT_TRUE(repository.save(*loaded.profile, kHospitalMedicalReserveContentVersion).succeeded);
     EXPECT_EQ(readBytes(directory.path() /
         ("profile.pre-hospital-rescue-and-medical-reserve-v1." + digest(primary) + ".json")), primary);
     EXPECT_EQ(readBytes(directory.path() /
@@ -717,7 +717,7 @@ TEST_F(PlayerSystemsV3SaveTest, BackpackRecoveryRoundTripAndRollbackKeepWholeAss
     ASSERT_TRUE(validateProfileState(profile, content).valid);
     const auto bytes = serializeProfileEnvelope(profile, content.contentVersion());
     const auto envelope = Json::parse(bytes);
-    EXPECT_EQ(envelope.at("schema_version"), 68U);
+    EXPECT_EQ(envelope.at("schema_version"), 69U);
     EXPECT_EQ(envelope.at("payload").at("pending_raid").at("backpack_recovery_enabled"), true);
 
     auto restored = deserializeProfileEnvelope(bytes, content);
@@ -812,7 +812,7 @@ TEST_F(PlayerSystemsV3SaveTest, UpgradeArchivesExact59PrimaryAndBackupBeforeRota
     EXPECT_EQ(readBytes(archive(directory.path(),false,primary)),primary);EXPECT_EQ(readBytes(archive(directory.path(),true,backup)),backup);
     ++profile.revision;ASSERT_TRUE(repository.save(profile,content.contentVersion()).succeeded);
     EXPECT_EQ(readBytes(archive(directory.path(),false,primary)),primary);EXPECT_EQ(readBytes(archive(directory.path(),true,backup)),backup);
-    EXPECT_EQ(Json::parse(readBytes(repository.primaryPath()))["schema_version"],68U);
+    EXPECT_EQ(Json::parse(readBytes(repository.primaryPath()))["schema_version"],69U);
 }
 
 TEST_F(PlayerSystemsV3SaveTest, BackupRecoveryArchivesCorruptPrimaryAnd59BackupByteForByte)

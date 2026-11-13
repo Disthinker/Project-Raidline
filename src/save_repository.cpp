@@ -2372,6 +2372,18 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
             payload["pending_raid"]["freight_breach_enabled"] = true;
         if (raid.hospitalMedicalReserveEnabled)
             payload["pending_raid"]["hospital_medical_reserve_enabled"] = true;
+        if (raid.fieldIntelligenceTrade)
+        {
+            const auto &trade = *raid.fieldIntelligenceTrade;
+            payload["pending_raid"]["field_intelligence_trade"] = {
+                {"position", vectorValue(trade.position)},
+                {"extra_category", trade.extraCategory == RaidIntelligenceCategory::Resource ? "resource" : "enemy"},
+                {"balance", trade.balance},
+                {"file_sold", trade.fileSold},
+                {"frontier_transport_purchased", trade.frontierTransportPurchased},
+                {"transport_purchased", trade.transportPurchased},
+                {"extra_purchased", trade.extraPurchased}};
+        }
         if (raid.hospitalNightVisionLoot)
         {
             if (schemaVersion < 61)
@@ -3150,6 +3162,7 @@ bool isValidEnvelope(
 std::string serializeProfileEnvelope(const ProfileState &profile, std::string_view contentVersion)
 {
     return serializeProfileEnvelope(profile, contentVersion,
+        contentVersion == kFieldIntelligenceTradeContentVersion ? 69U :
         supportsHospitalMedicalReserveContent(contentVersion) ? 68U :
         supportsEmergencyPowerContent(contentVersion) ? 67U : 66U);
 }
@@ -3188,7 +3201,13 @@ std::string serializeProfileEnvelope(
          (profile.baseManufacturing.activeOrder &&
           profile.baseManufacturing.activeOrder->recipeDefinitionId == kFreightBreachRecipeId)))
         throw std::invalid_argument{"freight breach requires schema 66 and compatible content"};
-    const bool reserveContract = schemaVersion == 68 && supportsHospitalMedicalReserveContent(contentVersion);
+    const bool fieldTradeContract =
+        schemaVersion == 69 && contentVersion == kFieldIntelligenceTradeContentVersion;
+    if ((schemaVersion == 69 && !fieldTradeContract) ||
+        (profile.pendingRaid && profile.pendingRaid->fieldIntelligenceTrade && !fieldTradeContract))
+        throw std::invalid_argument{"field intelligence trade requires schema 69 and content 87"};
+    const bool reserveContract = fieldTradeContract ||
+        (schemaVersion == 68 && supportsHospitalMedicalReserveContent(contentVersion));
     const bool powerContract = schemaVersion == 67 && supportsEmergencyPowerContent(contentVersion);
     if ((schemaVersion == 67 && !powerContract) ||
         (requiresEmergencyPowerContract(profile) && !powerContract && !reserveContract))
@@ -3220,7 +3239,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 32 && schemaVersion != 33 && schemaVersion != 34 &&
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
-        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66 && schemaVersion != 67 && schemaVersion != 68)
+        schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66 && schemaVersion != 67 && schemaVersion != 68 && schemaVersion != 69)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -3411,7 +3430,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             (schemaVersion >= 66 && contentVersion == kRaidBackpackRecoveryContentVersion) ||
             (schemaVersion >= 66 && contentVersion == kHospitalFloorplanRoutesContentVersion) ||
             (schemaVersion >= 66 && contentVersion == kFreightBreachContentVersion) ||
-            (schemaVersion >= 67 && contentVersion == kEmergencyPowerContentVersion);
+            (schemaVersion >= 67 && contentVersion == kEmergencyPowerContentVersion) ||
+            (schemaVersion == 68 && contentVersion == kHospitalMedicalReserveContentVersion);
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -3433,7 +3453,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
               schemaVersion != 37 && schemaVersion != 38 &&
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
-               schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66 && schemaVersion != 67 && schemaVersion != 68) ||
+               schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66 && schemaVersion != 67 && schemaVersion != 68 && schemaVersion != 69) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3452,7 +3472,12 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             schemaVersion >= 65 && supportsThrownIlluminationContent(contentVersion);
         const bool backpackContract =
             schemaVersion >= 66 && supportsRaidBackpackRecoveryContent(contentVersion);
-        const bool reserveContract = schemaVersion == 68 && supportsHospitalMedicalReserveContent(contentVersion);
+        const bool fieldTradeContract =
+            schemaVersion == 69 && contentVersion == kFieldIntelligenceTradeContentVersion;
+        if (schemaVersion == 69 && !fieldTradeContract)
+            return {SaveLoadStatus::Failed, std::nullopt, "unsupported field intelligence trade content"};
+        const bool reserveContract = fieldTradeContract ||
+            (schemaVersion == 68 && supportsHospitalMedicalReserveContent(contentVersion));
         if (schemaVersion == 68 && !reserveContract)
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported hospital medical reserve content"};
         const bool powerContract = reserveContract ||
@@ -4276,6 +4301,25 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                 if (!reserveContract || !enabled.is_boolean())
                     throw std::invalid_argument{"hospital medical reserve snapshot requires schema 68"};
                 raid.hospitalMedicalReserveEnabled = enabled.get<bool>();
+            }
+            if (value.contains("field_intelligence_trade"))
+            {
+                if (!fieldTradeContract)
+                    throw std::invalid_argument{"field intelligence trade snapshot requires schema 69 and content 87"};
+                const auto &trade = value.at("field_intelligence_trade");
+                const auto category = trade.at("extra_category").get<std::string>();
+                const auto &balance = trade.at("balance");
+                if ((category != "resource" && category != "enemy") ||
+                    !balance.is_number_unsigned() || balance.get<std::uint64_t>() > kFieldIntelligenceSalePrice)
+                    throw std::invalid_argument{"invalid field intelligence trade snapshot"};
+                raid.fieldIntelligenceTrade = RaidFieldIntelligenceTrade{
+                    parseVector(trade.at("position")),
+                    category == "resource" ? RaidIntelligenceCategory::Resource : RaidIntelligenceCategory::Enemy,
+                    balance.get<std::uint32_t>(),
+                    trade.at("file_sold").get<bool>(),
+                    trade.at("frontier_transport_purchased").get<bool>(),
+                    trade.at("transport_purchased").get<bool>(),
+                    trade.at("extra_purchased").get<bool>()};
             }
             if (value.contains("hospital_night_vision_loot"))
             {
@@ -5522,7 +5566,9 @@ SaveWriteResult SaveRepository::save(
         const bool freight = crossMapFreightCompatibleContent(contentVersion);
         const bool reserve = supportsHospitalMedicalReserveContent(contentVersion);
         const bool power = supportsEmergencyPowerContent(contentVersion);
-        const auto schema = reserve ? 68U : power ? 67U : backpack ? 66U : illumination ? 65U : armor ? 64U : fuel ? 63U : freight ? 62U : 61U;
+        const bool fieldTrade = contentVersion == kFieldIntelligenceTradeContentVersion;
+        const auto schema = fieldTrade ? 69U : reserve ? 68U : power ? 67U : backpack ? 66U
+            : illumination ? 65U : armor ? 64U : fuel ? 63U : freight ? 62U : 61U;
         const auto isLegacy = [&](const std::optional<SaveEnvelopeMetadata> &source) {
             return source && (source->schemaVersion < schema || source->contentVersion != contentVersion);
         };
@@ -5531,7 +5577,8 @@ SaveWriteResult SaveRepository::save(
         {
             // The former primary can remain in the rolling backup after upgrade.
             const std::string_view marker =
-                reserve ? "hospital-rescue-and-medical-reserve-v1"
+                fieldTrade ? "raid-field-intelligence-trade-v1"
+                : reserve ? "hospital-rescue-and-medical-reserve-v1"
                 : power ? "base-emergency-power-and-fuel-logistics-v1"
                 : contentVersion == kFreightBreachContentVersion ? "raid-freight-breach-route-v1"
                 : supportsHospitalFloorplanRoutesContent(contentVersion) ? "raid-hospital-floorplan-routes-v1"

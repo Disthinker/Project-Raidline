@@ -23,6 +23,7 @@ struct UiRaidHudTestAccess {
     static void clearPanels(App &a){a.developerWeaponPanelOpen_=false;a.developerRangePanelOpen_=false;a.developerPerformanceOverlayOpen_=false;a.tacticalMapOpen_=false;}
     static void hud(App &a){a.renderDebugText();a.renderMeleeStatus();a.renderThrowableUi();}
     static void raid(App &a){a.renderRaidScreen();}
+    static void fieldTrade(App &a, const RaidFieldTradeView &view) { a.drawFieldIntelligenceTradePanel(view); }
     static void range(App &a){a.developerRangePanelOpen_=true;a.renderDeveloperRangePanel();a.developerRangePanelOpen_=false;}
     static void developer(App &a){a.developerWeaponPanelOpen_=true;a.renderDeveloperWeaponPanel();a.developerWeaponPanelOpen_=false;}
     static void performance(App &a){a.developerPerformanceOverlayOpen_=true;a.framePerformance_.record({.21F,2.40F,3.20F,10.86F,16.67F});a.refreshDeveloperPerformanceOverlay();a.renderDeveloperPerformanceOverlay();a.developerPerformanceOverlayOpen_=false;}
@@ -144,6 +145,54 @@ TEST_F(UiRaidHudTest, AllAuxiliarySurfacesRenderInBothLanguagesAndThreeWindowSiz
         clear();A::loading(*app,.43F);save("loading");
         EXPECT_EQ(A::session(*app).profile().revision,revision);
         ASSERT_TRUE(A::flow(*app).leaveDeveloperRange());
+    }
+}
+
+TEST_F(UiRaidHudTest, FieldIntelligenceTradePanelKeepsAimAreaClearAtEveryWindowSize)
+{
+    RaidFieldTradeView trade;
+    trade.balance = kFieldIntelligenceSalePrice;
+    trade.sellableFile = AssetInstanceId{1};
+    trade.offers = {{{kFieldIntelligenceSourceMapId, RaidIntelligenceCategory::Transport, 36, false},
+                     {kFieldIntelligenceTargetMapId, RaidIntelligenceCategory::Transport, 58, false},
+                     {kFieldIntelligenceSourceMapId, RaidIntelligenceCategory::Enemy, 42, true}}};
+
+    const char *reviewPath = std::getenv("RAIDLINE_UI_FIELD_TRADE_REVIEW_DIR");
+    const auto destination = reviewPath ? std::filesystem::path(reviewPath) : std::filesystem::path{};
+    if (reviewPath)
+    {
+        ASSERT_TRUE(destination.is_absolute());
+        std::filesystem::create_directories(destination);
+    }
+    for (const auto size : kUiWindowSizes)
+    {
+        detach();
+        attach(size.width, size.height);
+        const auto physical = [&](SDL_Rect bounds)
+        {
+            const float scale = size.width / 1280.0F;
+            return SDL_Rect{
+                static_cast<int>(bounds.x * scale), static_cast<int>(bounds.y * scale),
+                static_cast<int>(bounds.w * scale), static_cast<int>(bounds.h * scale)};
+        };
+        for (const auto language : {UiLanguage::English, UiLanguage::SimplifiedChinese})
+        {
+            SCOPED_TRACE(size.width);
+            SCOPED_TRACE(uiLanguageCode(language));
+            A::text(*app).setLanguage(language);
+            clear();
+            A::fieldTrade(*app, trade);
+            ASSERT_TRUE(SDL_RenderPresent(renderer));
+            EXPECT_EQ(bright(physical({488, 224, 300, 250})), 0U);
+            EXPECT_GT(bright(physical({838, 108, 248, 24})), 30U);
+            EXPECT_GT(bright(physical({838, 266, 248, 38})), 30U);
+            EXPECT_GT(bright(physical({1160, 269, 80, 24})), 10U);
+            if (reviewPath)
+            {
+                const auto name = "field-trade-" + std::to_string(size.width) + "-" + uiLanguageCode(language) + ".png";
+                ASSERT_TRUE(IMG_SavePNG(surface, (destination / name).string().c_str()));
+            }
+        }
     }
 }
 

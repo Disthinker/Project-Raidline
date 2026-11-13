@@ -770,6 +770,46 @@ bool GameSession::canCallSignalExtraction(bool inventoryOpen) const noexcept
     return world_->canCallSignalExtraction(input);
 }
 
+RaidFieldTradeAccess GameSession::fieldIntelligenceTradeStatus() const noexcept
+{
+    if (!alphaRaidActive_ || developerRange_ || !world_ ||
+        state_ != GameSessionState::InRaid || !profile_.pendingRaid ||
+        !profile_.pendingRaid->fieldIntelligenceTrade ||
+        profileUiCommitPending() || inventoryPersistencePending() ||
+        !raidWorldInteractionAvailable(false))
+        return RaidFieldTradeAccess::Unavailable;
+    return world_->fieldIntelligenceTradeStatus();
+}
+
+std::optional<RaidFieldTradeView> GameSession::fieldIntelligenceTradeView() const
+{
+    return queryRaidFieldTrade(profile_, publishedContentRegistry());
+}
+
+bool GameSession::sellFieldIntelligenceDocument(AssetInstanceId assetId)
+{
+    if (fieldIntelligenceTradeStatus() != RaidFieldTradeAccess::Available ||
+        (lastIncomingDamage_ && lastIncomingDamage_->damageApplied > 0))
+        return false;
+    return executeRaidFieldDocumentSale(profile_, assetId);
+}
+
+bool GameSession::buyFieldIntelligenceOffer(std::size_t index)
+{
+    if (fieldIntelligenceTradeStatus() != RaidFieldTradeAccess::Available ||
+        (lastIncomingDamage_ && lastIncomingDamage_->damageApplied > 0))
+        return false;
+    const auto view = fieldIntelligenceTradeView();
+    if (!view || index >= view->offers.size() ||
+        !executeRaidFieldIntelligencePurchase(profile_, publishedContentRegistry(), index))
+        return false;
+
+    const auto &offer = view->offers[index];
+    if (offer.mapId == profile_.pendingRaid->mapDefinitionId)
+        world_->grantFieldIntelligence(offer.category);
+    return true;
+}
+
 void GameSession::cancelRaidCredentialInteraction() noexcept
 {
     if (world_) world_->interruptCredentialInteraction();

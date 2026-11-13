@@ -49,6 +49,7 @@ void App::renderFirstRaidHints() {
     return;
   if (gameFlow_.state() == GameFlowState::MainMenu || pauseMenu_.isOpen() ||
       developerWeaponPanelOpen_ || developerRangePanelOpen_ || developerPerformanceOverlayOpen_ ||
+      fieldIntelligenceTradeUi_.open ||
       tacticalMapOpen_ || medicalWheelOpen_ || throwableWheelOpen_ ||
       gameSession_.baseDailySaveBlocked() || gameSession_.baseDefenseSaveBlocked() ||
       baseDefenseResultVisible_ || baseSiegeWarningVisible() ||

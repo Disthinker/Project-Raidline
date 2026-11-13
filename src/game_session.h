@@ -269,6 +269,10 @@ public:
 
     [[nodiscard]] bool conditionalExtractionEligible() const;
     [[nodiscard]] bool raidFuelExtractionEnabled() const noexcept;
+    [[nodiscard]] RaidFieldTradeAccess fieldIntelligenceTradeStatus() const noexcept;
+    [[nodiscard]] std::optional<RaidFieldTradeView> fieldIntelligenceTradeView() const;
+    [[nodiscard]] bool sellFieldIntelligenceDocument(AssetInstanceId);
+    [[nodiscard]] bool buyFieldIntelligenceOffer(std::size_t);
     [[nodiscard]] bool canCallSignalExtraction(bool inventoryOpen = false) const noexcept;
 
     [[nodiscard]]

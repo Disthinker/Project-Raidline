@@ -1,5 +1,6 @@
 #include "raid_intelligence_domain.h"
 
+#include <algorithm>
 #include <limits>
 #include <utility>
 
@@ -20,6 +21,111 @@ RaidIntelligencePurchaseReceipt receiptFailure(
 {
     return {false, false, error, std::move(message), revision};
 }
+
+bool isCarriedFieldDocument(const ProfileState &profile, AssetInstanceId id)
+{
+    const auto *asset = profile.assets.find(id);
+    return asset && asset->definitionId == kFieldIntelligenceDocumentId &&
+        asset->quantity == 1U && !asset->reliefBatchId &&
+        std::holds_alternative<StoredAssetLocation>(asset->location) &&
+        assetIsCarried(profile, id);
+}
+
+const RaidFieldIntelligenceTrade *fieldTrade(const ProfileState &profile)
+{
+    if (!profile.pendingRaid ||
+        profile.pendingRaid->mapDefinitionId != kFieldIntelligenceSourceMapId ||
+        !profile.pendingRaid->fieldIntelligenceTrade)
+        return nullptr;
+    return &*profile.pendingRaid->fieldIntelligenceTrade;
+}
+}
+
+std::optional<RaidFieldTradeView> queryRaidFieldTrade(
+    const ProfileState &profile, const ContentRegistry &content)
+{
+    const auto *trade = fieldTrade(profile);
+    if (!trade)
+        return std::nullopt;
+    const auto &intelligence = profile.pendingRaid->intelligence;
+    const auto &riverside = content.map(kFieldIntelligenceSourceMapId).operationBriefing;
+    const auto &frontier = content.map(kFieldIntelligenceTargetMapId).operationBriefing;
+    const auto transport = RaidIntelligenceCategory::Transport;
+    RaidFieldTradeView view{
+        trade->balance,
+        trade->fileSold,
+        std::nullopt,
+        {{
+            {kFieldIntelligenceSourceMapId, transport, riverside.price(transport),
+                intelligence.has(transport)},
+            {kFieldIntelligenceTargetMapId, transport, frontier.price(transport),
+                trade->frontierTransportPurchased},
+            {kFieldIntelligenceSourceMapId, trade->extraCategory,
+                riverside.price(trade->extraCategory), intelligence.has(trade->extraCategory)}
+        }}
+    };
+    if (!trade->fileSold)
+    {
+        const auto &records = profile.assets.records();
+        const auto found = std::find_if(records.begin(), records.end(), [&](const auto &entry) {
+            return isCarriedFieldDocument(profile, entry.first);
+        });
+        if (found != records.end())
+            view.sellableFile = found->first;
+    }
+    return view;
+}
+
+bool executeRaidFieldDocumentSale(ProfileState &profile, AssetInstanceId id)
+{
+    const auto *trade = fieldTrade(profile);
+    if (!trade || trade->fileSold || !isCarriedFieldDocument(profile, id) ||
+        profile.revision == std::numeric_limits<ProfileRevision>::max() ||
+        profile.currency > std::numeric_limits<std::uint32_t>::max() - kFieldIntelligenceSalePrice)
+        return false;
+
+    // The definition is a single childless document. Erasing its stable ID
+    // leaves its collected loot snapshot as the original deployment record.
+    if (!profile.assets.erase(id))
+        return false;
+    auto &committed = *profile.pendingRaid->fieldIntelligenceTrade;
+    committed.fileSold = true;
+    committed.balance = kFieldIntelligenceSalePrice;
+    ++profile.revision;
+    return true;
+}
+
+bool executeRaidFieldIntelligencePurchase(
+    ProfileState &profile, const ContentRegistry &content, std::size_t offerIndex)
+{
+    const auto view = queryRaidFieldTrade(profile, content);
+    if (!view || offerIndex >= view->offers.size() ||
+        profile.revision == std::numeric_limits<ProfileRevision>::max())
+        return false;
+    const auto &offer = view->offers[offerIndex];
+    if (offer.purchased || offer.price == 0U || offer.price > view->balance)
+        return false;
+
+    auto &raid = *profile.pendingRaid;
+    auto &trade = *raid.fieldIntelligenceTrade;
+    if (offer.mapId == kFieldIntelligenceTargetMapId)
+    {
+        if (profile.raidIntelligence.count(offer.mapId, offer.category) >=
+            kRaidIntelligenceArchiveLimit)
+            return false;
+        trade.frontierTransportPurchased = true;
+    }
+    else
+    {
+        raid.intelligence.set(offer.category, true);
+        if (offer.category == RaidIntelligenceCategory::Transport)
+            trade.transportPurchased = true;
+        else
+            trade.extraPurchased = true;
+    }
+    trade.balance -= offer.price;
+    ++profile.revision;
+    return true;
 }
 
 RaidIntelligencePurchasePlan queryRaidIntelligencePurchase(
@@ -65,7 +171,7 @@ RaidIntelligencePurchasePlan queryRaidIntelligencePurchase(
     }
     const std::uint32_t owned =
         profile.raidIntelligence.count(command.mapDefinitionId, command.category);
-    if (owned == std::numeric_limits<std::uint32_t>::max())
+    if (owned >= kRaidIntelligenceArchiveLimit)
     {
         return planFailure(
             DomainErrorCode::Capacity,

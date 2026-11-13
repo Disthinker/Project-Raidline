@@ -145,7 +145,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        kHospitalMedicalReserveContentVersion);
+        kFieldIntelligenceTradeContentVersion);
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -277,7 +277,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.category, BaseSupplyCategory::Recreation);
     EXPECT_EQ(comfort.requiredContribution, 14U);
     EXPECT_FALSE(comfort.sourceHint.empty());
-    ASSERT_EQ(registry.items().size(), 71U);
+    ASSERT_EQ(registry.items().size(), 72U);
     const auto &light = registry.item(ItemDefinitionId{"item.component.weapon_flashlight_basic"});
     const auto &battery = registry.item(ItemDefinitionId{"item.battery.universal"});
     ASSERT_TRUE(light.weaponLight);
@@ -1927,6 +1927,9 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
         [](const auto &slot) { return slot.route == "resource"; });
     const bool freightKeySlot = std::any_of(riverside.raidLootSlots.begin(), riverside.raidLootSlots.end(),
         [](const auto &slot) { return slot.route == "central"; });
+    const bool fieldDocumentSlot = !riverside.fieldIntelligenceTradePositions.empty() &&
+        std::any_of(riverside.raidLootSlots.begin(), riverside.raidLootSlots.end(),
+            [](const auto &slot) { return slot.route == "resource"; });
     const bool fuelSlot = std::any_of(frontier.interiors.begin(), frontier.interiors.end(),
         [](const auto &interior) {
             return interior.id == kFreightCrateSpaceId &&
@@ -1974,14 +1977,14 @@ TEST(ContentRegistryTest, EveryPublishedItemHasARealSourceAndConsumer)
                 return recipe.outputItemDefinitionId ==
                     item.definitionId;
             });
-        // Dedicated slots are exercised by the seeded Frontier and hospital
-        // deployment regressions rather than a weighted table.
+        // Dedicated slots are exercised by seeded deployment regressions.
         const bool fixedResourceSource =
             item.definitionId == kFixedRaidOpticId ||
             (item.definitionId == kHospitalNightVisionId && nightVisionSlot) ||
             (item.definitionId == kHospitalFloorplanItemId && floorplanSlot) ||
             (item.definitionId == kHospitalFirstAidStockId && pharmacySlot) ||
             (item.definitionId == kFreightCrateKeyId && freightKeySlot) ||
+            (item.definitionId == kFieldIntelligenceDocumentId && fieldDocumentSlot) ||
             (item.definitionId == kRaidFuelCanId && fuelSlot) ||
             (item.definitionId == kArmorRepairBlueprintId && blueprintSlot);
         EXPECT_TRUE(
@@ -2273,7 +2276,7 @@ TEST(ContentRegistryTest, OpticDefinitionsSeparateTheReceiverMountAndOpticModes)
 TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDefinitions)
 {
     const auto original = hospitalContentCandidateJson();
-    ASSERT_EQ(original.at("content_version").get<std::string>(), kHospitalMedicalReserveContentVersion);
+    ASSERT_EQ(original.at("content_version").get<std::string>(), kFieldIntelligenceTradeContentVersion);
     for (const auto *required : {"fortifications", "enemy_combat_definitions"})
     {
         SCOPED_TRACE(required);

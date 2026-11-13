@@ -157,6 +157,7 @@ TEST(ProfileStateTest, NewPublishedProfileCreatesLegacyCatalogAndExcludesPurchas
             definition.definitionId == kRaidFuelCanId ||
             definition.definitionId == kArmorRepairBlueprintId ||
             definition.definitionId == kHospitalFloorplanItemId ||
+            definition.definitionId == kFieldIntelligenceDocumentId ||
             definition.definitionId == kFreightBreachWedgesId ||
             definition.definitionId == kThrownIlluminationItemId) {
             EXPECT_EQ(stored, profile.assets.records().end()) << definition.definitionId.value();

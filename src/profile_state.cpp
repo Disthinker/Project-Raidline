@@ -344,6 +344,7 @@ std::size_t populatePublishedWarehouseCatalog(
             definition.definitionId == kRaidFuelCanId ||
             definition.definitionId == kArmorRepairBlueprintId ||
             definition.definitionId == kHospitalFloorplanItemId ||
+            definition.definitionId == kFieldIntelligenceDocumentId ||
             definition.definitionId == kFreightBreachWedgesId ||
             definition.definitionId == kThrownIlluminationItemId)
         {
@@ -1480,7 +1481,7 @@ ProfileValidationResult validateProfileState(
             bool ownsAnyIntelligence = false;
             for (std::uint32_t count : counts)
             {
-                if (count > 1000000U)
+                if (count > kRaidIntelligenceArchiveLimit)
                 {
                     return false;
                 }
@@ -4519,6 +4520,38 @@ ProfileValidationResult validateProfileState(
         const bool blueprintRaid = armorReadinessContent &&
             raid.mapDefinitionId == kArmorRepairBlueprintMapId &&
             !resourceEcologyRules && regionalMissionCount == 0U;
+        std::optional<std::uint32_t> firstTradeResourceSlot;
+        std::optional<std::uint32_t> tradeDocumentSlot;
+        if (raid.fieldIntelligenceTrade)
+        {
+            const auto &trade = *raid.fieldIntelligenceTrade;
+            if (content.contentVersion() != kFieldIntelligenceTradeContentVersion ||
+                raid.mapDefinitionId != kFieldIntelligenceSourceMapId ||
+                resourceEcologyRules || regionalMissionCount != 0U ||
+                (trade.extraCategory != RaidIntelligenceCategory::Resource &&
+                 trade.extraCategory != RaidIntelligenceCategory::Enemy) ||
+                std::none_of(raidMap->fieldIntelligenceTradePositions.begin(),
+                    raidMap->fieldIntelligenceTradePositions.end(), [&](Vec2 point) {
+                        return point.x == trade.position.x && point.y == trade.position.y;
+                    }))
+                return {false, "pending Raid field intelligence trade is outside its ordinary Riverside activity"};
+
+            const auto &target = content.map(kFieldIntelligenceTargetMapId);
+            const auto transport = RaidIntelligenceCategory::Transport;
+            const std::uint32_t spent =
+                (trade.transportPurchased ? raidMap->operationBriefing.price(transport) : 0U) +
+                (trade.extraPurchased ? raidMap->operationBriefing.price(trade.extraCategory) : 0U) +
+                (trade.frontierTransportPurchased ? target.operationBriefing.price(transport) : 0U);
+            const std::uint32_t proceeds = trade.fileSold ? kFieldIntelligenceSalePrice : 0U;
+            if (spent > proceeds || trade.balance != proceeds - spent ||
+                (trade.transportPurchased && !raid.intelligence.has(transport)) ||
+                (trade.extraPurchased && !raid.intelligence.has(trade.extraCategory)) ||
+                trade.balance > std::numeric_limits<std::uint32_t>::max() - profile.currency ||
+                (trade.frontierTransportPurchased &&
+                 profile.raidIntelligence.count(kFieldIntelligenceTargetMapId, transport) ==
+                        kRaidIntelligenceArchiveLimit))
+                return {false, "pending Raid field intelligence trade balance or entitlement is invalid"};
+        }
         if ((raid.freightKeyLootSlotId &&
              (raid.mapDefinitionId != kFreightKeySourceMapId || resourceEcologyRules || regionalMissionCount != 0U)) ||
             (raid.sealedFreightCrate &&
@@ -4576,6 +4609,10 @@ ProfileValidationResult validateProfileState(
                     : loot.slotIndex < regularSlotCount;
                 if (validSlot)
                 {
+                    if (raid.fieldIntelligenceTrade && !loot.requiresHighRisk &&
+                        raidMap->raidLootSlots[loot.slotIndex].route == "resource" &&
+                        (!firstTradeResourceSlot || loot.slotIndex < *firstTradeResourceSlot))
+                        firstTradeResourceSlot = loot.slotIndex;
                     if (blueprintRaid && !loot.requiresHighRisk &&
                         raidMap->raidLootSlots[loot.slotIndex].route == "resource" &&
                         (!firstSelectedBlueprintResourceSlot ||
@@ -4823,6 +4860,14 @@ ProfileValidationResult validateProfileState(
             }
             if (loot.definitionId == kThrownIlluminationItemId && recoveryRoot == nullptr)
                 return {false, "pending Raid field flare is outside its self-recovery source"};
+            if (loot.definitionId == kFieldIntelligenceDocumentId && recoveryRoot == nullptr)
+            {
+                if (!raid.fieldIntelligenceTrade || tradeDocumentSlot || loot.quantity != 1U ||
+                    loot.requiresHighRisk || loot.sceneContainerAssetId ||
+                    loot.spaceId != outdoorRaidSpaceId())
+                    return {false, "pending Raid raw intelligence document is outside its field source"};
+                tradeDocumentSlot = loot.slotIndex;
+            }
             if (loot.definitionId == kArmorRepairBlueprintId && recoveryRoot == nullptr)
             {
                 if (!blueprintRaid || blueprintSlot || loot.quantity != 1U ||
@@ -4894,6 +4939,9 @@ ProfileValidationResult validateProfileState(
             return {false, "pending Raid sealed freight Loot is missing"};
         if (raid.fuelExtractionLootAssetId && !foundFuelLoot)
             return {false, "pending Raid extraction fuel Loot is missing"};
+        if (raid.fieldIntelligenceTrade &&
+            (!tradeDocumentSlot || tradeDocumentSlot != firstTradeResourceSlot))
+            return {false, "pending Raid raw intelligence document is outside its selected resource slot"};
         if (blueprintSlot && blueprintSlot != firstSelectedBlueprintResourceSlot)
             return {false, "pending Raid armor repair blueprint is outside its selected resource slot"};
         for (AssetInstanceId groundAssetId : groundAssetIds)
@@ -6222,6 +6270,19 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         for (bool selected : raid.intelligence.selected)
         {
             hashInteger(hash, static_cast<std::uint32_t>(selected));
+        }
+        if (raid.fieldIntelligenceTrade)
+        {
+            const auto &trade = *raid.fieldIntelligenceTrade;
+            hashBytes(hash, "field-intelligence-trade");
+            hashFloat(hash, trade.position.x);
+            hashFloat(hash, trade.position.y);
+            hashInteger(hash, static_cast<std::uint32_t>(trade.extraCategory));
+            hashInteger(hash, trade.balance);
+            hashInteger(hash, trade.fileSold ? 1U : 0U);
+            hashInteger(hash, trade.frontierTransportPurchased ? 1U : 0U);
+            hashInteger(hash, trade.transportPurchased ? 1U : 0U);
+            hashInteger(hash, trade.extraPurchased ? 1U : 0U);
         }
         hashInteger(hash, raid.travel.outboundMinutes);
         hashInteger(hash, raid.travel.returnMinutes);

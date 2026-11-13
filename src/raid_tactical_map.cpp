@@ -99,6 +99,7 @@ void RaidTacticalMapState::configure(
     initialEnemyCenters_ = std::move(initialEnemyCenters);
     specialLocations_ = std::move(specialLocations);
     objectives_ = std::move(objectives);
+    discoveredFieldIntelligenceContact_.reset();
     revealed_.assign(static_cast<std::size_t>(columns_ * rows_), false);
     normalExtractionDiscovered_ = false;
     emergencyExtractionDiscovered_ = false;
@@ -374,6 +375,22 @@ bool RaidTacticalMapState::hasIntelligence(
     RaidIntelligenceCategory category) const noexcept
 {
     return intelligence_.has(category);
+}
+
+void RaidTacticalMapState::grantIntelligence(RaidIntelligenceCategory category) noexcept
+{
+    if (raidIntelligenceCategoryIndex(category) < kRaidIntelligenceCategoryCount)
+        intelligence_.set(category, true);
+}
+
+void RaidTacticalMapState::discoverFieldIntelligenceContact(Vec2 position) noexcept
+{
+    discoveredFieldIntelligenceContact_ = position;
+}
+
+std::optional<Vec2> RaidTacticalMapState::discoveredFieldIntelligenceContact() const noexcept
+{
+    return discoveredFieldIntelligenceContact_;
 }
 const ContentRect &RaidTacticalMapState::normalExtraction() const noexcept
 {
