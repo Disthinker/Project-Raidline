@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -23,7 +24,8 @@ ProfileState makeProfile()
 
 AssetInstanceId addToStash(
     ProfileState &profile,
-    const ItemDefinitionId &definitionId)
+    const ItemDefinitionId &definitionId,
+    std::uint32_t quantity = 1U)
 {
     const ContentRegistry &content = publishedContentRegistry();
     const ItemDefinition &definition = content.item(definitionId);
@@ -36,7 +38,8 @@ AssetInstanceId addToStash(
     EXPECT_TRUE(origin.has_value());
     return profile.assets.create(
         definition,
-        StoredAssetLocation{ProfileContainerId::stash(), *origin});
+        StoredAssetLocation{ProfileContainerId::stash(), *origin},
+        quantity);
 }
 
 std::vector<AssetInstanceId> fillStash(ProfileState &profile)
@@ -111,6 +114,133 @@ TEST(BaseManufacturingDomainTest,
     }
     EXPECT_TRUE(validateProfileState(
         profile, publishedContentRegistry()).valid);
+}
+
+TEST(BaseManufacturingDomainTest,
+     FreightBreachWedgesReserveExactUnitsAndCancelWithoutDuplication)
+{
+    const auto &content = publishedContentRegistry();
+    const ItemDefinitionId scrapDefinition{"item.loot.scrap_parts"};
+    const ItemDefinitionId fastenerDefinition{"item.loot.industrial_fasteners"};
+    ProfileState profile = makeProfile();
+    const auto scrapA = addToStash(profile, scrapDefinition);
+    const auto scrapB = addToStash(profile, scrapDefinition);
+    const auto fasteners = addToStash(profile, fastenerDefinition, 3U);
+    const auto originalFastenerSlot = profile.assets.find(fasteners)->location;
+    const auto firstFreeId = profile.assets.nextAssetId();
+    const auto before = profileStateFingerprint(profile);
+    const auto plan = queryStartBaseManufacturing(profile, content, {kFreightBreachRecipeId});
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+    ASSERT_EQ(plan.inputs.size(), 3U);
+    EXPECT_EQ(plan.inputs[0].assetId, scrapA);
+    EXPECT_EQ(plan.inputs[1].assetId, scrapB);
+    EXPECT_EQ(plan.inputs[2].assetId, fasteners);
+    EXPECT_EQ(plan.inputs[2].quantity, 1U);
+
+    const CommandContext start{profile.revision, "start-freight-wedges"};
+    const auto started = executeStartBaseManufacturing(
+        profile, content, {kFreightBreachRecipeId}, start);
+    ASSERT_TRUE(started.succeeded) << started.message;
+    ASSERT_TRUE(started.outputAssetId);
+    ASSERT_TRUE(profile.baseManufacturing.activeOrder);
+    const auto &order = *profile.baseManufacturing.activeOrder;
+    EXPECT_EQ(order.inputAssetIds, (std::vector<AssetInstanceId>{scrapA, scrapB, firstFreeId}));
+    const auto *reserved = profile.assets.find(firstFreeId);
+    ASSERT_NE(reserved, nullptr);
+    EXPECT_EQ(reserved->location, AssetLocation{BaseServiceAssetLocation{order.jobId}});
+    EXPECT_EQ(reserved->definitionId, fastenerDefinition);
+    EXPECT_EQ(reserved->quantity, 1U);
+    ASSERT_NE(profile.assets.find(fasteners), nullptr);
+    EXPECT_EQ(profile.assets.find(fasteners)->location, originalFastenerSlot);
+    EXPECT_EQ(profile.assets.find(fasteners)->quantity, 2U);
+    EXPECT_EQ(profile.assets.nextAssetId(), firstFreeId + 2U);
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
+
+    const auto committed = profileStateFingerprint(profile);
+    const auto duplicate = executeStartBaseManufacturing(
+        profile, content, {kFreightBreachRecipeId}, start);
+    EXPECT_TRUE(duplicate.succeeded && duplicate.alreadyCommitted);
+    EXPECT_EQ(profileStateFingerprint(profile), committed);
+
+    const auto filler = fillStash(profile);
+    const auto full = profileStateFingerprint(profile);
+    const auto rejected = executeCancelBaseManufacturing(
+        profile, content, {profile.revision, "cancel-freight-wedges-full"});
+    EXPECT_EQ(rejected.error, DomainErrorCode::Capacity);
+    EXPECT_EQ(profileStateFingerprint(profile), full);
+    for (const AssetInstanceId id : filler)
+    {
+        ASSERT_TRUE(profile.assets.erase(id));
+    }
+    const auto cancelled = executeCancelBaseManufacturing(
+        profile, content, {profile.revision, "cancel-freight-wedges"});
+    ASSERT_TRUE(cancelled.succeeded) << cancelled.message;
+    EXPECT_FALSE(profile.baseManufacturing.activeOrder);
+    EXPECT_EQ(profile.assets.find(*started.outputAssetId), nullptr);
+    ASSERT_NE(profile.assets.find(firstFreeId), nullptr);
+    EXPECT_EQ(profile.assets.find(firstFreeId)->quantity, 1U);
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(profile.assets.find(firstFreeId)->location));
+    EXPECT_EQ(profile.assets.find(fasteners)->quantity, 2U);
+    EXPECT_EQ(profile.assets.find(fasteners)->location, originalFastenerSlot);
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
+}
+
+TEST(BaseManufacturingDomainTest,
+     FreightBreachWedgesRejectMissingUnitsAndIdentityExhaustionAtomically)
+{
+    const auto &content = publishedContentRegistry();
+    const ItemDefinitionId scrapDefinition{"item.loot.scrap_parts"};
+    const ItemDefinitionId fastenerDefinition{"item.loot.industrial_fasteners"};
+    ProfileState profile = makeProfile();
+    addToStash(profile, scrapDefinition);
+    addToStash(profile, fastenerDefinition, 3U);
+    const auto rejected = [&](DomainErrorCode error) {
+        const auto before = profileStateFingerprint(profile);
+        const auto receipt = executeStartBaseManufacturing(
+            profile, content, {kFreightBreachRecipeId}, {profile.revision, "start-insufficient"});
+        EXPECT_FALSE(receipt.succeeded);
+        EXPECT_EQ(receipt.error, error);
+        EXPECT_EQ(profileStateFingerprint(profile), before);
+    };
+    rejected(DomainErrorCode::MissingAsset);
+    addToStash(profile, scrapDefinition);
+    profile.assets.setNextAssetIdForLoad(std::numeric_limits<AssetInstanceId>::max() - 1U);
+    rejected(DomainErrorCode::RevisionOverflow);
+}
+
+TEST(BaseManufacturingDomainTest,
+     FreightBreachWedgesCompleteOnceFromASingleFastener)
+{
+    const auto &content = publishedContentRegistry();
+    ProfileState profile = makeProfile();
+    const auto scrapA = addToStash(profile, ItemDefinitionId{"item.loot.scrap_parts"});
+    const auto scrapB = addToStash(profile, ItemDefinitionId{"item.loot.scrap_parts"});
+    const auto fastener = addToStash(profile, ItemDefinitionId{"item.loot.industrial_fasteners"});
+    const auto started = executeStartBaseManufacturing(
+        profile, content, {kFreightBreachRecipeId}, {profile.revision, "start-single-fastener"});
+    ASSERT_TRUE(started.succeeded && started.outputAssetId) << started.message;
+    ASSERT_TRUE(profile.baseManufacturing.activeOrder);
+    const auto &order = *profile.baseManufacturing.activeOrder;
+    EXPECT_EQ(order.inputAssetIds, (std::vector<AssetInstanceId>{scrapA, scrapB, fastener}));
+    const auto duration = order.completionWorldMinute - order.startedWorldMinute;
+    EXPECT_EQ(duration, 90U);
+    EXPECT_EQ(advanceWorldClock(profile.worldClock, 90U).minutesApplied, 90U);
+    const auto completed = applyBaseManufacturingThrough(profile, content);
+    ASSERT_TRUE(completed.completed);
+    EXPECT_FALSE(completed.outputBlocked);
+    EXPECT_FALSE(applyBaseManufacturingThrough(profile, content).completed);
+    EXPECT_FALSE(profile.baseManufacturing.activeOrder);
+    for (const AssetInstanceId id : {scrapA, scrapB, fastener})
+    {
+        EXPECT_EQ(profile.assets.find(id), nullptr);
+    }
+    const auto *output = profile.assets.find(*started.outputAssetId);
+    ASSERT_NE(output, nullptr);
+    EXPECT_EQ(output->definitionId, kFreightBreachWedgesId);
+    EXPECT_EQ(output->quantity, 1U);
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(output->location));
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
 }
 
 TEST(BaseManufacturingDomainTest,

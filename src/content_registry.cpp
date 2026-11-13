@@ -2482,8 +2482,12 @@ ContentRegistry ContentRegistry::fromJson(
                     requiredPositiveUint(inputValue, "quantity")};
                 const ItemDefinition &item = registry.item(
                     input.itemDefinitionId);
+                const bool quantityAllowed = definition.id == kFreightBreachRecipeId
+                    ? (input.itemDefinitionId.value() == "item.loot.scrap_parts" && input.quantity == 2U) ||
+                      (input.itemDefinitionId.value() == "item.loot.industrial_fasteners" && input.quantity == 1U)
+                    : input.quantity == 1U && item.maxStackSize == 1U;
                 if (!inputIds.insert(input.itemDefinitionId).second ||
-                    input.quantity != 1U || item.maxStackSize != 1U ||
+                    !quantityAllowed ||
                     !item.containerCompartments.empty())
                 {
                     fail("Base manufacturing input contract is invalid");
@@ -4454,6 +4458,20 @@ ContentRegistry ContentRegistry::fromJson(
                         return recipe.outputItemDefinitionId == kHospitalFloorplanItemId;
                     }))
                 fail("hospital floor plan requires its fixed reception source");
+        }
+        if (registry.contentVersion() == kFreightBreachContentVersion)
+        {
+            if (!registry.itemIndex_.contains(kFreightBreachWedgesId) ||
+                !registry.baseManufacturingRecipeIndex_.contains(kFreightBreachRecipeId))
+                fail("freight breach requires workshop wedges");
+            const auto &wedges = registry.item(kFreightBreachWedgesId);
+            const auto &recipe = registry.baseManufacturingRecipe(kFreightBreachRecipeId);
+            if (wedges.category != ItemCategory::Loot || wedges.inventoryWidthCells != 1 ||
+                wedges.inventoryHeightCells != 1 || wedges.maxStackSize != 1 ||
+                wedges.marketBuyPrice || recipe.inputs.size() != 2U ||
+                recipe.outputItemDefinitionId != kFreightBreachWedgesId ||
+                recipe.outputQuantity != 1U || recipe.workerCount != 1U || recipe.durationMinutes != 90U)
+                fail("freight breach wedges contract is invalid");
         }
         return registry;
     }

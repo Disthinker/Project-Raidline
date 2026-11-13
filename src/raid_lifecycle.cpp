@@ -719,6 +719,9 @@ DeployReceipt executeDeploy(
     snapshot.settlementId = command.settlementId;
     snapshot.backpackRecoveryEnabled = regionalMissionCount == 0U &&
         supportsRaidBackpackRecoveryContent(content.contentVersion());
+    snapshot.freightBreachEnabled = regionalMissionCount == 0U &&
+        command.mapDefinitionId == kFreightCrateMapId &&
+        content.contentVersion() == kFreightBreachContentVersion;
     if (snapshot.backpackRecoveryEnabled)
         snapshot.startingAssets = profile.assets;
     const bool corpseTrial = command.mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"} &&

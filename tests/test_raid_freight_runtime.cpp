@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <string>
 #include <vector>
@@ -14,10 +15,13 @@ const MapDefinitionId kFrontier{"map.raid.frontier_exchange"};
 const RaidSpaceDefinitionId kFreightRoom{"raid_space.frontier_exchange.freight_service_bay"};
 constexpr float kStepSeconds{0.125F};
 
+enum class WedgeStorage { None, Carried, Warehouse };
+
 class RaidFreightRuntimeTest : public testing::Test
 {
 protected:
-    void deploy(bool carryKey, int additionalWarehouseStacks = 0)
+    void deploy(bool carryKey, int additionalWarehouseStacks = 0,
+                WedgeStorage wedgeStorage = WedgeStorage::None)
     {
         ASSERT_TRUE(session.startNewProfile("freight-runtime"));
         auto &profile = const_cast<ProfileState &>(session.profile());
@@ -35,6 +39,20 @@ protected:
         const auto fit = findFirstProfileFit(profile, content, keyDestination, keyDefinition, ItemOrientation::Degrees0);
         ASSERT_TRUE(fit);
         key = profile.assets.create(keyDefinition, StoredAssetLocation{keyDestination, *fit});
+
+        if (wedgeStorage != WedgeStorage::None)
+        {
+            const auto destination = wedgeStorage == WedgeStorage::Carried
+                ? ProfileContainerId::compartment(bag, 0) : ProfileContainerId::stash();
+            const auto &definition = content.item(kFreightBreachWedgesId);
+            for (auto &wedge : wedges)
+            {
+                const auto cell = findFirstProfileFit(profile, content, destination,
+                    definition, ItemOrientation::Degrees0);
+                ASSERT_TRUE(cell);
+                wedge = profile.assets.create(definition, StoredAssetLocation{destination, *cell});
+            }
+        }
 
         const auto warehouse = ProfileContainerId::stash();
         const auto &ammunition = content.item(alpha_content::ammunition);
@@ -123,10 +141,37 @@ protected:
         return projection ? projection->progress : -1.0F;
     }
 
+    GameplayInput aimAtBreachDoor() const
+    {
+        auto input = aimAtCrate();
+        input.aimWorldPosition = Vec2{740.0F, 260.0F};
+        return input;
+    }
+
+    void holdBreach(unsigned frames, bool freshPress)
+    {
+        auto input = aimAtBreachDoor();
+        input.interactPressed = true;
+        input.interactJustPressed = freshPress;
+        for (unsigned frame = 0; frame < frames; ++frame)
+        {
+            session.update(input, kStepSeconds);
+            input.interactJustPressed = false;
+        }
+    }
+
+    float breachProgress() const
+    {
+        const auto projection = session.raidFreightBreach();
+        EXPECT_TRUE(projection);
+        return projection ? projection->progress : -1.0F;
+    }
+
     GameSession session;
     AssetInstanceId bag{};
     AssetInstanceId crate{};
     AssetInstanceId key{};
+    std::array<AssetInstanceId, 2> wedges{};
     Vec2 cratePosition{};
 };
 
@@ -219,6 +264,138 @@ TEST_F(RaidFreightRuntimeTest, MovingAwayAndModalCancellationRequireNewPress)
     hold(16, true);
     EXPECT_TRUE(unlocked());
     EXPECT_EQ(session.takeOpenedRaidFreightCrate(), crate);
+}
+
+TEST_F(RaidFreightRuntimeTest, BreachWarehouseToolsCannotOpenTheDoor)
+{
+    ASSERT_NO_FATAL_FAILURE(deploy(false, 0, WedgeStorage::Warehouse));
+    ASSERT_TRUE(session.profile().pendingRaid->freightBreachEnabled);
+    ASSERT_NO_FATAL_FAILURE(move({640.0F, 260.0F}));
+    session.update(aimAtBreachDoor(), 0.0F);
+    const auto projection = session.raidFreightBreach();
+    ASSERT_TRUE(projection);
+    EXPECT_FALSE(projection->hasTool);
+
+    holdBreach(16, true);
+    EXPECT_FLOAT_EQ(breachProgress(), 0.0F);
+    EXPECT_TRUE(session.world().nearbyFreightBreachDoor());
+    for (const auto id : wedges)
+        EXPECT_NE(session.profile().assets.find(id), nullptr);
+}
+
+TEST_F(RaidFreightRuntimeTest, BreachFromEastConsumesOneToolAndDoorStaysOpenOnReentry)
+{
+    ASSERT_NO_FATAL_FAILURE(deploy(true, 0, WedgeStorage::Carried));
+    ASSERT_NO_FATAL_FAILURE(move({840.0F, 260.0F}));
+    session.update(aimAtBreachDoor(), 0.0F);
+    ASSERT_TRUE(session.raidFreightBreach());
+    EXPECT_TRUE(session.raidFreightBreach()->hasTool);
+
+    holdBreach(11, true);
+    EXPECT_FLOAT_EQ(breachProgress(), 11.0F / 12.0F);
+    EXPECT_NE(session.profile().assets.find(wedges[0]), nullptr);
+    session.update(aimAtBreachDoor(), 0.0F);
+    EXPECT_FLOAT_EQ(breachProgress(), 0.0F);
+    holdBreach(12, false);
+    EXPECT_FLOAT_EQ(breachProgress(), 0.0F);
+
+    holdBreach(11, true);
+    const auto started = std::chrono::steady_clock::now();
+    holdBreach(1, false);
+    const std::chrono::duration<double, std::milli> finishingFrame =
+        std::chrono::steady_clock::now() - started;
+    RecordProperty("breach_finishing_frame_ms", std::to_string(finishingFrame.count()));
+    EXPECT_FALSE(session.world().nearbyFreightBreachDoor());
+    EXPECT_EQ(session.profile().assets.find(wedges[0]), nullptr);
+    EXPECT_TRUE(assetIsCarried(session.profile(), wedges[1]));
+    EXPECT_FALSE(unlocked());
+    EXPECT_TRUE(assetIsCarried(session.profile(), key));
+    EXPECT_TRUE(validateProfileState(session.profile(), publishedContentRegistry()).valid);
+    holdBreach(16, false);
+    EXPECT_TRUE(assetIsCarried(session.profile(), wedges[1]));
+
+    const auto &rooms = session.profile().pendingRaid->interiors;
+    const auto room = std::find_if(rooms.begin(), rooms.end(),
+        [](const auto &entry) { return entry.id == kFreightRoom; });
+    ASSERT_NE(room, rooms.end());
+    const ContentRect exit = room->interiorExit;
+    const ContentRect entrance = room->exteriorEntrance;
+    ASSERT_NO_FATAL_FAILURE(move({exit.position.x + exit.size.x * 0.5F,
+                                 exit.position.y + exit.size.y * 0.5F}));
+    GameplayInput interact;
+    interact.interactJustPressed = true;
+    session.update(interact, 0.0F);
+    ASSERT_TRUE(session.world().inOutdoorRaidSpace());
+    ASSERT_NO_FATAL_FAILURE(move({entrance.position.x + entrance.size.x * 0.5F,
+                                 entrance.position.y + entrance.size.y * 0.5F}));
+    session.update(interact, 0.0F);
+    ASSERT_EQ(session.world().activeRaidSpaceId(), kFreightRoom);
+    ASSERT_NO_FATAL_FAILURE(move({640.0F, 260.0F}));
+    session.update(aimAtBreachDoor(), 0.0F);
+    EXPECT_FALSE(session.world().nearbyFreightBreachDoor());
+    EXPECT_TRUE(assetIsCarried(session.profile(), wedges[1]));
+}
+
+TEST_F(RaidFreightRuntimeTest, BreachDamageAndDroppedToolsRequireAFreshHold)
+{
+    ASSERT_NO_FATAL_FAILURE(deploy(false, 0, WedgeStorage::Carried));
+    ASSERT_NO_FATAL_FAILURE(move({640.0F, 260.0F}));
+    session.update(aimAtBreachDoor(), 0.0F);
+    holdBreach(6, true);
+    ASSERT_FLOAT_EQ(breachProgress(), 0.5F);
+    const int health = session.world().player().health();
+    EXPECT_FALSE(session.world().damagePlayer(1));
+    ASSERT_EQ(session.world().player().health(), health - 1);
+    holdBreach(12, false);
+    EXPECT_FLOAT_EQ(breachProgress(), 0.0F);
+    EXPECT_TRUE(assetIsCarried(session.profile(), wedges[0]));
+
+    session.update(aimAtBreachDoor(), 0.0F);
+    holdBreach(6, true);
+    ASSERT_FLOAT_EQ(breachProgress(), 0.5F);
+    const auto dropped = session.dropRaidBackpack(
+        bag, {session.profile().revision, "breach-drop-bound-tool"});
+    ASSERT_TRUE(dropped.succeeded) << dropped.message;
+    holdBreach(12, false);
+    EXPECT_TRUE(session.world().nearbyFreightBreachDoor());
+    EXPECT_FALSE(session.raidFreightBreach()->hasTool);
+    for (const auto id : wedges)
+    {
+        EXPECT_NE(session.profile().assets.find(id), nullptr);
+        EXPECT_FALSE(assetIsCarried(session.profile(), id));
+    }
+}
+
+TEST_F(RaidFreightRuntimeTest, BreachConsumptionAndRemainingToolFollowOrdinarySettlement)
+{
+    ASSERT_NO_FATAL_FAILURE(deploy(false, 0, WedgeStorage::Carried));
+    ASSERT_NO_FATAL_FAILURE(move({640.0F, 260.0F}));
+    session.update(aimAtBreachDoor(), 0.0F);
+    holdBreach(12, true);
+    ASSERT_EQ(session.profile().assets.find(wedges[0]), nullptr);
+    ASSERT_TRUE(assetIsCarried(session.profile(), wedges[1]));
+
+    const auto &content = publishedContentRegistry();
+    const std::string settlement = session.profile().pendingRaid->settlementId;
+    for (const auto outcome : {RaidResultOutcome::Extracted,
+                               RaidResultOutcome::PlayerDead,
+                               RaidResultOutcome::ActiveQuit})
+    {
+        SCOPED_TRACE(static_cast<int>(outcome));
+        ProfileState resolved = session.profile();
+        const auto receipt = settlePendingRaid(resolved, content, settlement, outcome);
+        ASSERT_TRUE(receipt.succeeded) << receipt.message;
+        EXPECT_FALSE(resolved.pendingRaid);
+        EXPECT_EQ(resolved.assets.find(wedges[0]), nullptr);
+        const bool extracted = outcome == RaidResultOutcome::Extracted;
+        EXPECT_EQ(assetIsCarried(resolved, wedges[1]), extracted);
+        ASSERT_TRUE(resolved.lastRaidResult);
+        EXPECT_EQ(resolved.lastRaidResult->outcome, outcome);
+        const auto &returned = resolved.lastRaidResult->returnedItemDefinitionIds;
+        EXPECT_EQ(std::count(returned.begin(), returned.end(), kFreightBreachWedgesId),
+            extracted ? 1 : 0);
+        EXPECT_TRUE(validateProfileState(resolved, content).valid);
+    }
 }
 
 TEST_F(RaidFreightRuntimeTest, ObservationAndTransferUseOriginalSceneAuthorityWithDenseAssets)

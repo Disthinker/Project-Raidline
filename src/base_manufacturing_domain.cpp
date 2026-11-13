@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <array>
 #include <limits>
-#include <set>
 #include <span>
 #include <utility>
 
@@ -313,32 +312,43 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
     const std::span<const BaseManufacturingInputDefinition> inputs = research
         ? std::span<const BaseManufacturingInputDefinition>{researchInputs}
         : std::span<const BaseManufacturingInputDefinition>{recipe->inputs};
-    std::set<AssetInstanceId> selected;
+    AssetInstanceId newAssetCount = research ? 0U : 1U;
     for (const BaseManufacturingInputDefinition &input : inputs)
     {
-        const auto found = std::find_if(
-            profile.assets.records().begin(),
-            profile.assets.records().end(),
-            [&](const auto &entry)
+        std::uint32_t remaining = input.quantity;
+        for (const auto &[assetId, asset] : profile.assets.records())
+        {
+            if (asset.definitionId != input.itemDefinitionId || asset.quantity == 0U)
             {
-                const AssetRecord &asset = entry.second;
-                if (selected.contains(asset.instanceId) ||
-                    asset.definitionId != input.itemDefinitionId ||
-                    asset.quantity != input.quantity)
+                continue;
+            }
+            if (research)
+            {
+                const auto *location = std::get_if<StoredAssetLocation>(&asset.location);
+                if (location == nullptr ||
+                    location->container.kind != ProfileContainerKind::Stash)
                 {
-                    return false;
+                    continue;
                 }
-                if (research)
-                {
-                    const auto *location =
-                        std::get_if<StoredAssetLocation>(&asset.location);
-                    return location != nullptr &&
-                        location->container.kind == ProfileContainerKind::Stash;
-                }
-                return assetIsBaseAccessible(profile, asset.instanceId) &&
-                    !hasChildren(profile, asset.instanceId);
-            });
-        if (found == profile.assets.records().end())
+            }
+            else if (!assetIsBaseAccessible(profile, assetId) || hasChildren(profile, assetId))
+            {
+                continue;
+            }
+
+            const std::uint32_t quantity = std::min(remaining, asset.quantity);
+            plan.inputs.push_back({assetId, asset.definitionId, quantity});
+            if (quantity < asset.quantity)
+            {
+                ++newAssetCount;
+            }
+            remaining -= quantity;
+            if (remaining == 0U)
+            {
+                break;
+            }
+        }
+        if (remaining != 0U)
         {
             return startFailure(
                 DomainErrorCode::MissingAsset,
@@ -347,9 +357,13 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
                     : "required manufacturing input is unavailable",
                 profile.revision);
         }
-        selected.insert(found->first);
-        plan.inputs.push_back(
-            {found->first, found->second.definitionId});
+    }
+    if (newAssetCount > std::numeric_limits<AssetInstanceId>::max() - profile.assets.nextAssetId())
+    {
+        return startFailure(
+            DomainErrorCode::RevisionOverflow,
+            "manufacturing identity or completion time would overflow",
+            profile.revision);
     }
     return plan;
 }
@@ -379,6 +393,7 @@ BaseManufacturingReceipt executeStartBaseManufacturing(
 
     ProfileState candidate = profile;
     const BaseServiceJobId jobId = candidate.nextBaseServiceJobId++;
+    const BaseServiceAssetLocation reservation{jobId};
     std::vector<AssetInstanceId> inputIds;
     for (const BaseManufacturingInputSelection &selection : plan.inputs)
     {
@@ -390,8 +405,34 @@ BaseManufacturingReceipt executeStartBaseManufacturing(
                 "manufacturing input disappeared",
                 profile);
         }
-        asset->location = BaseServiceAssetLocation{jobId};
-        inputIds.push_back(asset->instanceId);
+        if (selection.quantity == asset->quantity)
+        {
+            asset->location = reservation;
+            inputIds.push_back(selection.assetId);
+        }
+        else
+        {
+            const ItemOrientation orientation = asset->orientation;
+            AssetInstanceId splitId{};
+            try
+            {
+                // The reserved units have their own identity while the original
+                // stack keeps its slot and any remaining units.
+                splitId = candidate.assets.create(
+                    content.item(selection.definitionId), reservation,
+                    selection.quantity, asset->reliefBatchId);
+            }
+            catch (...)
+            {
+                return receiptFailure(
+                    DomainErrorCode::RevisionOverflow,
+                    "manufacturing input identity cannot be reserved",
+                    profile);
+            }
+            candidate.assets.findMutable(selection.assetId)->quantity -= selection.quantity;
+            candidate.assets.findMutable(splitId)->orientation = orientation;
+            inputIds.push_back(splitId);
+        }
     }
     std::optional<AssetInstanceId> outputId;
     if (command.recipeDefinitionId != kArmorRepairResearchId)

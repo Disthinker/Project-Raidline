@@ -4,9 +4,24 @@
 #include <algorithm>
 #include <nlohmann/json.hpp>
 
-inline nlohmann::json contentBeforeHospitalFloorplanRoutesJson()
+inline nlohmann::json contentBeforeFreightBreachJson()
 {
     auto document = nlohmann::json::parse(publishedContentJson());
+    document["content_version"] = kHospitalFloorplanRoutesContentVersion;
+    auto &items = document["items"];
+    std::erase_if(items.get_ref<nlohmann::json::array_t &>(), [](const auto &item) {
+        return item.at("id") == std::string{kFreightBreachWedgesId.value()};
+    });
+    auto &recipes = document["base_manufacturing"]["recipes"];
+    std::erase_if(recipes.get_ref<nlohmann::json::array_t &>(), [](const auto &recipe) {
+        return recipe.at("id") == std::string{kFreightBreachRecipeId.value()};
+    });
+    return document;
+}
+
+inline nlohmann::json contentBeforeHospitalFloorplanRoutesJson()
+{
+    auto document = contentBeforeFreightBreachJson();
     document["content_version"] = kRaidBackpackRecoveryContentVersion;
     auto &items = document["items"];
     items.erase(std::remove_if(items.begin(), items.end(), [](const auto &item) {

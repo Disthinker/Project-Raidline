@@ -166,6 +166,7 @@ struct RaidWorldConfig
     bool lightConeObservationEnabled{};
     std::optional<RaidCredentialExtractionSnapshot> credentialExtraction;
     bool grenadeEnabled{};
+    bool freightBreachEnabled{};
 };
 
 struct RaidOutdoorLabelProjection
@@ -313,6 +314,9 @@ public:
     [[nodiscard]] bool spaceTransitionedLastUpdate() const noexcept;
     [[nodiscard]] std::optional<RaidInteriorMapProjection>
     activeInteriorMapProjection() const noexcept;
+    [[nodiscard]] std::optional<ContentRect> freightBreachDoorBounds() const noexcept;
+    [[nodiscard]] std::optional<ContentRect> nearbyFreightBreachDoor() const;
+    [[nodiscard]] bool tryOpenFreightBreachDoor(const std::function<bool()> &commitWedge);
     void confirmRaidInteriorLayout(const RaidSpaceDefinitionId &spaceId) noexcept;
     [[nodiscard]] const RaidOutdoorPresentationProjection &
     outdoorPresentation(ContentRect visibleWorldBounds) const;
@@ -542,6 +546,7 @@ public:
 
 private:
     friend struct EnemyLifecycleTestAccess;
+    friend struct FreightBreachWorldTestAccess;
     struct EnemyNavigationRuntime
     {
         std::optional<Vec2> goal;
@@ -585,6 +590,7 @@ private:
         std::size_t navigationScheduleCursor{};
         std::size_t initialEnemyCount{};
         RaidLightEnvironment lightEnvironment{RaidLightEnvironment::WeakIndoor};
+        std::uint64_t geometryRevision{1};
     };
 
     struct NavigationFieldCache
@@ -592,6 +598,14 @@ private:
         RaidSpaceDefinitionId spaceId;
         Vec2 actorSize{};
         RaidSpaceNavigationField field;
+    };
+
+    struct PreparedFreightBreach
+    {
+        std::size_t interiorIndex{};
+        std::vector<BallisticBlocker> blockers;
+        std::optional<RaidSpaceBlockerIndex> blockerIndex;
+        std::vector<NavigationFieldCache> navigationFields;
     };
 
     struct OutdoorPresentationChunk
@@ -694,6 +708,8 @@ private:
     std::size_t outdoorNavigationScheduleCursor_{};
     std::vector<InteriorRuntime> interiors_;
     std::optional<std::size_t> activeInteriorIndex_;
+    std::uint64_t activeGeometryRevision_{1};
+    std::optional<PreparedFreightBreach> preparedFreightBreach_;
     std::vector<NavigationFieldCache> navigationFieldCache_;
     bool spaceTransitionedLastUpdate_{};
 
@@ -750,9 +766,15 @@ private:
     std::optional<GrenadeExplosion> lastGrenadeExplosion_;
     bool grenadeExplodedLastUpdate_{};
     float grenadeFlashSeconds_{};
-    struct GrenadeInvestigation { RaidSpaceDefinitionId space; Vec2 point{}; float remaining{}; };
-    std::map<CombatTargetId,GrenadeInvestigation> grenadeInvestigations_;
-    void updateGrenadeInvestigations(float);
+    struct LocalNoiseInvestigation
+    {
+        RaidSpaceDefinitionId space;
+        Vec2 point{};
+        float remaining{};
+        bool fromGrenade{};
+    };
+    std::map<CombatTargetId, LocalNoiseInvestigation> localNoiseInvestigations_;
+    void updateLocalNoiseInvestigations(float);
     void emitGrenadeNoise(Vec2, float);
     RaidNoiseDecoyRuntime noiseDecoy_;
     void updateNoiseDecoy(float seconds);
@@ -795,6 +817,7 @@ private:
         Vec2 worldSize,
         std::span<const BallisticBlocker> blockers,
         std::span<const Enemy> enemies);
+    void prepareFreightBreachDoor();
     [[nodiscard]] std::size_t outdoorAliveEnemyCount() const noexcept;
     [[nodiscard]] bool tryTransitionRaidSpace(
         const GameplayInput &input,

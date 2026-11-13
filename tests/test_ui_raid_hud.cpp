@@ -301,6 +301,76 @@ TEST(UiRaidHudTextTest, InteriorPermissionIsTranslatedBeforeCompositeLabels){
         "建筑内部地图 | 交易所办公室 | 永久情报");
 }
 
+TEST_F(UiRaidHudTest, FreightBreachProgressUsesExistingActionAreaAtEveryWindowSize)
+{
+    auto &session = A::session(*app);
+    auto &profile = const_cast<ProfileState &>(session.profile());
+    const auto &content = publishedContentRegistry();
+    const auto pack = std::find_if(profile.assets.records().begin(), profile.assets.records().end(),
+        [](const auto &entry) { return entry.second.definitionId == alpha_content::backpack; });
+    ASSERT_NE(pack, profile.assets.records().end());
+    const auto packId = pack->first;
+    ASSERT_TRUE(executeInventory(profile, content, InventoryEquipCommand{packId, EquipmentSlotKind::Backpack},
+        {profile.revision, "equip-breach-ui-pack"}).succeeded);
+    const auto container = ProfileContainerId::compartment(packId, 0);
+    const auto &item = content.item(kFreightBreachWedgesId);
+    const auto fit = findFirstProfileFit(profile, content, container, item, ItemOrientation::Degrees0);
+    ASSERT_TRUE(fit);
+    const auto wedges = profile.assets.create(item, StoredAssetLocation{container, *fit});
+    ASSERT_TRUE(A::flow(*app).deploy(kFreightCrateMapId));
+    ASSERT_TRUE(session.profile().pendingRaid && session.profile().pendingRaid->freightBreachEnabled);
+    const auto &rooms = session.profile().pendingRaid->interiors;
+    const auto room = std::find_if(rooms.begin(), rooms.end(),
+        [](const auto &entry) { return entry.id == kFreightCrateSpaceId; });
+    ASSERT_NE(room, rooms.end());
+    auto &player = const_cast<Player &>(session.world().player());
+    const float half = player.size() * 0.5F;
+    ASSERT_TRUE(player.setPosition({
+        room->exteriorEntrance.position.x + room->exteriorEntrance.size.x * 0.5F - half,
+        room->exteriorEntrance.position.y + room->exteriorEntrance.size.y * 0.5F - half}));
+    GameplayInput enter{};
+    enter.interactPressed = enter.interactJustPressed = true;
+    session.update(enter, 0.0F);
+    ASSERT_EQ(session.world().activeRaidSpaceId(), kFreightCrateSpaceId);
+    ASSERT_TRUE(assetIsCarried(session.profile(), wedges));
+    for (const auto &enemy : session.world().enemies())
+        static_cast<void>(const_cast<Enemy &>(enemy).takeDamage(enemy.maxHealth()));
+    session.update({}, 0.0F);
+    ASSERT_TRUE(player.setPosition({650.0F - half, 260.0F - half}));
+    GameplayInput aim{};
+    aim.aimWorldPosition = {740.0F, 260.0F};
+    aim.aimWorldBounds = Rect{{}, session.world().raidSpaceWorldSize()};
+    session.update(aim, 0.0F);
+    ASSERT_TRUE(session.raidFreightBreach());
+    aim.interactPressed = aim.interactJustPressed = true;
+    session.update(aim, 0.125F);
+    const auto progress = session.raidFreightBreach();
+    ASSERT_TRUE(progress && progress->hasTool);
+    ASSERT_GT(progress->progress, 0.0F);
+
+    std::filesystem::path destination;
+    if (const auto *output = std::getenv("RAIDLINE_FREIGHT_BREACH_QA_DIR"))
+    {
+        destination = output;
+        std::filesystem::create_directories(destination);
+    }
+    for (const auto size : kUiWindowSizes)
+    {
+        detach();
+        attach(size.width, size.height);
+        A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+        clear();
+        A::raid(*app);
+        ASSERT_TRUE(SDL_RenderPresent(renderer));
+        const float scale = size.width / 1280.0F;
+        EXPECT_GT(bright({static_cast<int>(446 * scale), static_cast<int>(485 * scale),
+                          static_cast<int>(388 * scale), static_cast<int>(23 * scale)}), 20U);
+        if (!destination.empty())
+            ASSERT_TRUE(IMG_SavePNG(surface,
+                (destination / ("freight-breach-" + std::to_string(size.width) + ".png")).string().c_str()));
+    }
+}
+
 TEST_F(UiRaidHudTest, WorldLabelsPaintLightGlyphsAtEveryScaleAndRestoreRendererState) {
     for (const auto size : kUiWindowSizes) for (const auto language : {UiLanguage::English, UiLanguage::SimplifiedChinese}) {
         detach(); attach(size.width, size.height); A::text(*app).setLanguage(language);

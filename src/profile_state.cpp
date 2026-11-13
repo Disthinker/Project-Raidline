@@ -295,6 +295,7 @@ std::size_t populatePublishedWarehouseCatalog(
             definition.definitionId == kRaidFuelCanId ||
             definition.definitionId == kArmorRepairBlueprintId ||
             definition.definitionId == kHospitalFloorplanItemId ||
+            definition.definitionId == kFreightBreachWedgesId ||
             definition.definitionId == kThrownIlluminationItemId)
         {
             continue;
@@ -2478,16 +2479,16 @@ ProfileValidationResult validateProfileState(
         const std::uint32_t baseDuration =
             research ? kArmorRepairResearchDurationMinutes : recipe->durationMinutes;
         const std::uint32_t workerCount = research ? 1U : recipe->workerCount;
-        std::set<ItemDefinitionId> expectedInputDefinitions;
+        std::map<ItemDefinitionId, std::uint32_t> remainingInputUnits;
         if (research)
         {
-            expectedInputDefinitions.insert(kArmorRepairBlueprintId);
+            remainingInputUnits.emplace(kArmorRepairBlueprintId, 1U);
         }
         else
         {
             for (const BaseManufacturingInputDefinition &input : recipe->inputs)
             {
-                expectedInputDefinitions.insert(input.itemDefinitionId);
+                remainingInputUnits.emplace(input.itemDefinitionId, input.quantity);
             }
         }
         const std::uint64_t frozenDuration =
@@ -2544,7 +2545,6 @@ ProfileValidationResult validateProfileState(
                 order.completionWorldMinute <=
                     profile.worldClock.elapsedWorldMinutes
             : order.committedWorkers == workerCount &&
-                order.inputAssetIds.size() == expectedInputDefinitions.size() &&
                 (order.completionWorldMinute >
                      workshopReserveStarted.value_or(
                          profile.worldClock.elapsedWorldMinutes) ||
@@ -2592,14 +2592,22 @@ ProfileValidationResult validateProfileState(
                 : nullptr;
             if (input == nullptr || inputService == nullptr ||
                 inputService->jobId != order.jobId ||
-                input->quantity != 1U ||
-                !expectedInputDefinitions.erase(input->definitionId) ||
                 !claimedServiceAssetIds.insert(inputId).second)
             {
                 return {false, "Base manufacturing input is invalid"};
             }
+            const auto expected = remainingInputUnits.find(input->definitionId);
+            if (expected == remainingInputUnits.end() || input->quantity > expected->second)
+            {
+                return {false, "Base manufacturing input is invalid"};
+            }
+            expected->second -= input->quantity;
+            if (expected->second == 0U)
+            {
+                remainingInputUnits.erase(expected);
+            }
         }
-        if (!order.outputReady && !expectedInputDefinitions.empty())
+        if (!order.outputReady && !remainingInputUnits.empty())
         {
             return {false, "Base manufacturing inputs are incomplete"};
         }
@@ -3028,6 +3036,13 @@ ProfileValidationResult validateProfileState(
         {
             return {false, "pending Raid mission modes cannot be combined"};
         }
+        if (raid.freightBreachEnabled &&
+            (regionalMissionCount != 0U || raid.mapDefinitionId != kFreightCrateMapId ||
+             content.contentVersion() != kFreightBreachContentVersion ||
+             std::none_of(raid.interiors.begin(), raid.interiors.end(), [](const auto &interior) {
+                 return interior.id == kFreightCrateSpaceId;
+             })))
+            return {false, "pending Raid freight breach requires an ordinary Frontier Exchange Raid"};
         if (raid.basePerimeterSweep.has_value())
         {
             try
@@ -5713,6 +5728,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashBytes(hash, raid.settlementId);
         hashBytes(hash, raid.rulesVersion);
         if (raid.backpackRecoveryEnabled) hashBytes(hash, "raid-backpack-recovery-v1");
+        if (raid.freightBreachEnabled) hashBytes(hash, "raid-freight-breach-route-v1");
         if (raid.hospitalNightVisionLoot) hashBytes(hash, "hospital-night-vision-loot-v1");
         if (raid.freightKeyLootSlotId)
         {

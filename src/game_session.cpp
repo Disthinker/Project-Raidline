@@ -28,6 +28,7 @@ namespace
     constexpr float kUnsuppressedGunshotNoiseRadius{900.0F};
     constexpr float kRaidContainerReach{72.0F};
     constexpr float kFreightUnlockSeconds{2.0F};
+    constexpr float kFreightBreachSeconds{1.5F};
     const LoadoutArchetypeDefinitionId kStarterLoadoutArchetype{
         "loadout_archetype.light_scavenger"};
 
@@ -102,6 +103,7 @@ void GameSession::update(
     if (profileUiCommitPending())
     {
         cancelRaidFreightUnlock();
+        cancelRaidFreightBreach();
         return;
     }
     if (alphaRaidActive_ ||
@@ -813,6 +815,7 @@ void GameSession::configurePersistence(
     selectedTacticalDevice_ = TacticalDeviceKind::WeaponLight;
     cancelWeaponLightInput();
     freightUnlock_ = {};
+    freightBreach_ = {};
     saveRepository_.emplace(std::move(directory));
     inventoryPersistence_.reset();
     profileUiPersistence_.reset();++profileUiEpoch_;
@@ -2428,6 +2431,148 @@ void GameSession::advanceRaidFreightUnlock(float deltaTime)
     else persistenceMessage_ = receipt.message;
 }
 
+bool GameSession::freightBreachToolCarried(AssetInstanceId id) const noexcept
+{
+    const auto *asset = profile_.assets.find(id);
+    return asset && asset->definitionId == kFreightBreachWedgesId &&
+        asset->quantity == 1U && std::holds_alternative<StoredAssetLocation>(asset->location) &&
+        assetIsCarried(profile_, id);
+}
+
+std::optional<AssetInstanceId> GameSession::carriedFreightBreachTool() const
+{
+    const auto &assets = profile_.assets.records();
+    const auto found = std::find_if(assets.begin(), assets.end(), [&](const auto &entry) {
+        return entry.second.definitionId == kFreightBreachWedgesId &&
+            freightBreachToolCarried(entry.first);
+    });
+    if (found == assets.end())
+        return std::nullopt;
+    return found->first;
+}
+
+std::optional<RaidFreightBreachProjection> GameSession::raidFreightBreach() const
+{
+    if (state_ != GameSessionState::InRaid || !profile_.pendingRaid ||
+        !profile_.pendingRaid->freightBreachEnabled || !world_->nearbyFreightBreachDoor())
+        return std::nullopt;
+    const bool holding = freightBreach_.tool && freightBreachToolCarried(*freightBreach_.tool);
+    return RaidFreightBreachProjection{
+        holding || carriedFreightBreachTool().has_value(),
+        holding ? freightBreach_.elapsedSeconds / kFreightBreachSeconds : 0.0F};
+}
+
+void GameSession::cancelRaidFreightBreach() noexcept
+{
+    freightBreach_.tool.reset();
+    freightBreach_.elapsedSeconds = 0.0F;
+    freightBreach_.startingHealth = 0;
+}
+
+void GameSession::prepareRaidFreightBreach(
+    const GameplayInput &rawInput, GameplayInput &input, GameplayInput &simulationInput)
+{
+    if (!profile_.pendingRaid || !profile_.pendingRaid->freightBreachEnabled)
+        return;
+    const bool modal = input.inventoryOpen || input.freezeObservationDirection || input.throwableModal;
+    if (freightBreach_.consumesInteraction &&
+        (rawInput.interactJustPressed || (!rawInput.interactPressed && !modal)))
+    {
+        cancelRaidFreightBreach();
+        freightBreach_.consumesInteraction = false;
+    }
+    if (!freightBreach_.consumesInteraction && !simulationInput.interactJustPressed)
+        return;
+    const bool conflict = modal || !raidWorldInteractionAvailable(input.inventoryOpen) ||
+        rawInput.fireJustPressed || rawInput.firePressed || simulationInput.fireJustPressed ||
+        simulationInput.firePressed || rawInput.meleeJustPressed || rawInput.meleePressed ||
+        rawInput.reloadJustPressed || rawInput.reloadGestureJustPressed ||
+        !rawInput.raidReloadIntents.empty() || rawInput.healJustPressed ||
+        rawInput.weaponSlotJustPressed.has_value() || playerThrowFlightActive() ||
+        world_->player().isControlled() || world_->player().isDead();
+    if (!freightBreach_.consumesInteraction && !conflict && simulationInput.interactJustPressed &&
+        world_->nearbyFreightBreachDoor())
+    {
+        if (const auto tool = carriedFreightBreachTool())
+        {
+            freightBreach_.consumesInteraction = true;
+            if (simulationInput.interactPressed)
+            {
+                freightBreach_.tool = tool;
+                freightBreach_.startingHealth = world_->player().health();
+            }
+        }
+        else if (!nearbyRaidLoot())
+        {
+            freightBreach_.consumesInteraction = true;
+            persistenceMessage_ = "FREIGHT BREACH REQUIRES WEDGES";
+        }
+    }
+    if (!freightBreach_.consumesInteraction)
+        return;
+    if (!simulationInput.interactPressed || conflict)
+        cancelRaidFreightBreach();
+    // An interrupted hold never becomes a new world interaction.
+    input.interactJustPressed = input.interactPressed = false;
+    simulationInput.interactJustPressed = simulationInput.interactPressed = false;
+    simulationInput.credentialInvestigationAllowed = false;
+}
+
+void GameSession::advanceRaidFreightBreach(float deltaTime)
+{
+    if (!freightBreach_.tool)
+        return;
+    if (world_->spaceTransitionedLastUpdate() || world_->player().isControlled() ||
+        world_->player().health() < freightBreach_.startingHealth ||
+        (lastIncomingDamage_ && lastIncomingDamage_->damageApplied > 0) ||
+        !raidWorldInteractionAvailable(false) || !world_->nearbyFreightBreachDoor() ||
+        !freightBreachToolCarried(*freightBreach_.tool))
+    {
+        cancelRaidFreightBreach();
+        return;
+    }
+    if (!std::isfinite(deltaTime) || deltaTime <= 0.0F)
+        return;
+    freightBreach_.elapsedSeconds += deltaTime;
+    if (freightBreach_.elapsedSeconds < kFreightBreachSeconds)
+        return;
+
+    const AssetInstanceId tool = *freightBreach_.tool;
+    cancelRaidFreightBreach();
+    if (inventoryPersistencePending())
+    {
+        requestInventoryPersistenceBarrier();
+        persistenceMessage_ = "INVENTORY SAVE PENDING";
+        return;
+    }
+    if (profile_.revision == std::numeric_limits<ProfileRevision>::max())
+    {
+        persistenceMessage_ = "REVISION LIMIT";
+        return;
+    }
+    const auto transaction = nextRaidTransaction("breach-freight-door");
+    if (transaction.empty())
+        return;
+    const bool opened = world_->tryOpenFreightBreachDoor([&] {
+        if (!freightBreachToolCarried(tool))
+            return false;
+        // A wedge is a single childless carried asset. The journal allocation
+        // and world preparation precede the nonthrowing removal and switch.
+        const auto [entry, inserted] = profile_.committedTransactions.insert(transaction);
+        if (!inserted)
+            return false;
+        if (!profile_.assets.erase(tool))
+        {
+            profile_.committedTransactions.erase(entry);
+            return false;
+        }
+        ++profile_.revision;
+        return true;
+    });
+    if (opened)
+        persistenceMessage_ = "FREIGHT BREACH OPENED";
+}
+
 InventoryPlan GameSession::queryRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command) const
 {
     if (!raidSceneContainerAvailable(id)) return {false, DomainErrorCode::IllegalDestination, "Scene container is no longer accessible", profile_.revision};
@@ -3975,6 +4120,7 @@ void GameSession::resetWorldClockRuntime() noexcept
 {
     weaponTriggerGate_.reset();
     freightUnlock_ = {};
+    freightBreach_ = {};
     droppedRaidMagazineIds_.clear();
     droppedRaidBackpackIds_.clear();
     pendingWorldSeconds_ = 0.0;
@@ -4050,6 +4196,7 @@ void GameSession::updateAlphaRaid(
     if (!developerRange_ && !profile_.pendingRaid.has_value())
     {
         freightUnlock_ = {};
+        freightBreach_ = {};
         alphaRaidActive_ = false;
         outpostRestorationObjectiveSecured_ = false;
         baseSiteClearanceObjectiveSecured_ = false;
@@ -4065,6 +4212,7 @@ void GameSession::updateAlphaRaid(
     if (input.quitRaidJustPressed && alphaRaidActive_)
     {
         cancelRaidFreightUnlock();
+        cancelRaidFreightBreach();
         if (developerRange_) state_ = GameSessionState::BetweenRaids;
         else static_cast<void>(requestActiveQuitAlphaRaid());
         return;
@@ -4073,12 +4221,14 @@ void GameSession::updateAlphaRaid(
     if (currentState == RaidSessionState::Extracted)
     {
         cancelRaidFreightUnlock();
+        cancelRaidFreightBreach();
         if(developerRange_)static_cast<void>(settleAlphaRaid(RaidResultOutcome::Extracted));else static_cast<void>(requestRaidSettlement(RaidResultOutcome::Extracted));
         return;
     }
     if (currentState == RaidSessionState::PlayerDead)
     {
         cancelRaidFreightUnlock();
+        cancelRaidFreightBreach();
         if(developerRange_)static_cast<void>(settleAlphaRaid(RaidResultOutcome::PlayerDead));else static_cast<void>(requestRaidSettlement(RaidResultOutcome::PlayerDead));
         return;
     }
@@ -4218,6 +4368,7 @@ void GameSession::updateAlphaRaid(
     preparePlayerCombatInput(simulationInput,input,deltaTime,weaponHandling);
     gateOpticInteraction(input, simulationInput, deltaTime);
     prepareRaidFreightUnlock(rawInput, input, simulationInput);
+    prepareRaidFreightBreach(rawInput, input, simulationInput);
 
     std::optional<FireWeaponCommand> pendingFireCommand;
     std::optional<std::string> pendingFireTransaction;
@@ -4472,6 +4623,7 @@ void GameSession::updateAlphaRaid(
     if (world_->raidSession().state() == RaidSessionState::PlayerDead)
     {
         cancelRaidFreightUnlock();
+        cancelRaidFreightBreach();
         if(developerRange_)static_cast<void>(settleAlphaRaid(RaidResultOutcome::PlayerDead));else static_cast<void>(requestRaidSettlement(RaidResultOutcome::PlayerDead));
         return;
     }
@@ -4479,6 +4631,7 @@ void GameSession::updateAlphaRaid(
     if (world_->raidSession().state() == RaidSessionState::Extracted)
     {
         cancelRaidFreightUnlock();
+        cancelRaidFreightBreach();
         if(developerRange_)static_cast<void>(settleAlphaRaid(RaidResultOutcome::Extracted));else static_cast<void>(requestRaidSettlement(RaidResultOutcome::Extracted));
         return;
     }
@@ -4489,6 +4642,7 @@ void GameSession::updateAlphaRaid(
     synchronizeWeaponLight(); // A completed switch affects observation before this frame can interact.
     synchronizeNightVision();
     advanceRaidFreightUnlock(deltaTime);
+    advanceRaidFreightBreach(deltaTime);
     if (input.interactJustPressed &&
         !world_->spaceTransitionedLastUpdate() &&
         !world_->raidSession().signalCalledLastUpdate() &&

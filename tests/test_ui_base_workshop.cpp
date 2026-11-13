@@ -134,7 +134,16 @@ TEST_F(UiBaseWorkshopTest, EveryPublishedRecipeKeepsItsOutputAndInputQuantities)
     seed.baseManufacturing.armorRepairRecipeUnlocked = true;
     for(std::size_t i=0;i<content.baseManufacturingRecipes().size();++i){
         profile()=seed; A::refresh(*app);const auto &r=content.baseManufacturingRecipes()[i];
-        for(const auto &s:r.inputs)create(s.itemDefinitionId,s.quantity);
+        for (const auto &input : r.inputs)
+        {
+            const auto maxStack = content.item(input.itemDefinitionId).maxStackSize;
+            for (auto remaining = input.quantity; remaining != 0;)
+            {
+                const auto quantity = std::min(remaining, maxStack);
+                create(input.itemDefinitionId, quantity);
+                remaining -= quantity;
+            }
+        }
         const auto page = i / kUiWorkshopPageSize;
         if (A::state(*app).page < page) control(Control::Next);
         ASSERT_EQ(A::state(*app).page, page);
@@ -144,6 +153,20 @@ TEST_F(UiBaseWorkshopTest, EveryPublishedRecipeKeepsItsOutputAndInputQuantities)
         const auto before=profile().worldClock.elapsedWorldMinutes;control(Control::Main);ASSERT_TRUE(profile().baseManufacturing.activeOrder);
         const auto &order=*profile().baseManufacturing.activeOrder;EXPECT_EQ(order.recipeDefinitionId,r.id);
         const auto *output=profile().assets.find(order.outputAssetId);ASSERT_NE(output,nullptr);EXPECT_EQ(output->definitionId,r.outputItemDefinitionId);EXPECT_EQ(output->quantity,r.outputQuantity);
+        for (const auto &input : r.inputs)
+        {
+            std::uint32_t reserved{};
+            for (const auto assetId : order.inputAssetIds)
+            {
+                const auto *asset = profile().assets.find(assetId);
+                ASSERT_NE(asset, nullptr);
+                if (asset->definitionId == input.itemDefinitionId)
+                {
+                    reserved += asset->quantity;
+                }
+            }
+            EXPECT_EQ(reserved, input.quantity);
+        }
         EXPECT_EQ(profile().worldClock.elapsedWorldMinutes,before);
     }
 }

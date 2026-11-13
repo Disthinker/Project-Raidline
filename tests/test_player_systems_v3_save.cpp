@@ -376,7 +376,7 @@ TEST_F(PlayerSystemsV3SaveTest, HospitalFloorplanUpgradePreservesPackAndBothFroz
     EXPECT_EQ(loaded.sourceEnvelope->contentVersion, kRaidBackpackRecoveryContentVersion);
     EXPECT_EQ(loaded.profile->pendingRaid->loot, profile.pendingRaid->loot);
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
-    const auto saved = repository.save(*loaded.profile, content.contentVersion());
+    const auto saved = repository.save(*loaded.profile, kHospitalFloorplanRoutesContentVersion);
     ASSERT_TRUE(saved.succeeded) << saved.message;
     EXPECT_EQ(readBytes(directory.path() /
         ("profile.pre-raid-hospital-floorplan-routes-v1." + digest(primary) + ".json")), primary);
@@ -390,6 +390,87 @@ TEST_F(PlayerSystemsV3SaveTest, HospitalFloorplanUpgradePreservesPackAndBothFroz
     EXPECT_TRUE(reopened.profile->pendingRaid->backpackRecoveryEnabled);
     EXPECT_EQ(reopened.profile->pendingRaid->loot, profile.pendingRaid->loot);
     EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
+}
+
+TEST_F(PlayerSystemsV3SaveTest, FreightBreachVersionKeepsOldFrozenRaidsAndArchivesBothSlots)
+{
+    const auto historical = ContentRegistry::fromJson(contentBeforeFreightBreachJson().dump());
+    const auto command = DeployCommand{"freight-breach-save", "freight-breach-result", 42U, kFreightCrateMapId};
+    const auto previous = makeNewAlphaProfile("pre-freight-breach", historical);
+    profile = previous;
+    ASSERT_TRUE(executeDeploy(profile, historical, command, {profile.revision, "old-deploy"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid);
+    EXPECT_FALSE(profile.pendingRaid->freightBreachEnabled);
+    const auto primary = serializeProfileEnvelope(profile, kHospitalFloorplanRoutesContentVersion, 66U);
+    const auto backup = serializeProfileEnvelope(previous, kHospitalFloorplanRoutesContentVersion, 66U);
+    SaveRepository repository{directory.path()};
+    writeBytes(repository.primaryPath(), primary);
+    writeBytes(repository.backupPath(), backup);
+
+    const auto loaded = repository.load(content);
+    ASSERT_TRUE(loaded.profile && loaded.profile->pendingRaid) << loaded.message;
+    EXPECT_FALSE(loaded.profile->pendingRaid->freightBreachEnabled);
+    const auto saved = repository.save(*loaded.profile, content.contentVersion());
+    ASSERT_TRUE(saved.succeeded) << saved.message;
+    EXPECT_EQ(readBytes(directory.path() /
+        ("profile.pre-raid-freight-breach-route-v1." + digest(primary) + ".json")), primary);
+    EXPECT_EQ(readBytes(directory.path() /
+        ("profile.backup.pre-raid-freight-breach-route-v1." + digest(backup) + ".json")), backup);
+    const auto migrated = repository.load(content);
+    ASSERT_TRUE(migrated.profile && migrated.profile->pendingRaid) << migrated.message;
+    EXPECT_EQ(profileStateFingerprint(*migrated.profile), profileStateFingerprint(profile));
+    EXPECT_FALSE(migrated.profile->pendingRaid->freightBreachEnabled);
+
+    profile = previous;
+    ASSERT_TRUE(executeDeploy(profile, content, command, {profile.revision, "new-deploy"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->freightBreachEnabled);
+    EXPECT_EQ(profile.pendingRaid->loot, loaded.profile->pendingRaid->loot);
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, kHospitalFloorplanRoutesContentVersion, 66U)),
+                 std::invalid_argument);
+    const auto bytes = serializeProfileEnvelope(profile, content.contentVersion(), 66U);
+    const auto roundTrip = deserializeProfileEnvelope(bytes, content);
+    ASSERT_TRUE(roundTrip.profile && roundTrip.profile->pendingRaid) << roundTrip.message;
+    EXPECT_TRUE(roundTrip.profile->pendingRaid->freightBreachEnabled);
+    auto invalid = Json::parse(bytes);
+    invalid["payload"]["pending_raid"]["freight_breach_enabled"] = "true";
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(invalid), content).profile);
+}
+
+TEST_F(PlayerSystemsV3SaveTest, FreightBreachWorkshopOrderKeepsExactReservedUnits)
+{
+    const ItemDefinitionId scrap{"item.loot.scrap_parts"};
+    const ItemDefinitionId fasteners{"item.loot.industrial_fasteners"};
+    const auto store = [&](const ItemDefinitionId &id, std::uint32_t quantity) {
+        const auto &item = content.item(id);
+        const auto stash = ProfileContainerId::stash();
+        const auto fit = findFirstProfileFit(profile, content, stash, item, ItemOrientation::Degrees0);
+        return fit ? profile.assets.create(item, StoredAssetLocation{stash, *fit}, quantity) : 0U;
+    };
+    ASSERT_NE(store(scrap, 1U), 0U);
+    ASSERT_NE(store(scrap, 1U), 0U);
+    const auto source = store(fasteners, 3U);
+    ASSERT_NE(source, 0U);
+    const auto started = executeStartBaseManufacturing(profile, content, {kFreightBreachRecipeId},
+        {profile.revision, "start-breach-save"});
+    ASSERT_TRUE(started.succeeded) << started.message;
+    ASSERT_TRUE(profile.baseManufacturing.activeOrder);
+    const auto &inputs = profile.baseManufacturing.activeOrder->inputAssetIds;
+    ASSERT_EQ(inputs.size(), 3U);
+    EXPECT_EQ(profile.assets.find(source)->quantity, 2U);
+    const auto reserved = std::find_if(inputs.begin(), inputs.end(), [&](const auto id) {
+        return profile.assets.find(id)->definitionId == fasteners;
+    });
+    ASSERT_NE(reserved, inputs.end());
+    EXPECT_NE(*reserved, source);
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, kHospitalFloorplanRoutesContentVersion, 66U)),
+                 std::invalid_argument);
+    const auto bytes = serializeProfileEnvelope(profile, content.contentVersion(), 66U);
+    const auto loaded = deserializeProfileEnvelope(bytes, content);
+    ASSERT_TRUE(loaded.profile) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+    auto forged = Json::parse(bytes);
+    assetJson(forged, *reserved)["quantity"] = 2U;
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(forged), content).profile);
 }
 
 TEST_F(PlayerSystemsV3SaveTest, BackpackRecoveryRoundTripAndRollbackKeepWholeAssetTree)

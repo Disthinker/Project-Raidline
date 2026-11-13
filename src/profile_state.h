@@ -1223,6 +1223,7 @@ struct PendingRaidSnapshot
     std::optional<RaidSealedFreightCrateSnapshot> sealedFreightCrate;
     std::optional<AssetInstanceId> fuelExtractionLootAssetId;
     bool backpackRecoveryEnabled{};
+    bool freightBreachEnabled{};
 };
 
 struct LastRaidResult

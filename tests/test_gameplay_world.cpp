@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -15,8 +16,114 @@
 #include "gameplay_input.h"
 #include "gameplay_world.h"
 
+struct FreightBreachWorldTestAccess
+{
+    static void reanchorAim(GameplayWorld &world, Vec2 center, Vec2 target)
+    {
+        world.shooting_.reanchor(center, {target.x - center.x, target.y - center.y},
+            world.raidSpaceWorldSize());
+    }
+
+    static RaidSpaceNavigationField *navigation(GameplayWorld &world, Vec2 size)
+    {
+        return world.activeNavigationField(size);
+    }
+
+    static bool lineOfSight(const GameplayWorld &world, Vec2 a, Vec2 b)
+    {
+        return world.activeBlockerIndex().hasLineOfSight(a, b);
+    }
+
+    static bool investigates(const GameplayWorld &world, CombatTargetId id)
+    {
+        return world.localNoiseInvestigations_.contains(id);
+    }
+};
+
 namespace
 {
+    constexpr Vec2 kBreachWest{640.0F, 260.0F};
+    constexpr Vec2 kBreachEast{840.0F, 260.0F};
+    constexpr Vec2 kBreachCenter{740.0F, 260.0F};
+
+    RaidWorldConfig makeFreightBreachWorldConfig(bool enabled)
+    {
+        const auto &content = publishedContentRegistry();
+        const auto &frontier = content.map(kFreightCrateMapId);
+        const auto freight = std::find_if(frontier.interiors.begin(), frontier.interiors.end(),
+            [](const RaidInteriorDefinition &room) { return room.id == kFreightCrateSpaceId; });
+        if (freight == frontier.interiors.end())
+        {
+            throw std::logic_error{"Published freight room is missing"};
+        }
+        RaidInteriorWorldConfig room;
+        room.id = freight->id;
+        room.displayName = freight->displayName;
+        room.worldSize = freight->worldSize;
+        room.exteriorEntrance = {{40.0F, 40.0F}, {120.0F, 80.0F}};
+        room.exteriorReturn = {48.0F, 48.0F};
+        room.interiorSpawn = freight->interiorSpawn;
+        room.interiorExit = freight->interiorExit;
+        for (const auto &blocker : freight->ballisticBlockers)
+        {
+            room.ballisticBlockers.push_back({
+                static_cast<BallisticBlockerId>(room.ballisticBlockers.size() + 1U),
+                {blocker.bounds.position, blocker.bounds.size}});
+        }
+        RaidWorldConfig config;
+        config.playerSpawn = room.exteriorReturn;
+        config.extractionPoint = {{1100.0F, 620.0F}, {100.0F, 60.0F}};
+        config.freightBreachEnabled = enabled;
+        config.lightConeObservationEnabled = true;
+        config.grenadeEnabled = true;
+        config.interiors.push_back(std::move(room));
+        return config;
+    }
+
+    Vec2 freightBreachPlayerCenter(const GameplayWorld &world)
+    {
+        const float half = world.player().size() * 0.5F;
+        const auto position = world.player().position();
+        return {position.x + half, position.y + half};
+    }
+
+    void placeFreightBreachPlayer(GameplayWorld &world, Vec2 center)
+    {
+        auto &player = const_cast<Player &>(world.player());
+        const float half = player.size() * 0.5F;
+        ASSERT_TRUE(player.setPosition({center.x - half, center.y - half}));
+        // Teleporting this fixture does not have the viewport motion a real
+        // player uses to update the cursor's world anchor.
+        FreightBreachWorldTestAccess::reanchorAim(world, center, kBreachCenter);
+    }
+
+    void crossFreightBreachPortal(GameplayWorld &world)
+    {
+        GameplayInput input;
+        input.interactJustPressed = true;
+        world.update(input, 0.0F);
+        ASSERT_TRUE(world.spaceTransitionedLastUpdate());
+    }
+
+    void walkFreightBreachLeg(GameplayWorld &world, Vec2 distance)
+    {
+        GameplayInput move;
+        move.moveRight = distance.x > 0;
+        move.moveLeft = distance.x < 0;
+        move.moveDown = distance.y > 0;
+        move.moveUp = distance.y < 0;
+        world.update(move, std::hypot(distance.x, distance.y) / 240.0F);
+    }
+
+    std::optional<HitTargetKind> freightBreachShotHit(const GameplayWorld &world)
+    {
+        EnemyRoster<> target;
+        target.spawn(Enemy{{815.0F, 235.0F}, {50.0F, 50.0F}, {}, 10, 1});
+        const auto result = resolveShotHits({{1, kBreachWest, {870.0F, 260.0F}, 2.0F, 1}},
+            target, world.ballisticBlockers());
+        return result.hits.empty() ? std::nullopt : std::optional{result.hits.front().targetKind};
+    }
+
     GameplayInput makeFireInput()
     {
         GameplayInput input{};
@@ -5012,4 +5119,189 @@ TEST(GameplayWorldTest, OpticTransitionAppliesTheSameSpreadToReticleAndShot)
                     std::atan2(visual.worldRadius, visual.aimDistance) /
                         std::atan2(reference.worldRadius, reference.aimDistance), 0.00001F);
     }
+}
+
+TEST(GameplayWorldRaidTest, FreightBreachUpdatesMovementObservationLightingShotsAndNavigation)
+{
+    GameplayWorld world{makeFreightBreachWorldConfig(true)};
+    EXPECT_FALSE(world.freightBreachDoorBounds());
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    ASSERT_EQ(world.activeRaidSpaceId(), kFreightCrateSpaceId);
+    ASSERT_NO_FATAL_FAILURE(placeFreightBreachPlayer(world, kBreachWest));
+    ASSERT_TRUE(world.nearbyFreightBreachDoor());
+    const auto closedMap = world.activeInteriorMapProjection();
+    ASSERT_TRUE(closedMap);
+    EXPECT_FALSE(closedMap->layoutKnown);
+    const auto closedBlockerCount = closedMap->blockers.size();
+    const auto closedVisibleBounds = closedMap->visibleBounds;
+    EXPECT_FALSE(FreightBreachWorldTestAccess::lineOfSight(world, kBreachWest, kBreachEast));
+    EXPECT_EQ(freightBreachShotHit(world), HitTargetKind::Obstacle);
+    EXPECT_FALSE(world.raidObservation().pointVisible(kBreachEast));
+
+    auto *navigation = FreightBreachWorldTestAccess::navigation(world, {50.0F, 50.0F});
+    ASSERT_NE(navigation, nullptr);
+    const auto around = navigation->nextWaypoint(kBreachWest, kBreachEast, 0.0F);
+    ASSERT_TRUE(around);
+    EXPECT_NE(around->y, kBreachEast.y);
+    walkFreightBreachLeg(world, {200.0F, 0.0F});
+    EXPECT_NEAR(freightBreachPlayerCenter(world).x, 684.0F, 0.01F);
+    for (const float dy : {-117.0F, 137.0F})
+    {
+        ASSERT_NO_FATAL_FAILURE(placeFreightBreachPlayer(world, kBreachWest));
+        walkFreightBreachLeg(world, {0.0F, dy});
+        walkFreightBreachLeg(world, {200.0F, 0.0F});
+        walkFreightBreachLeg(world, {0.0F, -dy});
+        EXPECT_NEAR(freightBreachPlayerCenter(world).x, kBreachEast.x, 0.01F);
+        EXPECT_NEAR(freightBreachPlayerCenter(world).y, kBreachEast.y, 0.01F);
+    }
+    ASSERT_NO_FATAL_FAILURE(placeFreightBreachPlayer(world, kBreachEast));
+    ASSERT_TRUE(world.nearbyFreightBreachDoor());
+    ASSERT_NO_FATAL_FAILURE(placeFreightBreachPlayer(world, kBreachWest));
+    ASSERT_TRUE(world.nearbyFreightBreachDoor());
+
+    ThrownIlluminationRuntime flare;
+    const ThrownIlluminationLanding landing{
+        kBreachWest, {665.0F, 260.0F}, kFreightCrateSpaceId, {}, "freight-breach-test-flare"};
+    ASSERT_TRUE(flare.start(landing));
+    flare.advance(landing.use.flightSeconds);
+    world.commitThrownIllumination(std::move(flare));
+    const auto before = world.raidObservationKey();
+    EXPECT_FALSE(world.thrownIlluminationBackgroundObservations()[0].pointVisible(kBreachEast));
+
+    unsigned attempts{};
+    EXPECT_FALSE(world.tryOpenFreightBreachDoor([&] { ++attempts; return false; }));
+    EXPECT_EQ(world.raidObservationKey(), before);
+    ASSERT_TRUE(world.tryOpenFreightBreachDoor([&] { ++attempts; return true; }));
+    EXPECT_FALSE(world.tryOpenFreightBreachDoor([&] { ++attempts; return true; }));
+    EXPECT_EQ(attempts, 2U);
+    EXPECT_FALSE(world.freightBreachDoorBounds());
+
+    const auto after = world.raidObservationKey();
+    EXPECT_EQ(after.geometryRevision, before.geometryRevision + 1U);
+    EXPECT_NE(after.illumination.source, before.illumination.source);
+    EXPECT_TRUE(world.raidObservation().pointVisible(kBreachEast));
+    EXPECT_TRUE(world.thrownIlluminationBackgroundObservations()[0].pointVisible(kBreachEast));
+    EXPECT_TRUE(FreightBreachWorldTestAccess::lineOfSight(world, kBreachWest, kBreachEast));
+    EXPECT_EQ(freightBreachShotHit(world), HitTargetKind::Enemy);
+    const auto openMap = world.activeInteriorMapProjection();
+    ASSERT_TRUE(openMap);
+    EXPECT_EQ(openMap->blockers.size(), closedBlockerCount + 1U);
+    EXPECT_FALSE(openMap->layoutKnown);
+    EXPECT_EQ(openMap->visibleBounds, closedVisibleBounds);
+    navigation = FreightBreachWorldTestAccess::navigation(world, {50.0F, 50.0F});
+    ASSERT_NE(navigation, nullptr);
+    const auto direct = navigation->nextWaypoint(kBreachWest, kBreachEast, 0.0F);
+    ASSERT_TRUE(direct);
+    EXPECT_FLOAT_EQ(direct->x, kBreachEast.x);
+    EXPECT_FLOAT_EQ(direct->y, kBreachEast.y);
+
+    walkFreightBreachLeg(world, {200.0F, 0.0F});
+    EXPECT_NEAR(freightBreachPlayerCenter(world).x, kBreachEast.x, 0.01F);
+    walkFreightBreachLeg(world, {-200.0F, 0.0F});
+    EXPECT_NEAR(freightBreachPlayerCenter(world).x, kBreachWest.x, 0.01F);
+    ASSERT_NO_FATAL_FAILURE(placeFreightBreachPlayer(world, {110.0F, 440.0F}));
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    EXPECT_TRUE(world.inOutdoorRaidSpace());
+    EXPECT_EQ(world.raidObservationKey().geometryRevision, before.geometryRevision);
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    EXPECT_EQ(world.raidObservationKey().geometryRevision, after.geometryRevision);
+    EXPECT_TRUE(FreightBreachWorldTestAccess::lineOfSight(world, kBreachWest, kBreachEast));
+}
+
+TEST(GameplayWorldRaidTest, FreightBreachPulseStaysLocalAndPreservesPursuit)
+{
+    auto config = makeFreightBreachWorldConfig(true);
+    config.initialEnemies = {{{1000.0F, 50.0F}, {50.0F, 50.0F}, 10}};
+    config.interiors.front().initialEnemies = {
+        {{810.0F, 235.0F}, {50.0F, 50.0F}, 10},
+        {{810.0F, 395.0F}, {50.0F, 50.0F}, 10},
+        {{1060.0F, 440.0F}, {50.0F, 50.0F}, 10}};
+    GameplayWorld world{std::move(config)};
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    ASSERT_NO_FATAL_FAILURE(placeFreightBreachPlayer(world, kBreachWest));
+    ASSERT_EQ(world.enemies().size(), 3U);
+    auto &pursuer = const_cast<Enemy &>(world.enemies()[1]);
+    pursuer.hearTarget({630.0F, 240.0F});
+    ASSERT_EQ(pursuer.awarenessState(), EnemyAwarenessState::Alerted);
+    const auto oldPursuit = pursuer.lastKnownTargetPosition();
+    ASSERT_TRUE(oldPursuit);
+    auto *const closedField = FreightBreachWorldTestAccess::navigation(world, {50.0F, 50.0F});
+    ASSERT_NE(closedField, nullptr);
+
+    ASSERT_TRUE(world.tryOpenFreightBreachDoor([] { return true; }));
+    EXPECT_EQ(world.enemies().size(), 3U);
+    EXPECT_EQ(world.enemies()[0].awarenessState(), EnemyAwarenessState::Searching);
+    EXPECT_TRUE(FreightBreachWorldTestAccess::investigates(world, world.enemies()[0].combatTargetId()));
+    EXPECT_FALSE(FreightBreachWorldTestAccess::investigates(world, pursuer.combatTargetId()));
+    ASSERT_TRUE(pursuer.lastKnownTargetPosition());
+    EXPECT_FLOAT_EQ(pursuer.lastKnownTargetPosition()->x, oldPursuit->x);
+    EXPECT_FLOAT_EQ(pursuer.lastKnownTargetPosition()->y, oldPursuit->y);
+    EXPECT_EQ(world.enemies()[2].awarenessState(), EnemyAwarenessState::Unaware);
+    auto *const openField = FreightBreachWorldTestAccess::navigation(world, {50.0F, 50.0F});
+    ASSERT_EQ(openField, closedField); // Reused the prebuilt per-size field slot.
+    const auto waypoint = openField->nextWaypoint(kBreachEast, kBreachWest, 0.0F);
+    ASSERT_TRUE(waypoint);
+    EXPECT_FLOAT_EQ(waypoint->x, kBreachWest.x);
+    EXPECT_FLOAT_EQ(waypoint->y, kBreachWest.y);
+
+    ASSERT_NO_FATAL_FAILURE(placeFreightBreachPlayer(world, {110.0F, 440.0F}));
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    ASSERT_EQ(world.enemies().size(), 1U);
+    EXPECT_EQ(world.enemies().front().awarenessState(), EnemyAwarenessState::Unaware);
+}
+
+TEST(GameplayWorldRaidTest, FreightBreachLegacyWorldKeepsTheSolidDivider)
+{
+    GameplayWorld world{makeFreightBreachWorldConfig(false)};
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    ASSERT_NO_FATAL_FAILURE(placeFreightBreachPlayer(world, kBreachWest));
+    EXPECT_FALSE(world.freightBreachDoorBounds());
+    EXPECT_FALSE(world.tryOpenFreightBreachDoor([] { ADD_FAILURE(); return true; }));
+    EXPECT_FALSE(FreightBreachWorldTestAccess::lineOfSight(world, kBreachWest, kBreachEast));
+}
+
+TEST(GameplayWorldRaidTest, FreightBreachMeasuresClosedPublicationAndOpenQueries)
+{
+    constexpr std::size_t samples = 24;
+    std::array<double, samples> closedUs{}, publishUs{}, openUs{};
+    const auto elapsedUs = [](std::chrono::steady_clock::time_point from)
+    { return std::chrono::duration<double, std::micro>{std::chrono::steady_clock::now() - from}.count(); };
+    for (std::size_t index{}; index < samples; ++index)
+    {
+        auto config = makeFreightBreachWorldConfig(true);
+        config.interiors.front().initialEnemies = {
+            {{810.0F, 235.0F}, {50.0F, 50.0F}, 10}};
+        GameplayWorld world{std::move(config)};
+        ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+        ASSERT_NO_FATAL_FAILURE(placeFreightBreachPlayer(world, kBreachWest));
+        auto measure = std::chrono::steady_clock::now();
+        const bool closed = world.raidObservation().pointVisible(kBreachEast);
+        const auto around = FreightBreachWorldTestAccess::navigation(world, {50.0F, 50.0F})
+            ->nextWaypoint(kBreachWest, kBreachEast, 0.0F);
+        closedUs[index] = elapsedUs(measure);
+        EXPECT_FALSE(closed);
+        ASSERT_TRUE(around);
+
+        measure = std::chrono::steady_clock::now();
+        const bool committed = world.tryOpenFreightBreachDoor([] { return true; });
+        publishUs[index] = elapsedUs(measure);
+        ASSERT_TRUE(committed);
+
+        measure = std::chrono::steady_clock::now();
+        const bool opened = world.raidObservation().pointVisible(kBreachEast);
+        const auto direct = FreightBreachWorldTestAccess::navigation(world, {50.0F, 50.0F})
+            ->nextWaypoint(kBreachWest, kBreachEast, 0.0F);
+        openUs[index] = elapsedUs(measure);
+        EXPECT_TRUE(opened);
+        ASSERT_TRUE(direct);
+        EXPECT_FLOAT_EQ(direct->x, kBreachEast.x);
+    }
+    const auto percentile = [](auto data)
+    {
+        std::sort(data.begin(), data.end());
+        return data[22]; // 95th percentile of the 24 observations.
+    };
+    std::cout << "Freight breach p95 (microseconds), closed queries " << percentile(closedUs)
+              << ", world publication " << percentile(publishUs)
+              << ", open queries " << percentile(openUs) << '\n';
 }

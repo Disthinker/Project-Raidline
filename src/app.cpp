@@ -4771,6 +4771,7 @@ void App::processEvents()
             {
                 gameSession_.cancelPlayerControlIntent();
                 gameSession_.cancelRaidFreightUnlock();
+                gameSession_.cancelRaidFreightBreach();
                 gameSession_.cancelRaidFuelExtraction();
                 windowHasInputFocus_ = false;
                 homeFoundingPrompt_.reset();
@@ -5692,6 +5693,7 @@ void App::update(float deltaTime)
     if(pendingInventoryBarrierAction_ || profileUiBusy()) {
         gameSession_.cancelPlayerControlIntent();
         gameSession_.cancelRaidFreightUnlock();
+        gameSession_.cancelRaidFreightBreach();
         gameSession_.cancelRaidFuelExtraction();
         if (gameSession_.tacticalDeviceWheelOpen()) gameSession_.cancelWeaponLightInput();
         pendingBaseClicks_.clear();pendingBaseRightClicks_.clear();pendingInventoryUiEvents_.clear();
@@ -5706,6 +5708,7 @@ void App::update(float deltaTime)
     if (raidSaveProtectionVisible())
     {
         gameSession_.cancelRaidFreightUnlock();
+        gameSession_.cancelRaidFreightBreach();
         gameSession_.cancelRaidFuelExtraction();
     }
     if(pauseMenu_.isOpen() || !windowHasInputFocus_ || developerWeaponPanelOpen_ || developerRangePanelOpen_ ||
@@ -5716,6 +5719,7 @@ void App::update(float deltaTime)
     {
         gameSession_.cancelPlayerControlIntent();
         gameSession_.cancelRaidFreightUnlock();
+        gameSession_.cancelRaidFreightBreach();
         gameSession_.cancelRaidFuelExtraction();
     }
     updateBasePresentation(deltaTime);
@@ -5904,6 +5908,7 @@ void App::update(float deltaTime)
     {
         gameSession_.cancelPlayerControlIntent();
         gameSession_.cancelRaidFreightUnlock();
+        gameSession_.cancelRaidFreightBreach();
         pauseMenu_.open();
         gameSession_.cancelWeaponLightInput();
         gameSession_.cancelRaidCredentialInteraction();
@@ -6545,6 +6550,17 @@ void App::renderDebugText()
         else if (p.action.empty())
             p.action = freight->hasKey ? "HOLD F TO UNLOCK SEALED CRATE"
                                        : "SEALED CRATE | CARRY THE KEY";
+    }
+    if (p.action.empty() && !highOptic)
+    {
+        if (const auto breach = gameSession_.raidFreightBreach())
+        {
+            p.actionFraction = breach->progress;
+            p.actionActive = breach->progress > 0.0F;
+            p.action = p.actionActive
+                ? fmt::format("{} {:.0f}%", tr("破拆中", "BREACHING"), breach->progress * 100.0F)
+                : breach->hasTool ? "HOLD F TO BREACH SERVICE DOOR" : "FREIGHT BREACH REQUIRES WEDGES";
+        }
     }
     if (raid.state() == RaidSessionState::Extracting || raid.state() == RaidSessionState::Extracted)
     {
@@ -8849,6 +8865,22 @@ void App::renderBallisticBlockers(bool terrainOnly, std::optional<Rect> worldVie
             std::max(0.0F, bounds.h - 8.0F)};
         SDL_SetRenderDrawColor(renderer_, 71, 76, 67, 220);
         SDL_RenderRect(renderer_, &inset);
+    }
+    const auto &world = gameSession_.world();
+    if (const auto door = world.freightBreachDoorBounds())
+    {
+        const auto &player = world.player();
+        const float playerX = player.position().x + player.size() * 0.5F;
+        const bool west = playerX <= door->position.x + door->size.x * 0.5F;
+        const float edgeX = west ? door->position.x - 4.0F
+                                 : door->position.x + door->size.x;
+        const Rect face{{edgeX, door->position.y}, {4.0F, door->size.y}};
+        if (world.raidBoundsObservable(face))
+        {
+            const SDL_FRect strip{face.position.x, face.position.y, face.size.x, face.size.y};
+            SDL_SetRenderDrawColor(renderer_, 191, 155, 90, 235);
+            SDL_RenderFillRect(renderer_, &strip);
+        }
     }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
 }

@@ -67,6 +67,12 @@ struct RaidFreightUnlockProjection
     float progress{};
 };
 
+struct RaidFreightBreachProjection
+{
+    bool hasTool{};
+    float progress{};
+};
+
 enum class GameSessionState
 {
     InRaid,
@@ -419,6 +425,8 @@ public:
     [[nodiscard]] bool canOpenRaidSceneContainer(AssetInstanceId id) const;
     [[nodiscard]] bool isRaidFreightCrate(AssetInstanceId id) const noexcept;
     [[nodiscard]] std::optional<RaidFreightUnlockProjection> raidFreightUnlock() const;
+    [[nodiscard]] std::optional<RaidFreightBreachProjection> raidFreightBreach() const;
+    void cancelRaidFreightBreach() noexcept;
     [[nodiscard]] std::optional<AssetInstanceId> takeOpenedRaidFreightCrate() noexcept;
     void cancelRaidFreightUnlock() noexcept;
     [[nodiscard]] InventoryPlan queryRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command) const;
@@ -694,6 +702,13 @@ private:
         float elapsedSeconds{};
         bool consumesInteraction{};
     } freightUnlock_;
+    struct RaidFreightBreachRuntime
+    {
+        std::optional<AssetInstanceId> tool;
+        float elapsedSeconds{};
+        int startingHealth{};
+        bool consumesInteraction{};
+    } freightBreach_;
     bool outpostRestorationObjectiveSecured_{};
     bool baseSiteClearanceObjectiveSecured_{};
     bool basePerimeterSweepObjectiveSecured_{};
@@ -856,6 +871,10 @@ private:
     [[nodiscard]] std::optional<AssetInstanceId> nearbyLockedFreightCrate() const;
     void prepareRaidFreightUnlock(const GameplayInput &rawInput, GameplayInput &input, GameplayInput &simulationInput);
     void advanceRaidFreightUnlock(float deltaTime);
+    [[nodiscard]] bool freightBreachToolCarried(AssetInstanceId) const noexcept;
+    [[nodiscard]] std::optional<AssetInstanceId> carriedFreightBreachTool() const;
+    void prepareRaidFreightBreach(const GameplayInput &rawInput, GameplayInput &input, GameplayInput &simulationInput);
+    void advanceRaidFreightBreach(float deltaTime);
     [[nodiscard]] bool selfRecoveryCacheInRange() const noexcept;
     [[nodiscard]] bool raidWorldInteractionAvailable(bool inventoryOpen) const noexcept;
 };

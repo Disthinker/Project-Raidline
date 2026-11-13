@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-hospital-floorplan-routes-content-83",
+  "content_version": "raid-freight-breach-route-content-84",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -309,6 +309,17 @@
           {"item": "item.loot.electronics", "quantity": 1}
         ],
         "output": {"item": "item.throwable.field_flare", "quantity": 2},
+        "worker_count": 1,
+        "duration_minutes": 90
+      },
+      {
+        "id": "base_manufacturing.freight_breach_wedges",
+        "display_name": "Breach Wedges",
+        "inputs": [
+          {"item": "item.loot.scrap_parts", "quantity": 2},
+          {"item": "item.loot.industrial_fasteners", "quantity": 1}
+        ],
+        "output": {"item": "item.loot.freight_breach_wedges", "quantity": 1},
         "worker_count": 1,
         "duration_minutes": 90
       }
@@ -1890,6 +1901,21 @@
       "inventory_texture": "items/inventory/unpublished_precision_components.png",
       "world_texture": "items/world/unpublished_precision_components.png",
       "market_recycle_price": 35
+    },
+    {
+      "id": "item.loot.freight_breach_wedges",
+      "display_name": "Breach Wedges",
+      "category": "loot",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 350,
+      "visual_assets_published": false,
+      "world": {
+        "render_size": {"x": 24, "y": 24},
+        "pickup_size": {"x": 32, "y": 32}
+      },
+      "inventory_texture": "items/inventory/unpublished_precision_components.png",
+      "world_texture": "items/world/unpublished_precision_components.png"
     },
     {
       "id": "item.loot.extraction_fuel_can",

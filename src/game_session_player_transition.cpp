@@ -249,6 +249,7 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
         worldConfig.noiseDecoyEnabled = !snapshot.selfRecovery && !snapshot.outpostRestoration &&
             !snapshot.baseSiteClearance && !snapshot.basePerimeterSweep;
         worldConfig.grenadeEnabled = worldConfig.noiseDecoyEnabled;
+        worldConfig.freightBreachEnabled = snapshot.freightBreachEnabled;
         worldConfig.lightConeObservationEnabled =
             candidate.pendingRaid->mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"} ||
             candidate.pendingRaid->mapDefinitionId == MapDefinitionId{"map.raid.hospital_district"};
@@ -496,6 +497,7 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     if(!prepared)return;
     if(prepared->kind==PreparedPlayerTransition::Kind::Deploy) {
     freightUnlock_ = {};
+    freightBreach_ = {};
     if (basePlayerWorld_)
         basePlayerWorld_->commitThrownIllumination({});
     world_=std::move(prepared->world);
@@ -534,6 +536,7 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     if(prepared->requirePhysicalRelease)cancelPlayerControlIntent();
     } else if(prepared->kind==PreparedPlayerTransition::Kind::RaidSettlement) {
     freightUnlock_ = {};
+    freightBreach_ = {};
     cancelWeaponLightInput();
     world_->commitNoiseDecoy({});
     world_->commitGrenade({});

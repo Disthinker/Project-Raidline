@@ -2268,6 +2268,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
             {"starting_health", raid.startingHealth}};
         if (raid.backpackRecoveryEnabled)
             payload["pending_raid"]["backpack_recovery_enabled"] = true;
+        if (raid.freightBreachEnabled)
+            payload["pending_raid"]["freight_breach_enabled"] = true;
         if (raid.hospitalNightVisionLoot)
         {
             if (schemaVersion < 61)
@@ -3038,10 +3040,10 @@ std::string serializeProfileEnvelope(
 {
     if (profile.pendingRaid && profile.pendingRaid->rulesVersion == kRaidRunnerRulesVersion &&
         !runnerCompatibleContent(contentVersion))
-        throw std::invalid_argument{"runner Raid requires compatible content 73 through 83"};
+        throw std::invalid_argument{"runner Raid requires compatible content 73 or later"};
     if (profile.pendingRaid && profile.pendingRaid->hospitalNightVisionLoot &&
         !hospitalNightCompatibleContent(contentVersion))
-        throw std::invalid_argument{"hospital night vision Loot requires compatible content 77 through 83"};
+        throw std::invalid_argument{"hospital night vision Loot requires compatible content 77 or later"};
     const bool freightContract = schemaVersion >= 62 && crossMapFreightCompatibleContent(contentVersion);
     if (profile.pendingRaid && (profile.pendingRaid->freightKeyLootSlotId || profile.pendingRaid->sealedFreightCrate) &&
         !freightContract)
@@ -3060,6 +3062,11 @@ std::string serializeProfileEnvelope(
         schemaVersion >= 66 && supportsRaidBackpackRecoveryContent(contentVersion);
     if (profile.pendingRaid && profile.pendingRaid->backpackRecoveryEnabled && !backpackContract)
         throw std::invalid_argument{"Raid backpack recovery requires schema 66 and compatible backpack recovery content"};
+    if ((schemaVersion < 66 || contentVersion != kFreightBreachContentVersion) &&
+        ((profile.pendingRaid && profile.pendingRaid->freightBreachEnabled) ||
+         (profile.baseManufacturing.activeOrder &&
+          profile.baseManufacturing.activeOrder->recipeDefinitionId == kFreightBreachRecipeId)))
+        throw std::invalid_argument{"freight breach requires schema 66 and compatible content"};
     if (!illuminationContract && profile.baseManufacturing.activeOrder &&
         profile.baseManufacturing.activeOrder->recipeDefinitionId == kThrownIlluminationRecipeId)
         throw std::invalid_argument{"field flare manufacturing requires schema 65 and content 81"};
@@ -3272,7 +3279,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             (schemaVersion >= 63 && contentVersion == kFuelExtractionContentVersion) ||
             (schemaVersion >= 64 && contentVersion == kArmorReadinessContentVersion) ||
             (schemaVersion >= 65 && contentVersion == kThrownIlluminationContentVersion) ||
-            (schemaVersion >= 66 && contentVersion == kRaidBackpackRecoveryContentVersion);
+            (schemaVersion >= 66 && contentVersion == kRaidBackpackRecoveryContentVersion) ||
+            (schemaVersion >= 66 && contentVersion == kHospitalFloorplanRoutesContentVersion);
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -3647,6 +3655,10 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                     return {SaveLoadStatus::Failed, std::nullopt,
                             "field flare manufacturing requires schema 65 and content 81"};
                 }
+                if ((schemaVersion < 66 || contentVersion != kFreightBreachContentVersion) &&
+                    active.recipeDefinitionId == kFreightBreachRecipeId)
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                        "freight breach order requires schema 66 and compatible content"};
                 active.committedWorkers = order.at(
                     "committed_workers").get<std::uint32_t>();
                 active.workerProfession = schemaVersion >= 19
@@ -4080,6 +4092,15 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                         "Raid backpack recovery requires a boolean in schema 66 and compatible backpack recovery content"};
                 raid.backpackRecoveryEnabled = enabled.get<bool>();
             }
+            if (value.contains("freight_breach_enabled"))
+            {
+                const auto &enabled = value.at("freight_breach_enabled");
+                if (schemaVersion < 66 || contentVersion != kFreightBreachContentVersion ||
+                    !enabled.is_boolean())
+                    return {SaveLoadStatus::Failed, std::nullopt,
+                        "freight breach requires a boolean in schema 66 and compatible content"};
+                raid.freightBreachEnabled = enabled.get<bool>();
+            }
             if (value.contains("hospital_night_vision_loot"))
             {
                 if (schemaVersion < 61 || !hospitalNightCompatibleContent(contentVersion))
@@ -4107,7 +4128,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             }
             if (raid.rulesVersion == kRaidRunnerRulesVersion &&
                 (schemaVersion < 58 || !runnerCompatibleContent(contentVersion)))
-                return {SaveLoadStatus::Failed, std::nullopt, "runner Raid requires schema 58+ and compatible content 73 through 83"};
+                return {SaveLoadStatus::Failed, std::nullopt, "runner Raid requires schema 58+ and compatible content 73 or later"};
             raid.mapDefinitionId = MapDefinitionId{
                 value.at("map_definition_id").get<std::string>()};
             raid.seed = value.at("seed").get<std::uint64_t>();
@@ -5307,7 +5328,8 @@ SaveWriteResult SaveRepository::save(
         {
             // The former primary can remain in the rolling backup after upgrade.
             const std::string_view marker =
-                supportsHospitalFloorplanRoutesContent(contentVersion) ? "raid-hospital-floorplan-routes-v1"
+                contentVersion == kFreightBreachContentVersion ? "raid-freight-breach-route-v1"
+                : supportsHospitalFloorplanRoutesContent(contentVersion) ? "raid-hospital-floorplan-routes-v1"
                 : backpack ? "raid-load-and-pack-recovery-v1"
                 : illumination ? "raid-thrown-illumination-v1"
                 : armor ? "base-research-armor-readiness-v1"

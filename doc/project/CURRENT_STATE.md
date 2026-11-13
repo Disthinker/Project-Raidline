@@ -1,3 +1,15 @@
+# 当前 · 货运装卸间破拆捷径 v1 已验收
+
+用外勤带回的工业材料做楔组，下次到「货运装卸间」可以绕行，也可以破拆中央检修门。[具体开发方案](../exec-plans/active/raid-freight-breach-route-v1.md)
+
+- task_id `raid-freight-breach-route-v1`，plan_version `RL-RAID-FREIGHT-BREACH-ROUTE-v1`，state `accepted`。approval_source 为 2026-11-12 用户回复“批准”。candidate_id `RL-RAID-FREIGHT-BREACH-ROUTE-v1-local-70145f994893`。accepted_candidate_id `RL-RAID-FREIGHT-BREACH-ROUTE-v1-local-70145f994893`。acceptance_source 为 2026-11-13 用户回复“验收通过”，按既定约定提交并推送。
+- 基线 `origin/main@302901a5c2d8b3a1e810bfa83f654bd99729267e` 的 Windows 和 Ubuntu CI 已通过。负重与图纸已验收推送 `7206b3f` 和 `6c0df90`，均在独立远端分支。本地候选基于已验收的 `6c0df90` 构建。[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43145371432)
+- 原策划线程已回复请求 `MAIN-NEXT-STAGE-20261112-AFTER-HOSPITAL-FLOORPLAN-01`，任务 `raid-next-stage-after-hospital-floorplan-routes`，协议 `RL-NEXT-STAGE-REQUEST-v1`，turn `01a1cf77-42f4-7450-92dd-d5c78dea4551`，基线一致。
+- 隔离工作树 `E:\WorkPlace\Projects\C\Project Raidline-raid-freight-breach-route-v1`，分支 `codex/raid-freight-breach-route-v1`，HEAD 为 `6c0df90`。
+- 固定入口已更新。Windows 全量 3266/3266，14 项 3 ms 检查通过。旧档副本升级回读一致。[联合验收](../acceptance/raid-freight-breach-route-v1.md)
+
+---
+
 # 当前 · 区医院图纸搜获与粉笔路线 v1 已验收
 
 在医院找到图纸后当场掌握内部布局。下一趟进医院，在战术地图上画自己的搜索和撤离路线。 [具体开发方案](../exec-plans/active/raid-hospital-floorplan-routes-v1.md)

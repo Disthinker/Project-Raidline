@@ -198,12 +198,15 @@ TEST(FieldMedicalSuppliesTest, ExistingWorkshopListsAllSixRecipesInChineseWithou
     addToStash(profile, kStock);
     const auto before = profileStateFingerprint(profile);
     const auto projection = projectUiWorkshop(profile, content(), UiLanguage::SimplifiedChinese, kRollRecipe);
-    ASSERT_EQ(projection.recipes.size(), 9U);
+    ASSERT_EQ(projection.recipes.size(), 10U);
     EXPECT_EQ(uiWorkshopPageCount(projection.recipes.size()), 2U);
     EXPECT_EQ(projection.recipes[kUiWorkshopPageSize].id,
         BaseManufacturingRecipeDefinitionId{"base_manufacturing.ammunition_5_45x39_expanding"});
     EXPECT_EQ(projection.recipes[kUiWorkshopPageSize + 1].id, kArmorRepairResearchId);
-    EXPECT_EQ(projection.recipes.back().id, kThrownIlluminationRecipeId);
+    EXPECT_EQ(projection.recipes[kUiWorkshopPageSize + 2].id, kThrownIlluminationRecipeId);
+    EXPECT_EQ(projection.recipes.back().id, kFreightBreachRecipeId);
+    EXPECT_EQ(projection.recipes.back().fullName, "破拆楔组");
+    EXPECT_EQ(projection.recipes.back().materials, "废旧零件  x2\n工业紧固件  x1\n");
     const auto firstPageEnd = projection.recipes.begin() + kUiWorkshopPageSize;
     ASSERT_TRUE(projection.start.canCommit) << projection.start.message;
     EXPECT_EQ(projection.start.durationMinutes, 60U);
