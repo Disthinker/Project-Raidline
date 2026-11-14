@@ -205,6 +205,11 @@ TEST(RaidFieldIntelligenceTradeTest, PreRaidRecoveryAndCurrentAndLegacySaveRound
     ASSERT_TRUE(executeRaidFieldDocumentSale(profile, documentId(profile)));
     ASSERT_TRUE(executeRaidFieldIntelligencePurchase(profile, current, 1U));
     const auto pending = serializeProfileEnvelope(profile, current.contentVersion());
+    const auto schema69Trade = serializeProfileEnvelope(profile, kFieldIntelligenceTradeContentVersion);
+    const auto migratedTrade = deserializeProfileEnvelope(schema69Trade, current);
+    ASSERT_TRUE(migratedTrade.profile && migratedTrade.sourceEnvelope) << migratedTrade.message;
+    EXPECT_EQ(migratedTrade.sourceEnvelope->schemaVersion, 69U);
+    EXPECT_EQ(serializeProfileEnvelope(*migratedTrade.profile, current.contentVersion()), pending);
     auto loaded = deserializeProfileEnvelope(pending, current);
     ASSERT_TRUE(loaded.profile) << loaded.message;
     ASSERT_TRUE(loaded.profile->pendingRaid);

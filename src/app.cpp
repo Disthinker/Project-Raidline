@@ -6262,6 +6262,10 @@ void App::update(float deltaTime)
         gameplayInput.lightJustPressed || gameplayInput.lightJustReleased || gameplayInput.weaponSlotJustPressed) &&
        gameSession_.persistenceMessage()!=actionMessageBefore && !gameSession_.persistenceMessage().empty())
         uiMessage_=gameSession_.persistenceMessage();
+    if (gameSession_.persistenceMessage() != actionMessageBefore &&
+        (gameSession_.persistenceMessage() == "ROAD BREACH OPENED" ||
+         gameSession_.persistenceMessage() == "ROAD BREACH REQUIRES WEDGES"))
+        uiMessage_ = gameSession_.persistenceMessage();
     if (gameFlow_.state() == GameFlowState::RaidResult &&
         gameSession_.world().isAlphaRaidWorld())
     {
@@ -6548,6 +6552,12 @@ void App::renderDebugText()
         p.crisis=(crisis->detailsKnown || developerCrisisRevealEnabled_)?fmt::format("{} · {}",crisis->displayName,crisis->warning):tr("危机未知 · 购买敌情可提前了解","UNKNOWN CRISIS · ENEMY INTELLIGENCE REVEALS IT");
         if(crisis->active)p.crisis=std::string(tr("危机已激活 · ","CRISIS ACTIVE · "))+p.crisis;
     }
+    if (const auto blockade = world.roadBlockade();
+        blockade && blockade->phase == RaidRoadBlockadePhase::Warning)
+        p.crisis = fmt::format("{} · {}s",
+            blockade->awaitingClear ? tr("道路有占用 · 暂缓封闭", "ROAD OCCUPIED · CLOSURE DELAYED")
+                                    : tr("道路即将封闭", "ROAD CLOSING"),
+            static_cast<int>(std::ceil(blockade->phaseSecondsRemaining)));
     const bool highOptic = visibleWeaponOptic() == WeaponOpticMode::High;
     if(raid.extractionRoute()==RaidExtractionRoute::EmergencySignal)p.signal=tr("信号已发送 · 附近敌人已警觉","SIGNAL SENT · NEARBY ENEMIES ALERTED");
     else if(world.signalInterruptedVisible())p.signal=!highOptic && gameSession_.canCallSignalExtraction()?tr("信号中断 · 返回后按 F 重试","SIGNAL INTERRUPTED · RETURN AND PRESS F"):tr("信号中断","SIGNAL INTERRUPTED");
@@ -6619,6 +6629,15 @@ void App::renderDebugText()
             p.action = p.actionActive
                 ? fmt::format("{} {:.0f}%", tr("破拆中", "BREACHING"), breach->progress * 100.0F)
                 : breach->hasTool ? "HOLD F TO BREACH SERVICE DOOR" : "FREIGHT BREACH REQUIRES WEDGES";
+        }
+        else if (const auto road = gameSession_.raidRoadBlockadeBreach())
+        {
+            p.actionFraction = road->progress;
+            p.actionActive = road->progress > 0.0F;
+            p.action = p.actionActive
+                ? fmt::format("{} {:.0f}%", tr("破拆路障", "BREACHING ROADBLOCK"), road->progress * 100.0F)
+                : road->hasTool ? tr("长按 F 破拆路障", "HOLD F TO BREACH ROADBLOCK")
+                                : tr("道路封闭 · 缺破拆楔组", "ROAD CLOSED · WEDGES REQUIRED");
         }
     }
     if (raid.state() == RaidSessionState::Extracting || raid.state() == RaidSessionState::Extracted)
@@ -8882,6 +8901,36 @@ void App::renderBallisticBlockers(bool terrainOnly, std::optional<Rect> worldVie
                     renderer_, bounds.x + 3.0F,
                     prop.collidable ? bounds.y + 3.0F : bounds.y - 14.0F,
                     structureSign.empty() ? raidOutdoorPropLabel(prop.kind) : structureSign.data());
+            }
+        }
+        if (!terrainOnly)
+        {
+            const auto blockade = gameSession_.world().roadBlockade();
+            if (blockade && blockade->visible && visible(blockade->bounds) &&
+                (blockade->phase == RaidRoadBlockadePhase::Warning ||
+                 blockade->phase == RaidRoadBlockadePhase::Closed))
+            {
+                const auto &b = blockade->bounds;
+                const SDL_FRect road{b.position.x, b.position.y, b.size.x, b.size.y};
+                const bool closed = blockade->phase == RaidRoadBlockadePhase::Closed;
+                // A closed blocker clips the observation mask at its face.
+                // Draw a narrow outside band so that face remains visible.
+                if (closed)
+                {
+                    const SDL_FRect outside{road.x - 4.0F, road.y - 4.0F,
+                        road.w + 8.0F, road.h + 8.0F};
+                    SDL_SetRenderDrawColor(renderer_, 250, 186, 115, 255);
+                    SDL_RenderFillRect(renderer_, &outside);
+                }
+                SDL_SetRenderDrawColor(renderer_, 91, 48, 33, closed ? 245 : 48);
+                SDL_RenderFillRect(renderer_, &road);
+                SDL_SetRenderDrawColor(renderer_, 250, 186, 115, 255);
+                SDL_RenderRect(renderer_, &road);
+                if (closed)
+                {
+                    SDL_RenderLine(renderer_, road.x, road.y, road.x + road.w, road.y + road.h);
+                    SDL_RenderLine(renderer_, road.x + road.w, road.y, road.x, road.y + road.h);
+                }
             }
         }
         if (!terrainOnly)
@@ -13007,6 +13056,12 @@ void App::renderAlphaRaidLoot()
             SDL_SetRenderDrawColor(renderer_, 238, 214, 132, 255);
             SDL_RenderRect(renderer_, &destination);
         }
+        if (loot.requiresHighRisk && asset->definitionId == kBlockadeSalvageItemId &&
+            profile.pendingRaid->highRiskCrisis && profile.pendingRaid->highRiskCrisis->roadBlockade)
+        {
+            SDL_SetRenderDrawColor(renderer_, 244, 230, 180, 255);
+            renderWorldLabel(destination.x, destination.y - 20.0F, definition.displayName);
+        }
         renderItemQuantityBadge(renderer_, destination, asset->quantity);
     }
 }
@@ -13802,10 +13857,17 @@ void App::renderRaidTacticalMap()
         uiFinalTextAt(renderer_,uiTextRenderer_,point.x,point.y,label.text.c_str(),std::max(40.0F, 1136.0F-(point.x)),11,1);
     }
 
+    const auto blockade = gameSession_.world().roadBlockade();
     SDL_SetRenderDrawColor(renderer_, 76, 88, 88, 220);
     for (const BallisticBlocker &blocker :
          gameSession_.world().ballisticBlockers())
     {
+        if (blockade &&
+            blocker.bounds.position.x == blockade->bounds.position.x &&
+            blocker.bounds.position.y == blockade->bounds.position.y &&
+            blocker.bounds.size.x == blockade->bounds.size.x &&
+            blocker.bounds.size.y == blockade->bounds.size.y)
+            continue;
         const Vec2 center{
             blocker.bounds.position.x + blocker.bounds.size.x * 0.5F,
             blocker.bounds.position.y + blocker.bounds.size.y * 0.5F};
@@ -14048,6 +14110,36 @@ void App::renderRaidTacticalMap()
     }
     if (chalk)
         renderRaidChalkLines(*chalk);
+    if (const auto marker = map.discoveredRoadBlockade())
+    {
+        const auto area = screenRect(marker->bounds);
+        const Vec2 center{area.x + area.w * 0.5F, area.y + area.h * 0.5F};
+        const SDL_FRect badge{center.x - 5.0F, center.y - 5.0F, 10.0F, 10.0F};
+        const bool open = marker->phase == RaidRoadBlockadePhase::Breached ||
+            marker->phase == RaidRoadBlockadePhase::Skipped;
+        const bool closed = marker->phase == RaidRoadBlockadePhase::Closed;
+        SDL_SetRenderDrawColor(renderer_, 25, 21, 18, 255);
+        SDL_RenderFillRect(renderer_, &badge);
+        if (open)
+            SDL_SetRenderDrawColor(renderer_, 126, 234, 210, 255);
+        else
+            SDL_SetRenderDrawColor(renderer_, 250, 186, 115, 255);
+        SDL_RenderRect(renderer_, &badge);
+        if (closed)
+        {
+            SDL_RenderLine(renderer_, badge.x + 2, badge.y + 2, badge.x + 8, badge.y + 8);
+            SDL_RenderLine(renderer_, badge.x + 8, badge.y + 2, badge.x + 2, badge.y + 8);
+        }
+        else if (open)
+        {
+            SDL_RenderLine(renderer_, badge.x + 2, badge.y + 5, badge.x + 4, badge.y + 7);
+            SDL_RenderLine(renderer_, badge.x + 4, badge.y + 7, badge.x + 8, badge.y + 3);
+        }
+        const char *label = open ? "ROAD OPEN" : closed ? "ROAD CLOSED" : "ROAD CLOSING";
+        // Roadblocks are selected near crisis targets. Keep the text in the
+        // header so the badge doesn't compete with their map labels.
+        uiFinalTextAt(renderer_, uiTextRenderer_, 978.0F, 95.0F, label, 158.0F, 11, 1);
+    }
     const Player &player = gameSession_.world().player();
     const Vec2 playerMarker = screenPoint(Vec2{
         player.position().x + player.size() * 0.5F,

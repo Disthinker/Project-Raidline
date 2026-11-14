@@ -4084,7 +4084,7 @@ ContentRegistry ContentRegistry::fromJson(
                 definition.credentialExtraction = std::move(credential);
             }
 
-            if (registry.contentVersion() == kFieldIntelligenceTradeContentVersion &&
+            if (supportsFieldIntelligenceTradeContent(registry.contentVersion()) &&
                 (definition.id == kFieldIntelligenceSourceMapId ||
                  mapValue.contains("field_intelligence_trade_positions")))
             {
@@ -4413,7 +4413,7 @@ ContentRegistry ContentRegistry::fromJson(
                     fail("extraction fuel requires the third service bay Loot slot");
             }
         }
-        if (registry.contentVersion() == kFieldIntelligenceTradeContentVersion)
+        if (supportsFieldIntelligenceTradeContent(registry.contentVersion()))
         {
             if (!registry.itemIndex_.contains(kFieldIntelligenceDocumentId))
                 fail("field intelligence trade requires a raw intelligence document");
@@ -4443,6 +4443,20 @@ ContentRegistry ContentRegistry::fromJson(
                         RaidIntelligenceCategory::Transport) != 58U)
                     fail("field intelligence trade requires matching briefing prices");
             }
+        }
+        if (registry.contentVersion() == kFrontierHighRiskBlockadeContentVersion)
+        {
+            if (!registry.itemIndex_.contains(kBlockadeSalvageItemId))
+                fail("road blockade requires a machine tool set");
+            const auto &salvage = registry.item(kBlockadeSalvageItemId);
+            if (salvage.category != ItemCategory::Loot || salvage.inventoryWidthCells != 2 ||
+                salvage.inventoryHeightCells != 2 || salvage.maxStackSize != 1 ||
+                salvage.unitWeightGrams != 3200U || salvage.marketRecyclePrice != 55U ||
+                salvage.baseConstructionMaterialValue != 5U ||
+                salvage.baseContribution != BaseResourceBundle{0U, 0U, 0U, 16U} ||
+                salvage.maximumCharges || salvage.armorProtection || salvage.weaponCondition ||
+                salvage.meleeUse || salvage.weaponLight || salvage.nightVision || salvage.weaponUse)
+                fail("road blockade machine tool set definition is invalid");
         }
         if (supportsFuelExtractionContent(registry.contentVersion()))
         {

@@ -16,6 +16,49 @@
 #include "gameplay_input.h"
 #include "gameplay_world.h"
 
+struct RoadBlockadeWorldTestAccess
+{
+    static void place(GameplayWorld &world, Vec2 center)
+    {
+        const float half = world.player_.size() * 0.5F;
+        ASSERT_TRUE(world.player_.setPosition({center.x - half, center.y - half}));
+    }
+
+    static void aim(GameplayWorld &world, Vec2 target)
+    {
+        const float half = world.player_.size() * 0.5F;
+        const auto position = world.player_.position();
+        const Vec2 center{position.x + half, position.y + half};
+        world.shooting_.reanchor(center, {target.x - center.x, target.y - center.y},
+            world.raidSpaceWorldSize());
+    }
+
+    static RaidSpaceNavigationField *navigation(GameplayWorld &world)
+    {
+        return world.activeNavigationField({50.0F, 50.0F});
+    }
+
+    static bool lineOfSight(const GameplayWorld &world, Vec2 from, Vec2 to)
+    {
+        return world.activeBlockerIndex().hasLineOfSight(from, to);
+    }
+
+    static bool investigates(const GameplayWorld &world, CombatTargetId id)
+    {
+        return world.localNoiseInvestigations_.contains(id);
+    }
+
+    static Enemy &outdoorEnemy(GameplayWorld &world, std::size_t index)
+    {
+        return world.enemies_[index];
+    }
+
+    static void advanceBlockadeClock(GameplayWorld &world, float seconds)
+    {
+        world.updateRoadBlockade(seconds);
+    }
+};
+
 struct FreightBreachWorldTestAccess
 {
     static void reanchorAim(GameplayWorld &world, Vec2 center, Vec2 target)
@@ -330,6 +373,28 @@ namespace
             ContentRect{Vec2{60.0F, 60.0F}, Vec2{120.0F, 120.0F}};
         config.interiors.push_back(std::move(interior));
         return config;
+    }
+
+    constexpr ContentRect kRoadBlockadeBounds{{700.0F, 210.0F}, {80.0F, 100.0F}};
+    constexpr Vec2 kRoadBlockadeWest{640.0F, 260.0F};
+    constexpr Vec2 kRoadBlockadeEast{840.0F, 260.0F};
+
+    RaidWorldConfig makeRoadBlockadeWorldConfig()
+    {
+        auto config = makeHighRiskWorldConfig();
+        config.highRisk.regularPhaseDurationSeconds = 10.0F;
+        config.highRisk.initialWaveDelaySeconds = 30.0F;
+        config.lightConeObservationEnabled = true;
+        config.roadBlockade = RaidRoadBlockadeSnapshot{
+            kRoadBlockadeBounds, kRoadBlockadeWest, kRoadBlockadeEast, 420.0F};
+        return config;
+    }
+
+    GameplayInput faceRoadBlockade(Vec2 target = kRoadBlockadeEast)
+    {
+        GameplayInput look;
+        look.aimWorldPosition = target;
+        return look;
     }
 
     RaidWorldConfig makeScalabilityWorldConfig(
@@ -5304,6 +5369,270 @@ TEST(GameplayWorldRaidTest, FreightBreachMeasuresClosedPublicationAndOpenQueries
     std::cout << "Freight breach p95 (microseconds), closed queries " << percentile(closedUs)
               << ", world publication " << percentile(publishUs)
               << ", open queries " << percentile(openUs) << '\n';
+}
+
+TEST(GameplayWorldRaidTest, RoadBlockadeWarnsThenSwitchesMovementObservationBallisticsAndNavigation)
+{
+    auto config = makeRoadBlockadeWorldConfig();
+    config.intelligence.set(RaidIntelligenceCategory::Transport, true);
+    config.intelligence.set(RaidIntelligenceCategory::Enemy, true);
+    GameplayWorld world{std::move(config)};
+    ASSERT_NO_FATAL_FAILURE(RoadBlockadeWorldTestAccess::place(world, kRoadBlockadeWest));
+    const auto look = faceRoadBlockade();
+    RoadBlockadeWorldTestAccess::aim(world, kRoadBlockadeEast);
+    world.update(look, 0.0F);
+    ASSERT_TRUE(world.roadBlockade());
+    EXPECT_EQ(world.roadBlockade()->phase, RaidRoadBlockadePhase::Preparing);
+    EXPECT_FALSE(world.tacticalMap().discoveredRoadBlockade());
+    const auto revision = world.raidObservationKey().geometryRevision;
+    EXPECT_TRUE(world.raidObservation().pointVisible(kRoadBlockadeEast));
+    EXPECT_TRUE(RoadBlockadeWorldTestAccess::lineOfSight(world, kRoadBlockadeWest, kRoadBlockadeEast));
+    EXPECT_EQ(freightBreachShotHit(world), HitTargetKind::Enemy);
+    auto *const openNavigation = RoadBlockadeWorldTestAccess::navigation(world);
+    ASSERT_NE(openNavigation, nullptr);
+
+    const auto away = faceRoadBlockade({400.0F, 260.0F});
+    world.update(away, 10.0F);
+    ASSERT_EQ(world.roadBlockade()->phase, RaidRoadBlockadePhase::Warning);
+    EXPECT_EQ(world.roadBlockade()->phaseSecondsRemaining, 5.0F);
+    EXPECT_FALSE(world.tacticalMap().discoveredRoadBlockade());
+    EXPECT_FALSE(world.roadBlockade()->visible);
+    world.update(look, 4.75F);
+    ASSERT_TRUE(world.tacticalMap().discoveredRoadBlockade());
+    EXPECT_EQ(world.tacticalMap().discoveredRoadBlockade()->phase, RaidRoadBlockadePhase::Warning);
+    EXPECT_EQ(world.roadBlockade()->phaseSecondsRemaining, 0.25F);
+    EXPECT_EQ(world.raidObservationKey().geometryRevision, revision);
+    EXPECT_EQ(freightBreachShotHit(world), HitTargetKind::Enemy);
+
+    world.update(look, 0.25F);
+    ASSERT_EQ(world.roadBlockade()->phase, RaidRoadBlockadePhase::Closed);
+    EXPECT_EQ(world.tacticalMap().discoveredRoadBlockade()->phase, RaidRoadBlockadePhase::Closed);
+    EXPECT_TRUE(world.roadBlockade()->canInteract);
+    EXPECT_EQ(world.raidObservationKey().geometryRevision, revision + 1);
+    EXPECT_FALSE(world.raidObservation().pointVisible(kRoadBlockadeEast));
+    EXPECT_FALSE(RoadBlockadeWorldTestAccess::lineOfSight(world, kRoadBlockadeWest, kRoadBlockadeEast));
+    EXPECT_EQ(freightBreachShotHit(world), HitTargetKind::Obstacle);
+    auto *const closedNavigation = RoadBlockadeWorldTestAccess::navigation(world);
+    ASSERT_NE(closedNavigation, nullptr);
+    ASSERT_NE(closedNavigation, openNavigation);
+    const auto detour = closedNavigation->nextWaypoint(kRoadBlockadeWest, kRoadBlockadeEast, 0.0F);
+    ASSERT_TRUE(detour);
+    EXPECT_NE(detour->y, kRoadBlockadeEast.y);
+    walkFreightBreachLeg(world, {200.0F, 0.0F});
+    EXPECT_NEAR(freightBreachPlayerCenter(world).x, 684.0F, 0.01F);
+
+    int commits{};
+    EXPECT_FALSE(world.tryOpenRoadBlockade([&] { ++commits; return false; }));
+    EXPECT_EQ(world.raidObservationKey().geometryRevision, revision + 1);
+    ASSERT_TRUE(world.tryOpenRoadBlockade([&] { ++commits; return true; }));
+    EXPECT_FALSE(world.tryOpenRoadBlockade([&] { ++commits; return true; }));
+    EXPECT_EQ(commits, 2);
+    EXPECT_EQ(world.roadBlockade()->phase, RaidRoadBlockadePhase::Breached);
+    EXPECT_EQ(world.tacticalMap().discoveredRoadBlockade()->phase, RaidRoadBlockadePhase::Breached);
+    EXPECT_EQ(world.raidObservationKey().geometryRevision, revision + 2);
+    EXPECT_TRUE(world.raidObservation().pointVisible(kRoadBlockadeEast));
+    EXPECT_TRUE(RoadBlockadeWorldTestAccess::lineOfSight(world, kRoadBlockadeWest, kRoadBlockadeEast));
+    EXPECT_EQ(freightBreachShotHit(world), HitTargetKind::Enemy);
+    EXPECT_EQ(RoadBlockadeWorldTestAccess::navigation(world), openNavigation);
+    const auto direct = openNavigation->nextWaypoint(kRoadBlockadeWest, kRoadBlockadeEast, 0.0F);
+    ASSERT_TRUE(direct);
+    EXPECT_FLOAT_EQ(direct->x, kRoadBlockadeEast.x);
+    EXPECT_FLOAT_EQ(direct->y, kRoadBlockadeEast.y);
+    walkFreightBreachLeg(world, {156.0F, 0.0F});
+    EXPECT_NEAR(freightBreachPlayerCenter(world).x, kRoadBlockadeEast.x, 0.01F);
+}
+
+TEST(GameplayWorldRaidTest, RoadBlockadeDelaysWhileOccupiedAndSkipsAfterFiveMoreSeconds)
+{
+    GameplayWorld world{makeRoadBlockadeWorldConfig()};
+    ASSERT_NO_FATAL_FAILURE(RoadBlockadeWorldTestAccess::place(world, (Vec2{740.0F, 260.0F})));
+    ASSERT_TRUE(world.triggerHighRiskForDeveloper());
+    world.update(faceRoadBlockade(), 5.0F);
+    ASSERT_EQ(world.roadBlockade()->phase, RaidRoadBlockadePhase::Warning);
+    EXPECT_TRUE(world.roadBlockade()->awaitingClear);
+    EXPECT_FLOAT_EQ(world.roadBlockade()->phaseSecondsRemaining, 5.0F);
+    EXPECT_TRUE(world.ballisticBlockers().empty());
+    world.update(faceRoadBlockade(), 4.75F);
+    EXPECT_TRUE(world.roadBlockade()->awaitingClear);
+    EXPECT_FLOAT_EQ(world.roadBlockade()->phaseSecondsRemaining, 0.25F);
+    world.update(faceRoadBlockade(), 0.25F);
+    EXPECT_EQ(world.roadBlockade()->phase, RaidRoadBlockadePhase::Skipped);
+    EXPECT_TRUE(world.ballisticBlockers().empty());
+    ASSERT_NO_FATAL_FAILURE(RoadBlockadeWorldTestAccess::place(world, kRoadBlockadeWest));
+    world.update(faceRoadBlockade(), 0.5F);
+    EXPECT_EQ(world.roadBlockade()->phase, RaidRoadBlockadePhase::Skipped);
+    EXPECT_EQ(world.raidObservationKey().geometryRevision, 1U);
+}
+
+TEST(GameplayWorldRaidTest, RoadBlockadeManualWarningAndClosurePreserveInteriorGeometry)
+{
+    auto config = makeRoadBlockadeWorldConfig();
+    config.highRisk.activationControlPoint = {{70.0F, 70.0F}, {120.0F, 120.0F}};
+    config.highRisk.activationDurationSeconds = 1.0F;
+    // Facing the road is insufficient to discover it through this wall.
+    config.ballisticBlockers = {{1U, {{400.0F, 55.0F}, {48.0F, 290.0F}}}};
+    auto interior = makeInteriorDiscoveryWorldConfig().interiors.front();
+    config.playerSpawn = {90.0F, 90.0F};
+    config.interiors.push_back(std::move(interior));
+    GameplayWorld world{std::move(config)};
+
+    auto activate = faceRoadBlockade();
+    activate.interactPressed = true;
+    world.update(activate, 1.0F);
+    ASSERT_EQ(world.raidSession().phase(), RaidPhase::HighRisk);
+    ASSERT_EQ(world.roadBlockade()->phase, RaidRoadBlockadePhase::Warning);
+    EXPECT_FLOAT_EQ(world.roadBlockade()->phaseSecondsRemaining, 5.0F);
+    EXPECT_FALSE(world.roadBlockade()->visible);
+    EXPECT_FALSE(world.tacticalMap().discoveredRoadBlockade());
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    ASSERT_FALSE(world.inOutdoorRaidSpace());
+    const auto indoorRevision = world.raidObservationKey().geometryRevision;
+    const auto indoorBlockerCount = world.ballisticBlockers().size();
+
+    world.update({}, 5.0F);
+    EXPECT_EQ(world.roadBlockade()->phase, RaidRoadBlockadePhase::Closed);
+    EXPECT_FALSE(world.roadBlockade()->visible);
+    EXPECT_FALSE(world.roadBlockade()->canInteract);
+    EXPECT_FALSE(world.tacticalMap().discoveredRoadBlockade());
+    EXPECT_EQ(world.raidObservationKey().geometryRevision, indoorRevision);
+    EXPECT_EQ(world.ballisticBlockers().size(), indoorBlockerCount);
+
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    EXPECT_TRUE(world.inOutdoorRaidSpace());
+    EXPECT_EQ(world.raidObservationKey().geometryRevision, 2U);
+    EXPECT_EQ(world.ballisticBlockers().size(), 2U);
+    EXPECT_FALSE(RoadBlockadeWorldTestAccess::lineOfSight(world, kRoadBlockadeWest, kRoadBlockadeEast));
+}
+
+TEST(GameplayWorldRaidTest, RoadBlockadeWaitsForLivingOutdoorEnemyWhilePlayerIsInside)
+{
+    auto config = makeRoadBlockadeWorldConfig();
+    auto interior = makeInteriorDiscoveryWorldConfig().interiors.front();
+    config.playerSpawn = {90.0F, 90.0F};
+    config.interiors.push_back(std::move(interior));
+    config.initialEnemies = {{{719.0F, 240.0F}, {50.0F, 50.0F}, 10}};
+    GameplayWorld world{std::move(config)};
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    ASSERT_TRUE(world.triggerHighRiskForDeveloper());
+    world.update({}, 5.0F);
+    EXPECT_EQ(world.roadBlockade()->phase, RaidRoadBlockadePhase::Warning);
+    EXPECT_TRUE(world.roadBlockade()->awaitingClear);
+    auto &occupant = RoadBlockadeWorldTestAccess::outdoorEnemy(world, 0U);
+    ASSERT_TRUE(occupant.takeDamage(occupant.maxHealth()));
+    world.update({}, 0.125F);
+    EXPECT_EQ(world.roadBlockade()->phase, RaidRoadBlockadePhase::Closed);
+    EXPECT_EQ(world.raidObservationKey().geometryRevision, 1U);
+}
+
+TEST(GameplayWorldRaidTest, RoadBlockadeBreachPulseStaysLocalAndDoesNotOverridePursuit)
+{
+    auto config = makeRoadBlockadeWorldConfig();
+    config.initialEnemies = {
+        {{810.0F, 235.0F}, {50.0F, 50.0F}, 10},
+        {{820.0F, 355.0F}, {50.0F, 50.0F}, 10},
+        {{1175.0F, 235.0F}, {50.0F, 50.0F}, 10}};
+    auto interior = makeInteriorDiscoveryWorldConfig().interiors.front();
+    interior.initialEnemies = {{{230.0F, 220.0F}, {50.0F, 50.0F}, 10}};
+    config.playerSpawn = {90.0F, 90.0F};
+    config.interiors.push_back(std::move(interior));
+    GameplayWorld world{std::move(config)};
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    ASSERT_TRUE(world.triggerHighRiskForDeveloper());
+    world.update({}, 5.0F);
+    ASSERT_EQ(world.roadBlockade()->phase, RaidRoadBlockadePhase::Closed);
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    ASSERT_NO_FATAL_FAILURE(RoadBlockadeWorldTestAccess::place(world, kRoadBlockadeWest));
+    RoadBlockadeWorldTestAccess::aim(world, kRoadBlockadeEast);
+    world.update(faceRoadBlockade(), 0.0F);
+    ASSERT_EQ(world.enemies().size(), 3U);
+    auto &pursuer = RoadBlockadeWorldTestAccess::outdoorEnemy(world, 1U);
+    pursuer.hearTarget({630.0F, 240.0F});
+    const auto oldTarget = pursuer.lastKnownTargetPosition();
+    ASSERT_TRUE(oldTarget);
+    ASSERT_TRUE(world.tryOpenRoadBlockade([] { return true; }));
+    EXPECT_EQ(world.enemies()[0].awarenessState(), EnemyAwarenessState::Searching);
+    EXPECT_TRUE(RoadBlockadeWorldTestAccess::investigates(world, world.enemies()[0].combatTargetId()));
+    EXPECT_FALSE(RoadBlockadeWorldTestAccess::investigates(world, pursuer.combatTargetId()));
+    ASSERT_TRUE(pursuer.lastKnownTargetPosition());
+    EXPECT_FLOAT_EQ(pursuer.lastKnownTargetPosition()->x, oldTarget->x);
+    EXPECT_FLOAT_EQ(pursuer.lastKnownTargetPosition()->y, oldTarget->y);
+    EXPECT_EQ(world.enemies()[2].awarenessState(), EnemyAwarenessState::Unaware);
+}
+
+TEST(GameplayWorldRaidTest, RoadBlockadeMeasuresDenseCoverAndPressureTransitionFrames)
+{
+    constexpr std::size_t samples = 12;
+    constexpr float step = 1.0F / 120.0F;
+    std::array<double, samples> closeUs{}, skipUs{}, breachUs{};
+    const auto elapsedUs = [](std::chrono::steady_clock::time_point start)
+    {
+        return std::chrono::duration<double, std::micro>{
+            std::chrono::steady_clock::now() - start}.count();
+    };
+
+    auto config = makeRoadBlockadeWorldConfig();
+    config.highRisk.initialWaveDelaySeconds = step;
+    config.highRisk.waveIntervalSeconds = 30.0F;
+    config.highRisk.activeEnemyCap = 8;
+    config.highRisk.waveSize = 4;
+    constexpr Vec2 start{660.0F, 260.0F};
+    constexpr Vec2 occupied{740.0F, 260.0F};
+    config.playerSpawn = {start.x - 16.0F, start.y - 16.0F};
+    for (std::size_t row{}; row < 9; ++row)
+    {
+        if (row >= 2 && row <= 4)
+            continue;
+        for (std::size_t column{}; column < 15; ++column)
+        {
+            config.ballisticBlockers.push_back({
+                config.ballisticBlockers.size() + 1U,
+                {{20.0F + 83.0F * static_cast<float>(column),
+                  42.0F + 64.0F * static_cast<float>(row)},
+                 {38.0F, 32.0F}}});
+        }
+    }
+
+    for (std::size_t index{}; index < samples; ++index)
+    {
+        GameplayWorld world{config};
+        ASSERT_TRUE(world.triggerHighRiskForDeveloper());
+        world.update(faceRoadBlockade(), step);
+        ASSERT_EQ(world.highRiskPressureWaveCount(), 1U);
+        ASSERT_GE(world.enemies().size(), 2U);
+
+        GameplayWorld occupiedWorld{config};
+        ASSERT_TRUE(occupiedWorld.triggerHighRiskForDeveloper());
+        occupiedWorld.update(faceRoadBlockade(), step);
+        ASSERT_NO_FATAL_FAILURE(RoadBlockadeWorldTestAccess::place(occupiedWorld, occupied));
+        RoadBlockadeWorldTestAccess::advanceBlockadeClock(world, 5.0F - 1.5F * step);
+        RoadBlockadeWorldTestAccess::advanceBlockadeClock(occupiedWorld, 10.0F - 1.5F * step);
+
+        auto measure = std::chrono::steady_clock::now();
+        world.update(faceRoadBlockade(), step);
+        static_cast<void>(world.raidObservation());
+        closeUs[index] = elapsedUs(measure);
+        ASSERT_EQ(world.roadBlockade()->phase, RaidRoadBlockadePhase::Closed);
+
+        measure = std::chrono::steady_clock::now();
+        occupiedWorld.update(faceRoadBlockade(), step);
+        static_cast<void>(occupiedWorld.raidObservation());
+        skipUs[index] = elapsedUs(measure);
+        ASSERT_EQ(occupiedWorld.roadBlockade()->phase, RaidRoadBlockadePhase::Skipped);
+
+        measure = std::chrono::steady_clock::now();
+        const bool opened = world.tryOpenRoadBlockade([] { return true; });
+        static_cast<void>(world.raidObservation());
+        breachUs[index] = elapsedUs(measure);
+        ASSERT_TRUE(opened);
+    }
+    const auto percentile95 = [](auto data)
+    {
+        std::sort(data.begin(), data.end());
+        return data.back(); // Nearest-rank 95th percentile of 12 samples.
+    };
+    std::cout << "Road blockade p95 (microseconds), closure frame " << percentile95(closeUs)
+              << ", occupied skip frame " << percentile95(skipUs)
+              << ", breach geometry and observation " << percentile95(breachUs) << '\n';
 }
 
 TEST(GameplayWorldRaidTest, FieldIntelligenceRequiresNearbyVisibleContact)

@@ -8,6 +8,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <limits>
 #include <numeric>
 #include <string_view>
@@ -35,6 +36,7 @@
 #include "regional_operations_domain.h"
 #include "save_repository.h"
 #include "self_recovery_domain.h"
+#include "test_temp_directory.h"
 #include "weapon_ammo_domain.h"
 
 namespace
@@ -106,6 +108,91 @@ std::string serializeLegacyProfileEnvelope(
 {
     profile.stashLayoutVersion = 0;
     return serializeProfileEnvelope(profile, contentVersion, schema);
+}
+
+TEST(SaveRepositoryTest, FrontierRoadBlockadeFrozenGeometryRoundTripsAndCannotDowngrade)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("blockade-round-trip", content);
+    const auto deployed = executeDeploy(profile, content,
+        {"blockade-save-raid", "blockade-save-return", 2U, kFreightCrateMapId},
+        {profile.revision, "deploy"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->highRiskCrisis);
+    ASSERT_TRUE(profile.pendingRaid->highRiskCrisis->roadBlockade);
+    const auto saved = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto envelope = nlohmann::json::parse(saved);
+    EXPECT_EQ(envelope.at("schema_version"), 70U);
+    const auto loaded = deserializeProfileEnvelope(saved, content);
+    ASSERT_TRUE(loaded.profile && loaded.profile->pendingRaid) << loaded.message;
+    EXPECT_EQ(loaded.profile->pendingRaid->highRiskCrisis, profile.pendingRaid->highRiskCrisis);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+    EXPECT_EQ(serializeProfileEnvelope(*loaded.profile, content.contentVersion()), saved);
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile,
+        kFieldIntelligenceTradeContentVersion)), std::invalid_argument);
+
+    auto malformed = envelope;
+    auto &blockade = malformed["payload"]["pending_raid"]["high_risk_crisis"]["road_blockade"];
+    blockade["route_entry"] = blockade["route_exit"];
+    malformed["payload_checksum"] = testSaveChecksum(malformed["payload"].dump());
+    EXPECT_FALSE(deserializeProfileEnvelope(malformed.dump(), content).profile);
+
+    malformed = envelope;
+    malformed["payload"]["pending_raid"]["high_risk_crisis"]["road_blockade"]
+        ["detour_corners"] = nlohmann::json::array();
+    malformed["payload_checksum"] = testSaveChecksum(malformed["payload"].dump());
+    EXPECT_FALSE(deserializeProfileEnvelope(malformed.dump(), content).profile);
+
+    malformed = envelope;
+    malformed["schema_version"] = 69U;
+    malformed["content_version"] = kFieldIntelligenceTradeContentVersion;
+    EXPECT_FALSE(deserializeProfileEnvelope(malformed.dump(), content).profile);
+}
+
+TEST(SaveRepositoryTest, FrontierRoadBlockadeUpgradePreservesSchema69FrozenRaidAndBothSaveSources)
+{
+    const auto &content = publishedContentRegistry();
+    const auto previous = contentBeforeFrontierRoadBlockade();
+    auto profile = makeNewAlphaProfile("blockade-previous-frozen", previous);
+    ASSERT_TRUE(executeDeploy(profile, previous,
+        {"old-blockade-raid", "old-blockade-return", 1U, kFreightCrateMapId},
+        {profile.revision, "old-deploy"}).succeeded);
+    const auto frozen = serializeProfileEnvelope(profile, previous.contentVersion());
+    const auto loaded = deserializeProfileEnvelope(frozen, content);
+    ASSERT_TRUE(loaded.profile && loaded.profile->pendingRaid && loaded.sourceEnvelope) << loaded.message;
+    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 69U);
+    ASSERT_TRUE(loaded.profile->pendingRaid->highRiskCrisis);
+    EXPECT_FALSE(loaded.profile->pendingRaid->highRiskCrisis->roadBlockade);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+    EXPECT_EQ(serializeProfileEnvelope(*loaded.profile, previous.contentVersion()), frozen);
+
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-blockade-save-", "previous-sources");
+    const SaveRepository repository{directory.path()};
+    auto backupProfile = profile;
+    ASSERT_TRUE(rollbackPendingRaidToBase(backupProfile, previous).succeeded);
+    const auto backup = serializeProfileEnvelope(backupProfile, previous.contentVersion());
+    {
+        std::ofstream primaryFile(repository.primaryPath(), std::ios::binary);
+        std::ofstream backupFile(repository.backupPath(), std::ios::binary);
+        primaryFile << frozen;
+        backupFile << backup;
+        ASSERT_TRUE(primaryFile.good() && backupFile.good());
+    }
+    const auto migrated = repository.save(*loaded.profile, content.contentVersion());
+    ASSERT_TRUE(migrated.succeeded) << migrated.message;
+    const auto read = [](const std::filesystem::path &path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+    };
+    const auto marker = std::string{".pre-frontier-high-risk-blockade-and-salvage-v1."};
+    EXPECT_EQ(read(directory.path() / ("profile" + marker + testSaveChecksum(frozen) + ".json")), frozen);
+    EXPECT_EQ(read(directory.path() / ("profile.backup" + marker + testSaveChecksum(backup) + ".json")), backup);
+    const auto reopened = repository.load(content);
+    ASSERT_TRUE(reopened.profile && reopened.sourceEnvelope) << reopened.message;
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 70U);
+    EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
 }
 
 TEST(SaveRepositoryTest, HospitalContentAcceptsPreviousContent61WithoutSchemaChange)
@@ -3901,7 +3988,7 @@ TEST(SaveRepositoryTest, Schema55RoundTripsIndependentPagesOverflowAndOwnedSubtr
     ASSERT_TRUE(validateProfileState(profile, content).valid);
     const auto text = serializeProfileEnvelope(profile, content.contentVersion());
     const auto envelope = nlohmann::json::parse(text);
-    EXPECT_EQ(envelope.at("schema_version"), 69U);
+    EXPECT_EQ(envelope.at("schema_version"), 70U);
     EXPECT_EQ(envelope.at("payload").at("stash_layout_version"), 1U);
     const auto loaded = deserializeProfileEnvelope(text, content);
     ASSERT_TRUE(loaded.profile) << loaded.message;

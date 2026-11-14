@@ -100,6 +100,7 @@ void RaidTacticalMapState::configure(
     specialLocations_ = std::move(specialLocations);
     objectives_ = std::move(objectives);
     discoveredFieldIntelligenceContact_.reset();
+    discoveredRoadBlockade_.reset();
     revealed_.assign(static_cast<std::size_t>(columns_ * rows_), false);
     normalExtractionDiscovered_ = false;
     emergencyExtractionDiscovered_ = false;
@@ -391,6 +392,22 @@ void RaidTacticalMapState::discoverFieldIntelligenceContact(Vec2 position) noexc
 std::optional<Vec2> RaidTacticalMapState::discoveredFieldIntelligenceContact() const noexcept
 {
     return discoveredFieldIntelligenceContact_;
+}
+
+void RaidTacticalMapState::observeRoadBlockade(RaidRoadBlockadeMapMarker observed) noexcept
+{
+    discoveredRoadBlockade_ = observed;
+}
+
+void RaidTacticalMapState::updateDiscoveredRoadBlockadePhase(RaidRoadBlockadePhase phase) noexcept
+{
+    if (discoveredRoadBlockade_)
+        discoveredRoadBlockade_->phase = phase;
+}
+
+std::optional<RaidRoadBlockadeMapMarker> RaidTacticalMapState::discoveredRoadBlockade() const noexcept
+{
+    return discoveredRoadBlockade_;
 }
 const ContentRect &RaidTacticalMapState::normalExtraction() const noexcept
 {

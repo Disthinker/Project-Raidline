@@ -4,6 +4,13 @@
 #include <algorithm>
 #include <nlohmann/json.hpp>
 
+inline ContentRegistry contentBeforeFrontierRoadBlockade()
+{
+    auto document = nlohmann::json::parse(publishedContentJson());
+    document["content_version"] = kFieldIntelligenceTradeContentVersion;
+    return ContentRegistry::fromJson(document.dump());
+}
+
 inline nlohmann::json contentBeforeHospitalMedicalReserveJson()
 {
     auto document = nlohmann::json::parse(publishedContentJson());

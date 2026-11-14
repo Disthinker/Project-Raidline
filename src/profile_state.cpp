@@ -4069,6 +4069,28 @@ ProfileValidationResult validateProfileState(
             {
                 return {false, "pending Raid high-risk crisis is invalid"};
             }
+            if (const auto &blockade = crisis.roadBlockade)
+            {
+                const auto insideWalkable = [&](Vec2 point)
+                {
+                    const auto &walkable = raidMap->walkableBounds;
+                    return point.x >= walkable.position.x && point.y >= walkable.position.y &&
+                        point.x <= walkable.position.x + walkable.size.x &&
+                        point.y <= walkable.position.y + walkable.size.y;
+                };
+                const auto &bounds = blockade->bounds;
+                const Vec2 farCorner{bounds.position.x + bounds.size.x,
+                                     bounds.position.y + bounds.size.y};
+                if (content.contentVersion() != kFrontierHighRiskBlockadeContentVersion ||
+                    regionalMissionCount != 0U || raid.mapDefinitionId != kFreightCrateMapId ||
+                    !(bounds.size.x > 0.0F && bounds.size.y > 0.0F) ||
+                    !insideWalkable(bounds.position) || !insideWalkable(farCorner) ||
+                    !insideWalkable(blockade->routeEntry) || !insideWalkable(blockade->routeExit) ||
+                    !std::all_of(blockade->detourCorners.begin(), blockade->detourCorners.end(), insideWalkable) ||
+                    !(blockade->detourExtraDistance >= kRaidRoadBlockadeMinimumDetour &&
+                      blockade->detourExtraDistance <= kRaidRoadBlockadeMaximumDetour))
+                    return {false, "pending Raid road blockade is invalid"};
+            }
             std::set<std::string> pressureAnchorIds;
             for (const RaidHighRiskPressureSpawnSnapshot &spawn :
                  crisis.pressureSpawns)
@@ -4525,7 +4547,7 @@ ProfileValidationResult validateProfileState(
         if (raid.fieldIntelligenceTrade)
         {
             const auto &trade = *raid.fieldIntelligenceTrade;
-            if (content.contentVersion() != kFieldIntelligenceTradeContentVersion ||
+            if (!supportsFieldIntelligenceTradeContent(content.contentVersion()) ||
                 raid.mapDefinitionId != kFieldIntelligenceSourceMapId ||
                 resourceEcologyRules || regionalMissionCount != 0U ||
                 (trade.extraCategory != RaidIntelligenceCategory::Resource &&
@@ -4808,18 +4830,26 @@ ProfileValidationResult validateProfileState(
             if (highRiskCrisisRules && loot.requiresHighRisk &&
                 raid.highRiskCrisis.has_value())
             {
-                const LootTableDefinition &table = content.lootTable(
-                    raid.highRiskCrisis->advancedLootTableId);
-                const auto entry = std::find_if(
-                    table.entries.begin(), table.entries.end(),
-                    [&](const LootContentEntry &value)
-                    { return value.itemDefinitionId == loot.definitionId; });
-                if (entry == table.entries.end() ||
-                    loot.quantity < entry->minimumQuantity ||
-                    loot.quantity > entry->maximumQuantity)
+                if (raid.highRiskCrisis->roadBlockade && loot.slotIndex == regularSlotCount)
                 {
-                    return {false,
-                            "pending Raid high-risk Loot table result is invalid"};
+                    if (loot.definitionId != kBlockadeSalvageItemId || loot.quantity != 1U)
+                        return {false, "pending Raid road blockade salvage is invalid"};
+                }
+                else
+                {
+                    const LootTableDefinition &table = content.lootTable(
+                        raid.highRiskCrisis->advancedLootTableId);
+                    const auto entry = std::find_if(
+                        table.entries.begin(), table.entries.end(),
+                        [&](const LootContentEntry &value)
+                        { return value.itemDefinitionId == loot.definitionId; });
+                    if (entry == table.entries.end() ||
+                        loot.quantity < entry->minimumQuantity ||
+                        loot.quantity > entry->maximumQuantity)
+                    {
+                        return {false,
+                                "pending Raid high-risk Loot table result is invalid"};
+                    }
                 }
             }
             else if (resourceEcologyRules &&
@@ -6151,6 +6181,24 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
                 hashFloat(hash, spawn.size.x);
                 hashFloat(hash, spawn.size.y);
                 hashInteger(hash, spawn.maximumHealth);
+            }
+            if (const auto &blockade = crisis.roadBlockade)
+            {
+                hashBytes(hash, "road_blockade");
+                hashFloat(hash, blockade->bounds.position.x);
+                hashFloat(hash, blockade->bounds.position.y);
+                hashFloat(hash, blockade->bounds.size.x);
+                hashFloat(hash, blockade->bounds.size.y);
+                hashFloat(hash, blockade->routeEntry.x);
+                hashFloat(hash, blockade->routeEntry.y);
+                hashFloat(hash, blockade->routeExit.x);
+                hashFloat(hash, blockade->routeExit.y);
+                hashFloat(hash, blockade->detourExtraDistance);
+                for (const auto point : blockade->detourCorners)
+                {
+                    hashFloat(hash, point.x);
+                    hashFloat(hash, point.y);
+                }
             }
         }
         for (const RaidLootSnapshot &loot : raid.loot)

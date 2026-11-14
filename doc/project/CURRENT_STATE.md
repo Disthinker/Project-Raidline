@@ -1,3 +1,15 @@
+# 当前 · 边境交换站高危封路与重型搜运 v1 已验收
+
+用交通图预判撤离路线，高危时绕过一处封锁或消耗楔组开路，把机修工具组带回基地整备。[具体开发方案](../exec-plans/active/frontier-high-risk-blockade-and-salvage-v1.md)
+
+- task_id `frontier-high-risk-blockade-and-salvage-v1`，plan_version `RL-FRONTIER-HIGH-RISK-BLOCKADE-AND-SALVAGE-v1`，state `accepted`。approval_source 为 2026-11-14 用户明确批准整阶段开发，暂不提交、推送或合并。candidate_id `RL-FRONTIER-HIGH-RISK-BLOCKADE-AND-SALVAGE-v1-local-9372c977823e`，accepted_candidate_id `RL-FRONTIER-HIGH-RISK-BLOCKADE-AND-SALVAGE-v1-local-9372c977823e`，acceptance_source 为 2026-11-14 用户明确回复“边境交换站高危封路与重型搜运 v1 验收通过，请提交并推送。”
+- 基线 `origin/main@0a5ef05ba3b7170f41a3cbc5e8418c6033762d0a`。Windows 与 Ubuntu 各通过 3309 项，含全部 14 项 3 ms 检查。[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43449452833)
+- 原策划线程已回复请求 `MAIN-NEXT-STAGE-20261113-AFTER-FIELD-INTELLIGENCE-TRADE-01`，协调任务 `raid-next-stage-after-field-intelligence-trade`，协议 `RL-NEXT-STAGE-REQUEST-v1`，turn `01a1d784-21a0-71b2-bc98-cba3f6a0f466`，基线一致。
+- 隔离工作树分支 `codex/frontier-high-risk-blockade-and-salvage-v1`。边境交换站高危封闭一段道路，要求可绕行、可破拆，并保留免费信号撤离。
+- 桌面固定入口已指向本地候选。Windows 全量 3323/3323，专项 14/14，原有 14 项 3 ms 检查全部通过。玩家原档、备份与设置的文件哈希一致。[联合验收](../acceptance/frontier-high-risk-blockade-and-salvage-v1.md)
+
+---
+
 # 当前 · 外勤情报交易与跨图撤离规划 v1 已验收
 
 在「河畔检查站」搜文件，选择带回出售或绕行换取情报，再到「边境交换站」用交通图规划撤离。[具体开发方案](../exec-plans/active/raid-field-intelligence-trade-v1.md)

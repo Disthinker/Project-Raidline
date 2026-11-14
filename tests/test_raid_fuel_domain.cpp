@@ -51,15 +51,16 @@ struct FuelFixture : testing::Test
 TEST(RaidFuelDomainTest, ThirdServiceBayRollIsTheOnlyNewFrontierDrop)
 {
     const auto freightContent = contentBeforeFuelExtraction();
+    const auto fuelContent = contentBeforeFrontierRoadBlockade();
     std::set<std::pair<std::string, std::string>> combinations;
     for (const auto seed : {6U, 8U, 9U, 3U, 23U, 12U, 2U, 5U, 1U})
     {
         SCOPED_TRACE(seed);
         auto old = makeNewAlphaProfile("fuel-seed-contract", freightContent);
-        auto current = makeNewAlphaProfile("fuel-seed-contract", content);
+        auto current = makeNewAlphaProfile("fuel-seed-contract", fuelContent);
         const auto oldReceipt = deploy(old, freightContent, kFreightCrateMapId, seed);
         ASSERT_TRUE(oldReceipt.succeeded) << oldReceipt.message;
-        const auto receipt = deploy(current, content, kFreightCrateMapId, seed);
+        const auto receipt = deploy(current, fuelContent, kFreightCrateMapId, seed);
         ASSERT_TRUE(receipt.succeeded) << receipt.message;
         ASSERT_TRUE(old.pendingRaid && current.pendingRaid);
         const auto &raid = *current.pendingRaid;

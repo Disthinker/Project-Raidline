@@ -177,6 +177,18 @@ struct RaidWorldConfig
     bool grenadeEnabled{};
     bool freightBreachEnabled{};
     std::optional<Vec2> fieldIntelligenceContact;
+    std::optional<RaidRoadBlockadeSnapshot> roadBlockade;
+};
+
+struct RaidRoadBlockadeView
+{
+    RaidRoadBlockadePhase phase{RaidRoadBlockadePhase::Preparing};
+    ContentRect bounds;
+    float phaseSecondsRemaining{};
+    bool awaitingClear{};
+    bool nearby{};
+    bool canInteract{};
+    bool visible{};
 };
 
 struct RaidOutdoorLabelProjection
@@ -327,6 +339,8 @@ public:
     [[nodiscard]] std::optional<ContentRect> freightBreachDoorBounds() const noexcept;
     [[nodiscard]] std::optional<ContentRect> nearbyFreightBreachDoor() const;
     [[nodiscard]] bool tryOpenFreightBreachDoor(const std::function<bool()> &commitWedge);
+    [[nodiscard]] std::optional<RaidRoadBlockadeView> roadBlockade() const;
+    [[nodiscard]] bool tryOpenRoadBlockade(const std::function<bool()> &commitWedge);
     void confirmRaidInteriorLayout(const RaidSpaceDefinitionId &spaceId) noexcept;
     [[nodiscard]] const RaidOutdoorPresentationProjection &
     outdoorPresentation(ContentRect visibleWorldBounds) const;
@@ -560,6 +574,7 @@ public:
 private:
     friend struct EnemyLifecycleTestAccess;
     friend struct FreightBreachWorldTestAccess;
+    friend struct RoadBlockadeWorldTestAccess;
     struct EnemyNavigationRuntime
     {
         std::optional<Vec2> goal;
@@ -619,6 +634,16 @@ private:
         std::vector<BallisticBlocker> blockers;
         std::optional<RaidSpaceBlockerIndex> blockerIndex;
         std::vector<NavigationFieldCache> navigationFields;
+    };
+
+    struct RoadBlockadeRuntime
+    {
+        ContentRect bounds;
+        RaidRoadBlockadePhase phase{RaidRoadBlockadePhase::Preparing};
+        float secondsRemaining{};
+        std::vector<BallisticBlocker> inactiveBlockers;
+        std::optional<RaidSpaceBlockerIndex> inactiveBlockerIndex;
+        std::vector<NavigationFieldCache> closedNavigationFields;
     };
 
     struct OutdoorPresentationChunk
@@ -723,6 +748,8 @@ private:
     std::vector<InteriorRuntime> interiors_;
     std::optional<std::size_t> activeInteriorIndex_;
     std::uint64_t activeGeometryRevision_{1};
+    std::uint64_t outdoorGeometryRevision_{1};
+    std::optional<RoadBlockadeRuntime> roadBlockade_;
     std::optional<PreparedFreightBreach> preparedFreightBreach_;
     std::vector<NavigationFieldCache> navigationFieldCache_;
     bool spaceTransitionedLastUpdate_{};
@@ -831,7 +858,20 @@ private:
         Vec2 worldSize,
         std::span<const BallisticBlocker> blockers,
         std::span<const Enemy> enemies);
+    static void cacheNavigationFieldForSpace(
+        std::vector<NavigationFieldCache> &cache,
+        const RaidSpaceDefinitionId &spaceId,
+        Vec2 actorSize,
+        Vec2 worldSize,
+        std::span<const BallisticBlocker> blockers);
     void prepareFreightBreachDoor();
+    void prepareRoadBlockade(const RaidRoadBlockadeSnapshot &snapshot);
+    void updateRoadBlockade(float highRiskDeltaTime);
+    void setRoadBlockadePhase(RaidRoadBlockadePhase phase) noexcept;
+    void switchRoadBlockadeGeometry() noexcept;
+    [[nodiscard]] bool roadBlockadeOccupied() const noexcept;
+    [[nodiscard]] bool roadBlockadeFaceObservable(Vec2 center,
+        std::optional<float> maximumReach = std::nullopt) const;
     [[nodiscard]] std::size_t outdoorAliveEnemyCount() const noexcept;
     [[nodiscard]] bool tryTransitionRaidSpace(
         const GameplayInput &input,

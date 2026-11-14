@@ -43,6 +43,9 @@ inline constexpr std::string_view kHospitalMedicalReserveContentVersion{
     "hospital-rescue-and-medical-reserve-content-86"};
 inline constexpr std::string_view kFieldIntelligenceTradeContentVersion{
     "raid-field-intelligence-trade-content-87"};
+inline constexpr std::string_view kFrontierHighRiskBlockadeContentVersion{
+    "frontier-high-risk-blockade-and-salvage-content-88"};
+inline const ItemDefinitionId kBlockadeSalvageItemId{"item.loot.machine_tool_set"};
 inline const ItemDefinitionId kFieldIntelligenceDocumentId{"item.loot.raw_intelligence_document"};
 inline const MapDefinitionId kFieldIntelligenceSourceMapId{"map.raid.riverside"};
 inline const MapDefinitionId kFieldIntelligenceTargetMapId{"map.raid.frontier_exchange"};
@@ -111,10 +114,16 @@ inline constexpr std::string_view kRaidFuelLootSlotId{"freight_manifest"};
         instanceId.substr(archetypeId.size()) == ".1";
 }
 
+[[nodiscard]] inline bool supportsFieldIntelligenceTradeContent(std::string_view version) noexcept
+{
+    return version == kFieldIntelligenceTradeContentVersion ||
+        version == kFrontierHighRiskBlockadeContentVersion;
+}
+
 [[nodiscard]] inline bool supportsHospitalMedicalReserveContent(std::string_view version) noexcept
 {
     return version == kHospitalMedicalReserveContentVersion ||
-        version == kFieldIntelligenceTradeContentVersion;
+        supportsFieldIntelligenceTradeContent(version);
 }
 
 [[nodiscard]] inline bool supportsEmergencyPowerContent(std::string_view version) noexcept

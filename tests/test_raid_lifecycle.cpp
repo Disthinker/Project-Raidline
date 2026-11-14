@@ -27,6 +27,111 @@
 #include "raid_rescue_domain.h"
 #include "regional_operations_domain.h"
 
+TEST(RaidLifecycleTest, FrontierRoadBlockadeChangesOnlyFirstAdvancedRoll)
+{
+    const auto &current = publishedContentRegistry();
+    const auto previous = contentBeforeFrontierRoadBlockade();
+    for (const std::uint64_t seed : {2U, 11U})
+    {
+        SCOPED_TRACE(seed);
+        auto profile = makeNewAlphaProfile("blockade-roll-contract", current);
+        auto old = makeNewAlphaProfile("blockade-roll-contract", previous);
+        const DeployCommand command{"blockade-raid", "blockade-settlement", seed, kFreightCrateMapId};
+        const auto deployed = executeDeploy(profile, current, command, {profile.revision, "deploy"});
+        ASSERT_TRUE(deployed.succeeded) << deployed.message;
+        const auto oldDeployment = executeDeploy(old, previous, command, {old.revision, "deploy"});
+        ASSERT_TRUE(oldDeployment.succeeded) << oldDeployment.message;
+        const auto &raid = *profile.pendingRaid;
+        const auto &oldRaid = *old.pendingRaid;
+        ASSERT_TRUE(raid.highRiskCrisis && oldRaid.highRiskCrisis);
+        EXPECT_FALSE(oldRaid.highRiskCrisis->roadBlockade);
+        auto crisis = *raid.highRiskCrisis;
+        crisis.roadBlockade.reset();
+        EXPECT_EQ(crisis, *oldRaid.highRiskCrisis);
+        EXPECT_EQ(raid.spatialLayout, oldRaid.spatialLayout);
+        EXPECT_EQ(raid.enemies, oldRaid.enemies);
+        EXPECT_EQ(raid.encounterGroups, oldRaid.encounterGroups);
+        EXPECT_EQ(raid.spawnExtractionPairId, oldRaid.spawnExtractionPairId);
+        EXPECT_EQ(profile.assets.nextAssetId(), old.assets.nextAssetId());
+
+        auto expectedLoot = oldRaid.loot;
+        ASSERT_EQ(raid.highRiskCrisis->roadBlockade.has_value(), seed == 2U);
+        if (raid.highRiskCrisis->roadBlockade)
+        {
+            const auto firstAdvanced = std::find_if(expectedLoot.begin(), expectedLoot.end(), [](const auto &item) {
+                return item.requiresHighRisk && item.spaceId == outdoorRaidSpaceId();
+            });
+            ASSERT_NE(firstAdvanced, expectedLoot.end());
+            const auto id = firstAdvanced->assetId;
+            EXPECT_NE(firstAdvanced->definitionId, kBlockadeSalvageItemId);
+            firstAdvanced->definitionId = kBlockadeSalvageItemId;
+            firstAdvanced->quantity = 1U;
+            const auto *reward = profile.assets.find(id);
+            ASSERT_NE(reward, nullptr);
+            EXPECT_EQ(reward->definitionId, firstAdvanced->definitionId);
+            EXPECT_EQ(reward->quantity, 1U);
+            EXPECT_EQ(reward->location, old.assets.find(id)->location);
+            EXPECT_EQ(reward->currentDurability, 0U);
+            EXPECT_EQ(reward->remainingCharges, 0U);
+            EXPECT_FALSE(reward->fireMode);
+            auto tampered = profile;
+            const auto first = static_cast<std::size_t>(firstAdvanced - expectedLoot.begin());
+            tampered.pendingRaid->loot[first].quantity = 2U;
+            EXPECT_FALSE(validateProfileState(tampered, current).valid);
+        }
+        EXPECT_EQ(raid.loot, expectedLoot);
+    }
+}
+
+TEST(RaidLifecycleTest, FrontierRoadBlockadeSalvageSettlesOnlyWithItsExistingCarriedAsset)
+{
+    const auto &content = publishedContentRegistry();
+    const auto &salvage = content.item(kBlockadeSalvageItemId);
+    EXPECT_EQ(salvage.inventoryWidthCells, 2);
+    EXPECT_EQ(salvage.inventoryHeightCells, 2);
+    EXPECT_EQ(salvage.unitWeightGrams, 3200U);
+    EXPECT_EQ(salvage.baseConstructionMaterialValue, 5U);
+    ASSERT_TRUE(salvage.baseContribution);
+    EXPECT_EQ(salvage.baseContribution->security, 16U);
+    EXPECT_EQ(salvage.marketRecyclePrice, 55U);
+
+    auto profile = makeNewAlphaProfile("blockade-return-contract", content);
+    static_cast<void>(profile.assets.create(content.item(ItemDefinitionId{"item.container.backpack_expedition"}),
+        EquippedAssetLocation{EquipmentSlotKind::Backpack}));
+    const auto beforeRaid = profile;
+    const auto deployed = executeDeploy(profile, content,
+        {"blockade-reward-raid", "blockade-reward-settlement", 2U, kFreightCrateMapId},
+        {profile.revision, "blockade-reward-deploy"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->highRiskCrisis);
+    ASSERT_TRUE(profile.pendingRaid->highRiskCrisis->roadBlockade);
+    const auto first = std::find_if(profile.pendingRaid->loot.begin(), profile.pendingRaid->loot.end(),
+        [](const auto &loot) { return loot.requiresHighRisk; });
+    ASSERT_NE(first, profile.pendingRaid->loot.end());
+    const auto rewardId = first->assetId;
+    ASSERT_EQ(first->definitionId, kBlockadeSalvageItemId);
+    const auto pickup = pickupObservedRaidLoot(profile, content, rewardId, {profile.revision, "blockade-salvage-pickup"});
+    ASSERT_TRUE(pickup.succeeded) << pickup.message;
+    auto interrupted = profile;
+    ASSERT_TRUE(rollbackPendingRaidToBase(interrupted, content).succeeded);
+    EXPECT_FALSE(interrupted.pendingRaid);
+    EXPECT_EQ(interrupted.assets.find(rewardId), nullptr);
+    EXPECT_EQ(interrupted.assets.nextAssetId(), beforeRaid.assets.nextAssetId());
+
+    const auto settled = settlePendingRaid(profile, content, "blockade-reward-settlement", RaidResultOutcome::Extracted);
+    ASSERT_TRUE(settled.succeeded) << settled.message;
+    ASSERT_TRUE(profile.lastRaidResult);
+    EXPECT_EQ(std::count(profile.lastRaidResult->returnedItemDefinitionIds.begin(),
+        profile.lastRaidResult->returnedItemDefinitionIds.end(), kBlockadeSalvageItemId), 1);
+    ASSERT_NE(profile.assets.find(rewardId), nullptr);
+    EXPECT_TRUE(assetIsCarried(profile, rewardId));
+    const auto afterSettlement = profileStateFingerprint(profile);
+    const auto replay = settlePendingRaid(profile, content, "blockade-reward-settlement", RaidResultOutcome::Extracted);
+    EXPECT_TRUE(replay.succeeded);
+    EXPECT_TRUE(replay.alreadyCommitted);
+    EXPECT_EQ(profileStateFingerprint(profile), afterSettlement);
+}
+
 TEST(RaidLifecycleTest, HospitalRealDeployHasReachableConsumersAcross128Seeds)
 {
     const auto &content = publishedContentRegistry();
@@ -44,7 +149,8 @@ TEST(RaidLifecycleTest, HospitalRealDeployHasReachableConsumersAcross128Seeds)
         const auto &raid = *profile.pendingRaid;
         ASSERT_EQ(raid.interiors.size(), 1U);
         EXPECT_EQ(raid.interiors.front().worldSize.x, 2400);
-        EXPECT_TRUE(raid.highRiskCrisis.has_value());
+        ASSERT_TRUE(raid.highRiskCrisis);
+        EXPECT_FALSE(raid.highRiskCrisis->roadBlockade);
         EXPECT_TRUE(raid.hospitalNightVisionLoot);
         EXPECT_TRUE(raid.hospitalMedicalReserveEnabled);
         ASSERT_TRUE(raid.rescue);

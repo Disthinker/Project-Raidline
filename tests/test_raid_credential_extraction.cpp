@@ -274,8 +274,9 @@ TEST(RaidCredentialCompatibilityTest, OldPendingRaidRemainsUntouchedAndSettlesWi
 
 TEST(RaidCredentialCompatibilityTest, IndependentAnchorKeepsExistingFrozenRollsAndPositionsAcrossSeeds)
 {
-    const auto &content = publishedContentRegistry();
     auto json = nlohmann::json::parse(publishedContentJson());
+    json["content_version"] = kFieldIntelligenceTradeContentVersion;
+    const auto content = ContentRegistry::fromJson(json.dump());
     for (auto &map : json["maps"])
         map.erase("credential_extraction");
     const auto oldContent = ContentRegistry::fromJson(json.dump());
@@ -353,6 +354,8 @@ TEST(RaidCredentialCompatibilityTest, SelfRecoveryOnFrontierKeepsItsOriginalMiss
     ASSERT_TRUE(receipt.succeeded) << receipt.message;
     ASSERT_TRUE(profile.pendingRaid->selfRecovery);
     EXPECT_FALSE(profile.pendingRaid->credentialExtraction);
+    ASSERT_TRUE(profile.pendingRaid->highRiskCrisis);
+    EXPECT_FALSE(profile.pendingRaid->highRiskCrisis->roadBlockade);
     EXPECT_EQ(findRaidAnchorPlacement(profile.pendingRaid->spatialLayout,
         kRaidAnchorCredentialExtraction), nullptr);
     EXPECT_TRUE(profile.raidExtractionPermissions.contains(permission));

@@ -72,6 +72,21 @@ struct RaidTacticalObjective
         const RaidTacticalObjective &) = default;
 };
 
+enum class RaidRoadBlockadePhase
+{
+    Preparing,
+    Warning,
+    Closed,
+    Breached,
+    Skipped
+};
+
+struct RaidRoadBlockadeMapMarker
+{
+    ContentRect bounds;
+    RaidRoadBlockadePhase phase{RaidRoadBlockadePhase::Preparing};
+};
+
 class RaidTacticalMapState
 {
 public:
@@ -107,6 +122,9 @@ public:
     void grantIntelligence(RaidIntelligenceCategory category) noexcept;
     void discoverFieldIntelligenceContact(Vec2 position) noexcept;
     [[nodiscard]] std::optional<Vec2> discoveredFieldIntelligenceContact() const noexcept;
+    void observeRoadBlockade(RaidRoadBlockadeMapMarker observed) noexcept;
+    void updateDiscoveredRoadBlockadePhase(RaidRoadBlockadePhase phase) noexcept;
+    [[nodiscard]] std::optional<RaidRoadBlockadeMapMarker> discoveredRoadBlockade() const noexcept;
     [[nodiscard]] const ContentRect &normalExtraction() const noexcept;
     [[nodiscard]] const std::optional<ContentRect> &
     emergencyExtraction() const noexcept;
@@ -152,6 +170,7 @@ private:
     std::vector<RaidTacticalResourcePoint> outdoorResourcePoints_;
     std::vector<RaidTacticalObjective> objectives_;
     std::optional<Vec2> discoveredFieldIntelligenceContact_;
+    std::optional<RaidRoadBlockadeMapMarker> discoveredRoadBlockade_;
     int columns_{32};
     int rows_{18};
     std::vector<bool> revealed_;

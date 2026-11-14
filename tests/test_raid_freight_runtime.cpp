@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -174,6 +175,194 @@ protected:
     std::array<AssetInstanceId, 2> wedges{};
     Vec2 cratePosition{};
 };
+
+class FrontierRoadBreachTest : public testing::Test
+{
+protected:
+    void deploy(unsigned carriedWedges, bool warehouseWedge = false)
+    {
+        ASSERT_TRUE(session.startNewProfile("frontier-road-breach"));
+        auto &profile = const_cast<ProfileState &>(session.profile());
+        const auto &content = publishedContentRegistry();
+        const auto bag = std::find_if(profile.assets.records().begin(), profile.assets.records().end(),
+            [](const auto &entry) { return entry.second.definitionId == alpha_content::backpack; });
+        ASSERT_NE(bag, profile.assets.records().end());
+        const auto bagId = bag->first;
+        ASSERT_TRUE(executeInventory(profile, content, InventoryEquipCommand{bagId, EquipmentSlotKind::Backpack},
+            {profile.revision, "equip-road-test-bag"}).succeeded);
+        const auto &wedge = content.item(kFreightBreachWedgesId);
+        for (unsigned index = 0; index < carriedWedges + static_cast<unsigned>(warehouseWedge); ++index)
+        {
+            const auto target = index < carriedWedges
+                ? ProfileContainerId::compartment(bagId, 0) : ProfileContainerId::stash();
+            const auto cell = findFirstProfileFit(profile, content, target, wedge, ItemOrientation::Degrees0);
+            ASSERT_TRUE(cell);
+            wedges.push_back(profile.assets.create(wedge, StoredAssetLocation{target, *cell}));
+        }
+        ASSERT_TRUE(session.deployAlpha(2U, kFrontier)) << session.persistenceMessage();
+        ASSERT_TRUE(session.profile().pendingRaid->highRiskCrisis);
+        ASSERT_TRUE(session.profile().pendingRaid->highRiskCrisis->roadBlockade);
+        blockade = *session.profile().pendingRaid->highRiskCrisis->roadBlockade;
+    }
+
+    static Vec2 center(const auto &rect)
+    {
+        return {rect.position.x + rect.size.x * 0.5F, rect.position.y + rect.size.y * 0.5F};
+    }
+
+    void move(Vec2 center)
+    {
+        auto &player = const_cast<Player &>(session.world().player());
+        const float half = player.size() * 0.5F;
+        ASSERT_TRUE(player.setPosition({center.x - half, center.y - half}));
+    }
+
+    void tick(GameplayInput input = {}, float seconds = kStepSeconds)
+    {
+        for (const auto &enemy : session.world().enemies())
+            static_cast<void>(const_cast<Enemy &>(enemy).takeDamage(enemy.maxHealth()));
+        session.update(input, seconds);
+    }
+
+    GameplayInput aim(Vec2 point) const
+    {
+        GameplayInput input;
+        input.aimWorldPosition = point;
+        input.aimWorldBounds = Rect{{}, session.world().raidSpaceWorldSize()};
+        return input;
+    }
+
+    void closeRoad()
+    {
+        const auto control = session.world().highRiskControlPoint();
+        ASSERT_TRUE(control);
+        ASSERT_NO_FATAL_FAILURE(move(center(*control)));
+        auto input = aim(center(*control));
+        input.interactPressed = input.interactJustPressed = true;
+        for (unsigned frame = 0; frame < 100 && session.world().raidSession().phase() == RaidPhase::Regular; ++frame)
+        {
+            tick(input);
+            input.interactJustPressed = false;
+        }
+        ASSERT_EQ(session.world().raidSession().phase(), RaidPhase::HighRisk);
+        ASSERT_TRUE(session.world().roadBlockade());
+        EXPECT_EQ(session.world().roadBlockade()->phase, RaidRoadBlockadePhase::Warning);
+        for (unsigned frame = 0; frame < 40; ++frame)
+            tick();
+        ASSERT_EQ(session.world().roadBlockade()->phase, RaidRoadBlockadePhase::Closed);
+    }
+
+    void approach()
+    {
+        const auto middle = center(blockade.bounds);
+        for (const auto endpoint : {blockade.routeEntry, blockade.routeExit})
+        {
+            const Vec2 toward{endpoint.x - middle.x, endpoint.y - middle.y};
+            const float length = std::hypot(toward.x, toward.y);
+            ASSERT_GT(length, 0.0F);
+            const Vec2 direction{toward.x / length, toward.y / length};
+            const float radius = std::min(
+                direction.x != 0.0F ? blockade.bounds.size.x / (2.0F * std::abs(direction.x)) : length,
+                direction.y != 0.0F ? blockade.bounds.size.y / (2.0F * std::abs(direction.y)) : length);
+            ASSERT_NO_FATAL_FAILURE(move({middle.x + direction.x * (radius + 48.0F),
+                                          middle.y + direction.y * (radius + 48.0F)}));
+            tick(aim(middle), 0.0F);
+            if (session.raidRoadBlockadeBreach())
+                return;
+        }
+        FAIL() << "Neither route endpoint exposes a usable roadblock face";
+    }
+
+    void hold(unsigned frames, bool freshPress)
+    {
+        auto input = aim(center(blockade.bounds));
+        input.interactPressed = true;
+        input.interactJustPressed = freshPress;
+        for (unsigned frame = 0; frame < frames; ++frame)
+        {
+            tick(input);
+            input.interactJustPressed = false;
+        }
+    }
+
+    GameSession session;
+    RaidRoadBlockadeSnapshot blockade;
+    std::vector<AssetInstanceId> wedges;
+};
+
+TEST_F(FrontierRoadBreachTest, FreshThreeSecondGestureConsumesExactlyOneCarriedWedge)
+{
+    ASSERT_NO_FATAL_FAILURE(deploy(2));
+    ASSERT_NO_FATAL_FAILURE(closeRoad());
+    ASSERT_NO_FATAL_FAILURE(approach());
+    ASSERT_TRUE(session.raidRoadBlockadeBreach()->hasTool);
+
+    hold(12, true);
+    ASSERT_FLOAT_EQ(session.raidRoadBlockadeBreach()->progress, 0.5F);
+    tick(aim(center(blockade.bounds)), 0.0F);
+    hold(30, false);
+    EXPECT_FLOAT_EQ(session.raidRoadBlockadeBreach()->progress, 0.0F);
+
+    hold(12, true);
+    auto modal = aim(center(blockade.bounds));
+    modal.interactPressed = true;
+    modal.freezeObservationDirection = true;
+    tick(modal);
+    hold(30, false);
+    EXPECT_FLOAT_EQ(session.raidRoadBlockadeBreach()->progress, 0.0F);
+    ASSERT_TRUE(session.profile().assets.find(wedges[0]));
+    ASSERT_TRUE(session.profile().assets.find(wedges[1]));
+
+    hold(23, true);
+    ASSERT_EQ(session.world().roadBlockade()->phase, RaidRoadBlockadePhase::Closed);
+    hold(1, false);
+    ASSERT_EQ(session.world().roadBlockade()->phase, RaidRoadBlockadePhase::Breached);
+    hold(30, true);
+    const auto remaining = std::count_if(wedges.begin(), wedges.end(), [&](AssetInstanceId id) {
+        return session.profile().assets.find(id) != nullptr;
+    });
+    EXPECT_EQ(remaining, 1);
+}
+
+TEST_F(FrontierRoadBreachTest, WarehouseWedgeCannotOpenRoadAndSignalExitStillWorks)
+{
+    ASSERT_NO_FATAL_FAILURE(deploy(0, true));
+    ASSERT_NO_FATAL_FAILURE(closeRoad());
+    ASSERT_NO_FATAL_FAILURE(approach());
+    EXPECT_FALSE(session.raidRoadBlockadeBreach()->hasTool);
+    hold(30, true);
+    EXPECT_EQ(session.world().roadBlockade()->phase, RaidRoadBlockadePhase::Closed);
+    EXPECT_TRUE(session.profile().assets.find(wedges.front()));
+
+    const auto &crisis = *session.profile().pendingRaid->highRiskCrisis;
+    const auto &loot = session.profile().pendingRaid->loot;
+    const auto salvage = std::find_if(loot.begin(), loot.end(), [&](const auto &drop) {
+        return drop.requiresHighRisk && drop.resourcePointInstanceId == crisis.resourcePointInstanceId &&
+            drop.definitionId == kBlockadeSalvageItemId;
+    });
+    ASSERT_NE(salvage, loot.end());
+    const auto salvageId = salvage->assetId;
+    ASSERT_NO_FATAL_FAILURE(move({salvage->position.x - 6.0F, salvage->position.y}));
+    auto input = aim(salvage->position);
+    tick(input, 0.0F);
+    EXPECT_TRUE(session.raidLootAccessible(*salvage));
+    input.interactJustPressed = input.interactPressed = true;
+    tick(input, 0.0F);
+    ASSERT_TRUE(assetIsCarried(session.profile(), salvageId)) << session.persistenceMessage();
+
+    const auto signal = session.world().emergencyExtractionPoint();
+    ASSERT_TRUE(signal);
+    ASSERT_NO_FATAL_FAILURE(move(center(signal->bounds())));
+    tick({}, 0.0F);
+    ASSERT_TRUE(session.canCallSignalExtraction());
+    tick(input);
+    for (unsigned frame = 0; frame < 200 && session.state() == GameSessionState::InRaid; ++frame)
+        tick();
+    ASSERT_TRUE(session.profile().lastRaidResult) << session.persistenceMessage();
+    EXPECT_EQ(session.profile().lastRaidResult->outcome, RaidResultOutcome::Extracted);
+    EXPECT_FALSE(session.profile().lastRaidResult->fuelExtractionPaid);
+    ASSERT_TRUE(session.profile().assets.find(salvageId));
+}
 
 TEST_F(RaidFreightRuntimeTest, WarehouseKeyDoesNotGrantAccessOrStartHold)
 {
