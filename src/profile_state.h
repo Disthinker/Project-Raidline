@@ -1183,6 +1183,7 @@ struct RaidHighRiskCrisisSnapshot
     std::uint32_t activeEnemyCap{};
     LootTableDefinitionId advancedLootTableId;
     std::vector<RaidHighRiskPressureSpawnSnapshot> pressureSpawns;
+    std::optional<RaidRoadBlockadeSnapshot> roadBlockade;
 
     friend bool operator==(
         const RaidHighRiskCrisisSnapshot &left,
@@ -1201,7 +1202,8 @@ struct RaidHighRiskCrisisSnapshot
             left.waveSize == right.waveSize &&
             left.activeEnemyCap == right.activeEnemyCap &&
             left.advancedLootTableId == right.advancedLootTableId &&
-            left.pressureSpawns == right.pressureSpawns;
+            left.pressureSpawns == right.pressureSpawns &&
+            left.roadBlockade == right.roadBlockade;
     }
 };
 

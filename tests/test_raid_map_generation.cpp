@@ -247,6 +247,77 @@ TEST(RaidMapGenerationTest, FrontierV4AcceptedBaselineHashes)
     }
 }
 
+TEST(RaidMapGenerationTest, FrontierBlockadeFreezesPlayerClearanceDetour)
+{
+    auto map = publishedContentRegistry().map(
+        MapDefinitionId{"map.raid.frontier_exchange"});
+    map.worldSize = {2400.0F, 1600.0F};
+    map.walkableBounds = {{}, map.worldSize};
+    map.proceduralOutdoor.columns = 30U;
+    map.proceduralOutdoor.rows = 20U;
+    RaidGeneratedMapLayout layout;
+    layout.layoutVersion = 4U;
+    for (std::uint16_t row = 8U; row < 12U; ++row)
+        for (std::uint16_t column = 9U; column < 21U; ++column)
+            layout.roadCells.push_back({column, row, RaidOutdoorRoadKind::Primary});
+    layout.anchorPlacements = {
+        {std::string{kRaidAnchorPlayerSpawn}, RaidMapAnchorKind::PlayerSpawn,
+         {{330.0F, 800.0F}, {50.0F, 50.0F}}},
+        {std::string{kRaidAnchorNormalExtraction}, RaidMapAnchorKind::NormalExtraction,
+         {{1280.0F, 220.0F}, {140.0F, 140.0F}}},
+        {std::string{kRaidAnchorEmergencyExtraction}, RaidMapAnchorKind::EmergencyExtraction,
+         {{1880.0F, 750.0F}, {140.0F, 140.0F}}},
+        {std::string{kRaidAnchorConditionalExtraction}, RaidMapAnchorKind::ConditionalExtraction,
+         {{1800.0F, 1150.0F}, {140.0F, 140.0F}}},
+        {std::string{kRaidAnchorCredentialExtraction}, RaidMapAnchorKind::CredentialExtraction,
+         {{1780.0F, 480.0F}, {140.0F, 140.0F}}},
+        {std::string{kRaidAnchorHighRiskControl}, RaidMapAnchorKind::HighRiskControl,
+         {{880.0F, 380.0F}, {150.0F, 84.0F}}},
+        {raidIndexedAnchorId("interior", 0U), RaidMapAnchorKind::InteriorEntrance,
+         {{450.0F, 1200.0F}, {80.0F, 80.0F}}}};
+    const ContentRect focus{{1130.0F, 1200.0F}, {160.0F, 140.0F}};
+    const auto blockade = chooseFrontierRoadBlockade(map, layout, focus, 42U);
+    ASSERT_TRUE(blockade);
+    EXPECT_EQ(chooseFrontierRoadBlockade(map, layout, focus, 42U), blockade);
+    EXPECT_TRUE(validateFrontierRoadBlockade(map, layout, focus, *blockade));
+    EXPECT_FLOAT_EQ(blockade->bounds.size.x, 64.0F);
+    EXPECT_GE(blockade->bounds.size.y, 320.0F);
+    EXPECT_GE(blockade->detourExtraDistance, 320.0F);
+    EXPECT_LE(blockade->detourExtraDistance, 960.0F);
+    const float side = blockade->detourCorners.front().y;
+    EXPECT_TRUE(side <= blockade->bounds.position.y - 16.0F ||
+                side >= blockade->bounds.position.y + blockade->bounds.size.y + 16.0F);
+    EXPECT_FLOAT_EQ(blockade->detourCorners.back().y, side);
+
+    auto invalid = *blockade;
+    invalid.routeEntry.y += 1.0F;
+    EXPECT_FALSE(validateFrontierRoadBlockade(map, layout, focus, invalid));
+    invalid = *blockade;
+    invalid.detourCorners.back().x -= 0.5F;
+    EXPECT_FALSE(validateFrontierRoadBlockade(map, layout, focus, invalid));
+
+    // A thin solid perimeter leaves the same road clear but isolates the
+    // signal extraction. Geometric detour validity alone cannot pass.
+    auto trapped = layout;
+    trapped.ballisticBlockers = {
+        {{1840.0F, 710.0F}, {220.0F, 30.0F}},
+        {{1840.0F, 890.0F}, {220.0F, 30.0F}},
+        {{1840.0F, 740.0F}, {30.0F, 150.0F}},
+        {{2030.0F, 740.0F}, {30.0F, 150.0F}}};
+    EXPECT_FALSE(validateFrontierRoadBlockade(map, trapped, focus, *blockade));
+    EXPECT_FALSE(chooseFrontierRoadBlockade(map, trapped, focus, 42U));
+
+    // The return center is south of the visible entrance. The obstruction
+    // here is outside the entrance and away from the road.
+    auto badReturn = layout;
+    badReturn.ballisticBlockers.push_back(
+        {{498.0F, 1358.0F}, {16.0F, 16.0F}});
+    EXPECT_FALSE(validateFrontierRoadBlockade(map, badReturn, focus, *blockade));
+
+    layout.usedFallback = true;
+    EXPECT_FALSE(chooseFrontierRoadBlockade(map, layout, focus, 42U));
+}
+
 TEST(RaidMapGenerationTest, HospitalCandidateHasDistinctExteriorAndFixedInterior)
 {
     const auto content = hospitalContentCandidate();

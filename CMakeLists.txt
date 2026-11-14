@@ -333,6 +333,7 @@ add_library(raidline_domain STATIC
     src/self_recovery_domain.cpp
     src/raid_lifecycle.h
     src/raid_map_generation.cpp
+    src/raid_road_blockade.cpp
     src/raid_map_generation.h
     src/raid_intelligence_domain.cpp
     src/raid_intelligence_domain.h

@@ -27,7 +27,8 @@ bool transientBaseMessage(std::string_view message) {
       "RELOAD STARTED (2 SEC)", "CHAMBERING", "MEDICAL ACTION STARTED",
       "WEAPON MAINTENANCE STARTED (8 SEC)", "ARMOR MAINTENANCE STARTED (10 SEC)",
       "MAGAZINE PACKING STARTED", "MAGAZINE UNLOAD STARTED (3 SEC)",
-      "WEAPON LIGHT INTENT ON", "WEAPON LIGHT OFF", "CORPSE EMPTY"};
+      "WEAPON LIGHT INTENT ON", "WEAPON LIGHT OFF", "CORPSE EMPTY",
+      "ROAD BREACH OPENED", "ROAD BREACH REQUIRES WEDGES"};
   return std::find(ordinary.begin(), ordinary.end(), message) != ordinary.end();
 }
 }

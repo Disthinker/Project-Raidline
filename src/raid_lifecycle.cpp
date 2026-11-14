@@ -1840,6 +1840,10 @@ DeployReceipt executeDeploy(
             crisis.activeEnemyCap = highRiskCrisis->activeEnemyCap;
             crisis.advancedLootTableId =
                 highRiskCrisis->advancedLootTableId;
+            if (regionalMissionCount == 0U && map->id == kFreightCrateMapId &&
+                content.contentVersion() == kFrontierHighRiskBlockadeContentVersion)
+                crisis.roadBlockade = chooseFrontierRoadBlockade(
+                    *map, snapshot.spatialLayout, target.bounds, command.seed);
 
             struct PressureCandidate
             {
@@ -1907,6 +1911,19 @@ DeployReceipt executeDeploy(
                 loot.resourcePointSlotIndex =
                     target.capacity +
                     static_cast<std::uint32_t>(advancedOrdinal);
+                if (advancedOrdinal == 0U && crisis.roadBlockade)
+                {
+                    // Keep the original draw and allocated instance ID. This
+                    // fresh loot has not acquired any contents or other owners.
+                    AssetRecord &asset = *candidate.assets.findMutable(loot.assetId);
+                    AssetRecord replacement;
+                    replacement.instanceId = asset.instanceId;
+                    replacement.definitionId = kBlockadeSalvageItemId;
+                    replacement.location = asset.location;
+                    asset = std::move(replacement);
+                    loot.definitionId = kBlockadeSalvageItemId;
+                    loot.quantity = 1U;
+                }
                 ++advancedOrdinal;
             }
             snapshot.highRiskCrisis = std::move(crisis);

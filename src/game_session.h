@@ -430,6 +430,7 @@ public:
     [[nodiscard]] bool isRaidFreightCrate(AssetInstanceId id) const noexcept;
     [[nodiscard]] std::optional<RaidFreightUnlockProjection> raidFreightUnlock() const;
     [[nodiscard]] std::optional<RaidFreightBreachProjection> raidFreightBreach() const;
+    [[nodiscard]] std::optional<RaidFreightBreachProjection> raidRoadBlockadeBreach() const;
     void cancelRaidFreightBreach() noexcept;
     [[nodiscard]] std::optional<AssetInstanceId> takeOpenedRaidFreightCrate() noexcept;
     void cancelRaidFreightUnlock() noexcept;
@@ -706,11 +707,13 @@ private:
         float elapsedSeconds{};
         bool consumesInteraction{};
     } freightUnlock_;
+    enum class RaidBreachTarget { FreightDoor, RoadBlockade };
     struct RaidFreightBreachRuntime
     {
         std::optional<AssetInstanceId> tool;
         float elapsedSeconds{};
         int startingHealth{};
+        RaidBreachTarget target{RaidBreachTarget::FreightDoor};
         bool consumesInteraction{};
     } freightBreach_;
     bool outpostRestorationObjectiveSecured_{};
@@ -878,6 +881,7 @@ private:
     void advanceRaidFreightUnlock(float deltaTime);
     [[nodiscard]] bool freightBreachToolCarried(AssetInstanceId) const noexcept;
     [[nodiscard]] std::optional<AssetInstanceId> carriedFreightBreachTool() const;
+    [[nodiscard]] bool roadBlockadeBreachAvailable() const;
     void prepareRaidFreightBreach(const GameplayInput &rawInput, GameplayInput &input, GameplayInput &simulationInput);
     void advanceRaidFreightBreach(float deltaTime);
     [[nodiscard]] bool selfRecoveryCacheInRange() const noexcept;

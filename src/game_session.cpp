@@ -30,6 +30,7 @@ namespace
     constexpr float kRaidContainerReach{72.0F};
     constexpr float kFreightUnlockSeconds{2.0F};
     constexpr float kFreightBreachSeconds{1.5F};
+    constexpr float kRoadBlockadeBreachSeconds{3.0F};
     const LoadoutArchetypeDefinitionId kStarterLoadoutArchetype{
         "loadout_archetype.light_scavenger"};
 
@@ -2497,10 +2498,35 @@ std::optional<RaidFreightBreachProjection> GameSession::raidFreightBreach() cons
     if (state_ != GameSessionState::InRaid || !profile_.pendingRaid ||
         !profile_.pendingRaid->freightBreachEnabled || !world_->nearbyFreightBreachDoor())
         return std::nullopt;
-    const bool holding = freightBreach_.tool && freightBreachToolCarried(*freightBreach_.tool);
+    const bool holding = freightBreach_.target == RaidBreachTarget::FreightDoor &&
+        freightBreach_.tool && freightBreachToolCarried(*freightBreach_.tool);
     return RaidFreightBreachProjection{
         holding || carriedFreightBreachTool().has_value(),
         holding ? freightBreach_.elapsedSeconds / kFreightBreachSeconds : 0.0F};
+}
+
+bool GameSession::roadBlockadeBreachAvailable() const
+{
+    const auto blockade = world_->roadBlockade();
+    return blockade && blockade->canInteract && raidWorldInteractionAvailable(false) &&
+        world_->raidSession().state() == RaidSessionState::InRaid &&
+        !world_->raidSpacePortalInteractionInRange() &&
+        !canCallSignalExtraction() && !world_->credentialInvestigationInRange() &&
+        !world_->highRiskControlInteractionInRange() &&
+        !world_->ordinarySurvivorRescueInteractionInRange();
+}
+
+std::optional<RaidFreightBreachProjection> GameSession::raidRoadBlockadeBreach() const
+{
+    if (state_ != GameSessionState::InRaid || !roadBlockadeBreachAvailable())
+        return std::nullopt;
+    const bool holding = freightBreach_.target == RaidBreachTarget::RoadBlockade &&
+        freightBreach_.tool && freightBreachToolCarried(*freightBreach_.tool);
+    if (!holding && (nearbyRaidLoot() || nearbyRaidSceneContainer()))
+        return std::nullopt;
+    return RaidFreightBreachProjection{
+        holding || carriedFreightBreachTool().has_value(),
+        holding ? freightBreach_.elapsedSeconds / kRoadBlockadeBreachSeconds : 0.0F};
 }
 
 void GameSession::cancelRaidFreightBreach() noexcept
@@ -2513,7 +2539,8 @@ void GameSession::cancelRaidFreightBreach() noexcept
 void GameSession::prepareRaidFreightBreach(
     const GameplayInput &rawInput, GameplayInput &input, GameplayInput &simulationInput)
 {
-    if (!profile_.pendingRaid || !profile_.pendingRaid->freightBreachEnabled)
+    if (!profile_.pendingRaid || (!profile_.pendingRaid->freightBreachEnabled &&
+        !(profile_.pendingRaid->highRiskCrisis && profile_.pendingRaid->highRiskCrisis->roadBlockade)))
         return;
     const bool modal = input.inventoryOpen || input.freezeObservationDirection || input.throwableModal;
     if (freightBreach_.consumesInteraction &&
@@ -2531,22 +2558,31 @@ void GameSession::prepareRaidFreightBreach(
         !rawInput.raidReloadIntents.empty() || rawInput.healJustPressed ||
         rawInput.weaponSlotJustPressed.has_value() || playerThrowFlightActive() ||
         world_->player().isControlled() || world_->player().isDead();
-    if (!freightBreach_.consumesInteraction && !conflict && simulationInput.interactJustPressed &&
-        world_->nearbyFreightBreachDoor())
+    if (!freightBreach_.consumesInteraction && !conflict && simulationInput.interactJustPressed)
     {
-        if (const auto tool = carriedFreightBreachTool())
+        const bool atFreightDoor = profile_.pendingRaid->freightBreachEnabled &&
+            world_->nearbyFreightBreachDoor().has_value();
+        const bool atRoadBlockade = !atFreightDoor && roadBlockadeBreachAvailable() &&
+            !nearbyRaidLoot() && !nearbyRaidSceneContainer();
+        if (atFreightDoor || atRoadBlockade)
         {
-            freightBreach_.consumesInteraction = true;
-            if (simulationInput.interactPressed)
+            if (const auto tool = carriedFreightBreachTool())
             {
-                freightBreach_.tool = tool;
-                freightBreach_.startingHealth = world_->player().health();
+                freightBreach_.consumesInteraction = true;
+                if (simulationInput.interactPressed)
+                {
+                    freightBreach_.tool = tool;
+                    freightBreach_.startingHealth = world_->player().health();
+                    freightBreach_.target = atRoadBlockade
+                        ? RaidBreachTarget::RoadBlockade : RaidBreachTarget::FreightDoor;
+                }
             }
-        }
-        else if (!nearbyRaidLoot())
-        {
-            freightBreach_.consumesInteraction = true;
-            persistenceMessage_ = "FREIGHT BREACH REQUIRES WEDGES";
+            else if (atRoadBlockade || !nearbyRaidLoot())
+            {
+                freightBreach_.consumesInteraction = true;
+                persistenceMessage_ = atRoadBlockade
+                    ? "ROAD BREACH REQUIRES WEDGES" : "FREIGHT BREACH REQUIRES WEDGES";
+            }
         }
     }
     if (!freightBreach_.consumesInteraction)
@@ -2563,10 +2599,14 @@ void GameSession::advanceRaidFreightBreach(float deltaTime)
 {
     if (!freightBreach_.tool)
         return;
+    const bool roadBlockade = freightBreach_.target == RaidBreachTarget::RoadBlockade;
+    const bool targetAvailable = roadBlockade
+        ? roadBlockadeBreachAvailable()
+        : world_->nearbyFreightBreachDoor().has_value();
     if (world_->spaceTransitionedLastUpdate() || world_->player().isControlled() ||
         world_->player().health() < freightBreach_.startingHealth ||
         (lastIncomingDamage_ && lastIncomingDamage_->damageApplied > 0) ||
-        !raidWorldInteractionAvailable(false) || !world_->nearbyFreightBreachDoor() ||
+        !raidWorldInteractionAvailable(false) || !targetAvailable ||
         !freightBreachToolCarried(*freightBreach_.tool))
     {
         cancelRaidFreightBreach();
@@ -2575,7 +2615,7 @@ void GameSession::advanceRaidFreightBreach(float deltaTime)
     if (!std::isfinite(deltaTime) || deltaTime <= 0.0F)
         return;
     freightBreach_.elapsedSeconds += deltaTime;
-    if (freightBreach_.elapsedSeconds < kFreightBreachSeconds)
+    if (freightBreach_.elapsedSeconds < (roadBlockade ? kRoadBlockadeBreachSeconds : kFreightBreachSeconds))
         return;
 
     const AssetInstanceId tool = *freightBreach_.tool;
@@ -2591,10 +2631,10 @@ void GameSession::advanceRaidFreightBreach(float deltaTime)
         persistenceMessage_ = "REVISION LIMIT";
         return;
     }
-    const auto transaction = nextRaidTransaction("breach-freight-door");
+    const auto transaction = nextRaidTransaction(roadBlockade ? "breach-road-blockade" : "breach-freight-door");
     if (transaction.empty())
         return;
-    const bool opened = world_->tryOpenFreightBreachDoor([&] {
+    const auto commitWedge = [&] {
         if (!freightBreachToolCarried(tool))
             return false;
         // A wedge is a single childless carried asset. The journal allocation
@@ -2609,9 +2649,11 @@ void GameSession::advanceRaidFreightBreach(float deltaTime)
         }
         ++profile_.revision;
         return true;
-    });
+    };
+    const bool opened = roadBlockade ? world_->tryOpenRoadBlockade(commitWedge)
+                                    : world_->tryOpenFreightBreachDoor(commitWedge);
     if (opened)
-        persistenceMessage_ = "FREIGHT BREACH OPENED";
+        persistenceMessage_ = roadBlockade ? "ROAD BREACH OPENED" : "FREIGHT BREACH OPENED";
 }
 
 InventoryPlan GameSession::queryRaidSceneContainerInventory(AssetInstanceId id, const InventoryCommand &command) const

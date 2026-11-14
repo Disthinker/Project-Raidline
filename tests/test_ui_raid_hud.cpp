@@ -4,6 +4,7 @@
 #include "test_temp_directory.h"
 #include "developer_test_range.h"
 #include "raid_lifecycle.h"
+#include "raid_tactical_map_presentation.h"
 #include <algorithm>
 #include <cmath>
 #include "ui_raid_hud_presentation.h"
@@ -190,6 +191,115 @@ TEST_F(UiRaidHudTest, FieldIntelligenceTradePanelKeepsAimAreaClearAtEveryWindowS
             if (reviewPath)
             {
                 const auto name = "field-trade-" + std::to_string(size.width) + "-" + uiLanguageCode(language) + ".png";
+                ASSERT_TRUE(IMG_SavePNG(surface, (destination / name).string().c_str()));
+            }
+        }
+    }
+}
+
+TEST_F(UiRaidHudTest, RoadBlockadeWarningAndDiscoveredMapMarkerFitAllWindowSizes)
+{
+    auto &session = A::session(*app);
+    ASSERT_TRUE(session.deployAlpha(2U, kFreightCrateMapId)) << session.persistenceMessage();
+    ASSERT_TRUE(session.world().roadBlockade());
+    const auto blockade = *session.profile().pendingRaid->highRiskCrisis->roadBlockade;
+    const Vec2 center{blockade.bounds.position.x + blockade.bounds.size.x * 0.5F,
+        blockade.bounds.position.y + blockade.bounds.size.y * 0.5F};
+    const auto &map = session.world().tacticalMap();
+    ASSERT_TRUE(session.triggerDeveloperHighRisk());
+    for (const auto &enemy : session.world().enemies())
+        static_cast<void>(const_cast<Enemy &>(enemy).takeDamage(enemy.maxHealth()));
+    auto &player = const_cast<Player &>(session.world().player());
+    const float half = player.size() * 0.5F;
+    ASSERT_TRUE(player.setPosition({blockade.routeEntry.x - half, blockade.routeEntry.y - half}));
+    GameplayInput lookAway;
+    lookAway.aimWorldPosition = Vec2{2.0F * blockade.routeEntry.x - center.x,
+        2.0F * blockade.routeEntry.y - center.y};
+    lookAway.aimWorldBounds = Rect{{}, session.world().raidSpaceWorldSize()};
+    session.update(lookAway, 0.125F);
+    ASSERT_FALSE(map.discoveredRoadBlockade());
+    ASSERT_EQ(session.world().roadBlockade()->phase, RaidRoadBlockadePhase::Warning);
+
+    const char *reviewPath = std::getenv("RAIDLINE_UI_ROAD_BLOCKADE_REVIEW_DIR");
+    const auto destination = reviewPath ? std::filesystem::path(reviewPath) : std::filesystem::path{};
+    if (reviewPath)
+    {
+        ASSERT_TRUE(destination.is_absolute());
+        std::filesystem::create_directories(destination);
+    }
+    const auto orangePixels = [&](SDL_Rect bounds)
+    {
+        unsigned count{};
+        for (int y = bounds.y; y < bounds.y + bounds.h; ++y)
+            for (int x = bounds.x; x < bounds.x + bounds.w; ++x)
+            {
+                Uint8 r{}, g{}, b{}, a{};
+                if (SDL_ReadSurfacePixel(surface, x, y, &r, &g, &b, &a) &&
+                    r > 180 && g > 125 && g < 205 && b < 135)
+                    ++count;
+            }
+        return count;
+    };
+    for (const auto size : kUiWindowSizes)
+    {
+        detach();
+        attach(size.width, size.height);
+        const float scale = size.width / 1280.0F;
+        const auto physical = [scale](SDL_Rect bounds) {
+            return SDL_Rect{static_cast<int>(bounds.x * scale), static_cast<int>(bounds.y * scale),
+                static_cast<int>(bounds.w * scale), static_cast<int>(bounds.h * scale)};
+        };
+        for (const auto language : {UiLanguage::English, UiLanguage::SimplifiedChinese})
+        {
+            SCOPED_TRACE(size.width);
+            SCOPED_TRACE(uiLanguageCode(language));
+            A::text(*app).setLanguage(language);
+            clear();
+            A::hud(*app);
+            ASSERT_TRUE(SDL_RenderPresent(renderer));
+            EXPECT_GT(orangePixels(physical({16, 110, 448, 40})), 20U);
+            EXPECT_EQ(bright(physical({480, 210, 320, 220})), 0U);
+            if (reviewPath)
+            {
+                const auto name = "road-warning-" + std::to_string(size.width) + "-" + uiLanguageCode(language) + ".png";
+                ASSERT_TRUE(IMG_SavePNG(surface, (destination / name).string().c_str()));
+            }
+        }
+    }
+    GameplayInput lookAt = lookAway;
+    lookAt.aimWorldPosition = center;
+    session.update(lookAt, 0.125F);
+    ASSERT_TRUE(map.discoveredRoadBlockade());
+    for (unsigned frame = 0; frame < 40; ++frame)
+        session.update(lookAt, 0.125F);
+    ASSERT_EQ(map.discoveredRoadBlockade()->phase, RaidRoadBlockadePhase::Closed);
+    for (const auto size : kUiWindowSizes)
+    {
+        detach();
+        attach(size.width, size.height);
+        const float scale = size.width / 1280.0F;
+        const auto chart = kRaidTacticalChart;
+        const auto worldSize = session.world().raidSpaceWorldSize();
+        const Vec2 marker{chart.position.x + center.x / worldSize.x * chart.size.x,
+            chart.position.y + center.y / worldSize.y * chart.size.y};
+        for (const auto language : {UiLanguage::English, UiLanguage::SimplifiedChinese})
+        {
+            SCOPED_TRACE(size.width);
+            SCOPED_TRACE(uiLanguageCode(language));
+            A::text(*app).setLanguage(language);
+            clear();
+            A::tactical(*app);
+            ASSERT_TRUE(SDL_RenderPresent(renderer));
+            const SDL_Rect badge{static_cast<int>((marker.x - 5.0F) * scale),
+                static_cast<int>((marker.y - 5.0F) * scale),
+                static_cast<int>(10.0F * scale), static_cast<int>(10.0F * scale)};
+            EXPECT_GT(orangePixels(badge), 10U);
+            const SDL_Rect status{static_cast<int>(978 * scale), static_cast<int>(95 * scale),
+                static_cast<int>(158 * scale), static_cast<int>(17 * scale)};
+            EXPECT_GT(bright(status), 14U);
+            if (reviewPath)
+            {
+                const auto name = "road-map-" + std::to_string(size.width) + "-" + uiLanguageCode(language) + ".png";
                 ASSERT_TRUE(IMG_SavePNG(surface, (destination / name).string().c_str()));
             }
         }

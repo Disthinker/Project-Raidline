@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -243,6 +244,45 @@ struct RaidGeneratedMapLayout
         const RaidGeneratedMapLayout &,
         const RaidGeneratedMapLayout &) = default;
 };
+
+inline constexpr float kRaidRoadBlockadeMinimumDetour{320.0F};
+inline constexpr float kRaidRoadBlockadeMaximumDetour{960.0F};
+
+struct RaidRoadBlockadeSnapshot
+{
+    ContentRect bounds;
+    Vec2 routeEntry;
+    Vec2 routeExit;
+    float detourExtraDistance{};
+    std::array<Vec2, 2> detourCorners{};
+
+    friend bool operator==(const RaidRoadBlockadeSnapshot &left,
+                           const RaidRoadBlockadeSnapshot &right) noexcept
+    {
+        return left.bounds == right.bounds &&
+            left.routeEntry.x == right.routeEntry.x &&
+            left.routeEntry.y == right.routeEntry.y &&
+            left.routeExit.x == right.routeExit.x &&
+            left.routeExit.y == right.routeExit.y &&
+            left.detourExtraDistance == right.detourExtraDistance &&
+            left.detourCorners[0].x == right.detourCorners[0].x &&
+            left.detourCorners[0].y == right.detourCorners[0].y &&
+            left.detourCorners[1].x == right.detourCorners[1].x &&
+            left.detourCorners[1].y == right.detourCorners[1].y;
+    }
+};
+
+[[nodiscard]] std::optional<RaidRoadBlockadeSnapshot> chooseFrontierRoadBlockade(
+    const MapDefinition &map,
+    const RaidGeneratedMapLayout &layout,
+    const ContentRect &crisisFocus,
+    std::uint64_t seed);
+
+[[nodiscard]] bool validateFrontierRoadBlockade(
+    const MapDefinition &map,
+    const RaidGeneratedMapLayout &layout,
+    const ContentRect &crisisFocus,
+    const RaidRoadBlockadeSnapshot &blockade);
 
 inline constexpr std::string_view kRaidAnchorPlayerSpawn{"player_spawn"};
 inline constexpr std::string_view kRaidAnchorNormalExtraction{

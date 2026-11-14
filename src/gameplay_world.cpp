@@ -29,6 +29,10 @@ namespace
     constexpr ContentRect kFreightBreachDoor{{700.0F, 210.0F}, {80.0F, 100.0F}};
     constexpr float kFreightBreachReach{72.0F};
     constexpr float kFreightBreachNoiseRadius{300.0F};
+    constexpr float kRoadBlockadeWarningSeconds{5.0F};
+    constexpr float kRoadBlockadeOccupancyGraceSeconds{5.0F};
+    constexpr float kRoadBlockadeReach{72.0F};
+    constexpr float kRoadBlockadeBreachNoiseRadius{400.0F};
     constexpr float kFieldIntelligenceDiscoveryRadius{145.0F};
     constexpr float kFieldIntelligenceInteractionRadius{72.0F};
     constexpr float kFieldIntelligenceThreatRadius{180.0F};
@@ -42,6 +46,13 @@ namespace
         return point.x >= rect.position.x && point.y >= rect.position.y &&
                point.x <= rect.position.x + rect.size.x &&
                point.y <= rect.position.y + rect.size.y;
+    }
+
+    Vec2 nearestPointOnRect(const ContentRect &bounds, Vec2 point) noexcept
+    {
+        return {
+            std::clamp(point.x, bounds.position.x, bounds.position.x + bounds.size.x),
+            std::clamp(point.y, bounds.position.y, bounds.position.y + bounds.size.y)};
     }
 
     const MapDefinition &defaultMap()
@@ -820,6 +831,12 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
     {
         prepareFreightBreachDoor();
     }
+    if (config.roadBlockade)
+    {
+        if (!config.highRisk.enabled)
+            throw std::invalid_argument{"Road blockade requires a high-risk phase"};
+        prepareRoadBlockade(*config.roadBlockade);
+    }
     if (!raidSession_.start())
     {
         throw std::logic_error{"Alpha Raid session failed to start"};
@@ -1295,11 +1312,11 @@ void GameplayWorld::update(
         return;
     }
 
-    updateHighRiskPressure(
-        std::max(
-            0.0F,
-            raidSession_.highRiskTimeElapsed() -
-                highRiskTimeBeforeUpdate));
+    const float highRiskDeltaTime =
+        std::max(0.0F, raidSession_.highRiskTimeElapsed() - highRiskTimeBeforeUpdate);
+    if (roadBlockade_)
+        updateRoadBlockade(highRiskDeltaTime);
+    updateHighRiskPressure(highRiskDeltaTime);
 
     updateNoiseDecoy(deltaTime);
     updateLocalNoiseInvestigations(deltaTime);
@@ -2340,6 +2357,243 @@ bool GameplayWorld::tryOpenFreightBreachDoor(const std::function<bool()> &commit
             listener->second.remaining = enemy.searchTimeRemaining();
             localNoiseInvestigations_.erase(id);
         }
+    }
+    localNoiseInvestigations_.merge(listeners);
+    return true;
+}
+
+void GameplayWorld::prepareRoadBlockade(const RaidRoadBlockadeSnapshot &snapshot)
+{
+    const auto &bounds = snapshot.bounds;
+    const Vec2 maximum{bounds.position.x + bounds.size.x, bounds.position.y + bounds.size.y};
+    if (!std::isfinite(bounds.size.x) || !std::isfinite(bounds.size.y) ||
+        bounds.size.x <= 0.0F || bounds.size.y <= 0.0F ||
+        !pointInside(ContentRect{{}, worldSize_}, bounds.position) ||
+        !pointInside(ContentRect{{}, worldSize_}, maximum))
+    {
+        throw std::invalid_argument{"Road blockade bounds are invalid"};
+    }
+
+    BallisticBlockerId nextId = 0;
+    for (const BallisticBlocker &blocker : ballisticBlockers_)
+        nextId = std::max(nextId, blocker.id);
+    if (nextId == std::numeric_limits<BallisticBlockerId>::max())
+        throw std::invalid_argument{"Road blockade blocker ID is unavailable"};
+
+    RoadBlockadeRuntime blockade;
+    blockade.bounds = bounds;
+    blockade.inactiveBlockers = ballisticBlockers_;
+    blockade.inactiveBlockers.push_back({nextId + 1, {bounds.position, bounds.size}});
+    blockade.inactiveBlockerIndex = RaidSpaceBlockerIndex::build(worldSize_, blockade.inactiveBlockers);
+    if (!blockade.inactiveBlockerIndex)
+        throw std::invalid_argument{"Road blockade blocker index is invalid"};
+
+    const auto prepareFootprint = [&](Vec2 size)
+    {
+        const auto &outdoor = outdoorRaidSpaceId();
+        cacheNavigationFieldForSpace(navigationFieldCache_, outdoor, size, worldSize_, ballisticBlockers_);
+        cacheNavigationFieldForSpace(blockade.closedNavigationFields, outdoor, size, worldSize_,
+            blockade.inactiveBlockers);
+    };
+    for (const Enemy &enemy : enemies_)
+        prepareFootprint(enemy.size());
+    for (const EnemySpawn &spawn : highRiskPressureSpawns_)
+        prepareFootprint(spawn.size);
+    roadBlockade_ = std::move(blockade);
+}
+
+bool GameplayWorld::roadBlockadeOccupied() const noexcept
+{
+    const ContentRect &bounds = roadBlockade_->bounds;
+    const Rect blockade{bounds.position, bounds.size};
+    if (inOutdoorRaidSpace() && !player_.isDead() && isCollision(playerBounds(player_), blockade))
+        return true;
+
+    return std::any_of(enemies_.begin(), enemies_.end(), [&](const Enemy &enemy)
+    {
+        return !enemy.isDead() && isCollision(enemy.bounds(), blockade);
+    });
+}
+
+void GameplayWorld::switchRoadBlockadeGeometry() noexcept
+{
+    auto &blockade = *roadBlockade_;
+    ballisticBlockers_.swap(blockade.inactiveBlockers);
+    outdoorBlockerIndex_.swap(blockade.inactiveBlockerIndex);
+    ++outdoorGeometryRevision_;
+    if (inOutdoorRaidSpace())
+    {
+        activeGeometryRevision_ = outdoorGeometryRevision_;
+        indoorObservationCacheReady_ = false;
+        enemyObservationIndexReady_ = false;
+    }
+    for (const Enemy &enemy : enemies_)
+    {
+        auto &navigation = enemies_.state(enemy.combatTargetId()).navigation;
+        navigation.waypoint.reset();
+        navigation.initialized = false;
+    }
+}
+
+void GameplayWorld::setRoadBlockadePhase(RaidRoadBlockadePhase phase) noexcept
+{
+    roadBlockade_->phase = phase;
+    tacticalMap_.updateDiscoveredRoadBlockadePhase(phase);
+}
+
+void GameplayWorld::updateRoadBlockade(float highRiskDeltaTime)
+{
+    if (raidSession_.phase() != RaidPhase::HighRisk)
+        return;
+
+    auto &blockade = *roadBlockade_;
+    if (blockade.phase == RaidRoadBlockadePhase::Preparing)
+    {
+        blockade.secondsRemaining = kRoadBlockadeWarningSeconds + kRoadBlockadeOccupancyGraceSeconds;
+        setRoadBlockadePhase(RaidRoadBlockadePhase::Warning);
+    }
+    if (blockade.phase == RaidRoadBlockadePhase::Warning)
+    {
+        blockade.secondsRemaining = std::max(0.0F, blockade.secondsRemaining - highRiskDeltaTime);
+        if (blockade.secondsRemaining <= kRoadBlockadeOccupancyGraceSeconds)
+        {
+            if (!roadBlockadeOccupied())
+            {
+                switchRoadBlockadeGeometry();
+                setRoadBlockadePhase(RaidRoadBlockadePhase::Closed);
+            }
+            else if (blockade.secondsRemaining <= 0.0F)
+            {
+                setRoadBlockadePhase(RaidRoadBlockadePhase::Skipped);
+            }
+        }
+    }
+    if ((blockade.phase == RaidRoadBlockadePhase::Warning ||
+         blockade.phase == RaidRoadBlockadePhase::Closed) &&
+        inOutdoorRaidSpace() && !tacticalMap_.discoveredRoadBlockade() &&
+        roadBlockadeFaceObservable(playerCenter(player_)))
+    {
+        tacticalMap_.observeRoadBlockade({blockade.bounds, blockade.phase});
+    }
+}
+
+bool GameplayWorld::roadBlockadeFaceObservable(Vec2 center, std::optional<float> maximumReach) const
+{
+    const ContentRect &bounds = roadBlockade_->bounds;
+    const Vec2 closest = nearestPointOnRect(bounds, center);
+    if (lightConeObservationEnabled())
+    {
+        float maximum = std::max(currentObservationParameters().maximumDistance, weaponLightDistance_);
+        if (thrownIllumination_.source())
+        {
+            maximum = std::max(maximum,
+                raidSightParameters(RaidLightEnvironment::DayOutdoor).maximumDistance);
+        }
+        if (distanceSquared(center, closest) > maximum * maximum)
+            return false;
+    }
+
+    const auto sampleVisible = [&](Vec2 point)
+    {
+        const float distanceToFaceSquared = distanceSquared(center, point);
+        if (maximumReach && distanceToFaceSquared > *maximumReach * *maximumReach)
+            return false;
+        // Sample just in front of the face, toward the observer.
+        const float offset = std::max(1.0F, std::sqrt(distanceToFaceSquared));
+        const Vec2 sample{point.x + (center.x - point.x) / offset,
+            point.y + (center.y - point.y) / offset};
+        if (!activeBlockerIndex().hasLineOfSight(center, sample))
+            return false;
+        static_cast<void>(raidObservation());
+        return observationBoundsQuery_.pointVisible(sample);
+    };
+    if (sampleVisible(closest))
+        return true;
+
+    // A wall or a cone boundary can hide the nearest point while exposing
+    // another part of the face.
+    const Vec2 farCorner{bounds.position.x + bounds.size.x, bounds.position.y + bounds.size.y};
+    const bool outsideHorizontal = center.x < bounds.position.x || center.x > farCorner.x;
+    if (outsideHorizontal &&
+        (sampleVisible({closest.x, bounds.position.y}) || sampleVisible({closest.x, farCorner.y})))
+        return true;
+    const bool outsideVertical = center.y < bounds.position.y || center.y > farCorner.y;
+    return outsideVertical &&
+        (sampleVisible({bounds.position.x, closest.y}) || sampleVisible({farCorner.x, closest.y}));
+}
+
+std::optional<RaidRoadBlockadeView> GameplayWorld::roadBlockade() const
+{
+    if (!roadBlockade_)
+        return std::nullopt;
+
+    const auto &blockade = *roadBlockade_;
+    RaidRoadBlockadeView view{blockade.phase, blockade.bounds};
+    if (blockade.phase == RaidRoadBlockadePhase::Warning)
+    {
+        view.awaitingClear = blockade.secondsRemaining <= kRoadBlockadeOccupancyGraceSeconds;
+        view.phaseSecondsRemaining = view.awaitingClear
+            ? blockade.secondsRemaining
+            : blockade.secondsRemaining - kRoadBlockadeOccupancyGraceSeconds;
+    }
+    if (!inOutdoorRaidSpace() || !raidSession_.isActive() || player_.isDead() ||
+        (blockade.phase != RaidRoadBlockadePhase::Warning &&
+         blockade.phase != RaidRoadBlockadePhase::Closed))
+    {
+        return view;
+    }
+
+    const Vec2 center = playerCenter(player_);
+    if (blockade.phase == RaidRoadBlockadePhase::Closed)
+    {
+        view.nearby = distanceSquared(center, nearestPointOnRect(blockade.bounds, center)) <=
+            kRoadBlockadeReach * kRoadBlockadeReach;
+        view.canInteract = view.nearby && !player_.isControlled() &&
+            roadBlockadeFaceObservable(center, kRoadBlockadeReach);
+    }
+    view.visible = view.canInteract || roadBlockadeFaceObservable(center);
+    return view;
+}
+
+bool GameplayWorld::tryOpenRoadBlockade(const std::function<bool()> &commitWedge)
+{
+    const auto view = roadBlockade();
+    if (!view || !view->canInteract || !commitWedge)
+        return false;
+
+    const Vec2 noise{view->bounds.position.x + view->bounds.size.x * 0.5F,
+        view->bounds.position.y + view->bounds.size.y * 0.5F};
+    const auto &space = outdoorRaidSpaceId();
+    // Reserve the local sound event before touching the asset. On success,
+    // all resulting world changes use the prepared geometry and map nodes.
+    decltype(localNoiseInvestigations_) listeners;
+    for (const Enemy &enemy : enemies_)
+    {
+        const auto id = enemy.combatTargetId();
+        if (!enemy.isDead() && enemies_.state(id).noiseResponsive &&
+            enemy.awarenessState() != EnemyAwarenessState::Alerted &&
+            enemy.attackPhase() == EnemyAttackPhase::Idle &&
+            distanceSquared(enemyCenter(enemy), noise) <=
+                kRoadBlockadeBreachNoiseRadius * kRoadBlockadeBreachNoiseRadius)
+        {
+            listeners.emplace(id, LocalNoiseInvestigation{space, noise, 0.0F, false});
+        }
+    }
+    if (!commitWedge())
+        return false;
+
+    switchRoadBlockadeGeometry();
+    setRoadBlockadePhase(RaidRoadBlockadePhase::Breached);
+    for (Enemy &enemy : enemies_)
+    {
+        const auto id = enemy.combatTargetId();
+        const auto listener = listeners.find(id);
+        if (listener == listeners.end())
+            continue;
+        noiseDecoy_.forget(id);
+        enemy.investigateSound(noise);
+        listener->second.remaining = enemy.searchTimeRemaining();
+        localNoiseInvestigations_.erase(id);
     }
     localNoiseInvestigations_.merge(listeners);
     return true;
@@ -3580,16 +3834,20 @@ RaidSpaceNavigationField *
 GameplayWorld::activeNavigationField(Vec2 actorSize)
 {
     const RaidSpaceDefinitionId &spaceId = activeRaidSpaceId();
+    auto &cache = inOutdoorRaidSpace() && roadBlockade_ &&
+            roadBlockade_->phase == RaidRoadBlockadePhase::Closed
+        ? roadBlockade_->closedNavigationFields
+        : navigationFieldCache_;
     const auto found = std::find_if(
-        navigationFieldCache_.begin(),
-        navigationFieldCache_.end(),
+        cache.begin(),
+        cache.end(),
         [&](const NavigationFieldCache &candidate)
         {
             return candidate.spaceId == spaceId &&
                    candidate.actorSize.x == actorSize.x &&
                    candidate.actorSize.y == actorSize.y;
         });
-    if (found != navigationFieldCache_.end())
+    if (found != cache.end())
     {
         return &found->field;
     }
@@ -3604,12 +3862,8 @@ GameplayWorld::activeNavigationField(Vec2 actorSize)
     {
         return nullptr;
     }
-    navigationFieldCache_.push_back(
-        NavigationFieldCache{
-            spaceId,
-            actorSize,
-            std::move(*field)});
-    return &navigationFieldCache_.back().field;
+    cache.push_back(NavigationFieldCache{spaceId, actorSize, std::move(*field)});
+    return &cache.back().field;
 }
 
 void GameplayWorld::cacheNavigationFieldsForSpace(
@@ -3619,36 +3873,28 @@ void GameplayWorld::cacheNavigationFieldsForSpace(
     std::span<const Enemy> enemies)
 {
     for (const Enemy &enemy : enemies)
-    {
-        const Vec2 actorSize = enemy.size();
-        const bool alreadyCached = std::any_of(
-            navigationFieldCache_.begin(),
-            navigationFieldCache_.end(),
-            [&](const NavigationFieldCache &candidate)
-            {
-                return candidate.spaceId == spaceId &&
-                       candidate.actorSize.x == actorSize.x &&
-                       candidate.actorSize.y == actorSize.y;
-            });
-        if (alreadyCached)
+        cacheNavigationFieldForSpace(navigationFieldCache_, spaceId, enemy.size(), worldSize, blockers);
+}
+
+void GameplayWorld::cacheNavigationFieldForSpace(
+    std::vector<NavigationFieldCache> &cache,
+    const RaidSpaceDefinitionId &spaceId,
+    Vec2 actorSize,
+    Vec2 worldSize,
+    std::span<const BallisticBlocker> blockers)
+{
+    const bool alreadyCached = std::any_of(cache.begin(), cache.end(),
+        [&](const NavigationFieldCache &candidate)
         {
-            continue;
-        }
-        std::optional<RaidSpaceNavigationField> field =
-            RaidSpaceNavigationField::build(
-                actorSize,
-                worldSize,
-                blockers,
-                2.0F);
-        if (field.has_value())
-        {
-            navigationFieldCache_.push_back(
-                NavigationFieldCache{
-                    spaceId,
-                    actorSize,
-                    std::move(*field)});
-        }
-    }
+            return candidate.spaceId == spaceId &&
+                candidate.actorSize.x == actorSize.x &&
+                candidate.actorSize.y == actorSize.y;
+        });
+    if (alreadyCached)
+        return;
+
+    if (auto field = RaidSpaceNavigationField::build(actorSize, worldSize, blockers, 2.0F))
+        cache.push_back(NavigationFieldCache{spaceId, actorSize, std::move(*field)});
 }
 
 std::size_t GameplayWorld::outdoorAliveEnemyCount() const noexcept
@@ -3678,7 +3924,7 @@ bool GameplayWorld::tryTransitionRaidSpace(
         const Vec2 returnPosition = interior.exteriorReturn;
         if (beforeSpaceTransition && !beforeSpaceTransition()) return false;
         activeInteriorIndex_.reset();
-        activeGeometryRevision_ = 1;
+        activeGeometryRevision_ = outdoorGeometryRevision_;
         static_cast<void>(player_.setPosition(returnPosition));
     }
     else

@@ -317,6 +317,8 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
             snapshot.highRiskCrisis.has_value()
             ? &*snapshot.highRiskCrisis
             : nullptr;
+        if (crisis)
+            worldConfig.roadBlockade = crisis->roadBlockade;
         worldConfig.highRisk = HighRiskWorldConfig{
             map.highRisk.enabled,
             map.highRisk.regularPhaseDurationSeconds,
