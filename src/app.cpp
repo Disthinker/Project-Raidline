@@ -1027,6 +1027,14 @@ namespace
         GridPosition clickedCell{};
     };
 
+    const RaidLostWeaponPursuitSnapshot *lostWeaponPursuit(const ProfileState &profile) noexcept
+    {
+        if (!profile.pendingRaid || !profile.pendingRaid->selfRecovery)
+            return nullptr;
+        const auto &pursuit = profile.pendingRaid->selfRecovery->pursuit;
+        return pursuit ? &*pursuit : nullptr;
+    }
+
     std::optional<ProfileAssetHit> profileAssetHitAt(
         const ProfileState &profile, MousePosition position, bool includeStash,
         std::optional<AssetInstanceId> externalContainerId = std::nullopt,
@@ -1092,24 +1100,29 @@ namespace
                 static_cast<int>((position.y - view.y) / view.cellSize)};
             const auto id = profileAssetAtCell(
                 profile, publishedContentRegistry(), view.container, cell);
-            if (!id.has_value())
-            {
+            const auto *asset = id ? profile.assets.find(*id) :
+                view.container.kind == ProfileContainerKind::AssetCompartment &&
+                view.container.compartmentIndex == 0
+                    ? raidPursuitCorpseWeapon(profile, view.container.ownerAssetId) : nullptr;
+            if (!asset)
                 return std::nullopt;
-            }
-            const AssetRecord *asset = profile.assets.find(*id);
-            const auto &stored = std::get<StoredAssetLocation>(asset->location);
+            const auto *stored = std::get_if<StoredAssetLocation>(&asset->location);
+            const GridPosition origin = stored ? stored->origin : GridPosition{};
             const InventoryFootprint footprint = inventoryFootprint(
                 publishedContentRegistry().item(asset->definitionId),
                 asset->orientation);
+            if (cell.x < origin.x || cell.y < origin.y ||
+                cell.x >= origin.x + footprint.width || cell.y >= origin.y + footprint.height)
+                return std::nullopt;
             return ProfileAssetHit{
                 asset,
                 SDL_FRect{
-                    view.x + static_cast<float>(stored.origin.x) * view.cellSize,
-                    view.y + static_cast<float>(stored.origin.y) * view.cellSize,
+                    view.x + static_cast<float>(origin.x) * view.cellSize,
+                    view.y + static_cast<float>(origin.y) * view.cellSize,
                     static_cast<float>(footprint.width) * view.cellSize,
                     static_cast<float>(footprint.height) * view.cellSize},
                 view.cellSize,
-                stored.origin,
+                origin,
                 cell};
         }
         return std::nullopt;
@@ -1723,7 +1736,7 @@ bool App::loadTextures()
 }
 
 // Init SDL video subsystem and create window
-bool App::initialize()
+bool App::initialize(std::string_view testProfile)
 {
     if (!SDL_Init(SDL_INIT_VIDEO))
     {
@@ -1747,29 +1760,54 @@ bool App::initialize()
         }
     }
 
-    char *preferencePath = SDL_GetPrefPath(
-        "Disthinker",
-        "Project Raidline");
-    if (preferencePath == nullptr)
+    std::filesystem::path persistenceDirectory;
+    if (testProfile.empty())
     {
-        fmt::print("SDL_GetPrefPath failed: {}\n", SDL_GetError());
-        SDL_Quit();
-        return false;
+        char *preferencePath = SDL_GetPrefPath("Disthinker", "Project Raidline");
+        if (preferencePath == nullptr)
+        {
+            fmt::print("SDL_GetPrefPath failed: {}\n", SDL_GetError());
+            SDL_Quit();
+            return false;
+        }
+        persistenceDirectory = preferencePath;
+        SDL_free(preferencePath);
     }
-    gameFlow_.configurePersistence(
-        std::filesystem::path{preferencePath});
-    settingsPath_ = std::filesystem::path{preferencePath} / "settings.json";
+    else
+    {
+        const char *basePath = SDL_GetBasePath();
+        std::error_code error;
+        const auto base = basePath ? std::filesystem::canonical(basePath, error) : std::filesystem::path{};
+        if (!error && !base.empty())
+        {
+            persistenceDirectory = base / "test-profiles" / testProfile;
+            const auto resolved = std::filesystem::canonical(persistenceDirectory, error);
+            const auto profilePath = persistenceDirectory / "profile.json";
+            const auto profileStatus = std::filesystem::symlink_status(profilePath, error);
+            if (error || resolved != persistenceDirectory ||
+                !std::filesystem::is_regular_file(profileStatus))
+                persistenceDirectory.clear();
+        }
+        if (persistenceDirectory.empty())
+        {
+            fmt::print(stderr, "Test profile '{}' is unavailable.\n", testProfile);
+            SDL_Quit();
+            return false;
+        }
+    }
+    gameFlow_.configurePersistence(persistenceDirectory);
+    settingsPath_ = persistenceDirectory / "settings.json";
     const auto clientSettings=loadUiClientSettings(settingsPath_);
     uiTextRenderer_.setLanguage(clientSettings.language);
     const auto area=availableUiWindowArea();
     uiWindowSize_=safeUiWindowSize(clientSettings.window,area.width,area.height);
-    SDL_free(preferencePath);
 
-    window_ = SDL_CreateWindow("Project Raidline", uiWindowSize_.width, uiWindowSize_.height, SDL_WINDOW_HIGH_PIXEL_DENSITY);
+    const char *title = testProfile.empty() ? "Project Raidline" : "Project Raidline - Test Profile";
+    window_ = SDL_CreateWindow(title, uiWindowSize_.width, uiWindowSize_.height, SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if (!window_ && (uiWindowSize_.width != 1280 || uiWindowSize_.height != 720))
     {
         uiWindowSize_=safeUiWindowSize({1280,720},area.width,area.height);
-        window_=SDL_CreateWindow("Project Raidline",uiWindowSize_.width,uiWindowSize_.height,SDL_WINDOW_HIGH_PIXEL_DENSITY);
+        window_=SDL_CreateWindow(title,uiWindowSize_.width,uiWindowSize_.height,SDL_WINDOW_HIGH_PIXEL_DENSITY);
     }
     if (!window_)
     {
@@ -2523,9 +2561,11 @@ void App::openRaidSceneContainer(AssetInstanceId id)
     inventoryOverlayState_.openContainerInventory();
     input_.suppressPrimaryPointerUntilRelease();
     const auto *root = gameSession_.profile().assets.find(id);
+    const auto *pursuit = lostWeaponPursuit(gameSession_.profile());
     uiMessage_ = gameSession_.isRaidFreightCrate(id)
         ? "FREIGHT CRATE OPENED | WORLD CONTINUES"
-        : root && std::holds_alternative<RaidCorpseContainerAssetLocation>(root->location)
+        : ((pursuit && pursuit->corpseAssetId == id) ||
+           (root && std::holds_alternative<RaidCorpseContainerAssetLocation>(root->location)))
             ? "CORPSE OPENED | WORLD CONTINUES" : "SCENE CONTAINER OPENED | WORLD CONTINUES";
 }
 
@@ -3484,10 +3524,10 @@ void App::handleProfileInventoryUiEvent(
         {
             const auto *stored = std::get_if<StoredAssetLocation>(
                 &asset.location);
-            const bool sourceIsExternal = stored != nullptr &&
-                stored->container.kind ==
-                    ProfileContainerKind::AssetCompartment &&
-                stored->container.ownerAssetId == *externalContainerId;
+            const bool sourceIsExternal = (stored &&
+                stored->container.kind == ProfileContainerKind::AssetCompartment &&
+                stored->container.ownerAssetId == *externalContainerId) ||
+                raidPursuitCorpseWeapon(profile, *externalContainerId) == &asset;
             for (const ProfileGridView &view : profileGridViews(
                      profile,
                      false,
@@ -3759,10 +3799,12 @@ void App::handleProfileRightClick(MousePosition position, bool inRaid)
     {
         const auto *stored = std::get_if<StoredAssetLocation>(
             &hit->asset->location);
-        if (stored != nullptr &&
+        if ((stored != nullptr &&
             stored->container.kind ==
                 ProfileContainerKind::AssetCompartment &&
-            stored->container.ownerAssetId == *externalContainerId)
+            stored->container.ownerAssetId == *externalContainerId) ||
+            raidPursuitCorpseWeapon(gameSession_.profileForInventoryPresentation(),
+                *externalContainerId) == hit->asset)
         {
             clearProfileItemContext();
             uiMessage_ = "MOVE ITEM TO CARRIED INVENTORY FIRST";
@@ -9696,8 +9738,9 @@ void App::renderPlayer()
 
 void App::renderEnemies()
 {
+    const auto &world = gameSession_.world();
     const std::vector<Enemy> &enemies =
-        gameSession_.world().enemies();
+        world.enemies();
     for (std::size_t enemyIndex{0U};
          enemyIndex < enemies.size();
          ++enemyIndex)
@@ -9841,6 +9884,12 @@ void App::renderEnemies()
                 enemyRect.y - 10.0F,
                 enemyStateText.c_str());
         }
+    }
+    if (const auto carrier = world.visibleLostWeaponCarrier())
+    {
+        SDL_SetRenderDrawColor(renderer_, 244, 230, 180, 255);
+        renderWorldLabel(carrier->position.x, carrier->position.y - 16.0F,
+            "LOST WEAPON CARRIER");
     }
 }
 
@@ -12149,6 +12198,14 @@ void App::renderProfileGrid(
             }
         }
     }
+    if (container.kind == ProfileContainerKind::AssetCompartment && container.compartmentIndex == 0)
+        if (const auto *weapon = raidPursuitCorpseWeapon(profile, container.ownerAssetId))
+        {
+            const auto footprint = inventoryFootprint(
+                publishedContentRegistry().item(weapon->definitionId), weapon->orientation);
+            renderProfileAsset(*weapon, {x, y, footprint.width * cellSize, footprint.height * cellSize},
+                cellSize);
+        }
     if(container.kind==ProfileContainerKind::Stash) {
         constexpr int rowsPerPage=8;
         for(int row=0;row<size.height;row+=rowsPerPage)
@@ -12819,8 +12876,10 @@ void App::renderProfileInventory(
         else if(profilePresentation_.returns && !assetsInContainer(profile,ProfileContainerId::baseIntake()).empty())title="UNASSIGNED RETURNS";
         if(externalContainerId) {
             const auto *owner=profile.assets.find(*externalContainerId);
+            const auto *pursuit=lostWeaponPursuit(profile);
             title = freightCrate ? "SEALED FREIGHT CRATE"
-                : owner && std::holds_alternative<RaidCorpseContainerAssetLocation>(owner->location)
+                : ((pursuit && pursuit->corpseAssetId == *externalContainerId) ||
+                   (owner && std::holds_alternative<RaidCorpseContainerAssetLocation>(owner->location)))
                     ? "CORPSE" : inRaid ? "SCENE STORAGE" : "BASE GROUND CONTAINER";
         }
         const int titleSize = externalContainerId && (!inRaid || freightCrate) &&
@@ -12930,6 +12989,23 @@ void App::renderAlphaRaidLoot()
     {
         const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location);
         if (!scene || scene->spaceId != gameSession_.world().activeRaidSpaceId()) continue;
+        if (const auto *pursuit = lostWeaponPursuit(profile); pursuit && pursuit->corpseAssetId == id)
+        {
+            if (!pursuit->deathPosition || !gameSession_.world().lostWeaponCorpseObservable())
+                continue;
+            const auto p = *pursuit->deathPosition;
+            const SDL_FRect body{p.x - 26, p.y - 10, 52, 20};
+            SDL_SetRenderDrawColor(renderer_, 86, 63, 58, 255);
+            SDL_RenderFillRect(renderer_, &body);
+            SDL_SetRenderDrawColor(renderer_, 244, 230, 180, 255);
+            SDL_RenderRect(renderer_, &body);
+            SDL_RenderLine(renderer_, p.x - 14, p.y, p.x + 14, p.y);
+            renderWorldLabel(body.x, body.y - 20.0F,
+                pursuit->claimed ? "EMPTY CORPSE" :
+                gameSession_.canOpenRaidSceneContainer(id) && !inventoryOverlayState_.isOpen()
+                    ? "F: SEARCH CORPSE" : "LOST WEAPON CORPSE");
+            continue;
+        }
         if (!gameSession_.world().raidBoundsObservable({{scene->position.x-24,scene->position.y-18},{48,36}})) continue;
         const SDL_FRect box{scene->position.x - 24, scene->position.y - 18, 48, 36};
         SDL_SetRenderDrawColor(renderer_, 86, 76, 52, 255);
@@ -14110,6 +14186,20 @@ void App::renderRaidTacticalMap()
     }
     if (chalk)
         renderRaidChalkLines(*chalk);
+    if (const auto *pursuit = lostWeaponPursuit(gameSession_.profile()))
+    {
+        if (!pursuit->claimed)
+        {
+            const SDL_FRect region = screenRect(pursuit->searchArea);
+            SDL_SetRenderDrawColor(renderer_, 229, 199, 112, 50);
+            SDL_RenderFillRect(renderer_, &region);
+            SDL_SetRenderDrawColor(renderer_, 242, 214, 112, 245);
+            SDL_RenderRect(renderer_, &region);
+        }
+        uiFinalTextAt(renderer_, uiTextRenderer_, 880.0F, 95.0F,
+            pursuit->claimed ? "LOST WEAPON TAKEN" : "LOST WEAPON SEARCH AREA",
+            256.0F, 11, 1);
+    }
     if (const auto marker = map.discoveredRoadBlockade())
     {
         const auto area = screenRect(marker->bounds);
@@ -14672,9 +14762,9 @@ void App::shutdown()
     SDL_Quit();
 }
 
-int App::run()
+int App::run(std::string_view testProfile)
 {
-    if (!initialize())
+    if (!initialize(testProfile))
     {
         return 1;
     }

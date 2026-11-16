@@ -2,6 +2,7 @@
 #include "weapon_ammo_domain.h"
 #include "raid_corpse_search.h"
 #include "raid_lifecycle.h"
+#include "self_recovery_domain.h"
 #include "chest_rig_layout_migration.h"
 #include "tactical_device_domain.h"
 #include "weapon_component_domain.h"
@@ -2334,6 +2335,9 @@ ProfileValidationResult validateProfileState(
             if (!profile.pendingRaid || !profile.pendingRaid->startingAssets || scene->raidId != profile.pendingRaid->raidId ||
                 asset.definitionId != ItemDefinitionId{"item.container.base_storage_crate"} || asset.quantity != 1U)
                 return {false, "Raid scene container ownership is invalid"};
+            const auto &recovery = profile.pendingRaid->selfRecovery;
+            if (recovery && recovery->pursuit && recovery->pursuit->corpseAssetId == id)
+                continue; // The pursuit container is validated with its source record.
             const auto &map = content.map(profile.pendingRaid->mapDefinitionId);
             const auto interior = std::find_if(map.interiors.begin(), map.interiors.end(),
                 [&](const auto &value) { return value.id == scene->spaceId; });
@@ -2737,6 +2741,8 @@ ProfileValidationResult validateProfileState(
     if (profile.pendingRaid.has_value())
     {
         const PendingRaidSnapshot &raid = *profile.pendingRaid;
+        const auto *pursuit = raid.selfRecovery && raid.selfRecovery->pursuit
+            ? &*raid.selfRecovery->pursuit : nullptr;
         const MapDefinition *raidMap{};
         try
         {
@@ -2820,6 +2826,8 @@ ProfileValidationResult validateProfileState(
             }
             else if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
             {
+                if (pursuit && pursuit->corpseAssetId == id)
+                    continue;
                 const bool isSealed = raid.sealedFreightCrate && raid.sealedFreightCrate->containerAssetId == id;
                 if (isSealed)
                     foundSealedCrate = true;
@@ -2846,7 +2854,7 @@ ProfileValidationResult validateProfileState(
             // scene containers. Backpack recovery also needs exact baselines on
             // ordinary maps that do not have these containers.
             std::size_t expectedSceneSpaces = 2U;
-            if (raid.backpackRecoveryEnabled)
+            if (raid.backpackRecoveryEnabled || pursuit)
                 expectedSceneSpaces = static_cast<std::size_t>(std::count_if(
                     raidMap->interiors.begin(), raidMap->interiors.end(), [](const auto &interior) {
                         return interior.lootSlots.size() >= 2U &&
@@ -3268,7 +3276,53 @@ ProfileValidationResult validateProfileState(
                         "pending Raid outpost restoration is invalid"};
             }
         }
-        if (raid.selfRecovery.has_value())
+        if (pursuit)
+        {
+            const auto &recovery = *raid.selfRecovery;
+            const auto &source = recovery.sourceRecord;
+            const auto record = profile.lostRaidRecords.find(source.recordId);
+            if (content.contentVersion() != kRaidLostWeaponPursuitContentVersion ||
+                raid.mapDefinitionId != kFieldIntelligenceSourceMapId ||
+                source.mapDefinitionId != raid.mapDefinitionId ||
+                !validLostRecordMetadata(source) || recovery.opened || recovery.roots.size() != 1U ||
+                !raid.startingAssets || (pursuit->claimed && !pursuit->deathPosition) ||
+                (record != profile.lostRaidRecords.end() && record->second != source) ||
+                (!pursuit->claimed && record == profile.lostRaidRecords.end()) ||
+                (profile.recoveryTask && profile.recoveryTask->sourceRecord.recordId == source.recordId))
+                return {false, "pending Raid pursuit record is invalid"};
+
+            const auto &root = recovery.roots.front();
+            const auto selected = selectRaidPursuitWeapon(*raid.startingAssets, content, source);
+            const auto *before = raid.startingAssets->find(root.assetId);
+            const auto *gun = profile.assets.find(root.assetId);
+            const auto *lostBefore = before ? std::get_if<LostRaidAssetLocation>(&before->location) : nullptr;
+            const auto *lostNow = gun ? std::get_if<LostRaidAssetLocation>(&gun->location) : nullptr;
+            if (selected != root.assetId || !lostBefore || lostBefore->sourceSlot != root.sourceSlot ||
+                !gun || gun->definitionId != before->definitionId || gun->quantity != 1U ||
+                (pursuit->claimed
+                    ? lostNow != nullptr
+                    : !lostNow || lostNow->recordId != source.recordId || lostNow->sourceSlot != root.sourceSlot) ||
+                std::any_of(raid.loot.begin(), raid.loot.end(),
+                    [&](const auto &loot) { return loot.assetId == root.assetId; }))
+                return {false, "pending Raid pursuit weapon ownership is invalid"};
+
+            const auto *asset = profile.assets.find(pursuit->corpseAssetId);
+            const auto *corpse = asset ? std::get_if<RaidSceneContainerAssetLocation>(&asset->location) : nullptr;
+            const Vec2 position = pursuit->deathPosition.value_or(pursuit->fallbackSearchPosition);
+            if (!corpse || asset->definitionId != kRaidLostWeaponPursuitCorpseId || corpse->raidId != raid.raidId ||
+                corpse->spaceId != outdoorRaidSpaceId() || corpse->position.x != position.x || corpse->position.y != position.y ||
+                raid.startingAssets->find(pursuit->corpseAssetId) ||
+                !raidLostWeaponCorpsePointClear(*raidMap, raid, position) ||
+                std::any_of(profile.assets.records().begin(), profile.assets.records().end(),
+                    [&](const auto &entry)
+                    {
+                        const auto *stored = std::get_if<StoredAssetLocation>(&entry.second.location);
+                        return stored && stored->container.kind == ProfileContainerKind::AssetCompartment &&
+                            stored->container.ownerAssetId == pursuit->corpseAssetId;
+                    }))
+                return {false, "pending Raid pursuit corpse is invalid"};
+        }
+        else if (raid.selfRecovery.has_value())
         {
             const RaidSelfRecoverySnapshot &recovery = *raid.selfRecovery;
             const auto record = profile.lostRaidRecords.find(
@@ -3456,7 +3510,7 @@ ProfileValidationResult validateProfileState(
                 }
                 anchors.reachablePoints.push_back(loot.position);
             }
-            if (raid.selfRecovery.has_value())
+            if (raid.selfRecovery.has_value() && !pursuit)
             {
                 anchors.reachablePoints.push_back(
                     raid.selfRecovery->cachePosition);
@@ -4081,7 +4135,7 @@ ProfileValidationResult validateProfileState(
                 const auto &bounds = blockade->bounds;
                 const Vec2 farCorner{bounds.position.x + bounds.size.x,
                                      bounds.position.y + bounds.size.y};
-                if (content.contentVersion() != kFrontierHighRiskBlockadeContentVersion ||
+                if (!supportsFrontierHighRiskBlockadeContent(content.contentVersion()) ||
                     regionalMissionCount != 0U || raid.mapDefinitionId != kFreightCrateMapId ||
                     !(bounds.size.x > 0.0F && bounds.size.y > 0.0F) ||
                     !insideWalkable(bounds.position) || !insideWalkable(farCorner) ||
@@ -6288,6 +6342,27 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
                 hashInteger(hash, root.lootSlotIndex);
                 hashFloat(hash, root.position.x);
                 hashFloat(hash, root.position.y);
+            }
+            if (recovery.pursuit)
+            {
+                const auto &pursuit = *recovery.pursuit;
+                hashBytes(hash, "lost_weapon_pursuit");
+                const auto hashPoint = [&](Vec2 point)
+                {
+                    hashFloat(hash, point.x);
+                    hashFloat(hash, point.y);
+                };
+                hashPoint(pursuit.carrierSpawn);
+                for (const Vec2 point : pursuit.patrolPoints)
+                    hashPoint(point);
+                hashPoint(pursuit.searchArea.position);
+                hashPoint(pursuit.searchArea.size);
+                hashPoint(pursuit.fallbackSearchPosition);
+                hashInteger(hash, pursuit.corpseAssetId);
+                hashInteger(hash, pursuit.deathPosition ? 1U : 0U);
+                if (pursuit.deathPosition)
+                    hashPoint(*pursuit.deathPosition);
+                hashInteger(hash, pursuit.claimed ? 1U : 0U);
             }
         }
         if (raid.outpostRestoration.has_value())

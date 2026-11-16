@@ -5760,3 +5760,145 @@ TEST(GameplayWorldRaidTest, FieldIntelligenceMeasuresOpenContactThreatQuery)
     std::sort(samples.begin(), samples.end());
     std::cout << "Field intelligence open contact p95 threat query: " << samples[22] << " us\n";
 }
+
+namespace
+{
+    RaidWorldConfig makeLostWeaponPursuitWorld()
+    {
+        RaidWorldConfig config;
+        config.playerSpawn = {100.0F, 100.0F};
+        config.extractionPoint = {{1080.0F, 520.0F}, {150.0F, 140.0F}};
+        config.noiseDecoyEnabled = true;
+        config.lostWeaponPursuitFallback = Vec2{610.0F, 450.0F};
+        EnemySpawn carrier{{700.0F, 140.0F}, {50.0F, 50.0F}, 10};
+        carrier.encounterKind = RaidEncounterKind::Patrol;
+        carrier.patrolPoints = {{725.0F, 165.0F}, {900.0F, 165.0F}};
+        carrier.lostWeaponCarrier = true;
+        config.initialEnemies.push_back(std::move(carrier));
+        return config;
+    }
+}
+
+TEST(GameplayWorldRaidTest, LostWeaponCarrierUsesOrdinaryPatrolAndCanInvestigateDecoy)
+{
+    auto config = makeLostWeaponPursuitWorld();
+    GameplayWorld world{std::move(config)};
+    ASSERT_EQ(world.enemies().size(), 1U);
+    const auto id = world.enemies().front().combatTargetId();
+    world.update({}, 0.25F);
+    const float afterPatrol = world.enemies().front().position().x;
+    EXPECT_GT(afterPatrol, 700.0F);
+    EXPECT_EQ(world.enemies().front().awarenessState(), EnemyAwarenessState::Unaware);
+
+    const auto plan = world.previewNoiseDecoy({540.0F, 160.0F}, NoiseDecoyUseDefinition{});
+    ASSERT_TRUE(plan);
+    RaidNoiseDecoyRuntime runtime;
+    ASSERT_TRUE(runtime.start(*plan));
+    world.commitNoiseDecoy(std::move(runtime));
+    world.update({}, 0.5F);
+    ASSERT_TRUE(world.noiseDecoy().investigations().contains(id));
+    EXPECT_FALSE(world.enemies().front().lastKnownTargetPosition());
+    const float atPulse = world.enemies().front().position().x;
+    world.update({}, 0.25F);
+    EXPECT_LT(world.enemies().front().position().x, atPulse);
+    EXPECT_FALSE(world.lostWeaponCarrierDeath());
+}
+
+TEST(GameplayWorldRaidTest, LostWeaponCarrierAndCorpseNeverProjectThroughCover)
+{
+    auto config = makeLostWeaponPursuitWorld();
+    config.playerSpawn = {346.0F, 144.0F};
+    config.initialEnemies.front().position = {430.0F, 135.0F};
+    config.initialEnemies.push_back({{350.0F, 420.0F}, {50.0F, 50.0F}, 10});
+    config.ballisticBlockers.push_back({1, {{400.0F, 60.0F}, {30.0F, 220.0F}}});
+    GameplayWorld world{std::move(config)};
+    ASSERT_EQ(world.enemies().size(), 2U);
+    // Riverside's legacy observation sees ordinary bounds even if a wall
+    // stands between them. Only the pursuit-specific projection adds LOS.
+    EXPECT_TRUE(world.raidEnemyObservable(world.enemies().front().combatTargetId()));
+    EXPECT_FALSE(world.visibleLostWeaponCarrier());
+    EXPECT_FALSE(world.lostWeaponCorpseObservable());
+
+    EXPECT_TRUE(const_cast<Enemy &>(world.enemies().back()).takeDamage(10));
+    world.update({}, 0.0F);
+    EXPECT_FALSE(world.lostWeaponCarrierDeath());
+    ASSERT_EQ(world.enemies().size(), 1U);
+
+    const auto id = world.enemies().front().combatTargetId();
+    EXPECT_TRUE(const_cast<Enemy &>(world.enemies().front()).takeDamage(10));
+    world.update({}, 0.0F);
+    EXPECT_TRUE(world.enemies().empty());
+    EXPECT_FALSE(world.raidEnemyObservable(id));
+    EXPECT_FALSE(world.visibleLostWeaponCarrier());
+    ASSERT_TRUE(world.lostWeaponCarrierDeath());
+    // The 52-wide corpse would intersect the wall at the raw death center,
+    // so resolve the first nearby clear point on the same side of cover.
+    EXPECT_FLOAT_EQ(world.lostWeaponCarrierDeath()->x, 459.0F);
+    EXPECT_FLOAT_EQ(world.lostWeaponCarrierDeath()->y, 160.0F);
+    EXPECT_FALSE(world.lostWeaponCorpseObservable());
+    EXPECT_TRUE(world.pendingCorpseDeaths().empty());
+
+    auto &player = const_cast<Player &>(world.player());
+    ASSERT_TRUE(player.setPosition({485.0F, 144.0F}));
+    world.update({}, 0.0F);
+    EXPECT_TRUE(world.lostWeaponCorpseObservable());
+    EXPECT_EQ(world.score(), 200);
+}
+
+TEST(GameplayWorldRaidTest, LostWeaponInvalidDeathPointUsesPreparedFallback)
+{
+    auto config = makeLostWeaponPursuitWorld();
+    const Vec2 fallback = *config.lostWeaponPursuitFallback;
+    config.ballisticBlockers.push_back({1, {{400.0F, 60.0F}, {80.0F, 220.0F}}});
+    GameplayWorld world{std::move(config)};
+    Enemy &carrier = const_cast<Enemy &>(world.enemies().front());
+    ASSERT_TRUE(carrier.setPosition({410.0F, 140.0F}));
+    ASSERT_TRUE(carrier.takeDamage(10));
+    world.update({}, 0.0F);
+    ASSERT_TRUE(world.lostWeaponCarrierDeath());
+    EXPECT_FLOAT_EQ(world.lostWeaponCarrierDeath()->x, fallback.x);
+    EXPECT_FLOAT_EQ(world.lostWeaponCarrierDeath()->y, fallback.y);
+    EXPECT_FALSE(world.visibleLostWeaponCarrier());
+    EXPECT_EQ(world.score(), 100);
+    world.update({}, 0.0F);
+    ASSERT_TRUE(world.lostWeaponCarrierDeath());
+    EXPECT_FLOAT_EQ(world.lostWeaponCarrierDeath()->x, fallback.x);
+    EXPECT_EQ(world.score(), 100);
+}
+
+TEST(GameplayWorldRaidTest, LostWeaponPursuitMeasuresPatrolAndDeathQueries)
+{
+    std::array<double, 24> patrolUs{}, deathUs{};
+    using Clock = std::chrono::steady_clock;
+    const auto elapsedUs = [](Clock::time_point start)
+    { return std::chrono::duration<double, std::micro>{Clock::now() - start}.count(); };
+
+    for (std::size_t sample{}; sample < patrolUs.size(); ++sample)
+    {
+        auto config = makeLostWeaponPursuitWorld();
+        config.ballisticBlockers.push_back({1, {{430.0F, 40.0F}, {80.0F, 80.0F}}});
+        config.ballisticBlockers.push_back({2, {{430.0F, 270.0F}, {50.0F, 100.0F}}});
+        config.ballisticBlockers.push_back({3, {{760.0F, 450.0F}, {80.0F, 50.0F}}});
+        for (float y : {320.0F, 430.0F, 540.0F, 650.0F})
+            config.initialEnemies.push_back({{560.0F, y}, {50.0F, 50.0F}, 10});
+        GameplayWorld world{std::move(config)};
+        auto start = Clock::now();
+        world.update({}, 1.0F / 60.0F);
+        static_cast<void>(world.visibleLostWeaponCarrier());
+        patrolUs[sample] = elapsedUs(start);
+
+        ASSERT_TRUE(const_cast<Enemy &>(world.enemies().front()).takeDamage(10));
+        start = Clock::now();
+        world.update({}, 1.0F / 60.0F);
+        ASSERT_TRUE(world.lostWeaponCarrierDeath());
+        static_cast<void>(world.lostWeaponCorpseObservable());
+        deathUs[sample] = elapsedUs(start);
+    }
+    const auto p95 = [](auto samples)
+    {
+        std::sort(samples.begin(), samples.end());
+        return samples[22];
+    };
+    std::cout << "Lost weapon pursuit p95 (microseconds), patrol with observation " << p95(patrolUs)
+              << ", carrier death with corpse observation " << p95(deathUs) << '\n';
+}

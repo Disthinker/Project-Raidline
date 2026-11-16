@@ -1,5 +1,7 @@
 #include "self_recovery_domain.h"
 
+#include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace
@@ -26,6 +28,11 @@ InventoryReceipt applyOpen(
     }
     RaidSelfRecoverySnapshot &recovery =
         *candidate.pendingRaid->selfRecovery;
+    if (recovery.pursuit)
+    {
+        return failure(DomainErrorCode::IllegalDestination,
+            "THE PURSUIT TARGET HAS NO STATIC CACHE", candidate.revision);
+    }
     if (recovery.opened)
     {
         return failure(
@@ -113,6 +120,7 @@ bool recoveryObserved(const ProfileState &profile, const RaidVisibilityProjectio
                       const RaidObservationKey *current)
 {
     if(!profile.pendingRaid || !profile.pendingRaid->selfRecovery || !view || !current ||
+       profile.pendingRaid->selfRecovery->pursuit ||
        current->spaceId != outdoorRaidSpaceId() || !view->matches(*current)) return false;
     const auto p=profile.pendingRaid->selfRecovery->cachePosition;
     const float dx=p.x-current->observer.x,dy=p.y-current->observer.y;
@@ -194,4 +202,61 @@ InventoryReceipt executeOpenRaidSelfRecovery(
     profile = std::move(candidate);
     receipt.revision = profile.revision;
     return receipt;
+}
+
+bool raidLostWeaponCorpsePointClear(
+    const MapDefinition &map, const PendingRaidSnapshot &raid, Vec2 point) noexcept
+{
+    constexpr float halfWidth = 26.0F;
+    constexpr float halfHeight = 18.0F;
+    const auto &bounds = map.walkableBounds;
+    if (!std::isfinite(point.x) || !std::isfinite(point.y) ||
+        point.x - halfWidth < bounds.position.x ||
+        point.y - halfHeight < bounds.position.y ||
+        point.x + halfWidth > bounds.position.x + bounds.size.x ||
+        point.y + halfHeight > bounds.position.y + bounds.size.y)
+        return false;
+
+    const auto overlaps = [&](const ContentRect &blocker)
+    {
+        return point.x + halfWidth > blocker.position.x &&
+            point.y + halfHeight > blocker.position.y &&
+            point.x - halfWidth < blocker.position.x + blocker.size.x &&
+            point.y - halfHeight < blocker.position.y + blocker.size.y;
+    };
+    return std::none_of(raid.spatialLayout.ballisticBlockers.begin(),
+        raid.spatialLayout.ballisticBlockers.end(), overlaps);
+}
+
+bool revealRaidLostWeaponPursuitCorpse(
+    ProfileState &profile, const ContentRegistry &content, Vec2 position) noexcept
+{
+    try
+    {
+        if (!profile.pendingRaid || !profile.pendingRaid->selfRecovery ||
+            !profile.pendingRaid->selfRecovery->pursuit)
+            return false;
+        auto &raid = *profile.pendingRaid;
+        auto &pursuit = *raid.selfRecovery->pursuit;
+        auto *root = profile.assets.findMutable(pursuit.corpseAssetId);
+        auto *scene = root ? std::get_if<RaidSceneContainerAssetLocation>(&root->location) : nullptr;
+        if (!scene || root->definitionId != kRaidLostWeaponPursuitCorpseId ||
+            raid.mapDefinitionId != kFieldIntelligenceSourceMapId ||
+            scene->raidId != raid.raidId || scene->spaceId != outdoorRaidSpaceId() ||
+            !raidLostWeaponCorpsePointClear(content.map(raid.mapDefinitionId), raid, position))
+            return false;
+        if (pursuit.deathPosition)
+            return true;
+        if (pursuit.claimed || profile.revision == std::numeric_limits<ProfileRevision>::max())
+            return false;
+
+        scene->position = position;
+        pursuit.deathPosition = position;
+        ++profile.revision;
+        return true;
+    }
+    catch (...)
+    {
+        return false;
+    }
 }

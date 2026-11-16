@@ -1,3 +1,17 @@
+# 当前 · 河畔检查站失物追踪与原枪夺回 v1 · 用户已授权交付
+
+用一趟寻回行动夺回原枪，再回基地维护和补弹，把同一把枪带进下一趟实战。[具体开发方案](../exec-plans/active/raid-lost-weapon-pursuit-v1.md)
+
+- task_id `raid-lost-weapon-pursuit-v1`，plan_version `RL-RAID-LOST-WEAPON-PURSUIT-v1`，state `delivery_authorized`。approval_source 为 2026-11-14 用户明确批准 RL-RAID-LOST-WEAPON-PURSUIT-v1 整阶段开发，追踪局只追回一把长枪，暂不提交、推送或合并。candidate_id `RL-RAID-LOST-WEAPON-PURSUIT-v1-local-9847e0b33658`，未记录实机复验结果。2026-11-16，用户要求“如果没有就直接提交合并”，授权交付本候选；合并以该提交的 Windows 和 Ubuntu CI 均通过为准。
+- 基线 `origin/main@b7f1fa4e985ef88de43786926f2c14bd22176c48`。Windows 和 Ubuntu 各通过 3323 项测试，包含 14 项 3 ms 检查。[主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43547890935)
+- 原策划线程已回复 `MAIN-NEXT-STAGE-20261114-AFTER-FRONTIER-BLOCKADE-01`，协调任务 `raid-next-stage-after-frontier-blockade`，协议 `RL-NEXT-STAGE-REQUEST-v1`，turn `01a1d99b-e9c0-7aa0-9d22-8cfe556de03f`，基线一致。
+- 隔离工作树分支 `codex/raid-lost-weapon-pursuit-v1`。河畔追踪局只追回一把长枪，其余失物留在原记录。
+- 桌面固定入口已更新。Windows 全量 3339/3339，新增回归 16 项，原有 14 项 3 ms 检查全部通过。玩家主档、备份和设置的文件哈希一致。[联合验收](../acceptance/raid-lost-weapon-pursuit-v1.md)
+
+
+---
+
+
 # 当前 · 边境交换站高危封路与重型搜运 v1 已验收
 
 用交通图预判撤离路线，高危时绕过一处封锁或消耗楔组开路，把机修工具组带回基地整备。[具体开发方案](../exec-plans/active/frontier-high-risk-blockade-and-salvage-v1.md)

@@ -132,6 +132,14 @@ struct RaidTravelPreview
     const ContentRegistry &content,
     const MapDefinition &map) noexcept;
 
+[[nodiscard]] std::optional<AssetInstanceId> selectRaidPursuitWeapon(
+    const AssetRegistry &assets, const ContentRegistry &content,
+    const LostRaidRecord &record);
+
+[[nodiscard]] bool raidPursuitGeometryValid(
+    const MapDefinition &map, const PendingRaidSnapshot &raid,
+    const RaidLostWeaponPursuitSnapshot &pursuit);
+
 [[nodiscard]] DeployReceipt executeDeploy(
     ProfileState &profile,
     const ContentRegistry &content,

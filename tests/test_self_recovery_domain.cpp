@@ -2,14 +2,18 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <limits>
+#include <set>
 
 #include "alpha_content_ids.h"
 #include "economy_domain.h"
 #include "lost_raid_domain.h"
+#include "maintenance_domain.h"
 #include "raid_lifecycle.h"
 #include "recovery_task_domain.h"
 #include "self_recovery_domain.h"
 #include "save_repository.h"
+#include "weapon_ammo_domain.h"
 
 namespace
 {
@@ -71,6 +75,152 @@ DeployReceipt deployRecovery(
             mapDefinitionId, {}, record},
         CommandContext{profile.revision, "self-recovery-deploy"});
 }
+
+DeployReceipt deployPursuit(ProfileState &profile, const ContentRegistry &content,
+                           const std::string &record, std::uint64_t seed = 9403U)
+{
+    return executeDeploy(
+        profile, content, DeployCommand{
+            "pursuit-raid", "pursuit-settlement", seed, kFieldIntelligenceSourceMapId, {}, record},
+        CommandContext{profile.revision, "pursuit-deploy"});
+}
+}
+
+TEST(SelfRecoveryDomainTest, LostWeaponPursuitSelectsOneOriginalGunAndPreservesOrdinaryRolls)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("pursuit-stable", content);
+    const std::string record = createLoss(profile, "pursuit-stable", kFieldIntelligenceSourceMapId);
+    const auto primary = firstAsset(profile, alpha_content::rifle);
+    const auto second = profile.assets.create(content.item(alpha_content::rifle),
+        LostRaidAssetLocation{record, EquipmentSlotKind::SecondaryWeapon});
+    const auto selection = [&]() { return selectRaidPursuitWeapon(profile.assets, content,
+        profile.lostRaidRecords.at(record)); };
+    EXPECT_FALSE(selection());
+    profile.lostRaidRecords.at(record).subsequentRaidSettlementCount = 1U;
+    EXPECT_EQ(selection(), primary);
+    auto secondaryOnly = profile;
+    ASSERT_TRUE(secondaryOnly.assets.erase(primary));
+    EXPECT_EQ(selectRaidPursuitWeapon(secondaryOnly.assets, content, secondaryOnly.lostRaidRecords.at(record)), second);
+
+    std::set<std::string> pairIds;
+    std::set<std::string> deploymentIds;
+    for (std::uint64_t seed = 1; seed <= 48U; ++seed)
+    {
+        auto branch = profile;
+        auto ordinary = profile;
+        const auto deployed = deployPursuit(branch, content, record, seed);
+        ASSERT_TRUE(deployed.succeeded) << deployed.message;
+        ASSERT_TRUE(branch.pendingRaid && branch.pendingRaid->selfRecovery);
+        const auto &raid = *branch.pendingRaid;
+        const auto &recovery = *raid.selfRecovery;
+        ASSERT_TRUE(recovery.pursuit) << seed;
+        EXPECT_TRUE(raidPursuitGeometryValid(content.map(kFieldIntelligenceSourceMapId), raid, *recovery.pursuit));
+        EXPECT_EQ(recovery.roots.size(), 1U);
+        EXPECT_EQ(recovery.roots.front().assetId, primary);
+        EXPECT_EQ(branch.lostRaidRecords.at(record), profile.lostRaidRecords.at(record));
+        EXPECT_EQ(branch.assets.find(primary)->location, profile.assets.find(primary)->location);
+        EXPECT_EQ(branch.assets.find(second)->location, profile.assets.find(second)->location);
+        EXPECT_FALSE(recovery.pursuit->deathPosition);
+        EXPECT_FALSE(recovery.pursuit->claimed);
+        EXPECT_FALSE(queryOpenRaidSelfRecovery(branch, content).canCommit);
+        const auto original = executeDeploy(ordinary, content,
+            {"comparison", "comparison-return", seed, kFieldIntelligenceSourceMapId},
+            {ordinary.revision, "comparison-deploy"});
+        ASSERT_TRUE(original.succeeded) << original.message;
+        EXPECT_EQ(raid.enemies, ordinary.pendingRaid->enemies);
+        auto ordinaryLoot = ordinary.pendingRaid->loot;
+        for (std::size_t index{}; index < ordinaryLoot.size(); ++index)
+        {
+            auto &item = ordinaryLoot[index];
+            if (item.definitionId == kFreightCrateKeyId || item.definitionId == kFieldIntelligenceDocumentId)
+            {
+                item.definitionId = raid.loot.at(index).definitionId;
+                item.quantity = raid.loot.at(index).quantity;
+            }
+        }
+        EXPECT_EQ(raid.loot, ordinaryLoot);
+        EXPECT_EQ(raid.spatialLayout, ordinary.pendingRaid->spatialLayout);
+        EXPECT_FALSE(raid.fieldIntelligenceTrade);
+        EXPECT_TRUE(ordinary.pendingRaid->fieldIntelligenceTrade);
+        pairIds.insert(raid.spawnExtractionPairId);
+        deploymentIds.emplace(raid.enemyDeploymentId.value());
+    }
+    EXPECT_EQ(pairIds.size(), 3U);
+    EXPECT_EQ(deploymentIds.size(), 3U);
+}
+
+TEST(SelfRecoveryDomainTest, LostWeaponPursuitIneligibleRecordsUseExistingCache)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("pursuit-fallback", content);
+    const std::string record = createLoss(profile, "pursuit-fallback", kFieldIntelligenceSourceMapId);
+    for (const bool fromQuit : {false, true})
+    {
+        auto branch = profile;
+        if (fromQuit)
+        {
+            auto &source = branch.lostRaidRecords.at(record);
+            source.outcome = RaidResultOutcome::ActiveQuit;
+            source.subsequentRaidSettlementCount = 2U;
+        }
+        const auto deployed = deployPursuit(branch, content, record);
+        ASSERT_TRUE(deployed.succeeded) << deployed.message;
+        ASSERT_TRUE(branch.pendingRaid && branch.pendingRaid->selfRecovery);
+        EXPECT_FALSE(branch.pendingRaid->selfRecovery->pursuit);
+        EXPECT_EQ(branch.pendingRaid->selfRecovery->roots.size(), 2U);
+    }
+}
+
+TEST(SelfRecoveryDomainTest, LostWeaponPursuitWithNoUniqueCarrierUsesExistingCache)
+{
+    auto content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("pursuit-no-carrier", content);
+    const auto record = createLoss(profile, "pursuit-no-carrier", kFieldIntelligenceSourceMapId);
+    ++profile.lostRaidRecords.at(record).subsequentRaidSettlementCount;
+    for (const auto &id : content.map(kFieldIntelligenceSourceMapId).raidEnemyDeploymentIds)
+    {
+        auto &enemies = const_cast<EnemyDeploymentDefinition &>(content.enemyDeployment(id)).enemies;
+        ASSERT_FALSE(enemies.empty());
+        for (auto &enemy : enemies) enemy.position = enemies.front().position;
+    }
+    const auto deployed = deployPursuit(profile, content, record);
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->selfRecovery);
+    EXPECT_FALSE(profile.pendingRaid->selfRecovery->pursuit);
+    EXPECT_EQ(profile.pendingRaid->selfRecovery->roots.size(), 2U);
+}
+
+TEST(SelfRecoveryDomainTest, UntakenPursuitExitAgesOriginalRecordAndExpiresAtThree)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("pursuit-age", content);
+    const std::string record = createLoss(profile, "pursuit-age", kFieldIntelligenceSourceMapId);
+    const auto original = firstAsset(profile, alpha_content::rifle);
+    for (const std::uint32_t age : {1U, 3U})
+    {
+        auto branch = profile;
+        branch.lostRaidRecords.at(record).subsequentRaidSettlementCount = age;
+        const auto deployed = deployPursuit(branch, content, record);
+        ASSERT_TRUE(deployed.succeeded) << deployed.message;
+        ASSERT_TRUE(branch.pendingRaid->selfRecovery->pursuit);
+        ASSERT_TRUE(revealRaidLostWeaponPursuitCorpse(branch, content,
+            branch.pendingRaid->selfRecovery->pursuit->fallbackSearchPosition));
+        const auto rescue = settlePendingRaid(branch, content, "pursuit-settlement", RaidResultOutcome::Extracted);
+        ASSERT_TRUE(rescue.succeeded) << rescue.message;
+        if (age == 3U)
+        {
+            EXPECT_FALSE(branch.lostRaidRecords.contains(record));
+            EXPECT_EQ(branch.assets.find(original), nullptr);
+        }
+        else
+        {
+            EXPECT_EQ(branch.lostRaidRecords.at(record).subsequentRaidSettlementCount, age + 1U);
+            EXPECT_EQ(lostRaidRecordForAsset(branch, original), record);
+        }
+        EXPECT_TRUE(settlePendingRaid(branch, content, "pursuit-settlement",
+            RaidResultOutcome::Extracted).alreadyCommitted);
+    }
 }
 
 TEST(SelfRecoveryDomainTest, CurrentObservationRequiredForQueryAndFinalOpen)
@@ -420,4 +570,292 @@ TEST(SelfRecoveryDomainTest,
     EXPECT_EQ(profile.pendingRaid->selfRecovery->sourceRecord.recordId,
               selfRecord);
     EXPECT_TRUE(validateProfileState(profile, publishedContentRegistry()).valid);
+}
+
+namespace
+{
+class PursuitCorpseInventoryTest : public testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        const auto &weapon = content.item(ItemDefinitionId{"item.weapon.rifle_5_45_service"});
+        const auto &magazine = content.item(ItemDefinitionId{"item.magazine.5_45x39_30"});
+        const auto &optic = content.item(ItemDefinitionId{"item.component.optic_1_5x_5_45"});
+        rifle = profile.assets.create(weapon, EquippedAssetLocation{EquipmentSlotKind::PrimaryWeapon});
+        installedMag = profile.assets.create(magazine, InstalledMagazineLocation{rifle});
+        opticId = profile.assets.create(optic, InstalledWeaponComponentLocation{rifle});
+        profile.assets.findMutable(rifle)->currentDurability -= 2000U;
+        profile.assets.findMutable(rifle)->chamberedRound =
+            MagazineRoundRecord{ItemDefinitionId{"item.ammunition.5_45x39_enhanced"}, std::nullopt};
+        profile.assets.findMutable(installedMag)->magazineRounds = {
+            {ItemDefinitionId{"item.ammunition.5_45x39_standard"}, std::nullopt},
+            {ItemDefinitionId{"item.ammunition.5_45x39_enhanced"}, std::nullopt},
+            {ItemDefinitionId{"item.ammunition.5_45x39_expanding"}, std::nullopt}};
+
+        otherLost = firstAsset(profile, alpha_content::pistol);
+        ASSERT_TRUE(executeInventory(profile, content,
+            InventoryEquipCommand{otherLost, EquipmentSlotKind::Sidearm},
+            {profile.revision, "equip-original-sidearm"}).succeeded);
+        const auto firstRaid = executeDeploy(profile, content,
+            {"pursuit-original", recordId, 7301U, kFieldIntelligenceSourceMapId, {}, std::nullopt},
+            {profile.revision, "deploy-original"});
+        ASSERT_TRUE(firstRaid.succeeded) << firstRaid.message;
+        ASSERT_TRUE(settlePendingRaid(profile, content, recordId, RaidResultOutcome::PlayerDead).succeeded);
+        profile.lostRaidRecords.at(recordId).subsequentRaidSettlementCount = 1U;
+        const auto reserveRifle = firstAsset(profile, alpha_content::rifle);
+        ASSERT_TRUE(executeInventory(profile, content,
+            InventoryEquipCommand{reserveRifle, EquipmentSlotKind::SecondaryWeapon},
+            {profile.revision, "equip-reserve-rifle"}).succeeded);
+        backpack = firstAsset(profile, alpha_content::backpack);
+        ASSERT_TRUE(executeInventory(profile, content,
+            InventoryEquipCommand{backpack, EquipmentSlotKind::Backpack},
+            {profile.revision, "equip-backpack"}).succeeded);
+        retainedMag = profile.assets.create(magazine,
+            RetainedRaidMagazineLocation{rifle, RaidReloadMagazineRole::OldMagazine});
+
+        const auto deployed = deployRecovery(profile, recordId, kFieldIntelligenceSourceMapId);
+        ASSERT_TRUE(deployed.succeeded) << deployed.message;
+        ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->selfRecovery &&
+            profile.pendingRaid->selfRecovery->pursuit);
+        const auto &pursuit = *profile.pendingRaid->selfRecovery->pursuit;
+        corpse = pursuit.corpseAssetId;
+        point = pursuit.fallbackSearchPosition;
+    }
+
+    RaidSceneContainerAccess observeAt(Vec2 observer) const
+    {
+        const auto &space = outdoorRaidSpaceId();
+        auto view = observeAssetContractPoint(profile, space, observer);
+        const auto key = view.key();
+        return {corpse, space, observer, std::move(view), key};
+    }
+
+    static InventoryEquipCommand equipRecovered(AssetInstanceId id)
+    {
+        return {id, EquipmentSlotKind::PrimaryWeapon};
+    }
+
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("pursuit-corpse-inventory", content);
+    const std::string recordId = "pursuit-original-settlement";
+    AssetInstanceId rifle{}, installedMag{}, retainedMag{}, opticId{}, otherLost{}, corpse{}, backpack{};
+    Vec2 point{};
+};
+}
+
+TEST_F(PursuitCorpseInventoryTest, DeathRevealsReadOnlyWeaponAndRequiresCurrentNearbyClearObservation)
+{
+    const auto access = observeAt(point);
+    auto fingerprint = profileStateFingerprint(profile);
+    EXPECT_FALSE(raidSceneContainerAccessible(profile, access));
+    EXPECT_FALSE(queryInventory(profile, content, equipRecovered(rifle), &access).canCommit);
+    EXPECT_FALSE(executeInventory(profile, content, equipRecovered(rifle),
+        {profile.revision, "unseen"}, &access).succeeded);
+    EXPECT_FALSE(revealRaidLostWeaponPursuitCorpse(profile, content, {-1.0F, 0.0F}));
+    EXPECT_FALSE(revealRaidLostWeaponPursuitCorpse(profile, content,
+        {std::numeric_limits<float>::quiet_NaN(), point.y}));
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+
+    ASSERT_TRUE(revealRaidLostWeaponPursuitCorpse(profile, content, point));
+    const auto *shown = raidPursuitCorpseWeapon(profile, corpse);
+    ASSERT_NE(shown, nullptr);
+    EXPECT_EQ(shown->instanceId, rifle);
+    EXPECT_EQ(lostRaidRecordForAsset(profile, rifle), recordId);
+    EXPECT_TRUE(assetsInContainer(profile, ProfileContainerId::compartment(corpse, 0)).empty());
+    EXPECT_EQ(profile.pendingRaid->selfRecovery->pursuit->deathPosition->x, point.x);
+    fingerprint = profileStateFingerprint(profile);
+    EXPECT_TRUE(revealRaidLostWeaponPursuitCorpse(profile, content, point));
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+    EXPECT_FALSE(queryOpenRaidSelfRecovery(profile, content,
+        &*access.observation, &*access.currentObservation).canCommit);
+    EXPECT_FALSE(queryInventory(profile, content, equipRecovered(rifle)).canCommit);
+
+    const auto far = observeAt({point.x - 73.0F, point.y});
+    EXPECT_FALSE(queryInventory(profile, content, equipRecovered(rifle), &far).canCommit);
+    auto stale = observeAt({point.x - 24.0F, point.y});
+    stale.currentObservation->geometryRevision += 1;
+    EXPECT_FALSE(queryInventory(profile, content, equipRecovered(rifle), &stale).canCommit);
+    auto walled = profile;
+    const auto near = observeAt({point.x - 60.0F, point.y});
+    walled.pendingRaid->spatialLayout.ballisticBlockers.push_back(
+        {{point.x - 45.0F, point.y - 30.0F}, {10.0F, 60.0F}});
+    EXPECT_FALSE(raidSceneContainerAccessible(walled, near));
+    EXPECT_FALSE(queryInventory(walled, content, equipRecovered(rifle), &near).canCommit);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+}
+
+TEST_F(PursuitCorpseInventoryTest, LegalEquipMovesOriginalTreeAndPreservesOtherLostRoots)
+{
+    ASSERT_TRUE(revealRaidLostWeaponPursuitCorpse(profile, content, point));
+    const auto access = observeAt(point);
+    const auto original = *profile.assets.find(rifle);
+    const auto orderedRounds = profile.assets.find(installedMag)->magazineRounds;
+    const auto originalAge = profile.lostRaidRecords.at(recordId).subsequentRaidSettlementCount;
+    const auto originalHighWater = profile.assets.nextAssetId();
+    const InventoryCommand occupied = InventoryEquipCommand{rifle, EquipmentSlotKind::SecondaryWeapon};
+    const InventoryCommand wrongSlot = InventoryEquipCommand{rifle, EquipmentSlotKind::Sidearm};
+    const InventoryCommand wrongRoot = InventoryEquipCommand{otherLost, EquipmentSlotKind::Sidearm};
+    const InventoryCommand deposit = InventoryMoveCommand{
+        *equippedAsset(profile, EquipmentSlotKind::SecondaryWeapon), 1,
+        {ProfileContainerId::compartment(corpse, 0), {0, 0}}};
+    const auto fingerprint = profileStateFingerprint(profile);
+    for (const auto *command : {&occupied, &wrongSlot, &wrongRoot, &deposit})
+    {
+        EXPECT_FALSE(queryInventory(profile, content, *command, &access).canCommit);
+        EXPECT_FALSE(executeInventory(profile, content, *command,
+            {profile.revision, "reject-intrusion"}, &access).succeeded);
+        EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+    }
+    EXPECT_FALSE(queryWeaponAmmo(profile, content, UnloadMagazineCommand{installedMag}).canCommit);
+    EXPECT_FALSE(executeWeaponAmmo(profile, content, UnloadMagazineCommand{installedMag},
+        {profile.revision, "unload-before-take"}).succeeded);
+    EXPECT_FALSE(queryFireWeapon(profile, content, FireWeaponCommand{rifle}).canCommit);
+    EXPECT_FALSE(executeFireWeapon(profile, content, FireWeaponCommand{rifle},
+        {profile.revision, "fire-before-take"}).succeeded);
+    EXPECT_FALSE(queryWeaponMaintenance(profile, content,
+        {firstAsset(profile, alpha_content::weaponMaintenanceKit), rifle,
+            MaintenanceAccess::CarriedOnly, MaintenanceLocation::Raid}).canCommit);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+
+    const InventoryCommand take = equipRecovered(rifle);
+    const CommandContext operation{profile.revision, "pursuit-claim-weapon"};
+    const auto preview = queryInventory(profile, content, take, &access);
+    ASSERT_TRUE(preview.canCommit) << preview.message;
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+    const auto accepted = executeInventory(profile, content, take, operation, &access);
+    ASSERT_TRUE(accepted.succeeded) << accepted.message;
+    EXPECT_EQ(profile.revision, operation.expectedRevision + 1);
+    EXPECT_EQ(profile.assets.nextAssetId(), originalHighWater);
+    EXPECT_EQ(equippedAsset(profile, EquipmentSlotKind::PrimaryWeapon), rifle);
+    EXPECT_EQ(profile.assets.find(rifle)->currentDurability, original.currentDurability);
+    EXPECT_EQ(profile.assets.find(rifle)->currentMaximumDurability, original.currentMaximumDurability);
+    EXPECT_EQ(profile.assets.find(rifle)->chamberedRound, original.chamberedRound);
+    EXPECT_EQ(installedMagazine(profile, rifle), installedMag);
+    EXPECT_EQ(profile.assets.find(installedMag)->magazineRounds, orderedRounds);
+    EXPECT_EQ(std::get<InstalledWeaponComponentLocation>(profile.assets.find(opticId)->location).weaponAssetId, rifle);
+    EXPECT_TRUE(assetIsCarried(profile, retainedMag));
+    EXPECT_EQ(lostRaidRecordForAsset(profile, otherLost), recordId);
+    EXPECT_EQ(profile.lostRaidRecords.at(recordId).subsequentRaidSettlementCount, originalAge);
+    EXPECT_TRUE(profile.pendingRaid->selfRecovery->pursuit->claimed);
+    EXPECT_EQ(raidPursuitCorpseWeapon(profile, corpse), nullptr);
+    const auto validity = validateProfileState(profile, content);
+    EXPECT_TRUE(validity.valid) << validity.message;
+
+    const auto after = profileStateFingerprint(profile);
+    const WeaponAmmoCommand unloadIntoCorpse = UnloadMagazineCommand{
+        installedMag, ProfileContainerId::compartment(corpse, 0)};
+    const auto rejectLostOrCorpse = [&](const WeaponAmmoCommand &command, const char *operationId)
+    {
+        EXPECT_EQ(queryWeaponAmmo(profile, content, command).error, DomainErrorCode::IllegalDestination);
+        EXPECT_EQ(executeWeaponAmmo(profile, content, command,
+            {profile.revision, operationId}).error, DomainErrorCode::IllegalDestination);
+    };
+    rejectLostOrCorpse(unloadIntoCorpse, "unload-into-corpse");
+    rejectLostOrCorpse(ChamberWeaponCommand{otherLost}, "chamber-other-loss-after-take");
+    EXPECT_TRUE(executeInventory(profile, content, take, operation, &access).alreadyCommitted);
+    EXPECT_EQ(profileStateFingerprint(profile), after);
+}
+
+TEST_F(PursuitCorpseInventoryTest, OverlappingBackpackDropCannotSwapALostWeapon)
+{
+    ASSERT_TRUE(revealRaidLostWeaponPursuitCorpse(profile, content, point));
+    const auto access = observeAt(point);
+    const auto pack = ProfileContainerId::compartment(backpack, 0);
+    const auto obstruction = profile.assets.create(content.item(alpha_content::lootCola),
+        StoredAssetLocation{pack, {0, 0}});
+    const InventoryCommand take = InventoryMoveCommand{rifle, 0, {pack, {0, 0}}};
+    const auto before = profileStateFingerprint(profile);
+    EXPECT_EQ(queryInventory(profile, content, take, &access).error, DomainErrorCode::Capacity);
+    EXPECT_EQ(executeInventory(profile, content, take, {profile.revision, "blocked"}, &access).error,
+        DomainErrorCode::Capacity);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+    ASSERT_TRUE(profile.assets.erase(obstruction));
+    const auto receipt = executeInventory(profile, content, take, {profile.revision, "room-made"}, &access);
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_TRUE(assetIsCarried(profile, rifle));
+    EXPECT_EQ(std::get<StoredAssetLocation>(profile.assets.find(rifle)->location).container, pack);
+    EXPECT_EQ(lostRaidRecordForAsset(profile, otherLost), recordId);
+    EXPECT_TRUE(assetIsCarried(profile, retainedMag));
+}
+
+TEST_F(PursuitCorpseInventoryTest, ClaimedWeaponSettlementFollowsCarriedOwnership)
+{
+    const auto source = profile.lostRaidRecords.at(recordId);
+    ASSERT_TRUE(revealRaidLostWeaponPursuitCorpse(profile, content, point));
+    const auto access = observeAt(point);
+    const auto take = executeInventory(profile, content, equipRecovered(rifle),
+        {profile.revision, "settlement-claim"}, &access);
+    ASSERT_TRUE(take.succeeded) << take.message;
+    const auto rifleAtClaim = *profile.assets.find(rifle);
+    const auto magazineAtClaim = *profile.assets.find(installedMag);
+    const auto settlementId = profile.pendingRaid->settlementId;
+    for (const auto outcome : {RaidResultOutcome::Extracted, RaidResultOutcome::PlayerDead, RaidResultOutcome::ActiveQuit})
+    {
+        auto branch = profile;
+        const auto result = settlePendingRaid(branch, content, settlementId, outcome);
+        ASSERT_TRUE(result.succeeded) << result.message;
+        EXPECT_EQ(branch.assets.find(corpse), nullptr);
+        EXPECT_EQ(lostRaidRecordForAsset(branch, otherLost), recordId);
+        EXPECT_EQ(branch.lostRaidRecords.at(recordId).subsequentRaidSettlementCount,
+            source.subsequentRaidSettlementCount + 1U);
+        ASSERT_NE(branch.assets.find(rifle), nullptr);
+        EXPECT_EQ(branch.assets.find(rifle)->currentDurability, rifleAtClaim.currentDurability);
+        EXPECT_EQ(branch.assets.find(rifle)->chamberedRound, rifleAtClaim.chamberedRound);
+        EXPECT_EQ(installedMagazine(branch, rifle), installedMag);
+        EXPECT_EQ(branch.assets.find(installedMag)->magazineRounds, magazineAtClaim.magazineRounds);
+        if (outcome == RaidResultOutcome::Extracted)
+        {
+            EXPECT_EQ(equippedAsset(branch, EquipmentSlotKind::PrimaryWeapon), rifle);
+            EXPECT_TRUE(assetIsCarried(branch, opticId));
+            EXPECT_FALSE(branch.lastRaidResult->lostRaidRecordId);
+        }
+        else
+        {
+            EXPECT_EQ(branch.lastRaidResult->lostRaidRecordId, settlementId);
+            EXPECT_EQ(lostRaidRecordForAsset(branch, rifle), settlementId);
+            EXPECT_EQ(lostRaidRecordForAsset(branch, opticId), settlementId);
+            EXPECT_EQ(branch.lostRaidRecords.at(settlementId).outcome, outcome);
+        }
+        const auto settled = profileStateFingerprint(branch);
+        EXPECT_TRUE(settlePendingRaid(branch, content, settlementId, outcome).alreadyCommitted);
+        EXPECT_EQ(profileStateFingerprint(branch), settled);
+    }
+}
+
+TEST_F(PursuitCorpseInventoryTest, AbnormalRollbackRestoresSoleSourceAndExactAssets)
+{
+    // Recreate a legitimate one-root record, then deploy and claim its sole root.
+    ASSERT_TRUE(rollbackPendingRaidToBase(profile, content).succeeded);
+    ASSERT_TRUE(profile.assets.erase(otherLost));
+    const auto source = profile.lostRaidRecords.at(recordId);
+    const auto original = *profile.assets.find(rifle);
+    const auto oldHighWater = profile.assets.nextAssetId();
+    const auto deployed = deployPursuit(profile, content, recordId);
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->selfRecovery && profile.pendingRaid->selfRecovery->pursuit);
+    corpse = profile.pendingRaid->selfRecovery->pursuit->corpseAssetId;
+    point = profile.pendingRaid->selfRecovery->pursuit->fallbackSearchPosition;
+    ASSERT_TRUE(revealRaidLostWeaponPursuitCorpse(profile, content, point));
+    const auto access = observeAt(point);
+    const auto take = executeInventory(profile, content, equipRecovered(rifle),
+        {profile.revision, "rollback-claim"}, &access);
+    ASSERT_TRUE(take.succeeded) << take.message;
+    EXPECT_FALSE(profile.lostRaidRecords.contains(recordId));
+    auto loaded = deserializeProfileEnvelope(serializeProfileEnvelope(profile, content.contentVersion()), content);
+    ASSERT_TRUE(loaded.profile) << loaded.message;
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+    profile = std::move(*loaded.profile);
+    const auto rollback = rollbackPendingRaidToBase(profile, content);
+    ASSERT_TRUE(rollback.succeeded) << rollback.message;
+    EXPECT_FALSE(profile.pendingRaid);
+    EXPECT_EQ(profile.lostRaidRecords.at(recordId), source);
+    EXPECT_EQ(lostRaidRecordForAsset(profile, rifle), recordId);
+    EXPECT_EQ(lostRaidRecordForAsset(profile, installedMag), recordId);
+    EXPECT_EQ(lostRaidRecordForAsset(profile, retainedMag), recordId);
+    EXPECT_EQ(lostRaidRecordForAsset(profile, opticId), recordId);
+    EXPECT_EQ(profile.assets.find(rifle)->currentDurability, original.currentDurability);
+    EXPECT_EQ(profile.assets.find(rifle)->chamberedRound, original.chamberedRound);
+    EXPECT_EQ(profile.assets.find(corpse), nullptr);
+    EXPECT_EQ(profile.assets.nextAssetId(), oldHighWater);
 }

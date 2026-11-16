@@ -1,5 +1,7 @@
 #include "weapon_ammo_domain.h"
 
+#include "lost_raid_domain.h"
+
 #include <algorithm>
 #include <cmath>
 #include <set>
@@ -350,6 +352,9 @@ WeaponAmmoReceipt applyFire(
         return failure(DomainErrorCode::MissingAsset,
                        "weapon does not exist", candidate.revision);
     }
+    if (std::holds_alternative<LostRaidAssetLocation>(weapon->location))
+        return failure(DomainErrorCode::IllegalDestination,
+            "lost Raid assets require a recovery transaction", candidate.revision);
     if (weaponStoredInDroppedBackpack(candidate, *weapon))
         return failure(DomainErrorCode::IllegalDestination, "PICK UP BACKPACK FIRST", candidate.revision);
     const ItemDefinition &definition = content.item(weapon->definitionId);
@@ -490,6 +495,9 @@ WeaponAmmoReceipt inspectFire(
         return failure(DomainErrorCode::MissingAsset,
                        "weapon does not exist", profile.revision);
     }
+    if (std::holds_alternative<LostRaidAssetLocation>(weapon->location))
+        return failure(DomainErrorCode::IllegalDestination,
+            "lost Raid assets require a recovery transaction", profile.revision);
     if (weaponStoredInDroppedBackpack(profile, *weapon))
         return failure(DomainErrorCode::IllegalDestination, "PICK UP BACKPACK FIRST", profile.revision);
     const ItemDefinition &definition = content.item(weapon->definitionId);
@@ -706,6 +714,38 @@ bool ammunitionCommandUsesDroppedBackpack(
     }, command);
 }
 
+bool ammunitionCommandTouchesPursuitRecovery(
+    const ProfileState &profile, const WeaponAmmoCommand &command) noexcept
+{
+    if (!profile.pendingRaid || !profile.pendingRaid->selfRecovery)
+        return false;
+    const auto &pursuit = profile.pendingRaid->selfRecovery->pursuit;
+    if (!pursuit)
+        return false;
+
+    const auto isLost = [&](AssetInstanceId id) {
+        return lostRaidRecordForAsset(profile, id).has_value();
+    };
+    const auto usesDestination = [&](ProfileContainerId destination) {
+        return destination.kind == ProfileContainerKind::AssetCompartment &&
+            (destination.ownerAssetId == pursuit->corpseAssetId || isLost(destination.ownerAssetId));
+    };
+    return std::visit([&](const auto &typed) {
+        bool blocked{};
+        if constexpr (requires { typed.weaponAssetId; })
+            blocked = blocked || isLost(typed.weaponAssetId);
+        if constexpr (requires { typed.magazineAssetId; })
+            blocked = blocked || isLost(typed.magazineAssetId);
+        if constexpr (requires { typed.ammunitionAssetId; })
+            blocked = blocked || isLost(typed.ammunitionAssetId);
+        if constexpr (requires { typed.destination.kind; })
+            blocked = blocked || usesDestination(typed.destination);
+        if constexpr (requires { typed.destination.container; })
+            blocked = blocked || usesDestination(typed.destination.container);
+        return blocked;
+    }, command);
+}
+
 WeaponAmmoReceipt apply(
     ProfileState &candidate,
     const ContentRegistry &content,
@@ -780,6 +820,9 @@ WeaponAmmoPlan queryWeaponAmmo(
     if (ammunitionCommandUsesDroppedBackpack(profile, command))
         return {false, DomainErrorCode::IllegalDestination, "PICK UP BACKPACK FIRST",
                 profile.revision, WeaponAmmoResult::Dry};
+    if (ammunitionCommandTouchesPursuitRecovery(profile, command))
+        return {false, DomainErrorCode::IllegalDestination,
+            "lost Raid assets require a recovery transaction", profile.revision, WeaponAmmoResult::Dry};
     if (const auto *mode = std::get_if<SetWeaponFireModeCommand>(&command))
     {
         const auto receipt = inspectSetMode(profile, content, *mode);
@@ -828,6 +871,9 @@ WeaponAmmoReceipt executeWeaponAmmo(
 
     if (ammunitionCommandUsesDroppedBackpack(profile, command))
         return failure(DomainErrorCode::IllegalDestination, "PICK UP BACKPACK FIRST", profile.revision);
+    if (ammunitionCommandTouchesPursuitRecovery(profile, command))
+        return failure(DomainErrorCode::IllegalDestination,
+            "lost Raid assets require a recovery transaction", profile.revision);
     if (const auto *mode = std::get_if<SetWeaponFireModeCommand>(&command))
     {
         auto receipt = inspectSetMode(profile, content, *mode);

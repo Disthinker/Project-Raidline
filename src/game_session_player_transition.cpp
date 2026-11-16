@@ -156,6 +156,8 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
         reportRaidDeploymentProgress(
             progress, 0.82F, RaidDeploymentProgressStage::BuildingWorld);
         const PendingRaidSnapshot &snapshot = *candidate.pendingRaid;
+        const auto *pursuit = snapshot.selfRecovery && snapshot.selfRecovery->pursuit
+            ? &*snapshot.selfRecovery->pursuit : nullptr;
         std::vector<EnemySpawn> enemies;
         enemies.reserve(snapshot.enemies.size());
         for (const RaidEnemySnapshot &enemy : snapshot.enemies)
@@ -186,6 +188,15 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
                 spawn.encounterHome = group->homePosition;
                 spawn.patrolPoints = group->patrolPoints;
                 spawn.ambushActivationDistance = group->activationDistance;
+            }
+            if (pursuit && enemy.position.x == pursuit->carrierSpawn.x &&
+                enemy.position.y == pursuit->carrierSpawn.y)
+            {
+                spawn.lostWeaponCarrier = true;
+                spawn.encounterKind = RaidEncounterKind::Patrol;
+                spawn.encounterHome = {enemy.position.x + enemy.size.x * 0.5F,
+                                       enemy.position.y + enemy.size.y * 0.5F};
+                spawn.patrolPoints.assign(pursuit->patrolPoints.begin(), pursuit->patrolPoints.end());
             }
             enemies.push_back(std::move(spawn));
         }
@@ -245,9 +256,12 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
         };
 
         RaidWorldConfig worldConfig;
-        worldConfig.noiseDecoyEnabled = !snapshot.selfRecovery && !snapshot.outpostRestoration &&
+        const bool ordinaryToolsEnabled = !snapshot.selfRecovery && !snapshot.outpostRestoration &&
             !snapshot.baseSiteClearance && !snapshot.basePerimeterSweep;
-        worldConfig.grenadeEnabled = worldConfig.noiseDecoyEnabled;
+        worldConfig.noiseDecoyEnabled = pursuit || ordinaryToolsEnabled;
+        worldConfig.grenadeEnabled = ordinaryToolsEnabled;
+        if (pursuit)
+            worldConfig.lostWeaponPursuitFallback = pursuit->fallbackSearchPosition;
         worldConfig.freightBreachEnabled = snapshot.freightBreachEnabled;
         worldConfig.lightConeObservationEnabled =
             candidate.pendingRaid->mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"} ||
@@ -367,7 +381,7 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
                     snapshot.rescue->transferPoint,
                     RaidTacticalObjectiveVisibility::Briefed});
         }
-        if (snapshot.selfRecovery.has_value())
+        if (snapshot.selfRecovery && !pursuit)
         {
             constexpr Vec2 markerSize{96.0F, 96.0F};
             const Vec2 cache = snapshot.selfRecovery->cachePosition;

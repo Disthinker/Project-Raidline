@@ -1,4 +1,5 @@
 #include "app.h"
+#include "raid_lifecycle.h"
 
 #include <algorithm>
 #include <fmt/format.h>
@@ -337,7 +338,14 @@ void App::renderLostRaidRecords() {
                 text({914, 308, 288, 23}, fmt::format("{}  {}", tr("LOW TENDENCY"), projection.quote.lowTendencyAssets));
                 text({914, 338, 288, 44}, "NPC RECOVERY TENDENCY IS NOT A GUARANTEE", 12, 2);
             } else text({914, 280, 288, 23}, "UNAVAILABLE");
-            text({914, 388, 288, 56}, retention(*projection.selectedRecord, false), 12, 3);
+            const auto &profile = gameSession_.profile();
+            const auto record = profile.lostRaidRecords.find(projection.selectedRecord->recordId);
+            const bool mayTrack = record != profile.lostRaidRecords.end() &&
+                selectRaidPursuitWeapon(profile.assets, publishedContentRegistry(), record->second).has_value();
+            text({914, 388, 288, mayTrack ? 42.0F : 56.0F},
+                retention(*projection.selectedRecord, false), 12, 3);
+            if (mayTrack)
+                text({914, 431, 288, 18}, "SELF RECOVERY MAY TRACK ONE LONG GUN", 12);
         } else text({914, 212, 288, 62}, "SELECT A LOST RAID RECORD", 14, 3);
         button(C::Start, "COMMISSION NPC");
         button(projection.selectedSelfTarget ? C::ClearSelfRecovery : C::SelfRecovery,

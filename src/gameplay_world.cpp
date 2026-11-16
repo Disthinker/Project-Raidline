@@ -5,6 +5,7 @@
 #include "navigation_refresh_selection.h"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cmath>
 #include <exception>
@@ -36,6 +37,7 @@ namespace
     constexpr float kFieldIntelligenceDiscoveryRadius{145.0F};
     constexpr float kFieldIntelligenceInteractionRadius{72.0F};
     constexpr float kFieldIntelligenceThreatRadius{180.0F};
+    constexpr Vec2 kLostWeaponCorpseHalfSize{26.0F, 18.0F};
 
     constexpr int kScorePerEnemy{100};
 
@@ -53,6 +55,23 @@ namespace
         return {
             std::clamp(point.x, bounds.position.x, bounds.position.x + bounds.size.x),
             std::clamp(point.y, bounds.position.y, bounds.position.y + bounds.size.y)};
+    }
+
+    Rect centeredBounds(Vec2 center, Vec2 halfSize) noexcept
+    {
+        return {{center.x - halfSize.x, center.y - halfSize.y},
+                {2.0F * halfSize.x, 2.0F * halfSize.y}};
+    }
+
+    bool lostWeaponCorpseFits(Vec2 center, const RaidSpaceBlockerIndex &blockers) noexcept
+    {
+        const Rect bounds = centeredBounds(center, kLostWeaponCorpseHalfSize);
+        const Vec2 worldSize = blockers.worldSize();
+        return pointInside({{}, worldSize}, bounds.position) &&
+            pointInside({{}, worldSize},
+                {bounds.position.x + bounds.size.x, bounds.position.y + bounds.size.y}) &&
+            std::none_of(blockers.allBlockerBounds().begin(), blockers.allBlockerBounds().end(),
+                [&bounds](const Rect &wall) { return isCollision(bounds, wall); });
     }
 
     const MapDefinition &defaultMap()
@@ -814,6 +833,18 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         throw std::invalid_argument{
             "RaidWorldConfig outdoor blocker index is invalid"};
     }
+    if (config.lostWeaponPursuitFallback || lostWeaponCarrierId_ != kInvalidCombatTargetId)
+    {
+        if (!config.lostWeaponPursuitFallback ||
+            lostWeaponCarrierId_ == kInvalidCombatTargetId ||
+            lostWeaponCarrierHalfSize_.x < player_.size() / 2.0F ||
+            lostWeaponCarrierHalfSize_.y < player_.size() / 2.0F ||
+            !lostWeaponCorpseFits(*config.lostWeaponPursuitFallback, *outdoorBlockerIndex_))
+        {
+            throw std::invalid_argument{"RaidWorldConfig lost weapon pursuit is invalid"};
+        }
+        lostWeaponPursuitFallback_ = config.lostWeaponPursuitFallback;
+    }
     cacheNavigationFieldsForSpace(
         outdoorRaidSpaceId(),
         worldSize_,
@@ -956,6 +987,16 @@ GameplayWorld::GameplayWorld(
             nextCombatTargetId_++, spawn.torsoArmor, spawn.variant});
         if (!spawn.sourceEnemyId.empty())
             corpseSources_.emplace(enemies_.back().combatTargetId(), RaidCorpseDeathFact{spawn.sourceEnemyId, outdoorRaidSpaceId(), {spawn.size.x * 0.5F, spawn.size.y * 0.5F}});
+        if (spawn.lostWeaponCarrier)
+        {
+            if (lostWeaponCarrierId_ != kInvalidCombatTargetId || !spawn.sourceEnemyId.empty() ||
+                spawn.encounterKind != RaidEncounterKind::Patrol || spawn.patrolPoints.size() != 2U)
+            {
+                throw std::invalid_argument{"RaidWorldConfig lost weapon carrier is invalid"};
+            }
+            lostWeaponCarrierId_ = enemies_.back().combatTargetId();
+            lostWeaponCarrierHalfSize_ = {spawn.size.x / 2.0F, spawn.size.y / 2.0F};
+        }
         const Vec2 spawnCenter{
             spawn.position.x + spawn.size.x * 0.5F,
             spawn.position.y + spawn.size.y * 0.5F};
@@ -1701,6 +1742,11 @@ void GameplayWorld::acknowledgeCorpseDeath(std::string_view sourceId)
     std::erase_if(pendingCorpseDeaths_, [sourceId](const auto &fact) { return fact.sourceEnemyId == sourceId; });
 }
 
+std::optional<Vec2> GameplayWorld::lostWeaponCarrierDeath() const noexcept
+{
+    return lostWeaponCarrierDeath_;
+}
+
 const Player &
 GameplayWorld::player() const
 {
@@ -2109,6 +2155,34 @@ bool GameplayWorld::raidEnemyObservable(CombatTargetId id) const
     cached->observable = observable;
     cached->computed = true;
     return observable;
+}
+
+std::optional<Rect> GameplayWorld::visibleLostWeaponCarrier() const
+{
+    if (!lostWeaponPursuitFallback_ || lostWeaponCarrierDeath_ ||
+        !inOutdoorRaidSpace() || !raidSession_.isActive() || player_.isDead())
+    {
+        return std::nullopt;
+    }
+    const Enemy *carrier = enemies_.find(lostWeaponCarrierId_);
+    if (!carrier || !activeBlockerIndex().hasLineOfSight(playerCenter(player_), enemyCenter(*carrier)) ||
+        !raidEnemyObservable(lostWeaponCarrierId_))
+    {
+        return std::nullopt;
+    }
+    return carrier->bounds();
+}
+
+bool GameplayWorld::lostWeaponCorpseObservable() const
+{
+    if (!lostWeaponCarrierDeath_ || !inOutdoorRaidSpace() || !raidSession_.isActive() ||
+        player_.isDead())
+    {
+        return false;
+    }
+    const Vec2 point = *lostWeaponCarrierDeath_;
+    return activeBlockerIndex().hasLineOfSight(playerCenter(player_), point) &&
+        raidBoundsObservable(centeredBounds(point, kLostWeaponCorpseHalfSize));
 }
 
 std::vector<RaidSpacePortalProjection>
@@ -4218,12 +4292,53 @@ void GameplayWorld::consumeEnemyRemovals(std::span<const EnemyRemovalFact> death
         if (death.reason!=EnemyRemovalReason::Death) continue;
         if(developerRange_)trainingCorpseDeaths_.push_back({death.id,{death.position.x+25.0F,death.position.y+25.0F},{50,50}});
         score_+=kScorePerEnemy;
+        if (lostWeaponPursuitFallback_ && death.id == lostWeaponCarrierId_ && !lostWeaponCarrierDeath_)
+        {
+            lostWeaponCarrierDeath_ = lostWeaponCorpseSearchPoint({
+                death.position.x + lostWeaponCarrierHalfSize_.x,
+                death.position.y + lostWeaponCarrierHalfSize_.y});
+        }
         const auto source=corpseSources_.find(death.id);
         if(source==corpseSources_.end())continue;
         auto fact=source->second;fact.position.x+=death.position.x;fact.position.y+=death.position.y;
         pendingCorpseDeaths_.push_back(std::move(fact));corpseSources_.erase(source);
     }
 }
+
+Vec2 GameplayWorld::lostWeaponCorpseSearchPoint(Vec2 deathCenter) const noexcept
+{
+    const auto &blockers = *outdoorBlockerIndex_;
+    const float halfPlayer = player_.size() / 2.0F;
+    const Vec2 size = blockers.worldSize();
+    const Rect standingBounds = centeredBounds(deathCenter, {halfPlayer, halfPlayer});
+    if (pointInside({{halfPlayer, halfPlayer}, {size.x - player_.size(), size.y - player_.size()}},
+                    deathCenter) &&
+        std::none_of(blockers.allBlockerBounds().begin(), blockers.allBlockerBounds().end(),
+            [&standingBounds](const Rect &wall) { return isCollision(standingBounds, wall); }))
+    {
+        // The carrier used the same blockers and is at least as large as the
+        // player. Its death point is reachable along the path it took; nearby
+        // offsets are allowed only along a clear sweep of the player's body.
+        constexpr std::array<Vec2, 9> offsets{{
+            {}, {4.0F, 0.0F}, {-4.0F, 0.0F}, {0.0F, 4.0F}, {0.0F, -4.0F},
+            {4.0F, 4.0F}, {4.0F, -4.0F}, {-4.0F, 4.0F}, {-4.0F, -4.0F}}};
+        for (const Vec2 offset : offsets)
+        {
+            const Vec2 candidate{deathCenter.x + offset.x, deathCenter.y + offset.y};
+            if (!lostWeaponCorpseFits(candidate, blockers))
+                continue;
+            const Rect sweep{
+                {std::min(deathCenter.x, candidate.x) - halfPlayer,
+                 std::min(deathCenter.y, candidate.y) - halfPlayer},
+                {player_.size() + std::abs(offset.x), player_.size() + std::abs(offset.y)}};
+            if (std::none_of(blockers.allBlockerBounds().begin(), blockers.allBlockerBounds().end(),
+                [&sweep](const Rect &wall) { return isCollision(sweep, wall); }))
+                return candidate;
+        }
+    }
+    return *lostWeaponPursuitFallback_;
+}
+
 bool GameplayWorld::commitPreparedMelee()
 {
     if(player_.isDead() || player_.isControlled() || !raidSession_.isActive()) {melee_.cancelPrepared();return false;}

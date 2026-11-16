@@ -605,7 +605,12 @@ TEST_F(UiMagazineWheelTest, DurableSavedCompletionAndConcurrentBaseHudShareOneSa
         return SaveRepository(folder).save(p,version,metrics);
     });
     ASSERT_TRUE(A::session(*app).requestWorldDurabilityBarrier().accepted);
-    ASSERT_TRUE(waitApp(*app,[&]{return A::session(*app).baseDailySaveBlocked();}));
+    // The writer can fail between the session poll and the Base frame's
+    // blocked-state check. Wait until the App has consumed that completion.
+    ASSERT_TRUE(waitApp(*app,[&]{
+        return A::session(*app).baseDailySaveBlocked() &&
+            A::message(*app) == "injected HUD save failure";
+    }));
     fail->store(false);ASSERT_TRUE(A::retry(*app));
     ASSERT_TRUE(waitApp(*app,[&]{return entered->load();}));
     EXPECT_EQ(A::message(*app),"SAVING CHANGES");

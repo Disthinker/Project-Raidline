@@ -4444,7 +4444,7 @@ ContentRegistry ContentRegistry::fromJson(
                     fail("field intelligence trade requires matching briefing prices");
             }
         }
-        if (registry.contentVersion() == kFrontierHighRiskBlockadeContentVersion)
+        if (supportsFrontierHighRiskBlockadeContent(registry.contentVersion()))
         {
             if (!registry.itemIndex_.contains(kBlockadeSalvageItemId))
                 fail("road blockade requires a machine tool set");
