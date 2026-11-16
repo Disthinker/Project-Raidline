@@ -2,32 +2,29 @@
 #include "game_flow.h"
 #include "home_founding_domain.h"
 #include "profile_ui_test_wait.h"
+#include "test_temp_directory.h"
 
 #include <algorithm>
-#include <chrono>
 #include <filesystem>
 #include <gtest/gtest.h>
 #include <stdexcept>
+#include <string_view>
 
 namespace {
 const auto &content = publishedContentRegistry();
 
 class FirstRaidSaveDirectory {
 public:
-  FirstRaidSaveDirectory()
-      : path_{std::filesystem::temp_directory_path() /
-              ("raidline-first-loop-" +
-               std::to_string(std::chrono::steady_clock::now()
-                                  .time_since_epoch()
-                                  .count()))} {}
-  ~FirstRaidSaveDirectory() {
-    std::error_code error;
-    std::filesystem::remove_all(path_, error);
+  FirstRaidSaveDirectory() {
+    const auto name = std::string_view{
+        testing::UnitTest::GetInstance()->current_test_info()->name()};
+    directory_.claim("raidline-first-loop-", name.substr(0, 18));
   }
-  const std::filesystem::path &path() const { return path_; }
+
+  const std::filesystem::path &path() const { return directory_.path(); }
 
 private:
-  std::filesystem::path path_;
+  raidline::test::TemporaryDirectory directory_;
 };
 
 ProfileState foundedProfile(std::string id) {
