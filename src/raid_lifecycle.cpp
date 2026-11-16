@@ -372,6 +372,198 @@ std::optional<std::string> createLostRaidRecord(
     }
     return record.recordId;
 }
+
+constexpr float kPursuitPlayerHalfSize = 16.0F;
+constexpr float kPursuitPlayerClearance = kPursuitPlayerHalfSize + 2.0F;
+constexpr float kPursuitPatrolOffset = 92.0F;
+constexpr float kPursuitSearchMargin = 64.0F;
+
+bool samePoint(Vec2 left, Vec2 right) noexcept
+{
+    return left.x == right.x && left.y == right.y;
+}
+
+bool pursuitPointWithin(Vec2 point, ContentRect bounds, Vec2 clearance = {}) noexcept
+{
+    return point.x >= bounds.position.x + clearance.x &&
+        point.y >= bounds.position.y + clearance.y &&
+        point.x <= bounds.position.x + bounds.size.x - clearance.x &&
+        point.y <= bounds.position.y + bounds.size.y - clearance.y;
+}
+
+Vec2 pursuitCentre(ContentRect bounds) noexcept
+{
+    return {bounds.position.x + bounds.size.x * 0.5F,
+        bounds.position.y + bounds.size.y * 0.5F};
+}
+
+bool pursuitSegmentClear(Vec2 start, Vec2 finish, Vec2 padding,
+                         const RaidGeneratedMapLayout &layout) noexcept
+{
+    return std::none_of(layout.ballisticBlockers.begin(), layout.ballisticBlockers.end(),
+        [&](ContentRect blocker)
+        {
+            return raidSightSegmentIntersectsRectInterior(start, finish,
+                {{blocker.position.x - padding.x, blocker.position.y - padding.y},
+                 {blocker.size.x + padding.x * 2.0F, blocker.size.y + padding.y * 2.0F}});
+        });
+}
+
+// Only Riverside uses this proof. Connecting the clearance corners gives a
+// deterministic visibility graph for the small map's rectangular blockers.
+bool pursuitPlayerPaths(const MapDefinition &map, const PendingRaidSnapshot &raid,
+                        Vec2 fallback, std::optional<Vec2> deathPosition)
+{
+    constexpr Vec2 clearance{kPursuitPlayerClearance, kPursuitPlayerClearance};
+    const Vec2 spawnCenter{raid.playerSpawn.x + kPursuitPlayerHalfSize,
+        raid.playerSpawn.y + kPursuitPlayerHalfSize};
+    std::vector<Vec2> nodes{fallback, spawnCenter, pursuitCentre(raid.extractionPoint),
+        pursuitCentre(map.highRisk.emergencyExtractionPoint)};
+    if (deathPosition)
+        nodes.push_back(*deathPosition);
+    const std::size_t required = nodes.size();
+    for (const auto &blocker : raid.spatialLayout.ballisticBlockers)
+    {
+        const Vec2 first{blocker.position.x - clearance.x, blocker.position.y - clearance.y};
+        const Vec2 last{blocker.position.x + blocker.size.x + clearance.x,
+            blocker.position.y + blocker.size.y + clearance.y};
+        for (const Vec2 corner : {first, Vec2{first.x, last.y}, last, Vec2{last.x, first.y}})
+            if (pursuitPointWithin(corner, map.walkableBounds, clearance))
+                nodes.push_back(corner);
+    }
+    std::vector<bool> connected(nodes.size());
+    std::vector<std::size_t> queue;
+    if (!pursuitPointWithin(fallback, map.walkableBounds, clearance) ||
+        !pursuitSegmentClear(fallback, fallback, clearance, raid.spatialLayout))
+        return false;
+    connected[0] = true;
+    queue.push_back(0U);
+    for (std::size_t first = 0U; first < queue.size(); ++first)
+    {
+        for (std::size_t next = 0U; next < nodes.size(); ++next)
+        {
+            if (!connected[next] && pursuitPointWithin(nodes[next], map.walkableBounds, clearance) &&
+                pursuitSegmentClear(nodes[queue[first]], nodes[next], clearance, raid.spatialLayout))
+            {
+                connected[next] = true;
+                queue.push_back(next);
+            }
+        }
+    }
+    return std::all_of(connected.begin(), connected.begin() + required, [](bool value) { return value; });
+}
+
+ContentRect pursuitSearchArea(const MapDefinition &map, const std::array<Vec2, 2> &points) noexcept
+{
+    const Vec2 low{
+        std::max(map.walkableBounds.position.x, std::min(points[0].x, points[1].x) - kPursuitSearchMargin),
+        std::max(map.walkableBounds.position.y, std::min(points[0].y, points[1].y) - kPursuitSearchMargin)};
+    const Vec2 high{
+        std::min(map.walkableBounds.position.x + map.walkableBounds.size.x,
+            std::max(points[0].x, points[1].x) + kPursuitSearchMargin),
+        std::min(map.walkableBounds.position.y + map.walkableBounds.size.y,
+            std::max(points[0].y, points[1].y) + kPursuitSearchMargin)};
+    return {low, {high.x - low.x, high.y - low.y}};
+}
+
+std::optional<RaidLostWeaponPursuitSnapshot> choosePursuitEncounter(
+    const MapDefinition &map, const PendingRaidSnapshot &raid)
+{
+    std::vector<RaidLostWeaponPursuitSnapshot> eligible;
+    for (const auto &enemy : raid.enemies)
+    {
+        if (enemy.spaceId != outdoorRaidSpaceId() || enemy.torsoArmor || enemy.variant)
+            continue;
+        const Vec2 centre = pursuitCentre({enemy.position, enemy.size});
+        for (const Vec2 direction : {Vec2{kPursuitPatrolOffset, 0.0F}, Vec2{0.0F, kPursuitPatrolOffset}})
+        {
+            const std::array<Vec2, 2> points{
+                Vec2{centre.x - direction.x, centre.y - direction.y},
+                Vec2{centre.x + direction.x, centre.y + direction.y}};
+            RaidLostWeaponPursuitSnapshot pursuit{
+                enemy.position, points, pursuitSearchArea(map, points), points[0], 0U, std::nullopt, false};
+            if (raidPursuitGeometryValid(map, raid, pursuit))
+                eligible.push_back(pursuit);
+        }
+    }
+    if (eligible.empty())
+        return std::nullopt;
+    Pcg32 random{raid.seed, 0x70757273756974ULL};
+    return eligible[random.bounded(static_cast<std::uint32_t>(eligible.size()))];
+}
+}
+
+std::optional<AssetInstanceId> selectRaidPursuitWeapon(
+    const AssetRegistry &assets, const ContentRegistry &content,
+    const LostRaidRecord &record)
+{
+    if (record.mapDefinitionId != kFieldIntelligenceSourceMapId ||
+        record.outcome != RaidResultOutcome::PlayerDead ||
+        record.subsequentRaidSettlementCount == 0U ||
+        record.subsequentRaidSettlementCount > kLostRaidRecordRetainedSettlementCount)
+        return std::nullopt;
+    for (const auto slot : {EquipmentSlotKind::PrimaryWeapon, EquipmentSlotKind::SecondaryWeapon})
+    {
+        for (const auto &[id, asset] : assets.records())
+        {
+            const auto *lost = std::get_if<LostRaidAssetLocation>(&asset.location);
+            if (!lost || lost->recordId != record.recordId || lost->sourceSlot != slot)
+                continue;
+            const auto &definition = content.item(asset.definitionId);
+            if (definition.weaponUse && itemCanEquipInSlot(definition, slot))
+                return id;
+        }
+    }
+    return std::nullopt;
+}
+
+bool raidPursuitGeometryValid(
+    const MapDefinition &map, const PendingRaidSnapshot &raid,
+    const RaidLostWeaponPursuitSnapshot &pursuit)
+{
+    if (map.id != kFieldIntelligenceSourceMapId || map.proceduralOutdoor.enabled ||
+        !map.highRisk.enabled)
+        return false;
+    const RaidEnemySnapshot *carrier{};
+    for (const auto &enemy : raid.enemies)
+    {
+        if (enemy.spaceId != outdoorRaidSpaceId() || !samePoint(enemy.position, pursuit.carrierSpawn))
+            continue;
+        if (carrier || enemy.torsoArmor || enemy.variant || !enemy.encounterGroupInstanceId.empty())
+            return false;
+        carrier = &enemy;
+    }
+    if (!carrier || carrier->size.x < kPursuitPlayerHalfSize * 2.0F ||
+        carrier->size.y < kPursuitPlayerHalfSize * 2.0F ||
+        !samePoint(pursuit.fallbackSearchPosition, pursuit.patrolPoints[0]) ||
+        pursuit.searchArea != pursuitSearchArea(map, pursuit.patrolPoints))
+        return false;
+    const Vec2 center = pursuitCentre({carrier->position, carrier->size});
+    const auto patrol = [&](Vec2 offset)
+    {
+        return samePoint(pursuit.patrolPoints[0], {center.x - offset.x, center.y - offset.y}) &&
+            samePoint(pursuit.patrolPoints[1], {center.x + offset.x, center.y + offset.y});
+    };
+    if (!patrol({kPursuitPatrolOffset, 0.0F}) && !patrol({0.0F, kPursuitPatrolOffset}))
+        return false;
+    const Vec2 clearance{carrier->size.x * 0.5F + 2.0F, carrier->size.y * 0.5F + 2.0F};
+    const auto waypointLegal = [&](Vec2 point)
+    {
+        if (!pursuitPointWithin(point, map.walkableBounds, clearance) ||
+            !pursuitSegmentClear(center, point, clearance, raid.spatialLayout))
+            return false;
+        for (const auto bounds : {raid.extractionPoint, map.highRisk.emergencyExtractionPoint,
+                                  map.highRisk.conditionalExtractionPoint, map.highRisk.activationControlPoint})
+            if (pursuitPointWithin(point, bounds))
+                return false;
+        return !raid.rescue || !pursuitPointWithin(point, raid.rescue->transferPoint);
+    };
+    constexpr Vec2 bodyClearance{26.0F, 18.0F};
+    return pursuitPointWithin(pursuit.fallbackSearchPosition, map.walkableBounds, bodyClearance) &&
+        (pursuitSegmentClear(pursuit.fallbackSearchPosition, pursuit.fallbackSearchPosition,
+             bodyClearance, raid.spatialLayout)) &&
+        std::all_of(pursuit.patrolPoints.begin(), pursuit.patrolPoints.end(), waypointLegal) &&
+        pursuitPlayerPaths(map, raid, pursuit.fallbackSearchPosition, pursuit.deathPosition);
 }
 
 bool hasFixedRaidResourceOptic(
@@ -1178,7 +1370,38 @@ DeployReceipt executeDeploy(
         return deployFailure(RaidLifecycleError::InvalidProfile,
             "fuel extraction requires the fixed service bay Loot slot", profile.revision);
 
-    if (selfRecoveryRecord.has_value())
+    if (selfRecoveryRecord &&
+        content.contentVersion() == kRaidLostWeaponPursuitContentVersion)
+    {
+        if (const auto weapon = selectRaidPursuitWeapon(candidate.assets, content, *selfRecoveryRecord))
+        {
+            RaidMapGenerationAnchors anchors;
+            anchors.playerSpawn = snapshot.playerSpawn;
+            anchors.extractionPoint = snapshot.extractionPoint;
+            // Riverside is an authored map. This yields its existing static
+            // blockers without changing any of the mission's rolled values.
+            snapshot.spatialLayout = generateRaidMapLayout(*map, snapshot.seed, anchors);
+            if (auto pursuit = choosePursuitEncounter(*map, snapshot))
+            {
+                if (candidate.assets.nextAssetId() == std::numeric_limits<AssetInstanceId>::max())
+                    return deployFailure(RaidLifecycleError::Capacity,
+                        "pursuit corpse identity space exhausted", profile.revision);
+                const auto *lost = std::get_if<LostRaidAssetLocation>(
+                    &candidate.assets.find(*weapon)->location);
+                RaidSelfRecoverySnapshot recovery;
+                recovery.sourceRecord = *selfRecoveryRecord;
+                recovery.roots.push_back({*weapon, lost->sourceSlot});
+                pursuit->corpseAssetId = candidate.assets.create(
+                    content.item(kRaidLostWeaponPursuitCorpseId),
+                    RaidSceneContainerAssetLocation{
+                        snapshot.raidId, outdoorRaidSpaceId(), pursuit->fallbackSearchPosition});
+                recovery.pursuit = *pursuit;
+                snapshot.selfRecovery = std::move(recovery);
+                snapshot.startingAssets = profile.assets;
+            }
+        }
+    }
+    if (selfRecoveryRecord.has_value() && !snapshot.selfRecovery.has_value())
     {
         std::set<std::size_t> occupiedRegularSlots;
         for (const RaidLootSnapshot &loot : snapshot.loot)
@@ -1296,7 +1519,7 @@ DeployReceipt executeDeploy(
                        RaidMapAnchorKind::Rescue,
                        snapshot.rescue->transferPoint.size);
         }
-        if (snapshot.selfRecovery.has_value())
+        if (snapshot.selfRecovery.has_value() && !snapshot.selfRecovery->pursuit)
         {
             addRequest(std::string{kRaidAnchorSelfRecovery},
                        RaidMapAnchorKind::SelfRecovery,
@@ -1426,7 +1649,7 @@ DeployReceipt executeDeploy(
             if (loot.spaceId == outdoorRaidSpaceId())
                 generationAnchors.reachablePoints.push_back(loot.position);
         }
-        if (snapshot.selfRecovery.has_value())
+        if (snapshot.selfRecovery.has_value() && !snapshot.selfRecovery->pursuit)
             generationAnchors.reachablePoints.push_back(
                 snapshot.selfRecovery->cachePosition);
         for (const EnemySpawnDefinition &spawn : map->highRisk.pressureSpawns)
@@ -1841,7 +2064,7 @@ DeployReceipt executeDeploy(
             crisis.advancedLootTableId =
                 highRiskCrisis->advancedLootTableId;
             if (regionalMissionCount == 0U && map->id == kFreightCrateMapId &&
-                content.contentVersion() == kFrontierHighRiskBlockadeContentVersion)
+                supportsFrontierHighRiskBlockadeContent(content.contentVersion()))
                 crisis.roadBlockade = chooseFrontierRoadBlockade(
                     *map, snapshot.spatialLayout, target.bounds, command.seed);
 
@@ -2121,7 +2344,7 @@ RaidSettlementReceipt settlePendingRaid(
 
     const PendingRaidSnapshot raidSnapshot = *candidate.pendingRaid;
     if (raidSnapshot.credentialExtraction || fuel || hasDroppedBackpacks ||
-        raidSnapshot.fieldIntelligenceTrade)
+        raidSnapshot.fieldIntelligenceTrade || (raidSnapshot.selfRecovery && raidSnapshot.selfRecovery->pursuit))
     {
         // Validate pending-only facts before settlement removes their sources.
         const ProfileValidationResult validation =
@@ -2390,7 +2613,18 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
         {
             selfRecoveryAssetIds.insert(root.assetId);
         }
-        if (recovery.opened)
+        if (recovery.pursuit && recovery.pursuit->claimed)
+        {
+            if (!candidate.pendingRaid->startingAssets)
+                return {false, RaidLifecycleError::InvalidProfile,
+                        "pursuit rollback asset snapshot missing", profile.revision};
+            const auto [record, added] = candidate.lostRaidRecords.emplace(
+                recovery.sourceRecord.recordId, recovery.sourceRecord);
+            if (!added && record->second != recovery.sourceRecord)
+                return {false, RaidLifecycleError::InvalidProfile,
+                        "pursuit original record changed", profile.revision};
+        }
+        else if (recovery.opened)
         {
             if (!candidate.lostRaidRecords.emplace(
                     recovery.sourceRecord.recordId,

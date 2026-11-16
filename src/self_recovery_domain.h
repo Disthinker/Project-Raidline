@@ -23,3 +23,11 @@ struct RaidSelfRecoveryPlan
     const CommandContext &context,
     const RaidVisibilityProjection *observation = nullptr,
     const RaidObservationKey *currentObservation = nullptr);
+
+// Called only after GameplayWorld resolves the bound carrier's first death
+// to a searchable position. This publishes the scene, not an asset transfer.
+[[nodiscard]] bool revealRaidLostWeaponPursuitCorpse(
+    ProfileState &profile, const ContentRegistry &content, Vec2 position) noexcept;
+
+[[nodiscard]] bool raidLostWeaponCorpsePointClear(
+    const MapDefinition &map, const PendingRaidSnapshot &raid, Vec2 point) noexcept;

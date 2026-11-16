@@ -122,7 +122,7 @@ TEST(SaveRepositoryTest, FrontierRoadBlockadeFrozenGeometryRoundTripsAndCannotDo
     ASSERT_TRUE(profile.pendingRaid->highRiskCrisis->roadBlockade);
     const auto saved = serializeProfileEnvelope(profile, content.contentVersion());
     const auto envelope = nlohmann::json::parse(saved);
-    EXPECT_EQ(envelope.at("schema_version"), 70U);
+    EXPECT_EQ(envelope.at("schema_version"), 71U);
     const auto loaded = deserializeProfileEnvelope(saved, content);
     ASSERT_TRUE(loaded.profile && loaded.profile->pendingRaid) << loaded.message;
     EXPECT_EQ(loaded.profile->pendingRaid->highRiskCrisis, profile.pendingRaid->highRiskCrisis);
@@ -186,13 +186,96 @@ TEST(SaveRepositoryTest, FrontierRoadBlockadeUpgradePreservesSchema69FrozenRaidA
         std::ifstream file(path, std::ios::binary);
         return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
     };
-    const auto marker = std::string{".pre-frontier-high-risk-blockade-and-salvage-v1."};
+    const auto marker = std::string{".pre-raid-lost-weapon-pursuit-v1."};
     EXPECT_EQ(read(directory.path() / ("profile" + marker + testSaveChecksum(frozen) + ".json")), frozen);
     EXPECT_EQ(read(directory.path() / ("profile.backup" + marker + testSaveChecksum(backup) + ".json")), backup);
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile && reopened.sourceEnvelope) << reopened.message;
-    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 70U);
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 71U);
     EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
+}
+
+TEST(SaveRepositoryTest, LostWeaponPursuitUpgradeKeepsExactContent88BlockadeAndArchivesBothSources)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("pursuit-v70-blockade", content);
+    auto base = profile;
+    const auto deployed = executeDeploy(profile, content,
+        {"pursuit-v70-blockade-raid", "pursuit-v70-blockade-return", 2U, kFreightCrateMapId},
+        {profile.revision, "deploy"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid->highRiskCrisis->roadBlockade);
+    const auto frozen = serializeProfileEnvelope(profile, kFrontierHighRiskBlockadeContentVersion);
+    const auto backup = serializeProfileEnvelope(base, kFrontierHighRiskBlockadeContentVersion);
+    const auto loaded = deserializeProfileEnvelope(frozen, content);
+    ASSERT_TRUE(loaded.profile) << loaded.message;
+    ASSERT_TRUE(loaded.sourceEnvelope);
+    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 70U);
+    EXPECT_EQ(serializeProfileEnvelope(*loaded.profile, kFrontierHighRiskBlockadeContentVersion), frozen);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-pursuit-save-", "content88");
+    SaveRepository repository{directory.path()};
+    {
+        std::ofstream primaryFile(repository.primaryPath(), std::ios::binary);
+        std::ofstream backupFile(repository.backupPath(), std::ios::binary);
+        primaryFile << frozen;
+        backupFile << backup;
+        ASSERT_TRUE(primaryFile.good() && backupFile.good());
+    }
+    const auto migrated = repository.save(*loaded.profile, content.contentVersion());
+    ASSERT_TRUE(migrated.succeeded) << migrated.message;
+    const auto read = [](const std::filesystem::path &path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+    };
+    const auto marker = std::string{".pre-raid-lost-weapon-pursuit-v1."};
+    EXPECT_EQ(read(directory.path() / ("profile" + marker + testSaveChecksum(frozen) + ".json")), frozen);
+    EXPECT_EQ(read(directory.path() / ("profile.backup" + marker + testSaveChecksum(backup) + ".json")), backup);
+    const auto reopened = repository.load(content);
+    ASSERT_TRUE(reopened.profile && reopened.sourceEnvelope) << reopened.message;
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 71U);
+    EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
+}
+
+TEST(SaveRepositoryTest, LostWeaponPursuitSnapshotRoundTripRejectsDowngradeAndInvalidGeometry)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("pursuit-round-trip", content);
+    profile.committedSettlements.insert("lost-rifle");
+    profile.lostRaidRecords.emplace("lost-rifle", LostRaidRecord{
+        "lost-rifle", "prior-riverside", "lost-rifle", kFieldIntelligenceSourceMapId,
+        "MODERATE", RaidResultOutcome::PlayerDead, 0U, 2U});
+    const auto original = profile.assets.create(content.item(alpha_content::rifle),
+        LostRaidAssetLocation{"lost-rifle", EquipmentSlotKind::PrimaryWeapon});
+    const auto deployed = executeDeploy(profile, content,
+        {"pursuit-raid", "pursuit-result", 9403U, kFieldIntelligenceSourceMapId, {}, "lost-rifle"},
+        {profile.revision, "pursuit-deploy"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid->selfRecovery->pursuit);
+    const auto &recovery = *profile.pendingRaid->selfRecovery;
+    EXPECT_EQ(recovery.roots.front().assetId, original);
+    const auto saved = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto loaded = deserializeProfileEnvelope(saved, content);
+    ASSERT_TRUE(loaded.profile && loaded.sourceEnvelope) << loaded.message;
+    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 71U);
+    EXPECT_EQ(loaded.profile->pendingRaid->selfRecovery->pursuit, recovery.pursuit);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+    EXPECT_EQ(serializeProfileEnvelope(*loaded.profile, content.contentVersion()), saved);
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, kFrontierHighRiskBlockadeContentVersion)),
+        std::invalid_argument);
+
+    auto tampered = nlohmann::json::parse(saved);
+    auto &pursuit = tampered["payload"]["pending_raid"]["self_recovery"]["pursuit"];
+    pursuit["patrol_points"][1] = pursuit["patrol_points"][0];
+    tampered["payload_checksum"] = testSaveChecksum(tampered["payload"].dump());
+    EXPECT_FALSE(deserializeProfileEnvelope(tampered.dump(), content).profile);
+    tampered = nlohmann::json::parse(saved);
+    tampered["schema_version"] = 70U;
+    tampered["content_version"] = kFrontierHighRiskBlockadeContentVersion;
+    EXPECT_FALSE(deserializeProfileEnvelope(tampered.dump(), content).profile);
 }
 
 TEST(SaveRepositoryTest, HospitalContentAcceptsPreviousContent61WithoutSchemaChange)
@@ -3988,7 +4071,7 @@ TEST(SaveRepositoryTest, Schema55RoundTripsIndependentPagesOverflowAndOwnedSubtr
     ASSERT_TRUE(validateProfileState(profile, content).valid);
     const auto text = serializeProfileEnvelope(profile, content.contentVersion());
     const auto envelope = nlohmann::json::parse(text);
-    EXPECT_EQ(envelope.at("schema_version"), 70U);
+    EXPECT_EQ(envelope.at("schema_version"), 71U);
     EXPECT_EQ(envelope.at("payload").at("stash_layout_version"), 1U);
     const auto loaded = deserializeProfileEnvelope(text, content);
     ASSERT_TRUE(loaded.profile) << loaded.message;

@@ -574,6 +574,32 @@ struct RaidSelfRecoveryRootSnapshot
         const RaidSelfRecoveryRootSnapshot &) = default;
 };
 
+struct RaidLostWeaponPursuitSnapshot
+{
+    Vec2 carrierSpawn{};
+    std::array<Vec2, 2> patrolPoints{};
+    ContentRect searchArea;
+    Vec2 fallbackSearchPosition{};
+    AssetInstanceId corpseAssetId{};
+    std::optional<Vec2> deathPosition;
+    bool claimed{};
+
+    friend bool operator==(const RaidLostWeaponPursuitSnapshot &left,
+                           const RaidLostWeaponPursuitSnapshot &right) noexcept
+    {
+        const auto same = [](Vec2 a, Vec2 b) { return a.x == b.x && a.y == b.y; };
+        return same(left.carrierSpawn, right.carrierSpawn) &&
+            same(left.patrolPoints[0], right.patrolPoints[0]) &&
+            same(left.patrolPoints[1], right.patrolPoints[1]) &&
+            left.searchArea == right.searchArea &&
+            same(left.fallbackSearchPosition, right.fallbackSearchPosition) &&
+            left.corpseAssetId == right.corpseAssetId &&
+            left.deathPosition.has_value() == right.deathPosition.has_value() &&
+            (!left.deathPosition || same(*left.deathPosition, *right.deathPosition)) &&
+            left.claimed == right.claimed;
+    }
+};
+
 struct RaidSelfRecoverySnapshot
 {
     LostRaidRecord sourceRecord;
@@ -581,6 +607,7 @@ struct RaidSelfRecoverySnapshot
     float interactionDurationSeconds{2.0F};
     bool opened{};
     std::vector<RaidSelfRecoveryRootSnapshot> roots;
+    std::optional<RaidLostWeaponPursuitSnapshot> pursuit;
 
     friend bool operator==(
         const RaidSelfRecoverySnapshot &,

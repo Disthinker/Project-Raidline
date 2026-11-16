@@ -6,6 +6,7 @@
 #include "base_defense_serialization.h"
 #include "combat_runtime_checkpoint_json.h"
 #include "raid_corpse_search.h"
+#include "raid_lifecycle.h"
 
 #include <algorithm>
 #include <chrono>
@@ -2978,6 +2979,22 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
                      recovery.interactionDurationSeconds},
                     {"opened", recovery.opened},
                     {"roots", std::move(roots)}};
+                if (recovery.pursuit)
+                {
+                    const auto &pursuit = *recovery.pursuit;
+                    payload["pending_raid"]["self_recovery"]["pursuit"] = {
+                        {"carrier_spawn", vectorValue(pursuit.carrierSpawn)},
+                        {"patrol_points", Json::array({
+                            vectorValue(pursuit.patrolPoints[0]),
+                            vectorValue(pursuit.patrolPoints[1])})},
+                        {"search_area", {
+                            {"position", vectorValue(pursuit.searchArea.position)},
+                            {"size", vectorValue(pursuit.searchArea.size)}}},
+                        {"fallback_search_position", vectorValue(pursuit.fallbackSearchPosition)},
+                        {"corpse_asset_id", pursuit.corpseAssetId},
+                        {"death_position", pursuit.deathPosition ? vectorValue(*pursuit.deathPosition) : Json(nullptr)},
+                        {"claimed", pursuit.claimed}};
+                }
             }
             else
             {
@@ -3174,6 +3191,7 @@ bool isValidEnvelope(
 std::string serializeProfileEnvelope(const ProfileState &profile, std::string_view contentVersion)
 {
     return serializeProfileEnvelope(profile, contentVersion,
+        contentVersion == kRaidLostWeaponPursuitContentVersion ? 71U :
         contentVersion == kFrontierHighRiskBlockadeContentVersion ? 70U :
         contentVersion == kFieldIntelligenceTradeContentVersion ? 69U :
         supportsHospitalMedicalReserveContent(contentVersion) ? 68U :
@@ -3214,17 +3232,23 @@ std::string serializeProfileEnvelope(
          (profile.baseManufacturing.activeOrder &&
           profile.baseManufacturing.activeOrder->recipeDefinitionId == kFreightBreachRecipeId)))
         throw std::invalid_argument{"freight breach requires schema 66 and compatible content"};
-    const bool blockadeContract =
-        schemaVersion == 70 && contentVersion == kFrontierHighRiskBlockadeContentVersion;
+    const bool pursuitContract =
+        schemaVersion == 71 && contentVersion == kRaidLostWeaponPursuitContentVersion;
+    if ((schemaVersion == 71 && !pursuitContract) ||
+        (profile.pendingRaid && profile.pendingRaid->selfRecovery &&
+            profile.pendingRaid->selfRecovery->pursuit && !pursuitContract))
+        throw std::invalid_argument{"lost weapon pursuit requires schema 71 and content 89"};
+    const bool blockadeContract = pursuitContract ||
+        (schemaVersion == 70 && contentVersion == kFrontierHighRiskBlockadeContentVersion);
     if ((schemaVersion == 70 && !blockadeContract) ||
         (profile.pendingRaid && profile.pendingRaid->highRiskCrisis &&
          profile.pendingRaid->highRiskCrisis->roadBlockade && !blockadeContract))
-        throw std::invalid_argument{"road blockade requires schema 70 and content 88"};
+        throw std::invalid_argument{"road blockade requires compatible schema 70 or 71"};
     const bool fieldTradeContract = blockadeContract ||
         (schemaVersion == 69 && contentVersion == kFieldIntelligenceTradeContentVersion);
     if ((schemaVersion == 69 && !fieldTradeContract) ||
         (profile.pendingRaid && profile.pendingRaid->fieldIntelligenceTrade && !fieldTradeContract))
-        throw std::invalid_argument{"field intelligence trade requires compatible schema 69 or 70"};
+        throw std::invalid_argument{"field intelligence trade requires compatible schema 69 or later"};
     const bool reserveContract = fieldTradeContract ||
         (schemaVersion == 68 && supportsHospitalMedicalReserveContent(contentVersion));
     const bool powerContract = schemaVersion == 67 && supportsEmergencyPowerContent(contentVersion);
@@ -3259,7 +3283,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
         schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66 && schemaVersion != 67 && schemaVersion != 68 && schemaVersion != 69 &&
-        schemaVersion != 70)
+        schemaVersion != 70 && schemaVersion != 71)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -3452,7 +3476,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             (schemaVersion >= 66 && contentVersion == kFreightBreachContentVersion) ||
             (schemaVersion >= 67 && contentVersion == kEmergencyPowerContentVersion) ||
             (schemaVersion == 68 && contentVersion == kHospitalMedicalReserveContentVersion) ||
-            (schemaVersion == 69 && contentVersion == kFieldIntelligenceTradeContentVersion);
+            (schemaVersion == 69 && contentVersion == kFieldIntelligenceTradeContentVersion) ||
+            (schemaVersion == 70 && contentVersion == kFrontierHighRiskBlockadeContentVersion);
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -3475,7 +3500,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
                schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66 && schemaVersion != 67 && schemaVersion != 68 && schemaVersion != 69 &&
-               schemaVersion != 70) ||
+               schemaVersion != 70 && schemaVersion != 71) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3494,8 +3519,12 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             schemaVersion >= 65 && supportsThrownIlluminationContent(contentVersion);
         const bool backpackContract =
             schemaVersion >= 66 && supportsRaidBackpackRecoveryContent(contentVersion);
-        const bool blockadeContract =
-            schemaVersion == 70 && contentVersion == kFrontierHighRiskBlockadeContentVersion;
+        const bool pursuitContract =
+            schemaVersion == 71 && contentVersion == kRaidLostWeaponPursuitContentVersion;
+        if (schemaVersion == 71 && !pursuitContract)
+            return {SaveLoadStatus::Failed, std::nullopt, "unsupported lost weapon pursuit content"};
+        const bool blockadeContract = pursuitContract ||
+            (schemaVersion == 70 && contentVersion == kFrontierHighRiskBlockadeContentVersion);
         if (schemaVersion == 70 && !blockadeContract)
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported road blockade content"};
         const bool fieldTradeContract = blockadeContract ||
@@ -4331,7 +4360,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             if (value.contains("field_intelligence_trade"))
             {
                 if (!fieldTradeContract)
-                    throw std::invalid_argument{"field intelligence trade snapshot requires compatible schema 69 or 70"};
+                    throw std::invalid_argument{"field intelligence trade snapshot requires compatible schema 69 or later"};
                 const auto &trade = value.at("field_intelligence_trade");
                 const auto category = trade.at("extra_category").get<std::string>();
                 const auto &balance = trade.at("balance");
@@ -4593,7 +4622,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                 if (crisisValue.contains("road_blockade"))
                 {
                     if (!blockadeContract)
-                        throw std::invalid_argument{"road blockade requires schema 70 and content 88"};
+                        throw std::invalid_argument{"road blockade requires compatible schema 70 or 71"};
                     const auto &blockade = crisisValue.at("road_blockade");
                     const auto &bounds = blockade.at("bounds");
                     const auto &corners = blockade.at("detour_corners");
@@ -5310,6 +5339,25 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                                 .get<std::uint32_t>(),
                             parseVector(root.at("position"))});
                 }
+                if (self.contains("pursuit"))
+                {
+                    if (!pursuitContract)
+                        throw std::invalid_argument{"lost weapon pursuit requires schema 71 and content 89"};
+                    const auto &pursuit = self.at("pursuit");
+                    const auto &points = pursuit.at("patrol_points");
+                    const auto &area = pursuit.at("search_area");
+                    const auto &death = pursuit.at("death_position");
+                    if (!points.is_array() || points.size() != 2U)
+                        throw std::invalid_argument{"lost weapon pursuit requires two patrol points"};
+                    recovery.pursuit = RaidLostWeaponPursuitSnapshot{
+                        parseVector(pursuit.at("carrier_spawn")),
+                        {parseVector(points.at(0)), parseVector(points.at(1))},
+                        {parseVector(area.at("position")), parseVector(area.at("size"))},
+                        parseVector(pursuit.at("fallback_search_position")),
+                        pursuit.at("corpse_asset_id").get<AssetInstanceId>(),
+                        death.is_null() ? std::nullopt : std::optional<Vec2>{parseVector(death)},
+                        pursuit.at("claimed").get<bool>()};
+                }
                 raid.selfRecovery = std::move(recovery);
             }
             if (schemaVersion >= 28 &&
@@ -5451,6 +5499,12 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             if (!validateFrontierRoadBlockade(content.map(raid.mapDefinitionId),
                     raid.spatialLayout, crisis.focusArea, *crisis.roadBlockade))
                 return {SaveLoadStatus::Failed, std::nullopt, "invalid frozen road blockade geometry"};
+        }
+        if (profile.pendingRaid && profile.pendingRaid->selfRecovery && profile.pendingRaid->selfRecovery->pursuit)
+        {
+            const auto &raid = *profile.pendingRaid;
+            if (!raidPursuitGeometryValid(content.map(raid.mapDefinitionId), raid, *raid.selfRecovery->pursuit))
+                return {SaveLoadStatus::Failed, std::nullopt, "invalid frozen lost weapon pursuit geometry"};
         }
         const bool migratedChestRig = profile.chestRigLayoutVersion == 0;
         const auto migration = migrateLegacyChestRigLayout(profile, content);
@@ -5618,8 +5672,9 @@ SaveWriteResult SaveRepository::save(
         const bool reserve = supportsHospitalMedicalReserveContent(contentVersion);
         const bool power = supportsEmergencyPowerContent(contentVersion);
         const bool blockade = contentVersion == kFrontierHighRiskBlockadeContentVersion;
+        const bool pursuit = contentVersion == kRaidLostWeaponPursuitContentVersion;
         const bool fieldTrade = supportsFieldIntelligenceTradeContent(contentVersion);
-        const auto schema = blockade ? 70U : fieldTrade ? 69U : reserve ? 68U : power ? 67U : backpack ? 66U
+        const auto schema = pursuit ? 71U : blockade ? 70U : fieldTrade ? 69U : reserve ? 68U : power ? 67U : backpack ? 66U
             : illumination ? 65U : armor ? 64U : fuel ? 63U : freight ? 62U : 61U;
         const auto isLegacy = [&](const std::optional<SaveEnvelopeMetadata> &source) {
             return source && (source->schemaVersion < schema || source->contentVersion != contentVersion);
@@ -5629,7 +5684,8 @@ SaveWriteResult SaveRepository::save(
         {
             // The former primary can remain in the rolling backup after upgrade.
             const std::string_view marker =
-                blockade ? "frontier-high-risk-blockade-and-salvage-v1"
+                pursuit ? "raid-lost-weapon-pursuit-v1"
+                : blockade ? "frontier-high-risk-blockade-and-salvage-v1"
                 : fieldTrade ? "raid-field-intelligence-trade-v1"
                 : reserve ? "hospital-rescue-and-medical-reserve-v1"
                 : power ? "base-emergency-power-and-fuel-logistics-v1"

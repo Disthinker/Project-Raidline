@@ -296,7 +296,8 @@ InventoryReceipt applyMove(
     ProfileState &candidate,
     const ContentRegistry &content,
     const InventoryMoveCommand &command,
-    bool validateWholeProfile)
+    bool validateWholeProfile,
+    bool claimingPursuit)
 {
     AssetRecord *source = candidate.assets.findMutable(command.instanceId);
     for (const auto &[id, asset] : candidate.assets.records())
@@ -329,7 +330,7 @@ InventoryReceipt applyMove(
             "asset is reserved by a Base service",
             candidate.revision);
     }
-    if (lostRaidRecordForAsset(candidate, source->instanceId).has_value())
+    if (!claimingPursuit && lostRaidRecordForAsset(candidate, source->instanceId).has_value())
     {
         return failure(
             DomainErrorCode::IllegalDestination,
@@ -431,6 +432,9 @@ InventoryReceipt applyMove(
         definition,
         command.destinationOrientation,
         source->instanceId);
+    if (claimingPursuit && !overlaps.empty())
+        return failure(DomainErrorCode::Capacity,
+            "asset does not fit inside the destination", candidate.revision);
     if ((sourceInIntake || sourceInLegacyOverflow) && !overlaps.empty())
     {
         const AssetRecord *target = overlaps.size() == 1
@@ -567,7 +571,8 @@ InventoryReceipt applyEquip(
     ProfileState &candidate,
     const ContentRegistry &content,
     const InventoryEquipCommand &command,
-    bool validateWholeProfile)
+    bool validateWholeProfile,
+    bool claimingPursuit)
 {
     AssetRecord *source = candidate.assets.findMutable(command.instanceId);
     for (const auto &[id, asset] : candidate.assets.records())
@@ -597,7 +602,7 @@ InventoryReceipt applyEquip(
             "asset is reserved by a Base service",
             candidate.revision);
     }
-    if (lostRaidRecordForAsset(candidate, source->instanceId).has_value())
+    if (!claimingPursuit && lostRaidRecordForAsset(candidate, source->instanceId).has_value())
     {
         return failure(
             DomainErrorCode::IllegalDestination,
@@ -667,10 +672,11 @@ InventoryReceipt apply(
     ProfileState &candidate,
     const ContentRegistry &content,
     const InventoryCommand &command,
-    bool validateWholeProfile)
+    bool validateWholeProfile,
+    bool claimingPursuit)
 {
     return std::visit(
-        [&candidate, &content, validateWholeProfile](
+        [&candidate, &content, validateWholeProfile, claimingPursuit](
             const auto &typedCommand)
         {
             using Command = std::decay_t<decltype(typedCommand)>;
@@ -687,7 +693,8 @@ InventoryReceipt apply(
                     candidate,
                     content,
                     typedCommand,
-                    validateWholeProfile);
+                    validateWholeProfile,
+                    claimingPursuit);
             }
             else
             {
@@ -695,7 +702,8 @@ InventoryReceipt apply(
                     candidate,
                     content,
                     typedCommand,
-                    validateWholeProfile);
+                    validateWholeProfile,
+                    claimingPursuit);
             }
         },
         command);
@@ -737,6 +745,36 @@ std::optional<AssetInstanceId> raidSceneContainerRoot(
     return std::nullopt;
 }
 
+namespace
+{
+const RaidSelfRecoverySnapshot *recoveryForPursuitCorpse(
+    const ProfileState &profile, AssetInstanceId corpseId) noexcept
+{
+    const auto *recovery = profile.pendingRaid && profile.pendingRaid->selfRecovery
+        ? &*profile.pendingRaid->selfRecovery : nullptr;
+    return recovery && recovery->pursuit && corpseId != 0 &&
+        recovery->pursuit->corpseAssetId == corpseId ? recovery : nullptr;
+}
+}
+
+const AssetRecord *raidPursuitCorpseWeapon(
+    const ProfileState &profile, AssetInstanceId corpseId) noexcept
+{
+    const auto *recovery = recoveryForPursuitCorpse(profile, corpseId);
+    if (!recovery || !recovery->pursuit->deathPosition ||
+        recovery->pursuit->claimed || recovery->roots.size() != 1U)
+        return nullptr;
+
+    const auto &reference = recovery->roots.front();
+    const auto *weapon = profile.assets.find(reference.assetId);
+    const auto *owner = weapon ? std::get_if<LostRaidAssetLocation>(&weapon->location) : nullptr;
+    const auto record = profile.lostRaidRecords.find(recovery->sourceRecord.recordId);
+    return owner && owner->recordId == recovery->sourceRecord.recordId &&
+        owner->sourceSlot == reference.sourceSlot &&
+        record != profile.lostRaidRecords.end() && record->second == recovery->sourceRecord
+        ? weapon : nullptr;
+}
+
 bool raidSceneContainerObservable(const ProfileState &profile, const RaidSceneContainerAccess &access)
 {
     const auto *asset = profile.assets.find(access.containerAssetId);
@@ -754,6 +792,25 @@ bool raidSceneContainerObservable(const ProfileState &profile, const RaidSceneCo
     if (!scene || !profile.pendingRaid || scene->raidId != profile.pendingRaid->raidId || scene->spaceId != access.spaceId ||
         !std::isfinite(access.playerCenter.x) || !std::isfinite(access.playerCenter.y)) return false;
     const float dx = scene->position.x - access.playerCenter.x, dy = scene->position.y - access.playerCenter.y;
+    if (const auto *recovery = recoveryForPursuitCorpse(profile, access.containerAssetId))
+    {
+        const auto &death = recovery->pursuit->deathPosition;
+        if (!death || access.spaceId != outdoorRaidSpaceId() ||
+            !std::isfinite(death->x) || !std::isfinite(death->y) ||
+            death->x != scene->position.x || death->y != scene->position.y ||
+            dx * dx + dy * dy > 72.0F * 72.0F ||
+            !access.observation->boundsVisible({{death->x - 26.0F, death->y - 18.0F}, {52.0F, 36.0F}}))
+            return false;
+
+        // Outdoor Riverside's ordinary observation includes blocked points.
+        // Search access also requires a clear view of the actual corpse.
+        const auto &blockers = profile.pendingRaid->spatialLayout.ballisticBlockers;
+        return std::none_of(blockers.begin(), blockers.end(), [&](const ContentRect &wall)
+        {
+            return raidSightSegmentIntersectsRectInterior(access.playerCenter, *death,
+                {wall.position, wall.size});
+        });
+    }
     if (!access.observation->boundsVisible({{scene->position.x-24,scene->position.y-18},{48,36}})) return false;
     return dx * dx + dy * dy <= 72.0F * 72.0F;
 }
@@ -814,6 +871,47 @@ InventoryReceipt unlockRaidFreightCrate(
 
 namespace
 {
+bool claimsPursuitWeapon(const ProfileState &profile, AssetInstanceId sourceId,
+    const RaidSceneContainerAccess *access) noexcept
+{
+    if (!access)
+        return false;
+    const auto *weapon = raidPursuitCorpseWeapon(profile, access->containerAssetId);
+    return weapon && weapon->instanceId == sourceId;
+}
+
+bool pursuitDestinationAllowed(const ProfileState &profile, const InventoryCommand &command)
+{
+    if (const auto *move = std::get_if<InventoryMoveCommand>(&command))
+    {
+        const auto &destination = move->destination.container;
+        return (move->quantity == 0 || move->quantity == 1) &&
+            destination.kind == ProfileContainerKind::AssetCompartment &&
+            equippedAsset(profile, EquipmentSlotKind::Backpack) == destination.ownerAssetId;
+    }
+    const auto slot = std::get<InventoryEquipCommand>(command).slot;
+    return slot == EquipmentSlotKind::PrimaryWeapon || slot == EquipmentSlotKind::SecondaryWeapon;
+}
+
+void markPursuitWeaponClaimed(ProfileState &profile)
+{
+    auto &recovery = *profile.pendingRaid->selfRecovery;
+    recovery.pursuit->claimed = true;
+    const auto &recordId = recovery.sourceRecord.recordId;
+    const auto &assets = profile.assets.records();
+    const bool keepsOtherRoots = std::any_of(assets.begin(), assets.end(), [&](const auto &entry)
+    {
+        const auto *location = std::get_if<LostRaidAssetLocation>(&entry.second.location);
+        return location && location->recordId == recordId;
+    });
+    if (!keepsOtherRoots)
+    {
+        profile.lostRaidRecords.erase(recordId);
+        if (profile.lastRaidResult && profile.lastRaidResult->lostRaidRecordId == recordId)
+            profile.lastRaidResult->lostRaidRecordId.reset();
+    }
+}
+
 bool sceneCommandAllowed(const ProfileState &profile, const InventoryCommand &command, const RaidSceneContainerAccess *access)
 {
     const auto sourceId = std::visit([](const auto &value) { return value.instanceId; }, command);
@@ -828,6 +926,11 @@ bool sceneCommandAllowed(const ProfileState &profile, const InventoryCommand &co
         if (raidDroppedBackpackRoot(profile, owner)) return false;
         destinationRoot = raidSceneContainerRoot(profile, owner);
     }
+    if (destinationRoot && recoveryForPursuitCorpse(profile, *destinationRoot))
+        return false;
+    if (claimsPursuitWeapon(profile, sourceId, access))
+        return raidSceneContainerAccessible(profile, *access) &&
+            pursuitDestinationAllowed(profile, command);
     if (!sourceRoot && !destinationRoot) return true;
     if (!access || !raidSceneContainerAccessible(profile, *access)) return false;
     if ((sourceRoot && *sourceRoot != access->containerAssetId) || (destinationRoot && *destinationRoot != access->containerAssetId)) return false;
@@ -854,8 +957,9 @@ InventoryPlan queryInventory(
     candidate.chestRigLayoutVersion = profile.chestRigLayoutVersion;
     candidate.revision = profile.revision;
     candidate.assets = profile.assets;
+    const auto sourceId = std::visit([](const auto &value) { return value.instanceId; }, command);
     const InventoryReceipt receipt = apply(
-        candidate, content, command, false);
+        candidate, content, command, false, claimsPursuitWeapon(profile, sourceId, sceneAccess));
     return InventoryPlan{
         receipt.succeeded,
         receipt.error,
@@ -900,6 +1004,8 @@ InventoryReceipt executeInventory(
     if (!sceneCommandAllowed(profile, command, sceneAccess))
         return failure(DomainErrorCode::IllegalDestination, "Scene container is outside the accessible inventory scope", profile.revision);
 
+    const auto sourceId = std::visit([](const auto &value) { return value.instanceId; }, command);
+    const bool claimingPursuit = claimsPursuitWeapon(profile, sourceId, sceneAccess);
     AssetRegistry originalAssets = profile.assets;
     std::set<std::string> committedTransactions =
         profile.committedTransactions;
@@ -913,7 +1019,7 @@ InventoryReceipt executeInventory(
         // profile aggregates are validated at deploy, persistence, recovery,
         // and settlement boundaries instead of rescanning the megamap for
         // every pickup or drag.
-        receipt = apply(profile, content, command, false);
+        receipt = apply(profile, content, command, false, claimingPursuit);
     }
     catch (...)
     {
@@ -937,6 +1043,8 @@ InventoryReceipt executeInventory(
             if ((loot.sceneContainerAssetId || loot.corpseContainerAssetId) && before &&
                 (!after || before->location != after->location || before->quantity != after->quantity)) loot.collected = true;
         }
+    if (claimingPursuit)
+        markPursuitWeaponClaimed(profile);
     profile.committedTransactions = std::move(committedTransactions);
     ++profile.revision;
     receipt.revision = profile.revision;

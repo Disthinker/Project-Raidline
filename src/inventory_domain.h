@@ -82,6 +82,10 @@ struct RaidSceneContainerAccess
     const ProfileState &profile, AssetInstanceId containerAssetId) noexcept;
 [[nodiscard]] bool raidSceneContainerAccessible(
     const ProfileState &profile, const RaidSceneContainerAccess &access);
+// A read-only, single-cell-origin projection. The weapon remains in its
+// original lost record until a legal inventory transfer commits.
+[[nodiscard]] const AssetRecord *raidPursuitCorpseWeapon(
+    const ProfileState &profile, AssetInstanceId corpseId) noexcept;
 [[nodiscard]] bool raidFreightCrateKeyCarried(const ProfileState &profile);
 [[nodiscard]] InventoryReceipt unlockRaidFreightCrate(
     ProfileState &profile,

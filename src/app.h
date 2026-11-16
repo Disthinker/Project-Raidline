@@ -167,7 +167,7 @@ public:
     App(App &&) = delete;
     App &operator=(App &&) = delete;
 
-    int run();
+    int run(std::string_view testProfile = {});
 
 private:
     // Headless event-router regression tests; never runs the game loop.
@@ -627,7 +627,7 @@ private:
         inventoryItemTextures_{};
 
     bool loadTextures();
-    bool initialize();
+    bool initialize(std::string_view testProfile);
     void syncAmbience();
     void consumePresentationAudioEvents();
     void updateBaseOperationNotices(float deltaTime);

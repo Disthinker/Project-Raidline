@@ -77,6 +77,7 @@ struct EnemySpawn
     std::optional<EnemyArmorState> torsoArmor;
     std::string sourceEnemyId;
     std::optional<EnemyVariantSnapshot> variant;
+    bool lostWeaponCarrier{};
 };
 
 struct HighRiskWorldConfig
@@ -178,6 +179,7 @@ struct RaidWorldConfig
     bool freightBreachEnabled{};
     std::optional<Vec2> fieldIntelligenceContact;
     std::optional<RaidRoadBlockadeSnapshot> roadBlockade;
+    std::optional<Vec2> lostWeaponPursuitFallback;
 };
 
 struct RaidRoadBlockadeView
@@ -274,6 +276,7 @@ public:
     const Player &player() const;
     [[nodiscard]] const std::vector<RaidCorpseDeathFact> &pendingCorpseDeaths() const noexcept { return pendingCorpseDeaths_; }
     void acknowledgeCorpseDeath(std::string_view sourceId);
+    [[nodiscard]] std::optional<Vec2> lostWeaponCarrierDeath() const noexcept;
 
     [[nodiscard]]
     // Test-only visibility into non-entity logical flight records. App and
@@ -328,6 +331,8 @@ public:
     [[nodiscard]] RaidObservationWork observationWork() const noexcept { return observationWork_; }
     [[nodiscard]] bool raidBoundsObservable(Rect bounds) const;
     [[nodiscard]] bool raidEnemyObservable(CombatTargetId id) const;
+    [[nodiscard]] std::optional<Rect> visibleLostWeaponCarrier() const;
+    [[nodiscard]] bool lostWeaponCorpseObservable() const;
     [[nodiscard]] std::uint64_t enemyObservationSolveCount() const noexcept { return enemyObservationSolveCount_; }
     [[nodiscard]] std::uint64_t indoorObservationBuildCount() const noexcept { return indoorObservationBuildCount_; }
     [[nodiscard]] std::vector<RaidSpacePortalProjection>
@@ -673,11 +678,16 @@ private:
     WorldShootingRuntime shooting_;
     WorldMeleeRuntime melee_;
     void consumeEnemyRemovals(std::span<const EnemyRemovalFact>);
+    [[nodiscard]] Vec2 lostWeaponCorpseSearchPoint(Vec2 deathCenter) const noexcept;
     CombatTargetId nextCombatTargetId_{1};
     EnemyRoster<EnemyAttachedState> enemies_;
     std::map<CombatTargetId, RaidCorpseDeathFact> corpseSources_;
     std::vector<TrainingCorpseDeathFact> trainingCorpseDeaths_;
     std::vector<RaidCorpseDeathFact> pendingCorpseDeaths_;
+    CombatTargetId lostWeaponCarrierId_{kInvalidCombatTargetId};
+    Vec2 lostWeaponCarrierHalfSize_{};
+    std::optional<Vec2> lostWeaponPursuitFallback_;
+    std::optional<Vec2> lostWeaponCarrierDeath_;
     std::size_t initialOutdoorEnemyCount_{};
     std::vector<BallisticBlocker> ballisticBlockers_;
     std::optional<Vec2> fieldIntelligenceContact_;

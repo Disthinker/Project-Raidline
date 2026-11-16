@@ -2309,6 +2309,12 @@ RaidSceneContainerAccess GameSession::raidSceneAccess(AssetInstanceId id) const
     const auto p=world_->player().position();
     const float half=world_->player().size()*0.5F;
     RaidSceneContainerAccess access{id,world_->activeRaidSpaceId(),{p.x+half,p.y+half},std::nullopt};
+    if (profile_.pendingRaid && profile_.pendingRaid->selfRecovery)
+    {
+        const auto &pursuit = profile_.pendingRaid->selfRecovery->pursuit;
+        if (pursuit && pursuit->corpseAssetId == id && !world_->lostWeaponCorpseObservable())
+            return access;
+    }
     access.observation=world_->raidObservation();
     access.currentObservation=world_->raidObservationKey();
     return access;
@@ -4601,6 +4607,14 @@ void GameSession::updateAlphaRaid(
             ? revealRaidCorpseInSimulation(profile_, publishedContentRegistry(), fact)
             : revealRaidCorpse(profile_, publishedContentRegistry(), fact))
             world_->acknowledgeCorpseDeath(fact.sourceEnemyId);
+    if (profile_.pendingRaid && profile_.pendingRaid->selfRecovery)
+    {
+        const auto &pursuit = profile_.pendingRaid->selfRecovery->pursuit;
+        if (pursuit && !pursuit->deathPosition)
+            if (const auto death = world_->lostWeaponCarrierDeath())
+                static_cast<void>(revealRaidLostWeaponPursuitCorpse(
+                    profile_, publishedContentRegistry(), *death));
+    }
     if(world_->grenade().active()) {
         const auto pos=world_->player().position();const float half=world_->player().size()/2;
         const Vec2 center{pos.x+half,pos.y+half};
@@ -4647,7 +4661,8 @@ void GameSession::updateAlphaRaid(
     }
 
     if (profile_.pendingRaid && profile_.pendingRaid->selfRecovery.has_value() &&
-        !profile_.pendingRaid->selfRecovery->opened)
+        !profile_.pendingRaid->selfRecovery->opened &&
+        !profile_.pendingRaid->selfRecovery->pursuit)
     {
         const bool canContinue = selfRecoveryCacheInRange() &&
             input.interactPressed && !input.inventoryOpen &&
@@ -5507,6 +5522,7 @@ bool GameSession::selfRecoveryCacheInRange() const noexcept
         !profile_.pendingRaid.has_value() ||
         !profile_.pendingRaid->selfRecovery.has_value() ||
         profile_.pendingRaid->selfRecovery->opened ||
+        profile_.pendingRaid->selfRecovery->pursuit ||
         world_->activeRaidSpaceId() != outdoorRaidSpaceId())
     {
         return false;
@@ -5528,7 +5544,8 @@ std::optional<RaidSelfRecoveryProjection>
 GameSession::raidSelfRecoveryProjection() const noexcept
 {
     if (!profile_.pendingRaid.has_value() ||
-        !profile_.pendingRaid->selfRecovery.has_value())
+        !profile_.pendingRaid->selfRecovery.has_value() ||
+        profile_.pendingRaid->selfRecovery->pursuit)
     {
         return std::nullopt;
     }

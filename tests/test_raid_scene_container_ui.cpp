@@ -1,4 +1,8 @@
 #include "app.h"
+#include "raid_lifecycle.h"
+#include "profile_ui_test_wait.h"
+#include "test_temp_directory.h"
+#include <SDL3_image/SDL_image.h>
 #include <gtest/gtest.h>
 #include <chrono>
 #include <filesystem>
@@ -23,7 +27,18 @@ struct RaidSceneContainerUiTestAccess {
     }
     static void bagTab(App &a) { static_cast<void>(a); /* Backpack is already on the shared page. */ }
     static void quick(App &a, MousePosition pos) { a.handleProfileInventoryUiEvent(InventoryQuickTransferEvent{pos}, true); }
+    static void pointer(App &a, InventoryPointerEventType event, MousePosition pos)
+    {
+        a.handleProfileInventoryUiEvent(InventoryPointerEvent{event, pos}, true);
+    }
+    static void tactical(App &a)
+    {
+        a.tacticalMapOpen_ = true;
+        a.renderRaidTacticalMap();
+        a.tacticalMapOpen_ = false;
+    }
     static bool renderer(App &a, SDL_Renderer *r) { a.renderer_=r; return a.uiTextRenderer_.initialize(r); }
+    static void language(App &a, UiLanguage lang) { a.uiTextRenderer_.setLanguage(lang); }
     static void paint(App &a, UiLanguage lang) { a.uiTextRenderer_.setLanguage(lang); a.renderInventoryOverlay(); }
     static void expectedCorpseTitle(App &a) {
         SDL_SetRenderDrawColor(a.renderer_,216,228,224,255);
@@ -37,6 +52,157 @@ void key(SDL_Scancode code) {
     SDL_Event e{}; e.type=SDL_EVENT_KEY_DOWN; e.key.scancode=code; e.key.down=true; ASSERT_TRUE(SDL_PushEvent(&e));
     e.type=SDL_EVENT_KEY_UP; e.key.down=false; ASSERT_TRUE(SDL_PushEvent(&e));
 }
+
+TEST(RaidLostWeaponPursuitUiTest, RealCorpsePanelRendersAndDragsOriginalGun)
+{
+    ASSERT_TRUE(SDL_Init(SDL_INIT_EVENTS));
+    raidline::test::TemporaryDirectory directory;
+    ASSERT_NO_THROW(directory.claim("raidline-pursuit-ui-", "original-gun"));
+    const auto &content = publishedContentRegistry();
+    const MapDefinitionId map{"map.raid.riverside"};
+    const auto &definition = content.item(ItemDefinitionId{"item.weapon.rifle_5_45_service"});
+    auto profile = makeNewAlphaProfile("raid-pursuit-ui", content);
+    profile.currency = 1000;
+    profile.tutorial = TutorialProgress::Complete;
+    const auto gun = profile.assets.create(definition, EquippedAssetLocation{EquipmentSlotKind::PrimaryWeapon});
+    const auto magazine = profile.assets.create(content.item(ItemDefinitionId{"item.magazine.5_45x39_30"}),
+        InstalledMagazineLocation{gun});
+    const ItemDefinitionId standard{"item.ammunition.5_45x39_standard"};
+    const ItemDefinitionId enhanced{"item.ammunition.5_45x39_enhanced"};
+    const auto stash = ProfileContainerId::stash();
+    const auto &kitDefinition = content.item(ItemDefinitionId{"item.maintenance.weapon_kit_basic"});
+    const auto kitPosition = findFirstProfileFit(profile, content, stash, kitDefinition, ItemOrientation::Degrees0);
+    ASSERT_TRUE(kitPosition);
+    const auto kit = profile.assets.create(kitDefinition, StoredAssetLocation{stash, *kitPosition});
+    const auto ammoPosition = findFirstProfileFit(profile, content, stash, content.item(standard), ItemOrientation::Degrees0);
+    ASSERT_TRUE(ammoPosition);
+    const auto spareAmmo = profile.assets.create(content.item(standard), StoredAssetLocation{stash, *ammoPosition}, 5);
+    const std::vector<MagazineRoundRecord> mixed{{standard}, {enhanced}, {standard}};
+    profile.assets.findMutable(magazine)->magazineRounds = mixed;
+    profile.assets.findMutable(gun)->chamberedRound = MagazineRoundRecord{enhanced};
+    profile.assets.findMutable(gun)->currentDurability = 7800;
+    const auto armor = profile.assets.create(content.item(ItemDefinitionId{"item.protective_gear.body_armor_heavy"}),
+        EquippedAssetLocation{EquipmentSlotKind::BodyArmor});
+    const auto original = executeDeploy(profile, content,
+        {"original-raid", "original-loss", 23, map}, {profile.revision, "original-deploy"});
+    ASSERT_TRUE(original.succeeded) << original.message;
+    ASSERT_TRUE(settlePendingRaid(profile, content, "original-loss", RaidResultOutcome::PlayerDead).succeeded);
+    auto &record = profile.lostRaidRecords.at("original-loss");
+    record.subsequentRaidSettlementCount = 1;
+    ASSERT_TRUE(SaveRepository(directory.path()).save(profile, content.contentVersion()).succeeded);
+
+    App app;
+    auto &flow = A::flow(app);
+    flow.configurePersistence(directory.path());
+    ASSERT_TRUE(flow.continueGame());
+    ASSERT_TRUE(flow.deploy(map, {}, record.recordId));
+    auto &session = flow.gameSession();
+    const auto &recovery = session.profile().pendingRaid->selfRecovery;
+    ASSERT_TRUE(recovery && recovery->pursuit) << session.persistenceMessage();
+    const auto pursuit = *recovery->pursuit;
+    EXPECT_TRUE(session.world().noiseDecoyEnabled());
+    EXPECT_FALSE(session.world().grenadeEnabled());
+    EXPECT_FALSE(session.raidSceneContainerAvailable(pursuit.corpseAssetId));
+    EXPECT_FALSE(session.raidSelfRecoveryProjection());
+
+    const auto &enemies = session.world().enemies();
+    const auto carrier = std::find_if(enemies.begin(), enemies.end(), [&](const Enemy &actor) {
+        return actor.position().x == pursuit.carrierSpawn.x && actor.position().y == pursuit.carrierSpawn.y;
+    });
+    ASSERT_NE(carrier, enemies.end());
+    auto &actor = const_cast<Enemy &>(*carrier);
+    static_cast<void>(actor.takeDamage(actor.maxHealth()));
+    flow.update({}, 0.01F);
+    const auto death = session.world().lostWeaponCarrierDeath();
+    ASSERT_TRUE(death);
+    auto &player = const_cast<Player &>(session.world().player());
+    ASSERT_TRUE(player.setPosition({death->x - player.size() * 0.5F, death->y - player.size() * 0.5F}));
+    A::frame(app);
+    ASSERT_EQ(session.nearbyRaidSceneContainer(), pursuit.corpseAssetId);
+    key(SDL_SCANCODE_F);
+    A::frame(app);
+    ASSERT_EQ(A::external(app), pursuit.corpseAssetId);
+    ASSERT_TRUE(A::open(app));
+    EXPECT_FALSE(A::capture(app));
+
+    const auto *review = std::getenv("RAIDLINE_PURSUIT_UI_REVIEW_DIR");
+    for (const auto size : kUiWindowSizes)
+    {
+        std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)> surface(
+            SDL_CreateSurface(size.width, size.height, SDL_PIXELFORMAT_RGBA32), SDL_DestroySurface);
+        ASSERT_TRUE(surface);
+        std::unique_ptr<SDL_Renderer, decltype(&SDL_DestroyRenderer)> renderer(
+            SDL_CreateSoftwareRenderer(surface.get()), SDL_DestroyRenderer);
+        ASSERT_TRUE(renderer);
+        ASSERT_TRUE(SDL_SetRenderLogicalPresentation(renderer.get(), 1280, 720, SDL_LOGICAL_PRESENTATION_LETTERBOX));
+        ASSERT_TRUE(A::renderer(app, renderer.get()));
+        for (const auto language : {UiLanguage::English, UiLanguage::SimplifiedChinese})
+        {
+            A::language(app, language);
+            const auto render = [&](const char *name, auto draw)
+            {
+                SDL_SetRenderDrawColor(renderer.get(), 0, 0, 0, 255);
+                EXPECT_TRUE(SDL_RenderClear(renderer.get()));
+                draw();
+                EXPECT_TRUE(SDL_RenderPresent(renderer.get()));
+                if (review)
+                {
+                    const auto file = std::filesystem::path(review) /
+                        (std::string{name} + "-" + std::to_string(size.width) + "-" + uiLanguageCode(language) + ".png");
+                    EXPECT_TRUE(IMG_SavePNG(surface.get(), file.string().c_str()));
+                }
+            };
+            render("pursuit-corpse", [&] { A::paint(app, language); });
+            render("pursuit-map", [&] { A::tactical(app); });
+        }
+        A::detach(app);
+    }
+
+    const MousePosition start{817, 137};
+    const MousePosition destination{60, 388};
+    A::pointer(app, InventoryPointerEventType::LeftButtonDown, start);
+    A::pointer(app, InventoryPointerEventType::Motion, destination);
+    EXPECT_TRUE(A::drag(app));
+    A::pointer(app, InventoryPointerEventType::LeftButtonUp, destination);
+    EXPECT_EQ(equippedAsset(session.profile(), EquipmentSlotKind::PrimaryWeapon), gun);
+    EXPECT_TRUE(session.profile().pendingRaid->selfRecovery->pursuit->claimed);
+    EXPECT_EQ(lostRaidRecordForAsset(session.profile(), armor), "original-loss");
+    EXPECT_FALSE(lostRaidRecordForAsset(session.profile(), gun));
+    EXPECT_EQ(session.profile().assets.find(magazine)->magazineRounds, mixed);
+    key(SDL_SCANCODE_ESCAPE);
+    A::frame(app);
+
+    const auto extraction = session.profile().pendingRaid->extractionPoint;
+    ASSERT_TRUE(player.setPosition({
+        extraction.position.x + (extraction.size.x - player.size()) * 0.5F,
+        extraction.position.y + (extraction.size.y - player.size()) * 0.5F}));
+    for (int frame = 0; frame < 30 && session.profile().pendingRaid && !session.profileUiCommitPending(); ++frame)
+        flow.update({}, 0.15F);
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+    flow.update({}, 0.0F);
+    ASSERT_EQ(flow.state(), GameFlowState::RaidResult) << session.persistenceMessage();
+    EXPECT_EQ(session.profile().lastRaidResult->outcome, RaidResultOutcome::Extracted);
+    EXPECT_EQ(session.profile().assets.find(gun)->chamberedRound, MagazineRoundRecord{enhanced});
+    EXPECT_EQ(session.profile().assets.find(magazine)->magazineRounds, mixed);
+    EXPECT_EQ(session.profile().lostRaidRecords.at("original-loss").subsequentRaidSettlementCount, 2U);
+    ASSERT_TRUE(flow.returnToBase());
+    const auto maintenance = session.executeBaseWeaponMaintenance(kit, gun, "pursuit-base-maintenance");
+    ASSERT_TRUE(maintenance.succeeded) << maintenance.message;
+    EXPECT_GT(session.profile().assets.find(gun)->currentDurability, 7800U);
+    const auto reload = session.executeProfileWeaponAmmo(
+        LoadMagazineCommand{magazine, spareAmmo, 5}, "pursuit-base-load");
+    ASSERT_TRUE(reload.succeeded) << reload.message;
+    const auto rearmedCount = mixed.size() + 5U;
+    EXPECT_EQ(session.profile().assets.find(magazine)->magazineRounds.size(), rearmedCount);
+    ASSERT_TRUE(flow.deploy(map));
+    EXPECT_EQ(session.activeAlphaWeapon(), gun);
+    GameplayInput fire;
+    fire.fireJustPressed = fire.firePressed = fire.firePhysicallyPressed = true;
+    flow.update(fire, 0.0F);
+    EXPECT_LT(session.profile().assets.find(magazine)->magazineRounds.size(), rearmedCount);
+    SDL_Quit();
+}
+
 class RaidSceneContainerUiTest : public testing::Test {
 protected:
     std::unique_ptr<App> app;
