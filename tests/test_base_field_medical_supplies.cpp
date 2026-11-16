@@ -198,15 +198,19 @@ TEST(FieldMedicalSuppliesTest, ExistingWorkshopListsAllSixRecipesInChineseWithou
     addToStash(profile, kStock);
     const auto before = profileStateFingerprint(profile);
     const auto projection = projectUiWorkshop(profile, content(), UiLanguage::SimplifiedChinese, kRollRecipe);
-    ASSERT_EQ(projection.recipes.size(), 10U);
+    ASSERT_EQ(projection.recipes.size(), 11U);
     EXPECT_EQ(uiWorkshopPageCount(projection.recipes.size()), 2U);
     EXPECT_EQ(projection.recipes[kUiWorkshopPageSize].id,
         BaseManufacturingRecipeDefinitionId{"base_manufacturing.ammunition_5_45x39_expanding"});
     EXPECT_EQ(projection.recipes[kUiWorkshopPageSize + 1].id, kArmorRepairResearchId);
     EXPECT_EQ(projection.recipes[kUiWorkshopPageSize + 2].id, kThrownIlluminationRecipeId);
-    EXPECT_EQ(projection.recipes.back().id, kFreightBreachRecipeId);
-    EXPECT_EQ(projection.recipes.back().fullName, "破拆楔组");
-    EXPECT_EQ(projection.recipes.back().materials, "废旧零件  x2\n工业紧固件  x1\n");
+    const auto &wedges = projection.recipes[kUiWorkshopPageSize + 3];
+    EXPECT_EQ(wedges.id, kFreightBreachRecipeId);
+    EXPECT_EQ(wedges.fullName, "破拆楔组");
+    EXPECT_EQ(wedges.materials, "废旧零件  x2\n工业紧固件  x1\n");
+    EXPECT_EQ(projection.recipes.back().id, kRaidFieldSplintRecipeId);
+    EXPECT_EQ(projection.recipes.back().fullName, "野战夹板");
+    EXPECT_EQ(projection.recipes.back().materials, "绷带  x1\n废旧零件  x1\n");
     const auto firstPageEnd = projection.recipes.begin() + kUiWorkshopPageSize;
     ASSERT_TRUE(projection.start.canCommit) << projection.start.message;
     EXPECT_EQ(projection.start.durationMinutes, 60U);
@@ -241,10 +245,12 @@ TEST(FieldMedicalSuppliesTest, PublishedAndDeveloperWarehouseCatalogsDoNotGrantM
 {
     const auto published = makeNewPublishedProfile("field-medical-published", content());
     EXPECT_EQ(firstAsset(published, kRoll), 0U);
+    EXPECT_EQ(firstAsset(published, kRaidFieldSplintId), 0U);
     auto profile = makeProfile();
     const auto granted = grantDeveloperWarehouseCatalog(profile, content());
     ASSERT_TRUE(granted.succeeded) << granted.message;
     EXPECT_EQ(firstAsset(profile, kRoll), 0U);
+    EXPECT_EQ(firstAsset(profile, kRaidFieldSplintId), 0U);
     EXPECT_NE(firstAsset(profile, kStock), 0U);
     EXPECT_NE(firstAsset(profile, alpha_content::medkit), 0U);
     EXPECT_TRUE(validateProfileState(profile, content()).valid);

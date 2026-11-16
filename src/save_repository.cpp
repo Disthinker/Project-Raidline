@@ -149,6 +149,9 @@ RaidReloadMagazineRole parseReloadRole(const Json &value)
 
 Json baseDefenseValueForSchema(const BaseDefenseSnapshot &snapshot, std::uint32_t schemaVersion)
 {
+    if (std::any_of(snapshot.enemies.begin(), snapshot.enemies.end(),
+            [](const auto &enemy) { return enemy.variant && enemy.variant->kind == EnemyVariantKind::LowLunge; }))
+        throw std::invalid_argument("hospital low-lunge enemy is not valid in Base defense");
     if (schemaVersion < 58 && std::any_of(snapshot.enemies.begin(), snapshot.enemies.end(),
             [](const auto &enemy) { return enemy.variant.has_value() || enemy.visiblePursuitMove; }))
         throw std::invalid_argument("enemy variant checkpoint requires schema 58");
@@ -173,8 +176,11 @@ BaseDefenseSnapshot parseBaseDefenseForSchema(const Json &value, std::uint32_t s
                 throw std::invalid_argument("enemy variant checkpoint requires schema 58");
     auto snapshot = parseBaseDefenseSnapshotJson(value);
     if (std::any_of(snapshot.enemies.begin(), snapshot.enemies.end(),
-            [](const auto &enemy) { return isRunnerEnemyVariant(enemy.variant); }))
-        throw std::invalid_argument("runner variant is not valid in Base defense");
+            [](const auto &enemy) {
+                return isRunnerEnemyVariant(enemy.variant) ||
+                    (enemy.variant && enemy.variant->kind == EnemyVariantKind::LowLunge);
+            }))
+        throw std::invalid_argument("Raid enemy variant is not valid in Base defense");
     return snapshot;
 }
 
@@ -1111,6 +1117,8 @@ Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersi
     for (const auto &[id, asset] : registry.records())
     {
         static_cast<void>(id);
+        if (schemaVersion < 72 && asset.definitionId == kRaidFieldSplintId)
+            throw std::invalid_argument("field splint requires schema 72 and content 90");
         if (schemaVersion < 54 && (asset.definitionId == alpha_content::utilityKnife ||
             (std::holds_alternative<EquippedAssetLocation>(asset.location) &&
              std::get<EquippedAssetLocation>(asset.location).slot == EquipmentSlotKind::QuickMelee)))
@@ -1406,6 +1414,8 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
             asset.definitionId = ItemDefinitionId{
                 value.at("definition_id").get<std::string>()};
             const auto &definition = content.item(asset.definitionId);
+            if (schemaVersion < 72 && asset.definitionId == kRaidFieldSplintId)
+                throw std::invalid_argument("field splint requires schema 72 and content 90");
             if (schemaVersion >= 59)
             {
                 const auto &mode = value.at("fire_mode");
@@ -1774,6 +1784,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
                 profile.medicalStatus.painkillerRemainingMs},
             {"pain_scream_remaining_ms",
                 profile.medicalStatus.painScreamRemainingMs}};
+        if (schemaVersion >= 72)
+            payload["medical_status"]["leg_fractured"] = profile.medicalStatus.legFractured;
     }
     if (schemaVersion >= 7)
     {
@@ -2264,6 +2276,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
         }
         for (const RaidEnemySnapshot &enemy : raid.enemies)
         {
+            if (schemaVersion < 72 && isLowLungeEnemyVariant(enemy.variant))
+                throw std::invalid_argument("hospital low-lunge enemy requires schema 72 and content 90");
             Json enemyValue{
                 {"position", vectorValue(enemy.position)},
                 {"size", vectorValue(enemy.size)},
@@ -2287,7 +2301,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
             {
                 if (raid.rulesVersion == kRaidRunnerRulesVersion && !enemy.variant)
                     throw std::invalid_argument("runner Raid is missing a frozen enemy variant");
-                if (raid.rulesVersion != kRaidRunnerRulesVersion && enemy.variant)
+                if (raid.rulesVersion != kRaidRunnerRulesVersion && enemy.variant &&
+                    !isLowLungeEnemyVariant(enemy.variant))
                     throw std::invalid_argument("legacy Raid cannot acquire enemy variants");
                 enemyValue["variant"] = enemy.variant ? enemyVariantSnapshotJson(*enemy.variant) : Json(nullptr);
             }
@@ -2316,6 +2331,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
         Json loot = Json::array();
         for (const RaidLootSnapshot &entry : raid.loot)
         {
+            if (schemaVersion < 72 && entry.definitionId == kRaidFieldSplintId)
+                throw std::invalid_argument("frozen field splint requires schema 72 and content 90");
             if (!fuelContract && entry.definitionId == kRaidFuelCanId)
                 throw std::invalid_argument("frozen fuel Loot requires schema 63 and compatible content");
             if (!armorContract && entry.definitionId == kArmorRepairBlueprintId)
@@ -2441,6 +2458,9 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
                     raid.startingMedicalStatus.painkillerRemainingMs},
                 {"pain_scream_remaining_ms",
                     raid.startingMedicalStatus.painScreamRemainingMs}};
+            if (schemaVersion >= 72)
+                payload["pending_raid"]["starting_medical_status"]["leg_fractured"] =
+                    raid.startingMedicalStatus.legFractured;
         }
         if (schemaVersion >= 20)
         {
@@ -3191,6 +3211,7 @@ bool isValidEnvelope(
 std::string serializeProfileEnvelope(const ProfileState &profile, std::string_view contentVersion)
 {
     return serializeProfileEnvelope(profile, contentVersion,
+        supportsRaidFractureContent(contentVersion) ? 72U :
         contentVersion == kRaidLostWeaponPursuitContentVersion ? 71U :
         contentVersion == kFrontierHighRiskBlockadeContentVersion ? 70U :
         contentVersion == kFieldIntelligenceTradeContentVersion ? 69U :
@@ -3232,8 +3253,17 @@ std::string serializeProfileEnvelope(
          (profile.baseManufacturing.activeOrder &&
           profile.baseManufacturing.activeOrder->recipeDefinitionId == kFreightBreachRecipeId)))
         throw std::invalid_argument{"freight breach requires schema 66 and compatible content"};
-    const bool pursuitContract =
-        schemaVersion == 71 && contentVersion == kRaidLostWeaponPursuitContentVersion;
+    const bool fractureContract = schemaVersion == 72 && supportsRaidFractureContent(contentVersion);
+    if ((schemaVersion == 72 && !fractureContract) ||
+        (!fractureContract && (profile.medicalStatus.legFractured ||
+            (profile.pendingRaid && profile.pendingRaid->startingMedicalStatus.legFractured) ||
+            (profile.basePlayerEffects && profile.basePlayerEffects->medical &&
+                profile.basePlayerEffects->medical->effect == MedicalUseEffect::StabilizeFracture) ||
+            (profile.baseManufacturing.activeOrder &&
+                profile.baseManufacturing.activeOrder->recipeDefinitionId == kRaidFieldSplintRecipeId))))
+        throw std::invalid_argument("fracture state requires schema 72 and content 90");
+    const bool pursuitContract = fractureContract ||
+        (schemaVersion == 71 && contentVersion == kRaidLostWeaponPursuitContentVersion);
     if ((schemaVersion == 71 && !pursuitContract) ||
         (profile.pendingRaid && profile.pendingRaid->selfRecovery &&
             profile.pendingRaid->selfRecovery->pursuit && !pursuitContract))
@@ -3283,7 +3313,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
         schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66 && schemaVersion != 67 && schemaVersion != 68 && schemaVersion != 69 &&
-        schemaVersion != 70 && schemaVersion != 71)
+        schemaVersion != 70 && schemaVersion != 71 && schemaVersion != 72)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -3477,7 +3507,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             (schemaVersion >= 67 && contentVersion == kEmergencyPowerContentVersion) ||
             (schemaVersion == 68 && contentVersion == kHospitalMedicalReserveContentVersion) ||
             (schemaVersion == 69 && contentVersion == kFieldIntelligenceTradeContentVersion) ||
-            (schemaVersion == 70 && contentVersion == kFrontierHighRiskBlockadeContentVersion);
+            (schemaVersion == 70 && contentVersion == kFrontierHighRiskBlockadeContentVersion) ||
+            (schemaVersion == 71 && contentVersion == kRaidLostWeaponPursuitContentVersion);
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -3500,7 +3531,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
                schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66 && schemaVersion != 67 && schemaVersion != 68 && schemaVersion != 69 &&
-               schemaVersion != 70 && schemaVersion != 71) ||
+               schemaVersion != 70 && schemaVersion != 71 && schemaVersion != 72) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3519,8 +3550,11 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             schemaVersion >= 65 && supportsThrownIlluminationContent(contentVersion);
         const bool backpackContract =
             schemaVersion >= 66 && supportsRaidBackpackRecoveryContent(contentVersion);
-        const bool pursuitContract =
-            schemaVersion == 71 && contentVersion == kRaidLostWeaponPursuitContentVersion;
+        const bool fractureContract = schemaVersion == 72 && supportsRaidFractureContent(contentVersion);
+        if (schemaVersion == 72 && !fractureContract)
+            return {SaveLoadStatus::Failed, std::nullopt, "unsupported fracture content"};
+        const bool pursuitContract = fractureContract ||
+            (schemaVersion == 71 && contentVersion == kRaidLostWeaponPursuitContentVersion);
         if (schemaVersion == 71 && !pursuitContract)
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported lost weapon pursuit content"};
         const bool blockadeContract = pursuitContract ||
@@ -3617,6 +3651,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                 return {SaveLoadStatus::Failed, std::nullopt,
                         "bleeding severity is invalid"};
             }
+            if (!fractureContract && medical.contains("leg_fractured"))
+                throw std::invalid_argument("legacy save contains a fracture field");
             profile.medicalStatus = MedicalStatusState{
                 static_cast<BleedingSeverity>(bleeding),
                 medical.at("light_bleeding_remaining_ms")
@@ -3626,7 +3662,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                 medical.at("painkiller_remaining_ms")
                     .get<std::uint32_t>(),
                 medical.at("pain_scream_remaining_ms")
-                    .get<std::uint32_t>()};
+                    .get<std::uint32_t>(),
+                fractureContract && medical.at("leg_fractured").get<bool>()};
         }
         if (schemaVersion >= 8)
         {
@@ -3896,6 +3933,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                     return {SaveLoadStatus::Failed, std::nullopt,
                             "armor repair workshop order requires schema 64 and compatible content"};
                 }
+                if (!fractureContract && active.recipeDefinitionId == kRaidFieldSplintRecipeId)
+                    throw std::invalid_argument("field splint workshop order requires schema 72 and content 90");
                 if (!illuminationContract && active.recipeDefinitionId == kThrownIlluminationRecipeId)
                 {
                     return {SaveLoadStatus::Failed, std::nullopt,
@@ -4442,9 +4481,17 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                     return {SaveLoadStatus::Failed, std::nullopt, "runner Raid is missing a frozen enemy variant"};
                 if (enemy.contains("variant") && !enemy.at("variant").is_null())
                 {
-                    if (schemaVersion < 58 || raid.rulesVersion != kRaidRunnerRulesVersion)
+                    if (schemaVersion < 58)
                         return {SaveLoadStatus::Failed, std::nullopt, "legacy Raid cannot acquire enemy variants"};
-                    raid.enemies.back().variant = parseEnemyVariantSnapshotJson(enemy.at("variant"));
+                    const auto variant = parseEnemyVariantSnapshotJson(enemy.at("variant"));
+                    if (variant.kind == EnemyVariantKind::LowLunge)
+                    {
+                        if (!fractureContract)
+                            throw std::invalid_argument("hospital low-lunge enemy requires schema 72 and content 90");
+                    }
+                    else if (raid.rulesVersion != kRaidRunnerRulesVersion)
+                        return {SaveLoadStatus::Failed, std::nullopt, "legacy Raid cannot acquire enemy variants"};
+                    raid.enemies.back().variant = variant;
                 }
             }
             if (schemaVersion >= 37)
@@ -4487,6 +4534,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                 const ItemDefinitionId definitionId = schemaVersion >= 7
                     ? ItemDefinitionId{entry.at("definition_id").get<std::string>()}
                     : (legacyAsset != nullptr ? legacyAsset->definitionId : ItemDefinitionId{});
+                if (!fractureContract && definitionId == kRaidFieldSplintId)
+                    throw std::invalid_argument("frozen field splint requires schema 72 and content 90");
                 if (!fuelContract && definitionId == kRaidFuelCanId)
                     return {SaveLoadStatus::Failed, std::nullopt, "frozen fuel Loot requires schema 63 and compatible content"};
                 if (!armorContract && definitionId == kArmorRepairBlueprintId)
@@ -4555,6 +4604,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                     return {SaveLoadStatus::Failed, std::nullopt,
                             "starting bleeding severity is invalid"};
                 }
+                if (!fractureContract && medical.contains("leg_fractured"))
+                    throw std::invalid_argument("legacy Raid contains a starting fracture field");
                 raid.startingMedicalStatus = MedicalStatusState{
                     static_cast<BleedingSeverity>(bleeding),
                     medical.at("light_bleeding_remaining_ms")
@@ -4564,7 +4615,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                     medical.at("painkiller_remaining_ms")
                         .get<std::uint32_t>(),
                     medical.at("pain_scream_remaining_ms")
-                        .get<std::uint32_t>()};
+                        .get<std::uint32_t>(),
+                    fractureContract && medical.at("leg_fractured").get<bool>()};
             }
             if (schemaVersion >= 20)
             {
@@ -5481,6 +5533,9 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             }
         }
         raidline::save60::parsePlayerState(payload, profile, schemaVersion, illuminationContract);
+        if (!fractureContract && profile.basePlayerEffects && profile.basePlayerEffects->medical &&
+            profile.basePlayerEffects->medical->effect == MedicalUseEffect::StabilizeFracture)
+            throw std::invalid_argument("Base splint recovery requires schema 72 and content 90");
         if (!powerContract && requiresEmergencyPowerContract(profile))
             return {SaveLoadStatus::Failed, std::nullopt, "base emergency power requires schema 67 and compatible content"};
         if (!reserveContract && requiresMedicalReserveContract(profile))
@@ -5673,8 +5728,9 @@ SaveWriteResult SaveRepository::save(
         const bool power = supportsEmergencyPowerContent(contentVersion);
         const bool blockade = contentVersion == kFrontierHighRiskBlockadeContentVersion;
         const bool pursuit = contentVersion == kRaidLostWeaponPursuitContentVersion;
+        const bool fracture = supportsRaidFractureContent(contentVersion);
         const bool fieldTrade = supportsFieldIntelligenceTradeContent(contentVersion);
-        const auto schema = pursuit ? 71U : blockade ? 70U : fieldTrade ? 69U : reserve ? 68U : power ? 67U : backpack ? 66U
+        const auto schema = fracture ? 72U : pursuit ? 71U : blockade ? 70U : fieldTrade ? 69U : reserve ? 68U : power ? 67U : backpack ? 66U
             : illumination ? 65U : armor ? 64U : fuel ? 63U : freight ? 62U : 61U;
         const auto isLegacy = [&](const std::optional<SaveEnvelopeMetadata> &source) {
             return source && (source->schemaVersion < schema || source->contentVersion != contentVersion);
@@ -5684,7 +5740,8 @@ SaveWriteResult SaveRepository::save(
         {
             // The former primary can remain in the rolling backup after upgrade.
             const std::string_view marker =
-                pursuit ? "raid-lost-weapon-pursuit-v1"
+                fracture ? "raid-fracture-and-field-stabilization-v1"
+                : pursuit ? "raid-lost-weapon-pursuit-v1"
                 : blockade ? "frontier-high-risk-blockade-and-salvage-v1"
                 : fieldTrade ? "raid-field-intelligence-trade-v1"
                 : reserve ? "hospital-rescue-and-medical-reserve-v1"

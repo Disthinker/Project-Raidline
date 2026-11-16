@@ -6635,9 +6635,7 @@ void App::renderDebugText()
             if(const auto id=equippedAsset(profile,slot))if(const auto *a=profile.assets.find(*id))name=compactUiItemName(publishedContentRegistry().item(a->definitionId),uiTextRenderer_.language());
             p.slots[i]=fmt::format("{} {}",i+1,name);
         }
-        if(profile.medicalStatus.bleeding==BleedingSeverity::Heavy)p.medical=tr("重度出血 · 尽快止血","HEAVY BLEED · APPLY TOURNIQUET");
-        else if(profile.medicalStatus.bleeding==BleedingSeverity::Light)p.medical=tr("轻度出血 · 需要包扎","LIGHT BLEED · BANDAGE");
-        if(hasPain(profile.medicalStatus))p.medical+=std::string(p.medical.empty()?"":" · ")+tr(painIsSuppressed(profile.medicalStatus)?"疼痛已抑制":"疼痛",painIsSuppressed(profile.medicalStatus)?"PAIN SUPPRESSED":"PAIN");
+        p.medical = projectUiRaidMedicalStatus(profile.medicalStatus, uiTextRenderer_.language());
         if(player.isControlled())p.medical+=fmt::format(" {} {:.1f}s",tr("受控","CONTROLLED"),player.controlRemaining());
         if(player.isImpactSlowed())p.medical+=fmt::format(" {} {:.1f}s",tr("踉跄","STAGGER"),player.impactSlowRemaining());
         if(const auto &action=gameSession_.raidActionState().active();action){
@@ -9912,6 +9910,34 @@ void App::renderEnemyAttackTelegraphs()
 
         const EnemyAttackPhase phase =
             enemy.attackPhase();
+        if (*attackType == EnemyAttackType::LowLunge)
+        {
+            if (const auto corridor = gameSession_.world().lowLungeTelegraph(enemy))
+            {
+                const auto corners = corridor->corners();
+                const std::array<SDL_FPoint, 5> outline{{
+                    {corners[0].x, corners[0].y}, {corners[1].x, corners[1].y},
+                    {corners[2].x, corners[2].y}, {corners[3].x, corners[3].y},
+                    {corners[0].x, corners[0].y}}};
+                const Vec2 tip{
+                    corridor->origin.x + corridor->direction.x * corridor->reach,
+                    corridor->origin.y + corridor->direction.y * corridor->reach};
+                const float arrowLength = std::min(14.0F, corridor->reach * 0.25F);
+                const Vec2 tail{tip.x - corridor->direction.x * arrowLength,
+                                tip.y - corridor->direction.y * arrowLength};
+                const Vec2 flank{-corridor->direction.y * arrowLength * 0.55F,
+                                  corridor->direction.x * arrowLength * 0.55F};
+                SDL_SetRenderDrawColor(renderer_, 255, 162, 80,
+                    phase == EnemyAttackPhase::Active ? 255 : 225);
+                SDL_RenderLines(renderer_, outline.data(), static_cast<int>(outline.size()));
+                SDL_RenderLine(renderer_, corridor->origin.x, corridor->origin.y, tip.x, tip.y);
+                SDL_RenderLine(renderer_, tail.x + flank.x, tail.y + flank.y, tip.x, tip.y);
+                SDL_RenderLine(renderer_, tail.x - flank.x, tail.y - flank.y, tip.x, tip.y);
+                const Rect body = enemy.bounds();
+                renderWorldLabel(body.position.x, body.position.y - 16.0F, "LOW LUNGE");
+            }
+            continue;
+        }
         const std::optional<Rect> attackRegion =
             phase == EnemyAttackPhase::Active
                 ? enemy.attackHitbox()
@@ -9932,6 +9958,7 @@ void App::renderEnemyAttackTelegraphs()
             blue = 255U;
             break;
         case EnemyAttackType::Scratch:
+        case EnemyAttackType::LowLunge:
             break;
         case EnemyAttackType::Bite:
             red = 255U;
@@ -12868,8 +12895,11 @@ void App::renderProfileInventory(
     }
     text({32,594,232,22},fmt::format("HP {}   {:.1f} KG",profile.currentHealth,
         gameSession_.currentRaidCarriedWeightGrams()/1000.0));
-    if(profile.medicalStatus.bleeding!=BleedingSeverity::None)
+    const bool bleeding = profile.medicalStatus.bleeding != BleedingSeverity::None;
+    if (bleeding)
         text({32,618,232,20},profile.medicalStatus.bleeding==BleedingSeverity::Heavy?"HEAVY BLEEDING":"LIGHT BLEEDING",12);
+    if (profile.medicalStatus.legFractured)
+        text({32,bleeding ? 638.0F : 618.0F,232,20},"LEG FRACTURE",12);
     if(right) {
         const char *title="WAREHOUSE";
         if(profilePresentation_.legacyOverflow && !assetsInContainer(profile,ProfileContainerId::legacyOverflow()).empty())title="LEGACY ITEMS";

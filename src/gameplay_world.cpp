@@ -1679,6 +1679,12 @@ void GameplayWorld::update(
             const auto contact = resolveEnemyAttackContact(
                 enemy, playerBounds(player_), !player_.isDead(),
                 enemyDamageProtectionRemainingSeconds_, [&] {
+                    if (enemy.attackType() == EnemyAttackType::LowLunge)
+                    {
+                        const auto corridor = lowLungeTelegraph(enemy);
+                        return corridor && corridor->overlaps(playerBounds(player_)) &&
+                            hasLineOfSight(corridor->origin, playerCenter(player_));
+                    }
                     return hasLineOfSight(enemyCenter(enemy), playerCenter(player_));
                 });
             if (!contact.damage)
@@ -1786,6 +1792,22 @@ const std::vector<BallisticBlocker> &
 GameplayWorld::ballisticBlockers() const noexcept
 {
     return activeBallisticBlockers();
+}
+
+std::optional<EnemyLowLungeCorridor>
+GameplayWorld::lowLungeTelegraph(const Enemy &enemy) const noexcept
+{
+    auto corridor = enemy.lowLungeCorridor();
+    if (corridor)
+    {
+        for (const auto &blocker : activeBallisticBlockers())
+        {
+            corridor->clipBefore(blocker.bounds);
+            if (corridor->reach <= 0.0F)
+                return std::nullopt;
+        }
+    }
+    return corridor;
 }
 
 const RaidSpaceDefinitionId &

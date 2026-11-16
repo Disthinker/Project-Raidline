@@ -533,6 +533,7 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     medicalTickAccumulatorSeconds_ = 0.0F;
     medicalRandomSequence_ = 0;
     woundRandomSequence_ = 0;
+    fractureRandomSequence_ = 0;
     weaponFaultSequence_ = 0;
     raidElapsedSeconds_ = 0.0F;
     selfRecoveryInteractionSeconds_ = 0.0F;

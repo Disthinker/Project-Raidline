@@ -14,6 +14,7 @@ struct NightVisionProjection;
 [[nodiscard]] std::string_view uiWeaponLightStateLabel(const WeaponLightProjection &) noexcept;
 [[nodiscard]] std::string_view uiWeaponFireModeName(WeaponFireMode, UiLanguage) noexcept;
 [[nodiscard]] std::string_view uiPlayerActionLabel(const RaidAction &) noexcept;
+[[nodiscard]] std::string projectUiRaidMedicalStatus(const MedicalStatusState &, UiLanguage);
 // Values already authorized by the current GameSession queries. No actor or
 // inventory scan belongs to the painter; hidden map information has no field.
 struct UiRaidHudProjection {

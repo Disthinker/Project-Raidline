@@ -527,6 +527,13 @@ std::uint64_t GameSession::currentRaidCarriedWeightGrams() const noexcept
 
 void GameSession::preparePlayerCombatInput(GameplayInput &simulationInput,const GameplayInput &input,float deltaTime,const std::optional<WeaponHandlingParameters> &weaponHandling)
 {
+    const auto &medical = profile_.medicalStatus;
+    const bool fractureLimitsMovement = medical.legFractured && !painIsSuppressed(medical);
+    if (fractureLimitsMovement)
+    {
+        simulationInput.sprint = false;
+    }
+
     const auto weapon=activeAlphaWeapon();
     const bool directFireIntent =
         simulationInput.fireJustPressed ||
@@ -584,8 +591,7 @@ void GameSession::preparePlayerCombatInput(GameplayInput &simulationInput,const 
         simulationInput.movementSpeedMultiplier *=
             weaponHandling->aimDownSightsMovementMultiplier;
     }
-    if (hasPain(profile_.medicalStatus) &&
-        !painIsSuppressed(profile_.medicalStatus))
+    if (hasPain(medical) && !painIsSuppressed(medical))
     {
         simulationInput.movementSpeedMultiplier *= 0.9F;
     }
@@ -632,6 +638,11 @@ void GameSession::preparePlayerCombatInput(GameplayInput &simulationInput,const 
             else if (grams > 22000U)
                 simulationInput.movementSpeedMultiplier *= 0.9F;
         }
+    }
+    if (fractureLimitsMovement)
+    {
+        simulationInput.movementSpeedMultiplier =
+            std::min(simulationInput.movementSpeedMultiplier, 0.7F);
     }
 }
 

@@ -20,6 +20,7 @@ struct BaseMedicalServicePlan
     std::uint32_t injuryCost{};
     int missingHealth{};
     BleedingSeverity bleedingBefore{BleedingSeverity::None};
+    bool fractureBefore{};
 };
 
 struct BaseMedicalServiceReceipt
@@ -34,6 +35,7 @@ struct BaseMedicalServiceReceipt
     BleedingSeverity bleedingBefore{BleedingSeverity::None};
     BleedingSeverity bleedingAfter{BleedingSeverity::None};
     bool clearedPainSource{};
+    bool clearedFracture{};
 };
 
 [[nodiscard]] BaseMedicalServicePlan queryBaseMedicalService(

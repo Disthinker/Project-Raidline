@@ -243,6 +243,65 @@ TEST(BaseManufacturingDomainTest,
     EXPECT_TRUE(validateProfileState(profile, content).valid);
 }
 
+TEST(BaseManufacturingDomainTest, FieldSplintReservesBandageAndScrapAndProducesOneCharge)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeProfile();
+    const auto scrap = addToStash(profile, alpha_content::lootScrap);
+    const auto spareBandage = addToStash(profile, alpha_content::bandage);
+    const auto before = profileStateFingerprint(profile);
+    const auto funds = profile.currency;
+    const StartBaseManufacturingCommand command{kRaidFieldSplintRecipeId};
+
+    const auto plan = queryStartBaseManufacturing(profile, content, command);
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+    EXPECT_EQ(plan.workerCount, 1U);
+    EXPECT_EQ(plan.durationMinutes, 90U);
+    ASSERT_EQ(plan.inputs.size(), 2U);
+    EXPECT_EQ(plan.inputs[0].definitionId, alpha_content::bandage);
+    EXPECT_EQ(plan.inputs[0].quantity, 1U);
+    EXPECT_NE(plan.inputs[0].assetId, spareBandage);
+    EXPECT_EQ(plan.inputs[1].assetId, scrap);
+    EXPECT_EQ(plan.inputs[1].quantity, 1U);
+
+    const auto started = executeStartBaseManufacturing(
+        profile, content, command, {profile.revision, "craft-field-splint"});
+    ASSERT_TRUE(started.succeeded && started.outputAssetId) << started.message;
+    ASSERT_TRUE(profile.baseManufacturing.activeOrder);
+    const auto reserved = AssetLocation{BaseServiceAssetLocation{
+        profile.baseManufacturing.activeOrder->jobId}};
+    for (const auto &input : plan.inputs)
+    {
+        ASSERT_NE(profile.assets.find(input.assetId), nullptr);
+        EXPECT_EQ(profile.assets.find(input.assetId)->location, reserved);
+    }
+    EXPECT_EQ(advanceWorldClock(profile.worldClock, 89U).minutesApplied, 89U);
+    EXPECT_FALSE(applyBaseManufacturingThrough(profile, content).completed);
+    EXPECT_EQ(advanceWorldClock(profile.worldClock, 1U).minutesApplied, 1U);
+    const auto completed = applyBaseManufacturingThrough(profile, content);
+    ASSERT_TRUE(completed.completed);
+    EXPECT_FALSE(completed.outputBlocked);
+    EXPECT_FALSE(applyBaseManufacturingThrough(profile, content).completed);
+    EXPECT_EQ(profile.assets.find(plan.inputs[0].assetId), nullptr);
+    EXPECT_EQ(profile.assets.find(scrap), nullptr);
+    ASSERT_NE(profile.assets.find(spareBandage), nullptr);
+    EXPECT_EQ(profile.assets.find(spareBandage)->remainingCharges, 1U);
+    EXPECT_EQ(profile.currency, funds);
+
+    const auto *output = profile.assets.find(*started.outputAssetId);
+    ASSERT_NE(output, nullptr);
+    EXPECT_EQ(output->definitionId, kRaidFieldSplintId);
+    EXPECT_EQ(output->quantity, 1U);
+    EXPECT_EQ(output->remainingCharges, 1U);
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(output->location));
+    EXPECT_EQ(content.item(kRaidFieldSplintId).marketRecyclePrice, 10U);
+    EXPECT_LT(content.item(kRaidFieldSplintId).marketRecyclePrice,
+        content.item(alpha_content::bandage).marketRecyclePrice +
+        content.item(alpha_content::lootScrap).marketRecyclePrice);
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
+}
+
 TEST(BaseManufacturingDomainTest,
      PublishedAmmunitionRecipesReserveSelectedCaliberAndQuantity)
 {

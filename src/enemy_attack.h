@@ -5,13 +5,15 @@
 #include <optional>
 
 #include "combat_damage_domain.h"
+#include "rect.h"
 #include "vec2.h"
 
 enum class EnemyAttackType
 {
     Grab,
     Scratch,
-    Bite
+    Bite,
+    LowLunge
 };
 
 enum class EnemyAttackPhase
@@ -43,6 +45,21 @@ struct EnemyAttackAdvance
 {
     bool hadActiveTime{};
     float lungeDistance{};
+};
+
+// The hospital attack locks this strip at the start of its windup.
+// Gameplay and presentation both use the same obstacle-clipped extent.
+struct EnemyLowLungeCorridor
+{
+    Vec2 origin;
+    Vec2 direction;
+    float reach{100.0F};
+    float halfWidth{24.0F};
+
+    [[nodiscard]] std::array<Vec2, 4> corners() const noexcept;
+    [[nodiscard]] Rect bounds() const noexcept;
+    [[nodiscard]] bool overlaps(Rect target) const noexcept;
+    void clipBefore(Rect blocker) noexcept;
 };
 
 struct EnemyAttackCombatDamage

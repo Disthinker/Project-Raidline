@@ -2,6 +2,7 @@
 #include "ui_text_renderer.h"
 #include "tactical_device_domain.h"
 #include <algorithm>
+#include <fmt/format.h>
 #include <type_traits>
 
 std::string_view uiWeaponLightStateLabel(const WeaponLightProjection &light) noexcept {
@@ -39,12 +40,46 @@ std::string_view uiPlayerActionLabel(const RaidAction &action) noexcept {
             case MedicalUseEffect::StopLightBleeding:return "BANDAGING";
             case MedicalUseEffect::StopAnyBleeding:return "APPLYING TOURNIQUET";
             case MedicalUseEffect::SuppressPain:return "TAKING PAINKILLER";
+            case MedicalUseEffect::StabilizeFracture:return "APPLYING FIELD SPLINT";
             default:return "HEALING";
             }
         }
         if constexpr(std::is_same_v<T,ExtractRaidAction>)return "EXTRACTING";
         return "HEALING";
     },action);
+}
+
+std::string projectUiRaidMedicalStatus(const MedicalStatusState &status, UiLanguage language)
+{
+    const bool chinese = language == UiLanguage::SimplifiedChinese;
+    std::string line;
+    if (status.bleeding == BleedingSeverity::Heavy)
+        line = chinese ? "重度出血 · 尽快止血" : "HEAVY BLEED · APPLY TOURNIQUET";
+    else if (status.bleeding == BleedingSeverity::Light)
+        line = chinese ? "轻度出血 · 需要包扎" : "LIGHT BLEED · BANDAGE";
+
+    if (status.legFractured)
+    {
+        if (!line.empty())
+            line += '\n';
+        if (painIsSuppressed(status))
+            line += fmt::format("{} {}{}",
+                chinese ? "骨折 · 止痛" : "FRACTURE · RELIEF",
+                (status.painkillerRemainingMs + 999) / 1000,
+                chinese ? "秒" : "s");
+        else
+            line += chinese ? "骨折 · 禁冲刺" : "FRACTURE · NO SPRINT";
+    }
+    else if (hasPain(status))
+    {
+        if (!line.empty())
+            line += " · ";
+        if (painIsSuppressed(status))
+            line += chinese ? "疼痛已抑制" : "PAIN SUPPRESSED";
+        else
+            line += chinese ? "疼痛" : "PAIN";
+    }
+    return line;
 }
 
 std::string_view uiWeaponFireModeName(WeaponFireMode mode,UiLanguage language) noexcept {

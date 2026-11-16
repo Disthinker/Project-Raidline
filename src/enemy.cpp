@@ -1,5 +1,7 @@
 #include "enemy.h"
 
+#include "collision.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -335,19 +337,21 @@ EnemyAttackAdvance Enemy::updateTowardsTarget(
               navigationTarget,
               allowUnawareNavigation});
 
-  if (decision.attackRequest.has_value() &&
-      tryStartAttack(
-          *decision.attackRequest,
-          targetOffset))
+  if (decision.attackRequest.has_value())
   {
-    ai_.recordAttackStarted(
-        *decision.attackRequest);
-    tacticalRole_ = EnemyTacticalRole::Engage;
-    return updateActiveAttack(
-        targetOffset,
-        effectiveDeltaTime,
-        worldWidth,
-        worldHeight);
+    const EnemyAttackType requestedAttack = isLowLungeEnemyVariant(variant_)
+        ? EnemyAttackType::LowLunge : *decision.attackRequest;
+    if ((requestedAttack != EnemyAttackType::LowLunge || targetVisible) &&
+        tryStartAttack(requestedAttack, targetOffset))
+    {
+      ai_.recordAttackStarted(requestedAttack);
+      tacticalRole_ = EnemyTacticalRole::Engage;
+      return updateActiveAttack(
+          targetOffset,
+          effectiveDeltaTime,
+          worldWidth,
+          worldHeight);
+    }
   }
 
   visiblePursuitMove_ = decision.confirmedVisiblePursuit &&
@@ -392,11 +396,16 @@ bool Enemy::tryStartAttack(
     Vec2 direction) noexcept
 {
   if (isDead() ||
+      (type == EnemyAttackType::LowLunge) != isLowLungeEnemyVariant(variant_) ||
       !attack_.tryStart(type, direction))
   {
     return false;
   }
 
+  if (type == EnemyAttackType::LowLunge)
+  {
+    lowLungeOrigin_ = {position_.x + size_.x * 0.5F, position_.y + size_.y * 0.5F};
+  }
   const Vec2 normalizedDirection =
       attack_.direction();
   visiblePursuitMove_ = false;
@@ -488,8 +497,28 @@ float Enemy::attackPhaseRemaining() const noexcept
   return attack_.phaseRemaining();
 }
 
+std::optional<EnemyLowLungeCorridor> Enemy::lowLungeCorridor() const noexcept
+{
+  if (isDead() || attack_.type() != EnemyAttackType::LowLunge)
+    return std::nullopt;
+  return EnemyLowLungeCorridor{lowLungeOrigin_, attack_.direction()};
+}
+
+bool Enemy::attackOverlaps(Rect target) const noexcept
+{
+  if (attack_.type() == EnemyAttackType::LowLunge)
+  {
+    const auto corridor = lowLungeCorridor();
+    return corridor && corridor->overlaps(target);
+  }
+  const auto hitbox = attackHitbox();
+  return hitbox && isCollision(*hitbox, target);
+}
+
 std::optional<Rect> Enemy::attackHitbox() const noexcept
 {
+  if (const auto corridor = lowLungeCorridor())
+    return corridor->bounds();
   const std::optional<EnemyAttackType> type =
       attack_.type();
   const std::optional<EnemyAttackConfig> config =
@@ -628,6 +657,11 @@ float Enemy::movementSpeed() const noexcept
     return visiblePursuitMove_ && ai_.config().visiblePursuitMoveSpeed
         ? *ai_.config().visiblePursuitMoveSpeed : ai_.config().normalMoveSpeed;
   case EnemyMovementState::Attack:
+    if (attack_.type() == EnemyAttackType::LowLunge)
+    {
+      const EnemyAttackConfig &config = attack_.config(EnemyAttackType::LowLunge);
+      return config.lungeDistance / config.activeDuration;
+    }
     return ai_.config().attackMoveSpeed;
   }
 
@@ -839,7 +873,8 @@ void Enemy::refreshMovementStateFromAttack() noexcept
     return;
   }
 
-  if (attack_.type() == EnemyAttackType::Grab &&
+  if ((attack_.type() == EnemyAttackType::Grab ||
+       attack_.type() == EnemyAttackType::LowLunge) &&
       attack_.phase() == EnemyAttackPhase::Active)
   {
     movementState_ = EnemyMovementState::Attack;

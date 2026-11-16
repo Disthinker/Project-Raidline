@@ -11,12 +11,16 @@ enum class EnemyVariantKind : std::uint32_t
 {
     Basic,
     Armored,
-    Runner
+    Runner,
+    LowLunge
 };
 
 inline constexpr std::uint32_t kStandardInfectedAttackProfileVersion = 1U;
 inline constexpr std::string_view kStandardInfectedAttackProfileId{
     "enemy.attack.infected-standard-v1"};
+inline constexpr std::uint32_t kLowLungeInfectedAttackProfileVersion = 2U;
+inline constexpr std::string_view kLowLungeInfectedAttackProfileId{
+    "enemy.attack.infected-low-lunge-v1"};
 
 struct EnemyMovementProfile
 {
@@ -40,6 +44,7 @@ struct EnemyVariantSnapshot
     case EnemyVariantKind::Basic: return "enemy.infected.basic";
     case EnemyVariantKind::Armored: return "enemy.infected.armored";
     case EnemyVariantKind::Runner: return "enemy.infected.runner";
+    case EnemyVariantKind::LowLunge: return "enemy.infected.low_lunge";
     }
     return {};
 }
@@ -50,6 +55,7 @@ struct EnemyVariantSnapshot
     if (id == "enemy.infected.basic") return EnemyVariantKind::Basic;
     if (id == "enemy.infected.armored") return EnemyVariantKind::Armored;
     if (id == "enemy.infected.runner") return EnemyVariantKind::Runner;
+    if (id == "enemy.infected.low_lunge") return EnemyVariantKind::LowLunge;
     return std::nullopt;
 }
 
@@ -65,6 +71,18 @@ struct EnemyVariantSnapshot
         {90.0F, 270.0F, kStandardInfectedAttackProfileVersion}};
 }
 
+[[nodiscard]] inline EnemyVariantSnapshot lowLungeEnemyVariantSnapshot() noexcept
+{
+    return {EnemyVariantKind::LowLunge,
+        {72.0F, std::nullopt, kLowLungeInfectedAttackProfileVersion}};
+}
+
+[[nodiscard]] inline bool isLowLungeEnemyVariant(
+    const std::optional<EnemyVariantSnapshot> &value) noexcept
+{
+    return value && value->kind == EnemyVariantKind::LowLunge;
+}
+
 // A versioned snapshot must keep its original values. Future balance changes
 // need a new contract, not a load-time lookup that silently replaces them.
 [[nodiscard]] inline bool validEnemyVariantSnapshot(const EnemyVariantSnapshot &value) noexcept
@@ -74,6 +92,7 @@ struct EnemyVariantSnapshot
     case EnemyVariantKind::Basic: return value == ordinaryEnemyVariantSnapshot();
     case EnemyVariantKind::Armored: return value == ordinaryEnemyVariantSnapshot(true);
     case EnemyVariantKind::Runner: return value == runnerEnemyVariantSnapshot();
+    case EnemyVariantKind::LowLunge: return value == lowLungeEnemyVariantSnapshot();
     }
     return false;
 }
@@ -89,7 +108,8 @@ struct EnemyVariantSnapshot
 {
     if (!validEnemyVariantSnapshot(value)) return false;
     if (value.kind == EnemyVariantKind::Runner) return maximumHealth == 8 && !armor;
-    if (value.kind == EnemyVariantKind::Basic) return maximumHealth == 12 && !armor;
+    if (value.kind == EnemyVariantKind::Basic || value.kind == EnemyVariantKind::LowLunge)
+        return maximumHealth == 12 && !armor;
     return maximumHealth == 12 && armor && armor->valid() &&
         armor->protectionRequirement == 7 && armor->durability <= 9 &&
         armor->durabilityLossBasisPoints == 10000;

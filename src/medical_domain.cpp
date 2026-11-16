@@ -25,6 +25,8 @@ MedicalUseEffect effectOf(const MedicalUseDefinition &definition) noexcept
         return MedicalUseEffect::StopAnyBleeding;
     case MedicalItemEffect::SuppressPain:
         return MedicalUseEffect::SuppressPain;
+    case MedicalItemEffect::StabilizeFracture:
+        return MedicalUseEffect::StabilizeFracture;
     }
     return MedicalUseEffect::RestoreHealth;
 }
@@ -51,6 +53,8 @@ bool medicalUseApplies(
         return profile.medicalStatus.bleeding != BleedingSeverity::None;
     case MedicalUseEffect::SuppressPain:
         return hasPain(profile.medicalStatus);
+    case MedicalUseEffect::StabilizeFracture:
+        return profile.medicalStatus.legFractured;
     }
     return false;
 }
@@ -186,7 +190,7 @@ MedicalAdvanceResult advanceMedicalStatus(
         }
 
         const bool screamClockRuns =
-            hasPain(status) && !painIsSuppressed(status);
+            status.bleeding != BleedingSeverity::None && !painIsSuppressed(status);
         if (status.painkillerRemainingMs > 0)
         {
             status.painkillerRemainingMs -=
@@ -278,6 +282,14 @@ MedicalUsePlan queryMedicalUse(
         return plan;
     }
     plan.effect = effectOf(*definition.medicalUse);
+    if (plan.effect == MedicalUseEffect::StabilizeFracture &&
+        access == MedicalAccess::AnyOwned &&
+        (profile.pendingRaid || !assetIsBaseAccessible(profile, medicalAssetId)))
+    {
+        plan.error = DomainErrorCode::IllegalDestination;
+        plan.message = "splint is not available for personal treatment in Base";
+        return plan;
+    }
     plan.durationMs = definition.medicalUse->actionDurationMs;
     plan.slowMovement = definition.medicalUse->slowMovement;
     if (!medicalUseApplies(profile, plan.effect))
@@ -358,6 +370,15 @@ MedicalUseReceipt executeMedicalUse(
     case MedicalUseEffect::SuppressPain:
         candidate.medicalStatus.painkillerRemainingMs =
             definition.medicalUse->effectMagnitude;
+        break;
+    case MedicalUseEffect::StabilizeFracture:
+        candidate.medicalStatus.legFractured = false;
+        if (candidate.basePlayerEffects && candidate.basePlayerEffects->medical &&
+            candidate.basePlayerEffects->medical->effect == MedicalUseEffect::StabilizeFracture)
+        {
+            // The completed action cannot recover an unconsumed splint.
+            candidate.basePlayerEffects->medical.reset();
+        }
         break;
     }
 

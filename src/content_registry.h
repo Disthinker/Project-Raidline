@@ -47,6 +47,13 @@ inline constexpr std::string_view kFrontierHighRiskBlockadeContentVersion{
     "frontier-high-risk-blockade-and-salvage-content-88"};
 inline constexpr std::string_view kRaidLostWeaponPursuitContentVersion{
     "raid-lost-weapon-pursuit-content-89"};
+inline constexpr std::string_view kRaidFractureContentVersion{
+    "raid-fracture-and-field-stabilization-content-90"};
+inline const ItemDefinitionId kRaidFieldSplintId{"item.medical.field_splint"};
+inline const BaseManufacturingRecipeDefinitionId kRaidFieldSplintRecipeId{
+    "base_manufacturing.field_splint"};
+inline const EnemyCombatDefinitionId kHospitalLowLungeEnemyId{"enemy.infected.low_lunge"};
+inline constexpr Vec2 kHospitalLowLungeSpawnPosition{1940.0F, 850.0F};
 inline const ItemDefinitionId kRaidLostWeaponPursuitCorpseId{
     "item.container.base_storage_crate"};
 inline const ItemDefinitionId kBlockadeSalvageItemId{"item.loot.machine_tool_set"};
@@ -111,6 +118,13 @@ inline constexpr std::string_view kRaidFuelLootSlotId{"freight_manifest"};
         slotId == "hospital_pharmacy";
 }
 
+[[nodiscard]] inline bool isHospitalFractureLootSlot(
+    const MapDefinitionId &map, const RaidSpaceDefinitionId &space, std::string_view slotId)
+{
+    return map == kHospitalFloorplanMapId && space == kHospitalFloorplanSpaceId &&
+        slotId == "hospital_emergency";
+}
+
 [[nodiscard]] inline bool isHospitalRescueDistrictInstance(
     std::string_view instanceId, std::string_view archetypeId) noexcept
 {
@@ -118,10 +132,20 @@ inline constexpr std::string_view kRaidFuelLootSlotId{"freight_manifest"};
         instanceId.substr(archetypeId.size()) == ".1";
 }
 
+[[nodiscard]] inline bool supportsRaidFractureContent(std::string_view version) noexcept
+{
+    return version == kRaidFractureContentVersion;
+}
+
+[[nodiscard]] inline bool supportsLostWeaponPursuitContent(std::string_view version) noexcept
+{
+    return version == kRaidLostWeaponPursuitContentVersion || supportsRaidFractureContent(version);
+}
+
 [[nodiscard]] inline bool supportsFrontierHighRiskBlockadeContent(std::string_view version) noexcept
 {
     return version == kFrontierHighRiskBlockadeContentVersion ||
-        version == kRaidLostWeaponPursuitContentVersion;
+        supportsLostWeaponPursuitContent(version);
 }
 
 [[nodiscard]] inline bool supportsFieldIntelligenceTradeContent(std::string_view version) noexcept
@@ -571,6 +595,7 @@ struct PlayerBaseMedicalDefinition
     std::uint32_t missingHealthCostPerPoint{};
     std::uint32_t lightBleedingCost{};
     std::uint32_t heavyBleedingCost{};
+    std::uint32_t fractureCost{};
 
     friend bool operator==(
         const PlayerBaseMedicalDefinition &,

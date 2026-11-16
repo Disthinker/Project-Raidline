@@ -130,7 +130,7 @@ protected:
 TEST_F(PlayerSystemsV3SaveTest, CurrentSchemaRequiresAllThreeBaseFieldsAndLegacy59DefaultsEmpty)
 {
     const auto current=Json::parse(serializeProfileEnvelope(profile,content.contentVersion()));
-    EXPECT_EQ(current.at("schema_version"),71U);
+    EXPECT_EQ(current.at("schema_version"),72U);
     EXPECT_TRUE(current.at("payload").at("base_reload_recovery").is_null());
     EXPECT_TRUE(current.at("payload").at("base_player_effects").is_null());
     EXPECT_TRUE(current.at("payload").at("base_corpses").empty());
@@ -718,7 +718,7 @@ TEST_F(PlayerSystemsV3SaveTest, BackpackRecoveryRoundTripAndRollbackKeepWholeAss
     ASSERT_TRUE(validateProfileState(profile, content).valid);
     const auto bytes = serializeProfileEnvelope(profile, content.contentVersion());
     const auto envelope = Json::parse(bytes);
-    EXPECT_EQ(envelope.at("schema_version"), 71U);
+    EXPECT_EQ(envelope.at("schema_version"), 72U);
     EXPECT_EQ(envelope.at("payload").at("pending_raid").at("backpack_recovery_enabled"), true);
 
     auto restored = deserializeProfileEnvelope(bytes, content);
@@ -813,7 +813,7 @@ TEST_F(PlayerSystemsV3SaveTest, UpgradeArchivesExact59PrimaryAndBackupBeforeRota
     EXPECT_EQ(readBytes(archive(directory.path(),false,primary)),primary);EXPECT_EQ(readBytes(archive(directory.path(),true,backup)),backup);
     ++profile.revision;ASSERT_TRUE(repository.save(profile,content.contentVersion()).succeeded);
     EXPECT_EQ(readBytes(archive(directory.path(),false,primary)),primary);EXPECT_EQ(readBytes(archive(directory.path(),true,backup)),backup);
-    EXPECT_EQ(Json::parse(readBytes(repository.primaryPath()))["schema_version"],71U);
+    EXPECT_EQ(Json::parse(readBytes(repository.primaryPath()))["schema_version"],72U);
 }
 
 TEST_F(PlayerSystemsV3SaveTest, BackupRecoveryArchivesCorruptPrimaryAnd59BackupByteForByte)
@@ -836,4 +836,45 @@ TEST_F(PlayerSystemsV3SaveTest, ArchiveConflictRejectsUpgradeAndLeavesBothSlotsA
     EXPECT_EQ(readBytes(repository.primaryPath()),primary);EXPECT_EQ(readBytes(repository.backupPath()),backup);
     EXPECT_EQ(readBytes(blocked),"unrelated immutable bytes");EXPECT_EQ(profileStateFingerprint(profile),before);
     EXPECT_FALSE(std::filesystem::exists(directory.path()/"profile.tmp.json"));
+}
+
+TEST_F(PlayerSystemsV3SaveTest, UnfinishedFieldSplintRetainsItsChargeAcrossBaseCheckpoint)
+{
+    const auto rig = first(profile, alpha_content::chestRig);
+    ASSERT_NE(rig, 0U);
+    profile.assets.findMutable(rig)->location = EquippedAssetLocation{EquipmentSlotKind::ChestRig};
+    const auto splint = profile.assets.create(content.item(kRaidFieldSplintId),
+        StoredAssetLocation{ProfileContainerId::compartment(rig, 0), {0, 0}});
+    profile.medicalStatus.legFractured = true;
+    BasePlayerEffectsRecovery effects;
+    effects.scope = scope;
+    effects.worldSize = access.worldSize;
+    effects.playerPosition = access.playerCenter;
+    effects.facingDirection = {1, 0};
+    effects.medical = BaseMedicalActionRecovery{
+        splint, MedicalUseEffect::StabilizeFracture, false, 0, 0, 2.0F, 4.0F};
+    profile.basePlayerEffects = effects;
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+
+    const auto saved = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto restored = deserializeProfileEnvelope(saved, content);
+    ASSERT_TRUE(restored.profile && restored.profile->basePlayerEffects) << restored.message;
+    EXPECT_TRUE(restored.profile->medicalStatus.legFractured);
+    const auto &medical = restored.profile->basePlayerEffects->medical;
+    ASSERT_TRUE(medical);
+    EXPECT_EQ(medical->medicalAssetId, splint);
+    EXPECT_EQ(medical->effect, MedicalUseEffect::StabilizeFracture);
+    EXPECT_FALSE(medical->chargeConsumed);
+    EXPECT_EQ(medical->healedAmount, 0);
+    EXPECT_EQ(medical->maximumHealing, 0);
+    EXPECT_FLOAT_EQ(medical->elapsedSeconds, 2.0F);
+    EXPECT_FLOAT_EQ(medical->durationSeconds, 4.0F);
+    ASSERT_NE(restored.profile->assets.find(splint), nullptr);
+    EXPECT_EQ(restored.profile->assets.find(splint)->remainingCharges, 1U);
+
+    auto invalid = Json::parse(saved);
+    invalid["payload"]["base_player_effects"]["medical"]["duration_seconds"] = 2.0F;
+    EXPECT_FALSE(deserializeProfileEnvelope(checked(invalid), content).profile);
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile,
+        kRaidLostWeaponPursuitContentVersion)), std::invalid_argument);
 }

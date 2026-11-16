@@ -1,3 +1,16 @@
+# 当前 · 重伤撤离与野战夹板 v1 已验收
+
+从医院遭遇、临时止痛、带伤撤离，到基地治疗和工坊补给，完成一个可联合验收的阶段。[具体开发方案](../exec-plans/active/raid-fracture-and-field-stabilization-v1.md)
+
+- task_id raid-fracture-and-field-stabilization-v1，plan_version RL-RAID-FRACTURE-AND-FIELD-STABILIZATION-v1，state accepted。验收候选 RL-RAID-FRACTURE-AND-FIELD-STABILIZATION-v1-local-e5b1b0def361。用户确认“重伤撤离与野战夹板 v1 验收通过，请提交并推送。”本轮交付范围为提交并推送功能分支。
+- 基线 origin/main@fb1c11910fb2598fc87cd474e7130219f91b2bb5。测试目录隔离 v2 已由 [PR #212](https://github.com/Disthinker/Project-Raidline/pull/212) 合入。[主线 Windows 和 Ubuntu CI](https://github.com/Disthinker/Project-Raidline/actions/runs/43861231459) 各通过 3339 项，含原 14 项 3 ms 检查。
+- 策划回复匹配请求 MAIN-NEXT-STAGE-20261116-AFTER-TEST-TEMP-ISOLATION-V2-01，原策划 turn 01a1e45a-8c27-7483-b7ec-09ccef697860。拟一次完成医院低位扑击、骨折与止痛取舍、夹板、伤势结算和回营补给。
+
+- 本地候选 e5b1b0def361 已接入桌面固定入口。Windows 全量 3358/3358、专项 62/62、原 14 项 3 ms 全部通过，九组旧档副本原状态回读一致。[联合验收](../acceptance/raid-fracture-and-field-stabilization-v1.md)
+
+
+---
+
 # 当前 · 河畔检查站失物追踪与原枪夺回 v1 · 用户已授权交付
 
 用一趟寻回行动夺回原枪，再回基地维护和补弹，把同一把枪带进下一趟实战。[具体开发方案](../exec-plans/active/raid-lost-weapon-pursuit-v1.md)

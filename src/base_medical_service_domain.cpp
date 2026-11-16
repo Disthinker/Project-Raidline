@@ -39,7 +39,8 @@ BaseMedicalServicePlan queryBaseMedicalService(
 
     const int missingHealth = 100 - profile.currentHealth;
     const BleedingSeverity bleeding = profile.medicalStatus.bleeding;
-    if (missingHealth == 0 && bleeding == BleedingSeverity::None)
+    const bool fracture = profile.medicalStatus.legFractured;
+    if (missingHealth == 0 && !hasPain(profile.medicalStatus))
     {
         return planFailure(
             DomainErrorCode::InvalidQuantity,
@@ -52,16 +53,16 @@ BaseMedicalServicePlan queryBaseMedicalService(
     const std::uint64_t healthCost =
         static_cast<std::uint64_t>(missingHealth) *
         service.missingHealthCostPerPoint;
-    std::uint64_t injuryCost{};
+    std::uint64_t injuryCost = fracture ? service.fractureCost : 0;
     switch (bleeding)
     {
     case BleedingSeverity::None:
         break;
     case BleedingSeverity::Light:
-        injuryCost = service.lightBleedingCost;
+        injuryCost += service.lightBleedingCost;
         break;
     case BleedingSeverity::Heavy:
-        injuryCost = service.heavyBleedingCost;
+        injuryCost += service.heavyBleedingCost;
         break;
     }
     const std::uint64_t quoted = healthCost + injuryCost;
@@ -87,7 +88,8 @@ BaseMedicalServicePlan queryBaseMedicalService(
         static_cast<std::uint32_t>(healthCost),
         static_cast<std::uint32_t>(injuryCost),
         missingHealth,
-        bleeding};
+        bleeding,
+        fracture};
     return plan;
 }
 
@@ -138,6 +140,12 @@ BaseMedicalServiceReceipt executeBaseMedicalService(
     candidate.medicalStatus.lightBleedingRemainingMs = 0;
     candidate.medicalStatus.bleedingDamageRemainingMs = 0;
     candidate.medicalStatus.painScreamRemainingMs = 0;
+    candidate.medicalStatus.legFractured = false;
+    if (candidate.basePlayerEffects && candidate.basePlayerEffects->medical &&
+        candidate.basePlayerEffects->medical->effect == MedicalUseEffect::StabilizeFracture)
+    {
+        candidate.basePlayerEffects->medical.reset();
+    }
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
 
@@ -162,6 +170,7 @@ BaseMedicalServiceReceipt executeBaseMedicalService(
         plan.missingHealth,
         plan.bleedingBefore,
         BleedingSeverity::None,
-        plan.bleedingBefore != BleedingSeverity::None};
+        plan.fractureBefore || plan.bleedingBefore != BleedingSeverity::None,
+        plan.fractureBefore};
 }
 

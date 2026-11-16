@@ -157,6 +157,8 @@ std::vector<UiItemActionEntry> projectUiItemActions(
                 label = inRaid ? "APPLY TOURNIQUET (4 SEC)" : "APPLY TOURNIQUET"; break;
             case MedicalUseEffect::SuppressPain:
                 label = inRaid ? "TAKE PAINKILLER (2 SEC)" : "TAKE PAINKILLER"; break;
+            case MedicalUseEffect::StabilizeFracture:
+                label = inRaid ? "APPLY FIELD SPLINT (4 SEC)" : "APPLY FIELD SPLINT"; break;
             }
             result.push_back({UiItemAction::UseMedical, label});
             break;

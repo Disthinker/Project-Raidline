@@ -99,6 +99,8 @@ public:
 
     [[nodiscard]]
     std::optional<Rect> attackHitbox() const noexcept;
+    [[nodiscard]] bool attackOverlaps(Rect target) const noexcept;
+    [[nodiscard]] std::optional<EnemyLowLungeCorridor> lowLungeCorridor() const noexcept;
 
     [[nodiscard]]
     std::optional<Rect> attackTelegraphBounds() const noexcept;
@@ -162,6 +164,7 @@ private:
     EnemyTacticalRole tacticalRole_{EnemyTacticalRole::Support};
     float impactSlowRemaining_{};
     bool visiblePursuitMove_{};
+    Vec2 lowLungeOrigin_{};
 
     [[nodiscard]]
     float consumeImpactAdjustedDeltaTime(

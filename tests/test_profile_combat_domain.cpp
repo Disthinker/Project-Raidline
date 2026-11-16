@@ -260,3 +260,63 @@ TEST(ProfileCombatDomainTest, DamageQueryAndSimulationDoNotReplaceUnrelatedAsset
     EXPECT_EQ(profile.currentHealth, 80);
     EXPECT_TRUE(validateProfileState(profile, content).valid);
 }
+
+TEST(ProfileCombatDomainTest, FractureUsesActualDamageAndOneNonlethalProbabilityRoll)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("leg-injury", content);
+    const IncomingDamageCommand severe{21, HitRegion::Legs, 0, 0, false, {}, 6499};
+
+    const auto eligible = queryIncomingDamage(profile, content, severe);
+    ASSERT_TRUE(eligible.canCommit) << eligible.message;
+    EXPECT_EQ(eligible.resolution.damageApplied, 16);
+    EXPECT_TRUE(eligible.causedFracture);
+    EXPECT_FALSE(profile.medicalStatus.legFractured);
+
+    for (const auto &ineligible : {
+             IncomingDamageCommand{20, HitRegion::Legs, 0, 0, false, {}, 0},
+             IncomingDamageCommand{21, HitRegion::Legs, 0, 0, false, {}, 6500},
+             IncomingDamageCommand{21, HitRegion::Torso, 0, 0, false, {}, 0},
+             IncomingDamageCommand{21, HitRegion::Legs, 0, 0, false}})
+    {
+        const auto plan = queryIncomingDamage(profile, content, ineligible);
+        ASSERT_TRUE(plan.canCommit);
+        EXPECT_FALSE(plan.causedFracture);
+    }
+
+    ProfileState dying = profile;
+    dying.currentHealth = 16;
+    const auto lethal = queryIncomingDamage(dying, content, severe);
+    ASSERT_TRUE(lethal.canCommit);
+    EXPECT_FALSE(lethal.causedFracture);
+
+    const CommandContext context{profile.revision, "first-low-lunge"};
+    const auto hit = executeIncomingDamageInSimulation(profile, content, severe, context);
+    ASSERT_TRUE(hit.succeeded) << hit.message;
+    EXPECT_TRUE(hit.causedFracture);
+    EXPECT_TRUE(profile.medicalStatus.legFractured);
+    EXPECT_EQ(profile.currentHealth, 84);
+    EXPECT_EQ(profile.medicalStatus.bleeding, BleedingSeverity::None);
+    EXPECT_EQ(profile.medicalStatus.painScreamRemainingMs, 0U);
+    EXPECT_FALSE(queryIncomingDamage(profile, content, severe).causedFracture);
+
+    const auto replay = executeIncomingDamageInSimulation(profile, content, severe, context);
+    ASSERT_TRUE(replay.idempotent);
+    EXPECT_FALSE(replay.causedFracture);
+    EXPECT_EQ(profile.currentHealth, 84);
+}
+
+TEST(ProfileCombatDomainTest, MalformedFractureRollDoesNotCommitAnyParticipant)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("malformed-fracture-roll", content);
+    const auto before = profileStateFingerprint(profile);
+    const IncomingDamageCommand command{22, HitRegion::Legs, 0, 0, false, {}, 10000};
+
+    const auto receipt = executeIncomingDamageInSimulation(
+        profile, content, command, CommandContext{profile.revision, "invalid-leg-hit"});
+    EXPECT_FALSE(receipt.succeeded);
+    EXPECT_EQ(receipt.error, DomainErrorCode::InvalidQuantity);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+    EXPECT_FALSE(profile.medicalStatus.legFractured);
+}

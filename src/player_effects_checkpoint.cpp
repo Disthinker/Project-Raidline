@@ -98,6 +98,15 @@ ProfileValidationResult validateBasePlayerEffectsRecovery(const BasePlayerEffect
             m.healedAmount < 0 || m.maximumHealing < 0 || m.maximumHealing > 100 || m.healedAmount > m.maximumHealing ||
             (!m.chargeConsumed && !profile.assets.find(m.medicalAssetId))) return fail("invalid Base medical recovery");
         switch(m.effect) { case MedicalUseEffect::RestoreHealth:case MedicalUseEffect::StopLightBleeding:case MedicalUseEffect::StopAnyBleeding:case MedicalUseEffect::SuppressPain:break;
+            case MedicalUseEffect::StabilizeFracture:
+                if (!supportsRaidFractureContent(content.contentVersion()) ||
+                    !profile.medicalStatus.legFractured || m.chargeConsumed ||
+                    m.maximumHealing != 0 || m.healedAmount != 0 || m.durationSeconds != 4.0F ||
+                    profile.assets.find(m.medicalAssetId)->definitionId != kRaidFieldSplintId ||
+                    profile.assets.find(m.medicalAssetId)->remainingCharges != 1U ||
+                    !assetIsCarried(profile, m.medicalAssetId))
+                    return fail("invalid Base splint action recovery");
+                break;
             default:return fail("unknown Base medical recovery effect"); }
     }
     const auto &g=r.grenade;

@@ -131,6 +131,68 @@ TEST_F(UiRaidHudTest, ActionAndHazardPaintingShowReadableCurrentFactsWithoutMuta
     EXPECT_EQ(bright({446,485,388,28}),0U);
 }
 
+TEST_F(UiRaidHudTest, CombinedBleedingAndFractureFitTheExistingHudAtEveryWindowSize)
+{
+    for (const auto size : kUiWindowSizes)
+    {
+        const float scale = size.width / 1280.0F;
+        for (const auto language : {UiLanguage::English, UiLanguage::SimplifiedChinese})
+        {
+            detach();
+            attach(size.width, size.height);
+            A::text(*app).setLanguage(language);
+            MedicalStatusState status;
+            status.bleeding = BleedingSeverity::Heavy;
+            status.legFractured = true;
+            UiRaidHudProjection projection;
+            projection.health = "HP 83 / 100";
+            projection.healthFraction = 0.83F;
+            projection.medical = projectUiRaidMedicalStatus(status, language);
+            EXPECT_NE(projection.medical.find(language == UiLanguage::English
+                ? "NO SPRINT" : "禁冲刺"), std::string::npos);
+            status.painkillerRemainingMs = 93001;
+            projection.medical = projectUiRaidMedicalStatus(status, language);
+            ASSERT_NE(projection.medical.find('\n'), std::string::npos);
+            EXPECT_NE(projection.medical.find("94"), std::string::npos);
+            projection.action = localizeUiText(language, "APPLYING FIELD SPLINT");
+            projection.actionActive = true;
+            projection.actionFraction = 0.55F;
+            clear();
+            renderUiRaidHud(renderer, A::text(*app), projection);
+            ASSERT_TRUE(SDL_RenderPresent(renderer));
+
+            const auto warnGlyphs = [&](int y0, int y1) {
+                std::size_t pixels{};
+                for (int y = static_cast<int>(y0 * scale);
+                     y < static_cast<int>(y1 * scale); ++y)
+                {
+                    for (int x = static_cast<int>(16 * scale);
+                         x < static_cast<int>(416 * scale); ++x)
+                    {
+                        Uint8 red{}, green{}, blue{}, alpha{};
+                        SDL_ReadSurfacePixel(surface, x, y, &red, &green, &blue, &alpha);
+                        if (red > 130 && green > 86 && red > green + 25 && green > blue + 20)
+                            ++pixels;
+                    }
+                }
+                return pixels;
+            };
+            EXPECT_GT(warnGlyphs(500, 519), 30U);
+            EXPECT_GT(warnGlyphs(519, 538), 30U);
+            EXPECT_EQ(warnGlyphs(485, 500), 0U);
+            if (const auto *env = std::getenv("RAIDLINE_FRACTURE_UI_REVIEW_DIR"))
+            {
+                const auto destination = std::filesystem::path(env);
+                ASSERT_TRUE(destination.is_absolute());
+                std::filesystem::create_directories(destination);
+                const auto filename = "fracture-hud-" + std::to_string(size.width) + "-" +
+                    uiLanguageCode(language) + ".png";
+                ASSERT_TRUE(IMG_SavePNG(surface, (destination / filename).string().c_str()));
+            }
+        }
+    }
+}
+
 TEST_F(UiRaidHudTest, AllAuxiliarySurfacesRenderInBothLanguagesAndThreeWindowSizes){
     std::filesystem::path destination;if(const auto *env=std::getenv("RAIDLINE_UI_FINAL_REVIEW_DIR")){destination=std::filesystem::path(env);ASSERT_TRUE(destination.is_absolute());std::filesystem::create_directories(destination);}
     for(const auto size:kUiWindowSizes)for(const auto language:{UiLanguage::English,UiLanguage::SimplifiedChinese}){

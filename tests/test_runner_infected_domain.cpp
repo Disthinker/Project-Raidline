@@ -54,7 +54,7 @@ std::size_t firstRunner(const PendingRaidSnapshot &raid)
 TEST(RunnerInfectedDomainTest, PublishedContentDefinesAnIsolatedAmbushReplacement)
 {
     const auto &content = publishedContentRegistry();
-    EXPECT_EQ(content.contentVersion(), kRaidLostWeaponPursuitContentVersion);
+    EXPECT_EQ(content.contentVersion(), kRaidFractureContentVersion);
     const auto &definition = content.enemyCombatDefinition(
         EnemyCombatDefinitionId{"enemy.infected.runner"});
     EXPECT_EQ(definition.maximumHealth, 8);
@@ -212,7 +212,24 @@ TEST(RunnerInfectedDomainTest, OtherMapsAndHistoricalContentKeepLegacySnapshots)
     {
         const auto profile = deployed(content, 9101U, MapDefinitionId{map});
         EXPECT_NE(profile.pendingRaid->rulesVersion, kRaidRunnerRulesVersion);
-        for (const auto &enemy : profile.pendingRaid->enemies) EXPECT_FALSE(enemy.variant);
+        const bool hospital = MapDefinitionId{map} == kHospitalFloorplanMapId;
+        std::size_t lowLunges{};
+        for (const auto &enemy : profile.pendingRaid->enemies)
+        {
+            if (isLowLungeEnemyVariant(enemy.variant))
+            {
+                ++lowLunges;
+                EXPECT_TRUE(hospital);
+                EXPECT_EQ(enemy.spaceId, kHospitalFloorplanSpaceId);
+                EXPECT_EQ(enemy.position.x, kHospitalLowLungeSpawnPosition.x);
+                EXPECT_EQ(enemy.position.y, kHospitalLowLungeSpawnPosition.y);
+            }
+            else
+            {
+                EXPECT_FALSE(enemy.variant);
+            }
+        }
+        EXPECT_EQ(lowLunges, hospital ? 1U : 0U);
     }
     for (const char *version : {"base-field-medical-supplies-content-70",
          "weapon-suppressor-acoustics-content-71", "raid-fragmentation-grenade-content-72"})

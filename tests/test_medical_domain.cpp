@@ -272,3 +272,91 @@ TEST(MedicalDomainTest, OwnedStashMedkitQueryIsReadOnlyAndStillHeals)
     ASSERT_NE(profile.assets.find(medkit), nullptr);
     EXPECT_EQ(profile.assets.find(medkit)->remainingCharges, 2U);
 }
+
+TEST(MedicalDomainTest, FractureAloneAllowsPainkillerAndPersistsAfterItExpires)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("fracture-painkiller", content);
+    profile.medicalStatus.legFractured = true;
+    const auto painkiller = findAsset(profile, alpha_content::painkiller);
+    ASSERT_NE(painkiller, 0U);
+    const auto plan = queryMedicalUse(profile, content, painkiller, MedicalAccess::AnyOwned);
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_EQ(plan.durationMs, 2000U);
+
+    ASSERT_TRUE(executeMedicalUse(
+        profile, content, painkiller, MedicalAccess::AnyOwned,
+        CommandContext{profile.revision, "fracture-painkiller"}).succeeded);
+    EXPECT_TRUE(painIsSuppressed(profile.medicalStatus));
+    EXPECT_EQ(profile.medicalStatus.painkillerRemainingMs, 180000U);
+
+    const auto elapsed = advanceMedicalStatus(
+        profile.medicalStatus, profile.currentHealth, 180000, 20000);
+    EXPECT_EQ(elapsed.healthLost, 0);
+    EXPECT_FALSE(elapsed.screamed);
+    EXPECT_TRUE(profile.medicalStatus.legFractured);
+    EXPECT_TRUE(hasPain(profile.medicalStatus));
+    EXPECT_FALSE(painIsSuppressed(profile.medicalStatus));
+    EXPECT_EQ(profile.medicalStatus.painScreamRemainingMs, 0U);
+}
+
+TEST(MedicalDomainTest, SplintOnlyClearsFractureAndRequiresAccessiblePersonalStock)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("splint-injury", content);
+    profile.currentHealth = 64;
+    profile.medicalStatus.legFractured = true;
+    profile.medicalStatus.painkillerRemainingMs = 1234;
+    ASSERT_TRUE(applyWoundRoll(
+        profile.medicalStatus,
+        WoundRollCommand{WoundSource::Bite, 0, 15000}).applied);
+
+    const ItemDefinition &definition = content.item(ItemDefinitionId{"item.medical.field_splint"});
+    const auto inaccessible = profile.assets.create(
+        definition, BaseGroundAssetLocation{RegionalBaseSiteDefinitionId{"region.test"}, {0.0F, 0.0F}});
+    const auto forbidden = queryMedicalUse(profile, content, inaccessible, MedicalAccess::AnyOwned);
+    EXPECT_FALSE(forbidden.canCommit);
+    EXPECT_EQ(forbidden.error, DomainErrorCode::IllegalDestination);
+    ASSERT_TRUE(profile.assets.erase(inaccessible));
+
+    const auto stash = ProfileContainerId::stash();
+    const auto origin = findFirstProfileFit(profile, content, stash, definition, ItemOrientation::Degrees0);
+    ASSERT_TRUE(origin);
+    const auto splint = profile.assets.create(definition, StoredAssetLocation{stash, *origin});
+    EXPECT_FALSE(queryMedicalUse(profile, content, splint, MedicalAccess::CarriedOnly).canCommit);
+    const auto plan = queryMedicalUse(profile, content, splint, MedicalAccess::AnyOwned);
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_EQ(plan.effect, MedicalUseEffect::StabilizeFracture);
+    EXPECT_EQ(plan.durationMs, 4000U);
+    EXPECT_TRUE(plan.slowMovement);
+
+    auto expected = profile.medicalStatus;
+    expected.legFractured = false;
+    const CommandContext context{profile.revision, "use-field-splint"};
+    const auto receipt = executeMedicalUse(profile, content, splint, MedicalAccess::AnyOwned, context);
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(profile.medicalStatus, expected);
+    EXPECT_EQ(profile.currentHealth, 64);
+    EXPECT_EQ(profile.assets.find(splint), nullptr);
+    EXPECT_TRUE(executeMedicalUse(profile, content, splint, MedicalAccess::AnyOwned, context).idempotent);
+}
+
+TEST(MedicalDomainTest, StopBleedingLeavesFractureAndPain)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("fracture-and-bleeding", content);
+    profile.medicalStatus.legFractured = true;
+    ASSERT_TRUE(applyWoundRoll(
+        profile.medicalStatus,
+        WoundRollCommand{WoundSource::Scratch, 0, 15000}).applied);
+    const auto bandage = findAsset(profile, alpha_content::bandage);
+    ASSERT_NE(bandage, 0U);
+
+    ASSERT_TRUE(executeMedicalUse(
+        profile, content, bandage, MedicalAccess::AnyOwned,
+        CommandContext{profile.revision, "bandage-with-fracture"}).succeeded);
+    EXPECT_EQ(profile.medicalStatus.bleeding, BleedingSeverity::None);
+    EXPECT_TRUE(profile.medicalStatus.legFractured);
+    EXPECT_TRUE(hasPain(profile.medicalStatus));
+    EXPECT_EQ(profile.medicalStatus.painScreamRemainingMs, 0U);
+}
