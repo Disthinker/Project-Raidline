@@ -7,6 +7,24 @@
 namespace
 {
     constexpr float kPhaseBoundaryEpsilon{0.00001F};
+    constexpr EnemyAttackConfig kLowLungeAttackConfigV1{
+        0.70F, 0.18F, 0.70F, 0.0F, 42.0F, {100.0F, 48.0F}, 50.0F,
+        22, 0.0F};
+    constexpr EnemyAttackCombatDamage kLowLungeAttackDamageV1{
+        22, HitRegion::Legs, 0, 0, false};
+
+    float dot(Vec2 a, Vec2 b) noexcept
+    {
+        return a.x * b.x + a.y * b.y;
+    }
+
+    std::array<Vec2, 4> boxCorners(Rect box) noexcept
+    {
+        return {box.position,
+            Vec2{box.position.x + box.size.x, box.position.y},
+            Vec2{box.position.x + box.size.x, box.position.y + box.size.y},
+            Vec2{box.position.x, box.position.y + box.size.y}};
+    }
 
     bool isValidAttackType(
         EnemyAttackType type) noexcept
@@ -16,6 +34,7 @@ namespace
         case EnemyAttackType::Grab:
         case EnemyAttackType::Scratch:
         case EnemyAttackType::Bite:
+        case EnemyAttackType::LowLunge:
             return true;
         }
 
@@ -70,6 +89,87 @@ namespace
     }
 }
 
+std::array<Vec2, 4> EnemyLowLungeCorridor::corners() const noexcept
+{
+    const Vec2 side{-direction.y * halfWidth, direction.x * halfWidth};
+    const Vec2 end{origin.x + direction.x * reach, origin.y + direction.y * reach};
+    return {Vec2{origin.x + side.x, origin.y + side.y},
+            Vec2{end.x + side.x, end.y + side.y},
+            Vec2{end.x - side.x, end.y - side.y},
+            Vec2{origin.x - side.x, origin.y - side.y}};
+}
+
+Rect EnemyLowLungeCorridor::bounds() const noexcept
+{
+    const auto points = corners();
+    float left = points[0].x, right = left;
+    float top = points[0].y, bottom = top;
+    for (const Vec2 p : points)
+    {
+        left = std::min(left, p.x);
+        right = std::max(right, p.x);
+        top = std::min(top, p.y);
+        bottom = std::max(bottom, p.y);
+    }
+    return {{left, top}, {right - left, bottom - top}};
+}
+
+bool EnemyLowLungeCorridor::overlaps(Rect target) const noexcept
+{
+    if (reach <= 0.0F || target.size.x <= 0.0F || target.size.y <= 0.0F)
+        return false;
+    const Rect area = bounds();
+    if (target.position.x >= area.position.x + area.size.x ||
+        target.position.y >= area.position.y + area.size.y ||
+        target.position.x + target.size.x <= area.position.x ||
+        target.position.y + target.size.y <= area.position.y)
+        return false;
+    const Vec2 center{target.position.x + target.size.x * 0.5F - origin.x,
+        target.position.y + target.size.y * 0.5F - origin.y};
+    const Vec2 side{-direction.y, direction.x};
+    const float along = dot(center, direction);
+    const float across = dot(center, side);
+    const float alongRadius = (std::abs(direction.x) * target.size.x +
+        std::abs(direction.y) * target.size.y) * 0.5F;
+    const float acrossRadius = (std::abs(side.x) * target.size.x +
+        std::abs(side.y) * target.size.y) * 0.5F;
+    return along + alongRadius > 0.0F && along - alongRadius < reach &&
+        std::abs(across) < acrossRadius + halfWidth;
+}
+
+void EnemyLowLungeCorridor::clipBefore(Rect blocker) noexcept
+{
+    if (!overlaps(blocker)) return;
+    const Vec2 side{-direction.y, direction.x};
+    const auto points = boxCorners(blocker);
+    std::array<Vec2, 4> projected{};
+    float firstForward = reach;
+    for (std::size_t i = 0; i < points.size(); ++i)
+    {
+        const Vec2 offset{points[i].x - origin.x, points[i].y - origin.y};
+        projected[i] = {dot(offset, direction), dot(offset, side)};
+        if (std::abs(projected[i].y) <= halfWidth)
+            firstForward = std::min(firstForward, projected[i].x);
+    }
+
+    // Intersections of the blocker edges with the two corridor sides complete
+    // the clipped polygon. Its earliest point is the visible stop plane.
+    for (std::size_t i = 0; i < projected.size(); ++i)
+    {
+        const Vec2 a = projected[i], b = projected[(i + 1U) % projected.size()];
+        for (const float sideOffset : {-halfWidth, halfWidth})
+        {
+            if ((a.y < sideOffset && b.y > sideOffset) ||
+                (a.y > sideOffset && b.y < sideOffset))
+            {
+                const float u = (sideOffset - a.y) / (b.y - a.y);
+                firstForward = std::min(firstForward, a.x + u * (b.x - a.x));
+            }
+        }
+    }
+    reach = std::max(0.0F, firstForward);
+}
+
 EnemyAttackConfigSet defaultEnemyAttackConfigs()
 {
     return standardInfectedAttackConfigsV1();
@@ -113,6 +213,8 @@ EnemyAttackConfigSet standardInfectedAttackConfigsV1()
 EnemyAttackCombatDamage enemyAttackCombatDamage(
     EnemyAttackType type) noexcept
 {
+    if (type == EnemyAttackType::LowLunge)
+        return kLowLungeAttackDamageV1;
     return standardInfectedAttackCombatDamageV1(type);
 }
 
@@ -137,6 +239,8 @@ EnemyAttackCombatDamage standardInfectedAttackCombatDamageV1(
             1,
             3,
             false};
+    case EnemyAttackType::LowLunge:
+        return EnemyAttackCombatDamage{};
     }
     return EnemyAttackCombatDamage{};
 }
@@ -152,6 +256,8 @@ const char *enemyAttackTypeName(
         return "Scratch";
     case EnemyAttackType::Bite:
         return "Bite";
+    case EnemyAttackType::LowLunge:
+        return "Low Lunge";
     }
 
     return "Unknown";
@@ -397,6 +503,8 @@ bool EnemyAttackState::hasHitOpportunity() const noexcept
 const EnemyAttackConfig &EnemyAttackState::config(
     EnemyAttackType type) const noexcept
 {
+    if (type == EnemyAttackType::LowLunge)
+        return kLowLungeAttackConfigV1;
     return configs_[indexOf(type)];
 }
 
@@ -422,6 +530,8 @@ std::size_t EnemyAttackState::indexOf(
         return 1U;
     case EnemyAttackType::Bite:
         return 2U;
+    case EnemyAttackType::LowLunge:
+        break;
     }
 
     return 0U;

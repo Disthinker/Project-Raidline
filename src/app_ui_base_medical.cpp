@@ -323,7 +323,15 @@ void App::renderBaseMedicalService() {
         const char *bleeding = p.medical.bleeding == BleedingSeverity::Heavy ? "HEAVY BLEEDING" :
             p.medical.bleeding == BleedingSeverity::Light ? "LIGHT BLEEDING" : "NO BLEEDING";
         text({80, 304, 328, 42}, bleeding);
-        text({80, 356, 328, 42}, hasPain(p.medical) ? painIsSuppressed(p.medical) ? "PAIN SUPPRESSED" : "PAIN ACTIVE" : "NO INJURY PAIN");
+        const auto pain = hasPain(p.medical)
+            ? painIsSuppressed(p.medical) ? "PAIN SUPPRESSED" : "PAIN ACTIVE"
+            : "NO INJURY PAIN";
+        const auto injury = p.medical.legFractured
+            ? fmt::format("{} · {}", tr("LEG FRACTURE"), tr(pain)) : tr(pain);
+        text({80, 356, 328, 42}, injury);
+        const auto outcome = p.medical.legFractured
+            ? "Treats the fracture and bleeding, restores health and retains remaining painkiller effect."
+            : "Restores health and stops bleeding. Remaining painkiller effect is retained.";
         if (p.medical.painkillerRemainingMs)
             text({80, 410, 328, 56}, fmt::format("{} {}{}", tr("PAINKILLER LEFT"), p.medical.painkillerRemainingMs / 1000, language == UiLanguage::English ? "s" : "秒"));
         text({464, 200, 728, 28}, "TOTAL TREATMENT COST", 16);
@@ -332,10 +340,10 @@ void App::renderBaseMedicalService() {
         button(Control::Details, detailed ? "HIDE COST DETAILS" : "SHOW COST DETAILS", detailed);
         if (detailed) {
             const auto details = fmt::format("{} {}\n{} {}\n\n{}", tr("HEALTH RESTORATION"), p.player.healthCost,
-                tr("INJURY TREATMENT"), p.player.injuryCost, tr("Restores health and stops bleeding. Remaining painkiller effect is retained."));
+                tr("INJURY TREATMENT"), p.player.injuryCost, tr(outcome));
             scrollText(uiBaseMedicalDetailsRect(), details, 14, medicalUi_.detailScroll, medicalUi_.detailMaximum);
         } else {
-            text({464, 362, 728, 60}, "Restores health and stops bleeding. Remaining painkiller effect is retained.");
+            text({464, 362, 728, 60}, outcome);
             medicalUi_.detailMaximum = 0;
         }
     } else {

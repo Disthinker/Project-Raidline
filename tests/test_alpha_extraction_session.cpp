@@ -1086,6 +1086,126 @@ const RaidLootSnapshot *hospitalPharmacyStock(const PendingRaidSnapshot &raid)
     return stock == raid.loot.end() ? nullptr : &*stock;
 }
 
+TEST(AlphaExtractionSessionTest, HospitalLungeFractureFollowsPainReliefExtractionAndClinic)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-fracture-raid-", "lunge-extraction");
+
+    MedicalStatusState returnedMedical;
+    {
+        GameSession session;
+        session.configurePersistence(directory.path());
+        ASSERT_TRUE(session.startNewProfile("hospital-fracture-raid"));
+        ASSERT_NO_FATAL_FAILURE(equipHospitalFloorplanPack(session));
+        const auto pack = equippedAsset(session.profile(), EquipmentSlotKind::Backpack);
+        ASSERT_TRUE(pack);
+        const auto painkillers = assets(session.profile(), alpha_content::painkiller);
+        ASSERT_FALSE(painkillers.empty());
+        const auto painkiller = painkillers.front();
+        const auto pocket = ProfileContainerId::compartment(*pack, 0);
+        const auto origin = findFirstProfileFit(session.profile(), content, pocket,
+            content.item(alpha_content::painkiller), ItemOrientation::Degrees0);
+        ASSERT_TRUE(origin);
+        ASSERT_TRUE(session.executeProfileInventory(
+            InventoryMoveCommand{painkiller, 0, {pocket, *origin}}, "carry-painkiller").succeeded);
+
+        // Seed 1's first eligible roll is below 65%. Execute the real damage and
+        // treatment transitions, with only the attack timing pinned by the test.
+        ASSERT_TRUE(session.deployAlpha(1U, kHospitalFloorplanMapId)) << session.persistenceMessage();
+        const auto interior = session.profile().pendingRaid->interiors.front();
+        RaidLootSnapshot floorplan;
+        ASSERT_NO_FATAL_FAILURE(enterActiveHospitalRoom(session, floorplan));
+        const auto &roster = session.world().enemies();
+        ASSERT_EQ(std::count_if(roster.begin(), roster.end(),
+            [](const Enemy &enemy) { return isLowLungeEnemyVariant(enemy.variant()); }), 1);
+        for (const auto &enemy : roster)
+        {
+            if (!isLowLungeEnemyVariant(enemy.variant()))
+                static_cast<void>(const_cast<Enemy &>(enemy).takeDamage(enemy.maxHealth()));
+        }
+        const auto lunge = std::find_if(roster.begin(), roster.end(),
+            [](const Enemy &enemy) { return isLowLungeEnemyVariant(enemy.variant()); });
+        ASSERT_NE(lunge, roster.end());
+        const Vec2 enemySize = lunge->size();
+        const Vec2 enemyPosition = lunge->position();
+        auto &player = const_cast<Player &>(session.world().player());
+        const float halfBody = player.size() / 2.0F;
+        ASSERT_TRUE(player.setPosition({
+            enemyPosition.x + enemySize.x / 2.0F + 62.0F - halfBody,
+            enemyPosition.y + enemySize.y / 2.0F - halfBody}));
+        ASSERT_TRUE(const_cast<Enemy &>(*lunge).tryStartAttack(EnemyAttackType::LowLunge, {1, 0}));
+        for (int frame = 0; frame < 20 && session.profile().currentHealth == 100; ++frame)
+            session.update({}, 0.05F);
+
+        ASSERT_TRUE(session.profile().medicalStatus.legFractured) << session.persistenceMessage();
+        EXPECT_EQ(session.profile().currentHealth, 83);
+        EXPECT_EQ(session.profile().medicalStatus.bleeding, BleedingSeverity::None);
+        ASSERT_TRUE(session.lastIncomingDamage());
+        EXPECT_EQ(session.lastIncomingDamage()->region, HitRegion::Legs);
+        EXPECT_EQ(session.lastIncomingDamage()->damageApplied, 17);
+
+        for (const auto &enemy : session.world().enemies())
+            static_cast<void>(const_cast<Enemy &>(enemy).takeDamage(enemy.maxHealth()));
+        session.update({}, 0.3F);
+        const auto moveDistance = [&](bool sprint) {
+            constexpr Vec2 openFloor{1800.0F, 970.0F};
+            EXPECT_TRUE(player.setPosition(openFloor));
+            GameplayInput input;
+            input.moveRight = true;
+            input.sprint = sprint;
+            session.update(input, 0.1F);
+            return player.position().x - openFloor.x;
+        };
+        const float fracturedWalk = moveDistance(false);
+        EXPECT_GT(fracturedWalk, 0.0F);
+        EXPECT_NEAR(moveDistance(true), fracturedWalk, 0.01F);
+
+        ASSERT_TRUE(session.startAlphaMedical(painkiller));
+        for (int frame = 0; frame < 25 && session.raidActionState().active(); ++frame)
+            session.update({}, 0.1F);
+        ASSERT_TRUE(painIsSuppressed(session.profile().medicalStatus));
+        EXPECT_TRUE(session.profile().medicalStatus.legFractured);
+        const float treatedWalk = moveDistance(false);
+        EXPECT_NEAR(fracturedWalk, 0.7F * treatedWalk, 0.01F);
+        EXPECT_NEAR(moveDistance(true), 1.5F * treatedWalk, 0.01F);
+
+        GameplayInput interact;
+        interact.interactJustPressed = true;
+        ASSERT_TRUE(player.setPosition(interior.interiorExit.position));
+        session.update(interact, 0.0F);
+        ASSERT_TRUE(session.world().inOutdoorRaidSpace());
+        for (const auto &enemy : session.world().enemies())
+            static_cast<void>(const_cast<Enemy &>(enemy).takeDamage(enemy.maxHealth()));
+        ASSERT_TRUE(player.setPosition(session.world().extractionPoint().bounds().position));
+        for (int frame = 0; frame < 100 && session.profile().pendingRaid; ++frame)
+            session.update({}, 0.1F);
+        ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+        ASSERT_FALSE(session.profile().pendingRaid) << session.persistenceMessage();
+        ASSERT_TRUE(session.profile().lastRaidResult);
+        EXPECT_EQ(session.profile().lastRaidResult->outcome, RaidResultOutcome::Extracted);
+        returnedMedical = session.profile().medicalStatus;
+        EXPECT_TRUE(returnedMedical.legFractured);
+        EXPECT_GT(returnedMedical.painkillerRemainingMs, 0U);
+    }
+
+    GameSession reopened;
+    reopened.configurePersistence(directory.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(reopened.profile().medicalStatus, returnedMedical);
+    EXPECT_EQ(reopened.profile().currentHealth, 83);
+    const auto currency = reopened.profile().currency;
+    const auto health = reopened.executeBasePaidMedicalService("clinic-fracture-extraction");
+    ASSERT_TRUE(health.succeeded) << health.message;
+    EXPECT_TRUE(health.clearedFracture);
+    EXPECT_EQ(health.currencyPaid, 96U);
+    EXPECT_EQ(reopened.profile().currency, currency - 96U);
+    EXPECT_EQ(reopened.profile().currentHealth, 100);
+    EXPECT_FALSE(reopened.profile().medicalStatus.legFractured);
+    EXPECT_EQ(reopened.profile().medicalStatus.painkillerRemainingMs,
+              returnedMedical.painkillerRemainingMs);
+}
+
 TEST(AlphaExtractionSessionTest, HospitalFloorplanFailedWriteRetriesAndPreservesOnlyKnowledge)
 {
     raidline::test::TemporaryDirectory directory;

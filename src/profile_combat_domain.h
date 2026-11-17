@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -16,6 +17,8 @@ struct IncomingDamageCommand
     int armorDamage{};
     bool weakPoint{};
     WoundRollCommand wound;
+    // Supplied only for the encounter's accepted low-lunge hit.
+    std::optional<std::uint32_t> fractureRoll{};
 };
 
 struct IncomingDamagePlan
@@ -27,6 +30,7 @@ struct IncomingDamagePlan
     CombatDamageResolution resolution;
     std::optional<AssetInstanceId> armorAssetId;
     WoundRollResult wound;
+    bool causedFracture{};
 };
 
 struct IncomingDamageReceipt
@@ -41,7 +45,11 @@ struct IncomingDamageReceipt
     int healthBefore{};
     int healthAfter{};
     WoundRollResult wound;
+    bool causedFracture{};
 };
+
+[[nodiscard]] bool eligibleForLegFracture(
+    const ProfileState &profile, const CombatDamageResolution &resolution) noexcept;
 
 [[nodiscard]] IncomingDamagePlan queryIncomingDamage(const ProfileState &profile,
                                                      const ContentRegistry &content,

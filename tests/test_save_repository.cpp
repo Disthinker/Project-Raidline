@@ -122,7 +122,7 @@ TEST(SaveRepositoryTest, FrontierRoadBlockadeFrozenGeometryRoundTripsAndCannotDo
     ASSERT_TRUE(profile.pendingRaid->highRiskCrisis->roadBlockade);
     const auto saved = serializeProfileEnvelope(profile, content.contentVersion());
     const auto envelope = nlohmann::json::parse(saved);
-    EXPECT_EQ(envelope.at("schema_version"), 71U);
+    EXPECT_EQ(envelope.at("schema_version"), 72U);
     const auto loaded = deserializeProfileEnvelope(saved, content);
     ASSERT_TRUE(loaded.profile && loaded.profile->pendingRaid) << loaded.message;
     EXPECT_EQ(loaded.profile->pendingRaid->highRiskCrisis, profile.pendingRaid->highRiskCrisis);
@@ -186,12 +186,12 @@ TEST(SaveRepositoryTest, FrontierRoadBlockadeUpgradePreservesSchema69FrozenRaidA
         std::ifstream file(path, std::ios::binary);
         return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
     };
-    const auto marker = std::string{".pre-raid-lost-weapon-pursuit-v1."};
+    const auto marker = std::string{".pre-raid-fracture-and-field-stabilization-v1."};
     EXPECT_EQ(read(directory.path() / ("profile" + marker + testSaveChecksum(frozen) + ".json")), frozen);
     EXPECT_EQ(read(directory.path() / ("profile.backup" + marker + testSaveChecksum(backup) + ".json")), backup);
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile && reopened.sourceEnvelope) << reopened.message;
-    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 71U);
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 72U);
     EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
 }
 
@@ -231,12 +231,12 @@ TEST(SaveRepositoryTest, LostWeaponPursuitUpgradeKeepsExactContent88BlockadeAndA
         std::ifstream file(path, std::ios::binary);
         return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
     };
-    const auto marker = std::string{".pre-raid-lost-weapon-pursuit-v1."};
+    const auto marker = std::string{".pre-raid-fracture-and-field-stabilization-v1."};
     EXPECT_EQ(read(directory.path() / ("profile" + marker + testSaveChecksum(frozen) + ".json")), frozen);
     EXPECT_EQ(read(directory.path() / ("profile.backup" + marker + testSaveChecksum(backup) + ".json")), backup);
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile && reopened.sourceEnvelope) << reopened.message;
-    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 71U);
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 72U);
     EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
 }
 
@@ -260,7 +260,7 @@ TEST(SaveRepositoryTest, LostWeaponPursuitSnapshotRoundTripRejectsDowngradeAndIn
     const auto saved = serializeProfileEnvelope(profile, content.contentVersion());
     const auto loaded = deserializeProfileEnvelope(saved, content);
     ASSERT_TRUE(loaded.profile && loaded.sourceEnvelope) << loaded.message;
-    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 71U);
+    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 72U);
     EXPECT_EQ(loaded.profile->pendingRaid->selfRecovery->pursuit, recovery.pursuit);
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
     EXPECT_EQ(serializeProfileEnvelope(*loaded.profile, content.contentVersion()), saved);
@@ -276,6 +276,105 @@ TEST(SaveRepositoryTest, LostWeaponPursuitSnapshotRoundTripRejectsDowngradeAndIn
     tampered["schema_version"] = 70U;
     tampered["content_version"] = kFrontierHighRiskBlockadeContentVersion;
     EXPECT_FALSE(deserializeProfileEnvelope(tampered.dump(), content).profile);
+}
+
+TEST(SaveRepositoryTest, FractureRollsBackStartingStateAndFreezesHospitalEncounterInSchema72)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("fracture-save-current", content);
+    profile.medicalStatus.legFractured = true;
+    const auto unfrozen = profileStateFingerprint(profile);
+    profile.medicalStatus.legFractured = false;
+    EXPECT_NE(profileStateFingerprint(profile), unfrozen);
+    profile.medicalStatus.legFractured = true;
+
+    const auto deployed = executeDeploy(profile, content,
+        {"fracture-save-raid", "fracture-save-result", 9403U, kHospitalFloorplanMapId},
+        {profile.revision, "fracture-save-deploy"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid);
+    ASSERT_TRUE(profile.pendingRaid->startingMedicalStatus.legFractured);
+    profile.medicalStatus.legFractured = false;
+    const auto before = profileStateFingerprint(profile);
+    const auto saved = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto loaded = deserializeProfileEnvelope(saved, content);
+    ASSERT_TRUE(loaded.profile && loaded.sourceEnvelope && loaded.profile->pendingRaid) << loaded.message;
+    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 72U);
+    EXPECT_FALSE(loaded.profile->medicalStatus.legFractured);
+    EXPECT_TRUE(loaded.profile->pendingRaid->startingMedicalStatus.legFractured);
+    EXPECT_EQ(loaded.profile->pendingRaid->enemies, profile.pendingRaid->enemies);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), before);
+    EXPECT_EQ(serializeProfileEnvelope(*loaded.profile, content.contentVersion()), saved);
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile,
+        kRaidLostWeaponPursuitContentVersion)), std::invalid_argument);
+
+    auto reopened = *loaded.profile;
+    EXPECT_TRUE(rollbackPendingRaidToBase(reopened, content).succeeded);
+    EXPECT_TRUE(reopened.medicalStatus.legFractured);
+
+    auto malformed = nlohmann::json::parse(saved);
+    auto &enemies = malformed["payload"]["pending_raid"]["enemies"];
+    const auto lunge = std::find_if(enemies.begin(), enemies.end(), [](const auto &enemy) {
+        const auto &variant = enemy.at("variant");
+        return variant.is_object() && variant.at("definition_id") == "enemy.infected.low_lunge";
+    });
+    ASSERT_NE(lunge, enemies.end());
+    (*lunge)["variant"]["attack_profile"] = kStandardInfectedAttackProfileId;
+    malformed["payload_checksum"] = testSaveChecksum(malformed["payload"].dump());
+    EXPECT_FALSE(deserializeProfileEnvelope(malformed.dump(), content).profile);
+
+    malformed = nlohmann::json::parse(saved);
+    malformed["payload"]["pending_raid"]["starting_medical_status"]["leg_fractured"] = 1;
+    malformed["payload_checksum"] = testSaveChecksum(malformed["payload"].dump());
+    EXPECT_FALSE(deserializeProfileEnvelope(malformed.dump(), content).profile);
+}
+
+TEST(SaveRepositoryTest, FractureUpgradePreservesOldHospitalSnapshotAndBothSaveSources)
+{
+    const auto &content = publishedContentRegistry();
+    auto document = nlohmann::json::parse(publishedContentJson());
+    document["content_version"] = kRaidLostWeaponPursuitContentVersion;
+    const auto oldContent = ContentRegistry::fromJson(document.dump());
+    auto profile = makeNewAlphaProfile("fracture-legacy-hospital", oldContent);
+    const auto backup = serializeProfileEnvelope(profile, oldContent.contentVersion());
+    const auto deployed = executeDeploy(profile, oldContent,
+        {"old-hospital-raid", "old-hospital-result", 9403U, kHospitalFloorplanMapId},
+        {profile.revision, "old-hospital-deploy"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    const auto frozen = serializeProfileEnvelope(profile, oldContent.contentVersion());
+    const auto loaded = deserializeProfileEnvelope(frozen, content);
+    ASSERT_TRUE(loaded.profile && loaded.sourceEnvelope && loaded.profile->pendingRaid) << loaded.message;
+    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 71U);
+    EXPECT_FALSE(loaded.profile->medicalStatus.legFractured);
+    EXPECT_FALSE(loaded.profile->pendingRaid->startingMedicalStatus.legFractured);
+    EXPECT_EQ(loaded.profile->pendingRaid->enemies, profile.pendingRaid->enemies);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+    EXPECT_EQ(serializeProfileEnvelope(*loaded.profile, oldContent.contentVersion()), frozen);
+
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-fracture-save-", "old-hospital");
+    const SaveRepository repository{directory.path()};
+    {
+        std::ofstream primaryFile(repository.primaryPath(), std::ios::binary);
+        std::ofstream backupFile(repository.backupPath(), std::ios::binary);
+        primaryFile << frozen;
+        backupFile << backup;
+        ASSERT_TRUE(primaryFile.good() && backupFile.good());
+    }
+    const auto migrated = repository.save(*loaded.profile, content.contentVersion());
+    ASSERT_TRUE(migrated.succeeded) << migrated.message;
+    const auto read = [](const std::filesystem::path &path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+    };
+    const auto marker = std::string{".pre-raid-fracture-and-field-stabilization-v1."};
+    EXPECT_EQ(read(directory.path() / ("profile" + marker + testSaveChecksum(frozen) + ".json")), frozen);
+    EXPECT_EQ(read(directory.path() / ("profile.backup" + marker + testSaveChecksum(backup) + ".json")), backup);
+    const auto reopened = repository.load(content);
+    ASSERT_TRUE(reopened.profile && reopened.sourceEnvelope) << reopened.message;
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 72U);
+    EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
 }
 
 TEST(SaveRepositoryTest, HospitalContentAcceptsPreviousContent61WithoutSchemaChange)
@@ -4071,7 +4170,7 @@ TEST(SaveRepositoryTest, Schema55RoundTripsIndependentPagesOverflowAndOwnedSubtr
     ASSERT_TRUE(validateProfileState(profile, content).valid);
     const auto text = serializeProfileEnvelope(profile, content.contentVersion());
     const auto envelope = nlohmann::json::parse(text);
-    EXPECT_EQ(envelope.at("schema_version"), 71U);
+    EXPECT_EQ(envelope.at("schema_version"), 72U);
     EXPECT_EQ(envelope.at("payload").at("stash_layout_version"), 1U);
     const auto loaded = deserializeProfileEnvelope(text, content);
     ASSERT_TRUE(loaded.profile) << loaded.message;

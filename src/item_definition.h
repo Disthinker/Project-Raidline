@@ -112,7 +112,8 @@ enum class MedicalItemEffect
     RestoreHealth,
     StopLightBleeding,
     StopAnyBleeding,
-    SuppressPain
+    SuppressPain,
+    StabilizeFracture
 };
 
 struct MedicalUseDefinition

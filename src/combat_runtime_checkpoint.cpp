@@ -9,7 +9,10 @@ bool nonnegative(float f) { return std::isfinite(f) && f >= 0; }
 } // namespace
 bool validateEnemyRuntimeCheckpoint(const EnemyRuntimeCheckpoint &e) noexcept
 {
-    return (!e.variant || validEnemyVariantVitals(*e.variant, e.maximumHealth, e.torsoArmor)) &&
+    // Raid freezes the initial encounter, not live attack state. This
+    // checkpoint contract belongs to Base activities and cannot spawn it.
+    return !isLowLungeEnemyVariant(e.variant) &&
+           (!e.variant || validEnemyVariantVitals(*e.variant, e.maximumHealth, e.torsoArmor)) &&
            (!e.visiblePursuitMove || (e.variant && e.variant->movement.visiblePursuitMoveSpeed &&
                 e.movement == 1 && e.awareness == 1 && e.attackPhase == 0 &&
                 (e.role == 0 || e.role == 1))) &&

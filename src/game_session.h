@@ -697,6 +697,7 @@ private:
     std::uint64_t raidCommandSequence_{};
     std::uint64_t medicalRandomSequence_{};
     std::uint64_t woundRandomSequence_{};
+    std::uint64_t fractureRandomSequence_{};
     std::uint64_t weaponFaultSequence_{};
     float raidElapsedSeconds_{};
     float selfRecoveryInteractionSeconds_{};

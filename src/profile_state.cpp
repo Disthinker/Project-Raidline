@@ -347,6 +347,7 @@ std::size_t populatePublishedWarehouseCatalog(
             definition.definitionId == kHospitalFloorplanItemId ||
             definition.definitionId == kFieldIntelligenceDocumentId ||
             definition.definitionId == kFreightBreachWedgesId ||
+            definition.definitionId == kRaidFieldSplintId ||
             definition.definitionId == kThrownIlluminationItemId)
         {
             continue;
@@ -1462,7 +1463,8 @@ ProfileValidationResult validateProfileState(
     {
         return {false, "profile header is invalid"};
     }
-    if (!validMedicalStatus(profile.medicalStatus))
+    if (!validMedicalStatus(profile.medicalStatus) ||
+        (profile.medicalStatus.legFractured && !supportsRaidFractureContent(content.contentVersion())))
     {
         return {false, "profile medical status is invalid"};
     }
@@ -3103,6 +3105,7 @@ ProfileValidationResult validateProfileState(
             raid.enemyDeploymentId.value().empty() || raid.seed == 0 ||
             raid.startingHealth <= 0 || raid.startingHealth > 100 ||
             !validMedicalStatus(raid.startingMedicalStatus) ||
+            (raid.startingMedicalStatus.legFractured && !supportsRaidFractureContent(content.contentVersion())) ||
             (expandedResourceEcologyRules
                  ? outdoorEnemyCount <
                            raidMap->proceduralOutdoor.minimumInitialEnemies ||
@@ -3281,7 +3284,7 @@ ProfileValidationResult validateProfileState(
             const auto &recovery = *raid.selfRecovery;
             const auto &source = recovery.sourceRecord;
             const auto record = profile.lostRaidRecords.find(source.recordId);
-            if (content.contentVersion() != kRaidLostWeaponPursuitContentVersion ||
+            if (!supportsLostWeaponPursuitContent(content.contentVersion()) ||
                 raid.mapDefinitionId != kFieldIntelligenceSourceMapId ||
                 source.mapDefinitionId != raid.mapDefinitionId ||
                 !validLostRecordMetadata(source) || recovery.opened || recovery.roots.size() != 1U ||
@@ -4588,6 +4591,19 @@ ProfileValidationResult validateProfileState(
         std::set<std::uint32_t> snapshotSlots;
         bool foundNightVisionSlot{};
         bool foundHospitalPharmacySlot{};
+        bool foundHospitalSplintSlot{};
+        const auto isHospitalLungeSlot = [](const RaidEnemySnapshot &enemy)
+        {
+            return enemy.spaceId == kHospitalFloorplanSpaceId &&
+                enemy.position.x == kHospitalLowLungeSpawnPosition.x &&
+                enemy.position.y == kHospitalLowLungeSpawnPosition.y;
+        };
+        const bool hospitalFractureEncounter =
+            raid.mapDefinitionId == kHospitalFloorplanMapId && regionalMissionCount == 0U &&
+            supportsRaidFractureContent(content.contentVersion()) &&
+            std::any_of(raid.enemies.begin(), raid.enemies.end(), [&](const auto &enemy) {
+                return isHospitalLungeSlot(enemy) && isLowLungeEnemyVariant(enemy.variant);
+            });
         bool foundSealedCrateLoot{};
         bool foundFuelLoot{};
         std::optional<std::uint32_t> firstSelectedFreightKeySlot;
@@ -4653,6 +4669,7 @@ ProfileValidationResult validateProfileState(
             bool nightVisionSlot{};
             bool hospitalFloorplanSlot{};
             bool hospitalPharmacySlot{};
+            bool hospitalSplintSlot{};
             bool freightKeySlot{};
             bool sealedFreightSlot{};
             bool fuelSlot{};
@@ -4844,6 +4861,7 @@ ProfileValidationResult validateProfileState(
                             nightVisionSlot = isHospitalNightVisionLootSlot(raid.mapDefinitionId, interior.id, slot.id);
                             hospitalFloorplanSlot = isHospitalFloorplanLootSlot(raid.mapDefinitionId, interior.id, slot.id);
                             hospitalPharmacySlot = isHospitalPharmacyLootSlot(raid.mapDefinitionId, interior.id, slot.id);
+                            hospitalSplintSlot = isHospitalFractureLootSlot(raid.mapDefinitionId, interior.id, slot.id);
                             sealedFreightSlot = raid.sealedFreightCrate && interior.id == kFreightCrateSpaceId &&
                                 slot.id == kFreightCrateSlotId;
                             fuelSlot = raid.fuelExtractionLootAssetId && interior.id == kFreightCrateSpaceId &&
@@ -4985,6 +5003,15 @@ ProfileValidationResult validateProfileState(
                     return {false, "pending Raid hospital pharmacy slot is invalid"};
                 foundHospitalPharmacySlot = true;
             }
+            if (hospitalSplintSlot && hospitalFractureEncounter)
+            {
+                if (loot.definitionId != kRaidFieldSplintId || loot.quantity != 1U ||
+                    loot.requiresHighRisk || loot.sceneContainerAssetId)
+                    return {false, "pending Raid hospital splint slot is invalid"};
+                foundHospitalSplintSlot = true;
+            }
+            else if (loot.definitionId == kRaidFieldSplintId && recoveryRoot == nullptr)
+                return {false, "pending Raid field splint is outside its fixed hospital slot"};
             if (freightKeySlot)
             {
                 if (loot.definitionId != kFreightCrateKeyId || loot.quantity != 1U || loot.sceneContainerAssetId)
@@ -5016,6 +5043,8 @@ ProfileValidationResult validateProfileState(
             return {false, "pending hospital night vision slot is missing"};
         if (raid.hospitalMedicalReserveEnabled && !foundHospitalPharmacySlot)
             return {false, "pending Raid hospital pharmacy slot is missing"};
+        if (hospitalFractureEncounter && !foundHospitalSplintSlot)
+            return {false, "pending Raid hospital splint slot is missing"};
         if (raid.freightKeyLootSlotId && (!firstSelectedFreightKeySlot ||
             raidMap->raidLootSlots[*firstSelectedFreightKeySlot].id != *raid.freightKeyLootSlotId))
             return {false, "pending Raid freight key source is not its first selected central slot"};
@@ -5048,7 +5077,14 @@ ProfileValidationResult validateProfileState(
         }
         for (const RaidEnemySnapshot &enemy : raid.enemies)
         {
-            if (!runnerEcologyRules && enemy.variant)
+            if (isLowLungeEnemyVariant(enemy.variant))
+            {
+                if (!hospitalFractureEncounter || !isHospitalLungeSlot(enemy) ||
+                    !validEnemyVariantVitals(*enemy.variant, enemy.maximumHealth, enemy.torsoArmor) ||
+                    !enemy.encounterGroupInstanceId.empty() || !enemy.sourceEnemyId.empty())
+                    return {false, "pending Raid low-lunge enemy is outside its fixed hospital slot"};
+            }
+            else if (!runnerEcologyRules && enemy.variant)
                 return {false, "legacy Raid contains a versioned enemy variant"};
             if (enemy.torsoArmor && (!enemy.torsoArmor->valid() || enemy.torsoArmor->durability == 0))
                 return {false, "invalid frozen enemy armor"};
@@ -5189,8 +5225,10 @@ ProfileValidationResult validateProfileState(
             for (std::size_t index{}; index < raid.enemies.size(); ++index)
             {
                 const auto &enemy = raid.enemies[index];
+                const auto expectedKind = hospitalFractureEncounter && isHospitalLungeSlot(enemy)
+                    ? EnemyVariantKind::LowLunge : expectedEnemyKinds[index];
                 if (!enemy.variant || !validEnemyVariantVitals(*enemy.variant, enemy.maximumHealth, enemy.torsoArmor) ||
-                    enemy.variant->kind != expectedEnemyKinds[index])
+                    enemy.variant->kind != expectedKind)
                     return {false, "runner Raid enemy variant is missing or does not match its frozen member"};
                 if (enemy.variant->kind == EnemyVariantKind::Armored)
                 {
@@ -5499,6 +5537,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     hashInteger(hash, profile.medicalStatus.bleedingDamageRemainingMs);
     hashInteger(hash, profile.medicalStatus.painkillerRemainingMs);
     hashInteger(hash, profile.medicalStatus.painScreamRemainingMs);
+    if (profile.medicalStatus.legFractured) hashBytes(hash, "leg-fracture-v1");
     hashInteger(hash, profile.worldClock.elapsedWorldMinutes);
     hashInteger(hash, profile.baseResources.pool.food);
     hashInteger(hash, profile.baseResources.pool.hygiene);
@@ -6390,6 +6429,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, raid.startingMedicalStatus.bleedingDamageRemainingMs);
         hashInteger(hash, raid.startingMedicalStatus.painkillerRemainingMs);
         hashInteger(hash, raid.startingMedicalStatus.painScreamRemainingMs);
+        if (raid.startingMedicalStatus.legFractured) hashBytes(hash, "leg-fracture-v1");
         for (bool selected : raid.intelligence.selected)
         {
             hashInteger(hash, static_cast<std::uint32_t>(selected));

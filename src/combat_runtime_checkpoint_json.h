@@ -11,12 +11,14 @@ inline nlohmann::json enemyVariantSnapshotJson(const EnemyVariantSnapshot &v)
 {
     if (!validEnemyVariantSnapshot(v))
         throw std::invalid_argument("Invalid enemy variant snapshot");
+    const auto attackProfile = v.movement.attackProfileVersion == kLowLungeInfectedAttackProfileVersion
+        ? kLowLungeInfectedAttackProfileId : kStandardInfectedAttackProfileId;
     return {{"definition_id", enemyVariantDefinitionId(v.kind)},
             {"normal_move_speed", v.movement.normalMoveSpeed},
             {"visible_pursuit_move_speed", v.movement.visiblePursuitMoveSpeed
                 ? nlohmann::json(*v.movement.visiblePursuitMoveSpeed)
                 : nlohmann::json(nullptr)},
-            {"attack_profile", kStandardInfectedAttackProfileId}};
+            {"attack_profile", attackProfile}};
 }
 
 inline EnemyVariantSnapshot parseEnemyVariantSnapshotJson(const nlohmann::json &j)
@@ -25,13 +27,17 @@ inline EnemyVariantSnapshot parseEnemyVariantSnapshotJson(const nlohmann::json &
         !j.at("normal_move_speed").is_number() ||
         (!j.at("visible_pursuit_move_speed").is_null() &&
          !j.at("visible_pursuit_move_speed").is_number()) ||
-        !j.at("attack_profile").is_string() ||
-        j.at("attack_profile").get<std::string>() != kStandardInfectedAttackProfileId)
-        throw std::invalid_argument("Invalid enemy variant fields or attack profile");
+        !j.at("attack_profile").is_string())
+        throw std::invalid_argument("Invalid enemy variant fields");
+    const auto attackProfile = j.at("attack_profile").get<std::string>();
+    if (attackProfile != kStandardInfectedAttackProfileId &&
+        attackProfile != kLowLungeInfectedAttackProfileId)
+        throw std::invalid_argument("Unknown frozen enemy attack profile");
     const auto kind = enemyVariantKindFromDefinitionId(j.at("definition_id").get<std::string>());
     if (!kind) throw std::invalid_argument("Unknown enemy variant identity");
     EnemyVariantSnapshot result{*kind, {j.at("normal_move_speed").get<float>(),
-        std::nullopt, kStandardInfectedAttackProfileVersion}};
+        std::nullopt, attackProfile == kLowLungeInfectedAttackProfileId
+            ? kLowLungeInfectedAttackProfileVersion : kStandardInfectedAttackProfileVersion}};
     if (!j.at("visible_pursuit_move_speed").is_null())
         result.movement.visiblePursuitMoveSpeed = j.at("visible_pursuit_move_speed").get<float>();
     if (!std::isfinite(result.movement.normalMoveSpeed) ||

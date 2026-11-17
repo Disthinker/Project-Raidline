@@ -304,6 +304,8 @@ public:
     [[nodiscard]]
     const std::vector<BallisticBlocker> &
     ballisticBlockers() const noexcept;
+    [[nodiscard]] std::optional<EnemyLowLungeCorridor>
+    lowLungeTelegraph(const Enemy &enemy) const noexcept;
 
     [[nodiscard]] const RaidSpaceDefinitionId &
     activeRaidSpaceId() const noexcept;

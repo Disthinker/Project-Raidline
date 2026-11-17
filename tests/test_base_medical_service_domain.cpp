@@ -218,3 +218,54 @@ TEST(BaseMedicalServiceDomainTest, PendingRaidBlocksTheService)
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 }
 
+TEST(BaseMedicalServiceDomainTest, FractureTreatmentAtFullHealthCostsOnlyCurrency)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = woundedProfile(BleedingSeverity::None);
+    profile.currentHealth = 100;
+    profile.medicalStatus.legFractured = true;
+    profile.currency = 44;
+    const auto unaffordable = queryBaseMedicalService(profile, content);
+    EXPECT_FALSE(unaffordable.canCommit);
+    EXPECT_EQ(unaffordable.injuryCost, 45U);
+    const auto before = profileStateFingerprint(profile);
+    EXPECT_FALSE(executeBaseMedicalService(
+        profile, content, BaseMedicalServiceCommand{},
+        CommandContext{profile.revision, "fracture-treatment-too-expensive"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+
+    profile.currency = 45;
+    const auto assets = profile.assets;
+    const auto quote = queryBaseMedicalService(profile, content);
+    ASSERT_TRUE(quote.canCommit) << quote.message;
+    EXPECT_TRUE(quote.fractureBefore);
+    EXPECT_EQ(quote.quotedCurrency, 45U);
+    EXPECT_EQ(quote.healthCost, 0U);
+    const CommandContext context{profile.revision, "fracture-treatment"};
+    const auto treatment = executeBaseMedicalService(
+        profile, content, BaseMedicalServiceCommand{}, context);
+    ASSERT_TRUE(treatment.succeeded) << treatment.message;
+    EXPECT_TRUE(treatment.clearedFracture);
+    EXPECT_TRUE(treatment.clearedPainSource);
+    EXPECT_EQ(treatment.currencyPaid, 45U);
+    EXPECT_EQ(profile.currency, 0U);
+    EXPECT_FALSE(profile.medicalStatus.legFractured);
+    EXPECT_EQ(profile.medicalStatus.painkillerRemainingMs, 90000U);
+    expectAssetsEqual(profile.assets, assets);
+
+    const auto replay = executeBaseMedicalService(profile, content, BaseMedicalServiceCommand{}, context);
+    EXPECT_TRUE(replay.idempotent);
+    EXPECT_EQ(profile.currency, 0U);
+}
+
+TEST(BaseMedicalServiceDomainTest, FractureSurchargeKeepsExistingBleedingAndHealthPrices)
+{
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = woundedProfile(BleedingSeverity::Heavy);
+    profile.medicalStatus.legFractured = true;
+    const auto quote = queryBaseMedicalService(profile, content);
+    ASSERT_TRUE(quote.canCommit) << quote.message;
+    EXPECT_EQ(quote.healthCost, 135U);
+    EXPECT_EQ(quote.injuryCost, 105U);
+    EXPECT_EQ(quote.quotedCurrency, 240U);
+}

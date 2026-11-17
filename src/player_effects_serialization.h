@@ -179,12 +179,12 @@ inline ThrownIlluminationLanding parseIlluminationLanding(const Json &value)
 
 inline std::string medicalEffect(MedicalUseEffect e)
 {
-    switch(e){case MedicalUseEffect::RestoreHealth:return "restore_health";case MedicalUseEffect::StopLightBleeding:return "stop_light_bleeding";case MedicalUseEffect::StopAnyBleeding:return "stop_any_bleeding";case MedicalUseEffect::SuppressPain:return "suppress_pain";}
+    switch(e){case MedicalUseEffect::RestoreHealth:return "restore_health";case MedicalUseEffect::StopLightBleeding:return "stop_light_bleeding";case MedicalUseEffect::StopAnyBleeding:return "stop_any_bleeding";case MedicalUseEffect::SuppressPain:return "suppress_pain";case MedicalUseEffect::StabilizeFracture:return "stabilize_fracture";}
     throw std::invalid_argument("unknown medical recovery effect");
 }
 inline MedicalUseEffect parseMedicalEffect(const Json &j)
 {
-    const auto s=text(j);if(s=="restore_health")return MedicalUseEffect::RestoreHealth;if(s=="stop_light_bleeding")return MedicalUseEffect::StopLightBleeding;if(s=="stop_any_bleeding")return MedicalUseEffect::StopAnyBleeding;if(s=="suppress_pain")return MedicalUseEffect::SuppressPain;
+    const auto s=text(j);if(s=="restore_health")return MedicalUseEffect::RestoreHealth;if(s=="stop_light_bleeding")return MedicalUseEffect::StopLightBleeding;if(s=="stop_any_bleeding")return MedicalUseEffect::StopAnyBleeding;if(s=="suppress_pain")return MedicalUseEffect::SuppressPain;if(s=="stabilize_fracture")return MedicalUseEffect::StabilizeFracture;
     throw std::invalid_argument("unknown medical recovery effect");
 }
 inline std::string activeSlot(EquipmentSlotKind s)

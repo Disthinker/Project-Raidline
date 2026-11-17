@@ -4860,7 +4860,7 @@ bool GameSession::advanceContinuousHealing(
 void GameSession::advanceAlphaMedicalStatus(float deltaTime)
 {
     if (!std::isfinite(deltaTime) || deltaTime <= 0.0F ||
-        (!hasPain(profile_.medicalStatus) &&
+        (profile_.medicalStatus.bleeding == BleedingSeverity::None &&
          profile_.medicalStatus.painkillerRemainingMs == 0))
     {
         return;
@@ -4941,27 +4941,34 @@ void GameSession::applyAlphaIncomingDamage()
                 break;
             }
         }
+        const auto &content = publishedContentRegistry();
+        IncomingDamageCommand command{observation.baseDamage, observation.region,
+            observation.penetration, observation.armorDamage, observation.weakPoint, {}};
+        if (observation.attackType == EnemyAttackType::LowLunge)
+        {
+            // The new encounter does not consume the existing bleeding stream.
+            const auto hit = queryIncomingDamage(profile_, content, command);
+            if (profile_.pendingRaid && hit.canCommit &&
+                eligibleForLegFracture(profile_, hit.resolution))
+            {
+                Pcg32 fractureRandom{profile_.pendingRaid->seed ^ (fractureRandomSequence_ + 1),
+                    0x6672616374757265ULL};
+                command.fractureRoll = fractureRandom.bounded(10000U);
+            }
+        }
+        else
+        {
+            const std::uint64_t woundSequence = ++woundRandomSequence_;
+            Pcg32 woundRandom{
+                (profile_.pendingRaid ? profile_.pendingRaid->seed : 1ULL) ^ woundSequence,
+                0x776f756e642d726fULL};
+            command.wound = {observation.woundSource, woundRandom.bounded(10000U),
+                15000U + woundRandom.bounded(10001U)};
+        }
         ProfileState candidate = profile_;
-        const std::uint64_t woundSequence = ++woundRandomSequence_;
-        Pcg32 woundRandom{
-            (profile_.pendingRaid ? profile_.pendingRaid->seed : 1ULL) ^ woundSequence,
-            0x776f756e642d726fULL};
         const IncomingDamageReceipt receipt = executeIncomingDamage(
-            candidate,
-            publishedContentRegistry(),
-            IncomingDamageCommand{
-                observation.baseDamage,
-                observation.region,
-                observation.penetration,
-                observation.armorDamage,
-                observation.weakPoint,
-                WoundRollCommand{
-                    observation.woundSource,
-                    woundRandom.bounded(10000U),
-                    15000U + woundRandom.bounded(10001U)}},
-            CommandContext{
-                profile_.revision,
-                nextRaidTransaction("incoming-damage")});
+            candidate, content, command,
+            CommandContext{profile_.revision, nextRaidTransaction("incoming-damage")});
         if (!receipt.succeeded ||
             !commitProfileCandidate(std::move(candidate), false))
         {
@@ -4972,6 +4979,8 @@ void GameSession::applyAlphaIncomingDamage()
             break;
         }
 
+        if (command.fractureRoll && !receipt.idempotent)
+            ++fractureRandomSequence_;
         lastIncomingDamage_ = receipt.resolution;
 
         static_cast<void>(world_->damagePlayer(

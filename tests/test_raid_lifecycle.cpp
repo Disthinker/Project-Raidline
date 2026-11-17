@@ -172,6 +172,12 @@ TEST(RaidLifecycleTest, HospitalRealDeployHasReachableConsumersAcross128Seeds)
         EXPECT_EQ(std::count_if(raid.loot.begin(), raid.loot.end(), [](const auto &loot) {
             return loot.definitionId == kHospitalNightVisionId;
         }), 1);
+        EXPECT_EQ(std::count_if(raid.enemies.begin(), raid.enemies.end(), [](const auto &enemy) {
+            return enemy.spaceId == kHospitalFloorplanSpaceId && isLowLungeEnemyVariant(enemy.variant);
+        }), 1);
+        EXPECT_EQ(std::count_if(raid.loot.begin(), raid.loot.end(), [](const auto &loot) {
+            return loot.spaceId == kHospitalFloorplanSpaceId && loot.definitionId == kRaidFieldSplintId;
+        }), 1);
         EXPECT_TRUE(validateProfileState(profile, content).valid);
         hashes.insert(raid.spatialLayout.layoutHash);
         for (const auto id : {kRaidAnchorPlayerSpawn, kRaidAnchorNormalExtraction,
@@ -182,9 +188,81 @@ TEST(RaidLifecycleTest, HospitalRealDeployHasReachableConsumersAcross128Seeds)
     EXPECT_GT(hashes.size(), 96U);
 }
 
-TEST(RaidLifecycleTest, HospitalMedicalReserveAddsOnlyRescueAndFixedPharmacyStock)
+namespace
+{
+ContentRegistry contentBeforeHospitalFracture()
+{
+    auto document = nlohmann::json::parse(publishedContentJson());
+    document["content_version"] = kRaidLostWeaponPursuitContentVersion;
+    return ContentRegistry::fromJson(document.dump());
+}
+}
+
+TEST(RaidLifecycleTest, HospitalFractureChangesOnlyTheEmergencyEncounterAndLoot)
 {
     const auto &current = publishedContentRegistry();
+    const auto previous = contentBeforeHospitalFracture();
+    const auto &interior = current.map(kHospitalFloorplanMapId).interiors.front();
+    const auto emergency = std::find_if(interior.lootSlots.begin(), interior.lootSlots.end(),
+        [&](const auto &slot) { return isHospitalFractureLootSlot(kHospitalFloorplanMapId, interior.id, slot.id); });
+    ASSERT_NE(emergency, interior.lootSlots.end());
+
+    for (const auto seed : {1U, 42U, 9917U, 47091U})
+    {
+        SCOPED_TRACE(seed);
+        auto legacy = makeNewAlphaProfile("hospital-fracture-compare", previous);
+        auto active = makeNewAlphaProfile("hospital-fracture-compare", current);
+        const DeployCommand deploy{"hospital-fracture-raid", "hospital-fracture-return", seed, kHospitalFloorplanMapId};
+        const auto before = executeDeploy(legacy, previous, deploy, {legacy.revision, "hospital-fracture-deploy"});
+        const auto after = executeDeploy(active, current, deploy, {active.revision, "hospital-fracture-deploy"});
+        ASSERT_TRUE(before.succeeded) << before.message;
+        ASSERT_TRUE(after.succeeded) << after.message;
+        const auto &oldRaid = *legacy.pendingRaid;
+        const auto &newRaid = *active.pendingRaid;
+        EXPECT_EQ(newRaid.spatialLayout, oldRaid.spatialLayout);
+        EXPECT_EQ(newRaid.interiors, oldRaid.interiors);
+        EXPECT_EQ(newRaid.rescue, oldRaid.rescue);
+        ASSERT_EQ(newRaid.enemies.size(), oldRaid.enemies.size());
+        ASSERT_EQ(newRaid.loot.size(), oldRaid.loot.size());
+
+        std::size_t replacedEnemies{};
+        for (std::size_t i = 0; i < oldRaid.enemies.size(); ++i)
+        {
+            auto expected = oldRaid.enemies[i];
+            if (expected.spaceId == kHospitalFloorplanSpaceId &&
+                expected.position.x == kHospitalLowLungeSpawnPosition.x &&
+                expected.position.y == kHospitalLowLungeSpawnPosition.y)
+            {
+                ++replacedEnemies;
+                EXPECT_FALSE(expected.variant);
+                expected.variant = lowLungeEnemyVariantSnapshot();
+            }
+            EXPECT_EQ(newRaid.enemies[i], expected);
+        }
+        EXPECT_EQ(replacedEnemies, 1U);
+
+        std::size_t replacedDrops{};
+        for (std::size_t i = 0; i < oldRaid.loot.size(); ++i)
+        {
+            auto expected = oldRaid.loot[i];
+            if (expected.spaceId == interior.id && expected.position.x == emergency->position.x &&
+                expected.position.y == emergency->position.y)
+            {
+                ++replacedDrops;
+                expected.definitionId = kRaidFieldSplintId;
+                expected.quantity = 1U;
+            }
+            EXPECT_EQ(newRaid.loot[i], expected);
+        }
+        EXPECT_EQ(replacedDrops, 1U);
+        EXPECT_TRUE(validateProfileState(legacy, current).valid);
+        EXPECT_TRUE(validateProfileState(active, current).valid);
+    }
+}
+
+TEST(RaidLifecycleTest, HospitalMedicalReserveAddsOnlyRescueAndFixedPharmacyStock)
+{
+    const auto current = contentBeforeHospitalFracture();
     const auto previous = ContentRegistry::fromJson(contentBeforeHospitalMedicalReserveJson().dump());
     const auto &interior = current.map(kHospitalFloorplanMapId).interiors.front();
     const auto pharmacy = std::find_if(interior.lootSlots.begin(), interior.lootSlots.end(),

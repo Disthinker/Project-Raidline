@@ -322,7 +322,8 @@ void GameSession::finishBaseDefenseFrame(BaseWorld &world, float deltaTime)
     {baseDefenseSaveBlocked_=baseDefenseSimulationRejected_=true;return;}
     // The same medical rules as Raid, with only their small participants staged.
     // A Base defense has no PendingRaid and must not call the Raid-only ticker.
-    if (hasPain(profile_.medicalStatus) || profile_.medicalStatus.painkillerRemainingMs > 0)
+    if (profile_.medicalStatus.bleeding != BleedingSeverity::None ||
+        profile_.medicalStatus.painkillerRemainingMs > 0)
     {
         medicalTickAccumulatorSeconds_ =
             std::min(1.0F, medicalTickAccumulatorSeconds_ + std::max(0.0F, deltaTime));

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-lost-weapon-pursuit-content-89",
+  "content_version": "raid-fracture-and-field-stabilization-content-90",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -15,7 +15,8 @@
   "enemy_combat_definitions": [
     {"id": "enemy.infected.basic", "maximum_health": 12},
     {"id": "enemy.infected.armored", "maximum_health": 12, "torso_armor": {"protection_requirement": 7, "durability": 9, "durability_loss_basis_points": 10000}},
-    {"id": "enemy.infected.runner", "maximum_health": 8, "movement": {"normal_move_speed": 90, "visible_pursuit_move_speed": 270, "attack_profile": "enemy.attack.infected-standard-v1"}}
+    {"id": "enemy.infected.runner", "maximum_health": 8, "movement": {"normal_move_speed": 90, "visible_pursuit_move_speed": 270, "attack_profile": "enemy.attack.infected-standard-v1"}},
+    {"id": "enemy.infected.low_lunge", "maximum_health": 12, "movement": {"normal_move_speed": 72, "visible_pursuit_move_speed": null, "attack_profile": "enemy.attack.infected-low-lunge-v1"}}
   ],
   "base_services": {
     "gunsmith_full_maintenance": {
@@ -26,7 +27,8 @@
     "player_medical": {
       "missing_health_cost_per_point": 3,
       "light_bleeding_cost": 30,
-      "heavy_bleeding_cost": 60
+      "heavy_bleeding_cost": 60,
+      "fracture_cost": 45
     },
     "resident_medical": {
       "required_contribution": 10,
@@ -331,6 +333,17 @@
           {"item": "item.loot.industrial_fasteners", "quantity": 1}
         ],
         "output": {"item": "item.loot.freight_breach_wedges", "quantity": 1},
+        "worker_count": 1,
+        "duration_minutes": 90
+      },
+      {
+        "id": "base_manufacturing.field_splint",
+        "display_name": "Field Splint",
+        "inputs": [
+          {"item": "item.medical.bandage_basic", "quantity": 1},
+          {"item": "item.loot.scrap_parts", "quantity": 1}
+        ],
+        "output": {"item": "item.medical.field_splint", "quantity": 1},
         "worker_count": 1,
         "duration_minutes": 90
       }
@@ -1446,6 +1459,29 @@
       "maximum_charges": 1,
       "medical_use": {
         "effect": "stop_any_bleeding",
+        "action_duration_ms": 4000,
+        "effect_magnitude": 1,
+        "slow_movement": true
+      }
+    },
+    {
+      "id": "item.medical.field_splint",
+      "display_name": "Field Splint",
+      "category": "medical",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 1,
+      "unit_weight_grams": 300,
+      "visual_assets_published": true,
+      "world": {
+        "render_size": {"x": 64, "y": 64},
+        "pickup_size": {"x": 72, "y": 72}
+      },
+      "inventory_texture": "items/inventory/item_medkit_basic_v1_128x128.png",
+      "world_texture": "items/world/item_medkit_basic_v1_64x64.png",
+      "market_recycle_price": 10,
+      "maximum_charges": 1,
+      "medical_use": {
+        "effect": "stabilize_fracture",
         "action_duration_ms": 4000,
         "effect_magnitude": 1,
         "slow_movement": true

@@ -34,6 +34,13 @@ struct DamageParticipants
 DamageParticipants inspect(const ProfileState &candidate, const ContentRegistry &content,
                            const IncomingDamageCommand &command)
 {
+    if (command.fractureRoll && *command.fractureRoll >= 10000)
+    {
+        return {failure(DomainErrorCode::InvalidQuantity, "fracture roll is out of range",
+                        candidate.revision),
+                {}};
+    }
+
     CombatDamageCommand damage{command.baseDamage,  command.region,    command.penetration,
                                command.armorDamage, command.weakPoint, std::nullopt};
 
@@ -87,6 +94,12 @@ DamageParticipants inspect(const ProfileState &candidate, const ContentRegistry 
     {
         wound = applyWoundRoll(medicalAfter, command.wound);
     }
+    const bool causedFracture = command.fractureRoll && *command.fractureRoll < 6500 &&
+        eligibleForLegFracture(candidate, resolution);
+    if (causedFracture)
+    {
+        medicalAfter.legFractured = true;
+    }
 
     if (armorAssetId.has_value() && resolution.armorDurabilityLoss > 0)
     {
@@ -108,7 +121,8 @@ DamageParticipants inspect(const ProfileState &candidate, const ContentRegistry 
                                   armorAssetId,
                                   healthBefore,
                                   healthAfter,
-                                  wound},
+                                  wound,
+                                  causedFracture},
             medicalAfter};
 }
 
@@ -137,13 +151,21 @@ IncomingDamageReceipt apply(ProfileState &candidate, const ContentRegistry &cont
 }
 } // namespace
 
+bool eligibleForLegFracture(
+    const ProfileState &profile, const CombatDamageResolution &resolution) noexcept
+{
+    return resolution.resolved() && resolution.region == HitRegion::Legs &&
+           resolution.damageApplied >= 16 && resolution.damageApplied < profile.currentHealth &&
+           !profile.medicalStatus.legFractured;
+}
+
 IncomingDamagePlan queryIncomingDamage(const ProfileState &profile, const ContentRegistry &content,
                                        const IncomingDamageCommand &command)
 {
     const IncomingDamageReceipt receipt = inspect(profile, content, command).receipt;
     return IncomingDamagePlan{receipt.succeeded, receipt.error,      receipt.message,
                               profile.revision,  receipt.resolution, receipt.armorAssetId,
-                              receipt.wound};
+                              receipt.wound, receipt.causedFracture};
 }
 
 IncomingDamageReceipt executeIncomingDamage(ProfileState &profile, const ContentRegistry &content,

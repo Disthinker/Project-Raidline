@@ -595,6 +595,8 @@ namespace
             effect = MedicalItemEffect::StopAnyBleeding;
         else if (effectName == "suppress_pain")
             effect = MedicalItemEffect::SuppressPain;
+        else if (effectName == "stabilize_fracture")
+            effect = MedicalItemEffect::StabilizeFracture;
         else
             fail("medical effect is not supported: " + effectName);
 
@@ -914,7 +916,10 @@ ContentRegistry ContentRegistry::fromJson(
                     if (!pursuit.is_null())
                         profile.visiblePursuitMoveSpeed = requiredFiniteFloat(
                             movement, "visible_pursuit_move_speed", true);
-                    if (requiredString(movement, "attack_profile") != kStandardInfectedAttackProfileId)
+                    const auto attackProfile = requiredString(movement, "attack_profile");
+                    if (attackProfile == kLowLungeInfectedAttackProfileId)
+                        profile.attackProfileVersion = kLowLungeInfectedAttackProfileVersion;
+                    else if (attackProfile != kStandardInfectedAttackProfileId)
                         fail("unknown enemy attack profile");
                     const auto kind = enemyVariantKindFromDefinitionId(definition.id.value());
                     if (!kind || !validEnemyVariantSnapshot({*kind, profile}))
@@ -925,6 +930,10 @@ ContentRegistry ContentRegistry::fromJson(
                     (definition.maximumHealth != 8 || definition.torsoArmor ||
                      definition.movement != std::optional{runnerEnemyVariantSnapshot().movement}))
                     fail("invalid runner combat definition");
+                if (definition.id == kHospitalLowLungeEnemyId &&
+                    (definition.maximumHealth != 12 || definition.torsoArmor ||
+                     definition.movement != std::optional{lowLungeEnemyVariantSnapshot().movement}))
+                    fail("invalid hospital low-lunge combat definition");
                 if (!hasPrefix(definition.id.value(), "enemy.") ||
                     !registry.enemyCombatDefinitions_.emplace(definition.id, definition).second)
                     fail("invalid or duplicate enemy combat definition ID");
@@ -934,6 +943,9 @@ ContentRegistry ContentRegistry::fromJson(
             if (runnerCompatibleContent(registry.contentVersion_) &&
                 !registry.enemyCombatDefinitions_.contains(EnemyCombatDefinitionId{"enemy.infected.runner"}))
                 fail("runner combat definition is required by content 73");
+            if (supportsRaidFractureContent(registry.contentVersion()) &&
+                !registry.enemyCombatDefinitions_.contains(kHospitalLowLungeEnemyId))
+                fail("hospital low-lunge combat definition is required by content 90");
         }
         else
         {
@@ -989,7 +1001,9 @@ ContentRegistry ContentRegistry::fromJson(
                 playerMedical,
                 "missing_health_cost_per_point"),
             requiredPositiveUint(playerMedical, "light_bleeding_cost"),
-            requiredPositiveUint(playerMedical, "heavy_bleeding_cost")};
+            requiredPositiveUint(playerMedical, "heavy_bleeding_cost"),
+            supportsRaidFractureContent(registry.contentVersion())
+                ? requiredPositiveUint(playerMedical, "fracture_cost") : 0U};
         constexpr std::uint32_t maximumMedicalUnitCost = 10000U;
         if (registry.playerBaseMedical_.missingHealthCostPerPoint >
                 maximumMedicalUnitCost ||
@@ -998,7 +1012,8 @@ ContentRegistry ContentRegistry::fromJson(
             registry.playerBaseMedical_.heavyBleedingCost >
                 maximumMedicalUnitCost ||
             registry.playerBaseMedical_.heavyBleedingCost <
-                registry.playerBaseMedical_.lightBleedingCost)
+                registry.playerBaseMedical_.lightBleedingCost ||
+            registry.playerBaseMedical_.fractureCost > maximumMedicalUnitCost)
         {
             fail("player Base medical definition is invalid");
         }
@@ -2113,6 +2128,10 @@ ContentRegistry ContentRegistry::fromJson(
                 {
                     fail("pain suppression duration is invalid");
                 }
+                if (medical.effect == MedicalItemEffect::StabilizeFracture &&
+                    (definition.definitionId != kRaidFieldSplintId || definition.maximumCharges != 1U ||
+                     medical.actionDurationMs != 4000U || medical.effectMagnitude != 1U || !medical.slowMovement))
+                    fail("field splint medical use is invalid");
             }
             else if (definition.category == ItemCategory::Medical &&
                      definition.maximumCharges > 0)
@@ -4578,6 +4597,59 @@ ContentRegistry ContentRegistry::fromJson(
                         return recipe.outputItemDefinitionId == kHospitalFloorplanItemId;
                     }))
                 fail("hospital floor plan requires its fixed reception source");
+        }
+        if (supportsRaidFractureContent(registry.contentVersion()))
+        {
+            if (!registry.itemIndex_.contains(kRaidFieldSplintId) ||
+                !registry.baseManufacturingRecipeIndex_.contains(kRaidFieldSplintRecipeId))
+                fail("content 90 requires the workshop field splint");
+            const auto &splint = registry.item(kRaidFieldSplintId);
+            const auto &recipe = registry.baseManufacturingRecipe(kRaidFieldSplintRecipeId);
+            const auto usesOne = [&](std::string_view id)
+            {
+                return std::any_of(recipe.inputs.begin(), recipe.inputs.end(), [&](const auto &input) {
+                    return input.itemDefinitionId.value() == id && input.quantity == 1U;
+                });
+            };
+            if (splint.category != ItemCategory::Medical || splint.inventoryWidthCells != 1U ||
+                splint.inventoryHeightCells != 1U || splint.maxStackSize != 1U ||
+                splint.unitWeightGrams != 300U || splint.marketBuyPrice ||
+                splint.marketRecyclePrice != 10U || splint.baseContribution ||
+                splint.baseConstructionMaterialValue ||
+                !splint.medicalUse || splint.medicalUse->effect != MedicalItemEffect::StabilizeFracture ||
+                recipe.inputs.size() != 2U || !usesOne("item.medical.bandage_basic") ||
+                !usesOne("item.loot.scrap_parts") || recipe.outputItemDefinitionId != kRaidFieldSplintId ||
+                recipe.outputQuantity != 1U || recipe.workerCount != 1U || recipe.durationMinutes != 90U)
+                fail("hospital field splint definition or recipe is invalid");
+
+            if (registry.mapIndex_.contains(kHospitalFloorplanMapId))
+            {
+                const auto &hospital = registry.map(kHospitalFloorplanMapId);
+                const int ordinaryHealth =
+                    registry.enemyCombatDefinition(ordinaryInfectedDefinitionId()).maximumHealth;
+                const auto interior = std::find_if(hospital.interiors.begin(), hospital.interiors.end(),
+                    [](const auto &space) { return space.id == kHospitalFloorplanSpaceId; });
+                if (interior == hospital.interiors.end() ||
+                    std::count_if(interior->enemies.begin(), interior->enemies.end(), [ordinaryHealth](const auto &enemy) {
+                        return enemy.position.x == kHospitalLowLungeSpawnPosition.x &&
+                            enemy.position.y == kHospitalLowLungeSpawnPosition.y &&
+                            enemy.maximumHealth == ordinaryHealth;
+                    }) != 1 ||
+                    !std::any_of(interior->lootSlots.begin(), interior->lootSlots.end(),
+                        [&](const auto &slot) { return isHospitalFractureLootSlot(hospital.id, interior->id, slot.id); }))
+                    fail("hospital fracture encounter source is missing");
+            }
+            const auto offersSplint = [](const auto &source) { return source.itemDefinitionId == kRaidFieldSplintId; };
+            if (std::any_of(registry.lootTables_.begin(), registry.lootTables_.end(), [&](const auto &table) {
+                    return std::any_of(table.entries.begin(), table.entries.end(), offersSplint);
+                }) || std::any_of(registry.maps_.begin(), registry.maps_.end(), [&](const auto &map) {
+                    return std::any_of(map.groundItems.begin(), map.groundItems.end(), offersSplint);
+                }) || std::any_of(registry.baseManufacturingRecipes_.begin(),
+                    registry.baseManufacturingRecipes_.end(), [](const auto &candidate) {
+                        return candidate.outputItemDefinitionId == kRaidFieldSplintId &&
+                            candidate.id != kRaidFieldSplintRecipeId;
+                    }))
+                fail("field splint requires its fixed encounter or workshop source");
         }
         if (supportsFreightBreachContent(registry.contentVersion()))
         {

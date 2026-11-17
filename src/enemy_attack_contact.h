@@ -30,8 +30,7 @@ template <class LineOfSight>
         !std::isfinite(protectionRemaining) || protectionRemaining < 0.0F ||
         (!enemy.hasGrabContactOpportunity() && !enemy.hasAttackHitOpportunity()))
         return {};
-    const auto hitbox = enemy.attackHitbox();
-    if (!hitbox || !isCollision(*hitbox, targetBounds) || !lineOfSight())
+    if (!enemy.attackOverlaps(targetBounds) || !lineOfSight())
         return {};
 
     // Grab deals no damage itself. Contact commits the existing owned Bite

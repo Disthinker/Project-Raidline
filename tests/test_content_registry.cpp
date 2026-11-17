@@ -145,7 +145,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        kRaidLostWeaponPursuitContentVersion);
+        kRaidFractureContentVersion);
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -221,6 +221,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
         3U);
     EXPECT_EQ(registry.playerBaseMedical().lightBleedingCost, 30U);
     EXPECT_EQ(registry.playerBaseMedical().heavyBleedingCost, 60U);
+    EXPECT_EQ(registry.playerBaseMedical().fractureCost, 45U);
     EXPECT_EQ(registry.residentMedical().requiredContribution, 10U);
     EXPECT_EQ(registry.residentMedical().durationMinutes, 360U);
     EXPECT_EQ(registry.baseOperations().strainedBelowReserveDays, 3U);
@@ -249,7 +250,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(registry.baseWorkforce().generalFallbackDurationPercent, 150U);
     EXPECT_EQ(registry.baseWorkforce().workshopLevel2DurationPercent, 85U);
     EXPECT_EQ(registry.baseWorkforce().medicalLevel2DurationPercent, 85U);
-    ASSERT_EQ(registry.baseManufacturingRecipes().size(), 10U);
+    ASSERT_EQ(registry.baseManufacturingRecipes().size(), 11U);
     const BaseManufacturingRecipeDefinition &manufacturing =
         registry.baseManufacturingRecipe(
             BaseManufacturingRecipeDefinitionId{
@@ -277,7 +278,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.category, BaseSupplyCategory::Recreation);
     EXPECT_EQ(comfort.requiredContribution, 14U);
     EXPECT_FALSE(comfort.sourceHint.empty());
-    ASSERT_EQ(registry.items().size(), 72U);
+    ASSERT_EQ(registry.items().size(), 73U);
     const auto &light = registry.item(ItemDefinitionId{"item.component.weapon_flashlight_basic"});
     const auto &battery = registry.item(ItemDefinitionId{"item.battery.universal"});
     ASSERT_TRUE(light.weaponLight);
@@ -2057,6 +2058,8 @@ TEST(ContentRegistryTest, FieldMedicalRecipesPreserveExistingProductionAndSingle
          {{ItemDefinitionId{"item.loot.first_aid_stock"}, 1}}},
         {"base_manufacturing.bandage_roll_basic_repack", "item.medical.bandage_roll_basic", 1, 60,
          {{ItemDefinitionId{"item.loot.first_aid_stock"}, 1}}},
+        {"base_manufacturing.field_splint", "item.medical.field_splint", 1, 90,
+         {{ItemDefinitionId{"item.medical.bandage_basic"}, 1}, {ItemDefinitionId{"item.loot.scrap_parts"}, 1}}},
         {"base_manufacturing.ammunition_5_45x39_expanding", "item.ammunition.5_45x39_expanding", 18, 120,
          {{ItemDefinitionId{"item.loot.precision_components"}, 1}}},
         {"base_manufacturing.armor_repair_tool", "item.maintenance.armor_kit_basic", 1, 240,
@@ -2276,7 +2279,7 @@ TEST(ContentRegistryTest, OpticDefinitionsSeparateTheReceiverMountAndOpticModes)
 TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDefinitions)
 {
     const auto original = hospitalContentCandidateJson();
-    ASSERT_EQ(original.at("content_version").get<std::string>(), kRaidLostWeaponPursuitContentVersion);
+    ASSERT_EQ(original.at("content_version").get<std::string>(), kRaidFractureContentVersion);
     for (const auto *required : {"fortifications", "enemy_combat_definitions"})
     {
         SCOPED_TRACE(required);
@@ -2288,6 +2291,30 @@ TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDe
     auto &spawn = invalid["enemy_deployments"][0]["enemies"][0];
     spawn.erase("enemy_combat_definition");
     spawn["maximum_health"] = 3;
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid.dump())), ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, FractureContentRejectsMismatchedAttackAndSplintContracts)
+{
+    const auto &content = publishedContentRegistry();
+    const auto &splint = content.item(kRaidFieldSplintId);
+    ASSERT_TRUE(splint.medicalUse);
+    EXPECT_EQ(splint.maximumCharges, 1U);
+    EXPECT_EQ(splint.medicalUse->effect, MedicalItemEffect::StabilizeFracture);
+    EXPECT_EQ(splint.medicalUse->actionDurationMs, 4000U);
+    EXPECT_EQ(content.enemyCombatDefinition(kHospitalLowLungeEnemyId).movement,
+        std::optional{lowLungeEnemyVariantSnapshot().movement});
+
+    const auto original = hospitalContentCandidateJson();
+    auto invalid = original;
+    for (auto &definition : invalid["enemy_combat_definitions"])
+        if (definition.at("id").get<std::string>() == kHospitalLowLungeEnemyId.value())
+            definition["movement"]["attack_profile"] = kStandardInfectedAttackProfileId;
+    EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid.dump())), ContentRegistryError);
+    invalid = original;
+    for (auto &item : invalid["items"])
+        if (item.at("id").get<std::string>() == kRaidFieldSplintId.value())
+            item["medical_use"]["slow_movement"] = false;
     EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(invalid.dump())), ContentRegistryError);
 }
 

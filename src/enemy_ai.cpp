@@ -337,8 +337,9 @@ void EnemyAiState::recordAttackStarted(
         specialChargeHoldTime_ = 0.0F;
         break;
     case EnemyAttackType::Scratch:
+    case EnemyAttackType::LowLunge:
         scratchCooldownRemaining_ = config_.scratchCooldown;
-        specialChargeArmed_ = true;
+        specialChargeArmed_ = type == EnemyAttackType::Scratch;
         specialChargeHoldTime_ = 0.0F;
         break;
     case EnemyAttackType::Bite:
@@ -383,6 +384,7 @@ float EnemyAiState::cooldownRemaining(
     case EnemyAttackType::Grab:
         return grabCooldownRemaining_;
     case EnemyAttackType::Scratch:
+    case EnemyAttackType::LowLunge:
         return scratchCooldownRemaining_;
     case EnemyAttackType::Bite:
         return 0.0F;

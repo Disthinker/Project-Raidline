@@ -7,7 +7,8 @@ enum class MedicalUseEffect
     RestoreHealth,
     StopLightBleeding,
     StopAnyBleeding,
-    SuppressPain
+    SuppressPain,
+    StabilizeFracture
 };
 
 enum class BleedingSeverity
@@ -31,6 +32,7 @@ struct MedicalStatusState
     std::uint32_t bleedingDamageRemainingMs{};
     std::uint32_t painkillerRemainingMs{};
     std::uint32_t painScreamRemainingMs{};
+    bool legFractured{};
 
     friend bool operator==(const MedicalStatusState &, const MedicalStatusState &) = default;
 };
@@ -60,7 +62,7 @@ struct MedicalStatusState
 
 [[nodiscard]] constexpr bool hasPain(const MedicalStatusState &status) noexcept
 {
-    return status.bleeding != BleedingSeverity::None;
+    return status.bleeding != BleedingSeverity::None || status.legFractured;
 }
 
 [[nodiscard]] constexpr bool painIsSuppressed(const MedicalStatusState &status) noexcept

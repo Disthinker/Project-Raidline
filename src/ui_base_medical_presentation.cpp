@@ -67,8 +67,9 @@ std::string uiBaseMedicalActionKey(UiBaseMedicalControl control, UiBaseMedicalTa
         // The caller binds the selected tab too. Do not bind elapsed time or
         // unrelated revisions: ordinary world-clock ticks do not change a quote.
         if (tab == UiBaseMedicalTab::Personal) {
-            key += fmt::format(":{}:{}:{}:{}:{}:{}:{}", p.currency, p.health,
-                static_cast<int>(p.medical.bleeding), p.player.canCommit, p.player.quotedCurrency,
+            key += fmt::format(":{}:{}:{}:{}:{}:{}:{}:{}", p.currency, p.health,
+                static_cast<int>(p.medical.bleeding), p.medical.legFractured,
+                p.player.canCommit, p.player.quotedCurrency,
                 p.player.healthCost, p.player.injuryCost);
         } else {
             key += fmt::format(":{}:{}:{}:{}:{}:{}:{}", p.resident.canCommit, p.resident.durationMinutes,

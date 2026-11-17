@@ -277,6 +277,48 @@ TEST(WorldWeaponActivityRuntime, BaseContinuousMedicalKeepsAppliedPortionAndSing
     EXPECT_EQ(remaining?remaining->remainingCharges:0U,chargesAfter);
 }
 
+TEST(WorldWeaponActivityRuntime, BaseSplintInterruptsAndCommitsWithoutStaleRecovery)
+{
+    GameSession session;
+    BaseWorld world;
+    const auto loadout = prepareBase(session, world);
+    const auto &content = publishedContentRegistry();
+    const auto splint = addChestSupply(session, loadout.rig,
+        content.item(ItemDefinitionId{"item.medical.field_splint"}));
+    auto &profile = WeaponHandlingTestAccess::profile(session);
+    profile.currentHealth = 85;
+    profile.medicalStatus.legFractured = true;
+
+    ASSERT_TRUE(session.startAlphaMedical(splint));
+    static_cast<void>(session.updateBaseWorld(world, {}, 1.0F));
+    ASSERT_TRUE(session.profile().basePlayerEffects);
+    ASSERT_TRUE(session.profile().basePlayerEffects->medical);
+    EXPECT_EQ(session.profile().basePlayerEffects->medical->medicalAssetId, splint);
+    EXPECT_TRUE(session.profile().medicalStatus.legFractured);
+
+    GameplayInput sprint;
+    sprint.sprint = true;
+    static_cast<void>(session.updateBaseWorld(world, sprint, 0.1F));
+    EXPECT_FALSE(session.playerActionState().active());
+    ASSERT_NE(session.profile().assets.find(splint), nullptr);
+    EXPECT_EQ(session.profile().assets.find(splint)->remainingCharges, 1U);
+    EXPECT_TRUE(session.profile().medicalStatus.legFractured);
+    static_cast<void>(session.updateBaseWorld(world, {}, 0.1F));
+
+    ASSERT_TRUE(session.startAlphaMedical(splint));
+    for (int tick = 0; tick < 4; ++tick)
+        static_cast<void>(session.updateBaseWorld(world, {}, 1.0F));
+
+    EXPECT_FALSE(session.playerActionState().active());
+    EXPECT_FALSE(session.profile().medicalStatus.legFractured);
+    EXPECT_EQ(session.profile().currentHealth, 85);
+    EXPECT_EQ(session.profile().assets.find(splint), nullptr);
+    ASSERT_TRUE(session.profile().basePlayerEffects);
+    EXPECT_FALSE(session.profile().basePlayerEffects->medical);
+    const auto validation = validateProfileState(session.profile(), content);
+    EXPECT_TRUE(validation.valid) << validation.message;
+}
+
 TEST(WorldWeaponActivityRuntime, BaseCoreThrowRejectsBeforeConsumptionAndArmedRecoveryDoesNotConsumeAgain)
 {
     GameSession session;BaseWorld world;const auto ids=prepareBase(session,world);

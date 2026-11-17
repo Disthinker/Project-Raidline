@@ -915,6 +915,9 @@ DeployReceipt executeDeploy(
     snapshot.hospitalMedicalReserveEnabled = regionalMissionCount == 0U &&
         command.mapDefinitionId == kHospitalFloorplanMapId &&
         supportsHospitalMedicalReserveContent(content.contentVersion());
+    const bool hospitalFractureRules = regionalMissionCount == 0U &&
+        command.mapDefinitionId == kHospitalFloorplanMapId &&
+        supportsRaidFractureContent(content.contentVersion());
     if (regionalMissionCount == 0U && !map->fieldIntelligenceTradePositions.empty())
     {
         Pcg32 tradeRandom{command.seed, 0x6669656c642d7472ULL};
@@ -1145,6 +1148,7 @@ DeployReceipt executeDeploy(
                 enemy.position, enemy.size, enemy.maximumHealth});
         }
     }
+    bool hospitalLungePlaced{};
     for (std::size_t interiorIndex{};
          interiorIndex < map->interiors.size(); ++interiorIndex)
     {
@@ -1175,8 +1179,26 @@ DeployReceipt executeDeploy(
                 enemy.size,
                 enemy.maximumHealth,
                 interior.id});
+            if (hospitalFractureRules && interior.id == kHospitalFloorplanSpaceId &&
+                enemy.position.x == kHospitalLowLungeSpawnPosition.x &&
+                enemy.position.y == kHospitalLowLungeSpawnPosition.y)
+            {
+                const auto &definition = content.enemyCombatDefinition(kHospitalLowLungeEnemyId);
+                if (hospitalLungePlaced || !definition.movement ||
+                    !validEnemyVariantVitals({EnemyVariantKind::LowLunge, *definition.movement},
+                        definition.maximumHealth, definition.torsoArmor))
+                    return deployFailure(RaidLifecycleError::InvalidProfile,
+                        "hospital low-lunge encounter is invalid", profile.revision);
+                snapshot.enemies.back().maximumHealth = definition.maximumHealth;
+                snapshot.enemies.back().variant =
+                    EnemyVariantSnapshot{EnemyVariantKind::LowLunge, *definition.movement};
+                hospitalLungePlaced = true;
+            }
         }
     }
+    if (hospitalFractureRules && !hospitalLungePlaced)
+        return deployFailure(RaidLifecycleError::InvalidProfile,
+            "hospital low-lunge spawn is missing", profile.revision);
     for (EquipmentSlotKind slot : {
              EquipmentSlotKind::PrimaryWeapon,
              EquipmentSlotKind::SecondaryWeapon,
@@ -1309,6 +1331,7 @@ DeployReceipt executeDeploy(
     const bool fuelExtractionRules = sealedFreightRules &&
         supportsFuelExtractionContent(content.contentVersion());
     std::optional<AssetInstanceId> freightSupplyAssetId;
+    bool hospitalSplintPlaced{};
     for (std::size_t interiorIndex{};
          interiorIndex < map->interiors.size(); ++interiorIndex)
     {
@@ -1331,6 +1354,8 @@ DeployReceipt executeDeploy(
                 isHospitalFloorplanLootSlot(map->id, interior.id, slot.id);
             const bool hospitalPharmacySlot = snapshot.hospitalMedicalReserveEnabled &&
                 isHospitalPharmacyLootSlot(map->id, interior.id, slot.id);
+            const bool hospitalSplintSlot = hospitalFractureRules &&
+                isHospitalFractureLootSlot(map->id, interior.id, slot.id);
             const bool sealedFreightSlot = sealedFreightRules && interior.id == kFreightCrateSpaceId &&
                 slot.id == kFreightCrateSlotId;
             const bool fuelSlot = fuelExtractionRules && interior.id == kFreightCrateSpaceId &&
@@ -1339,12 +1364,15 @@ DeployReceipt executeDeploy(
                 ? kHospitalNightVisionId
                 : hospitalFloorplanSlot ? kHospitalFloorplanItemId
                 : hospitalPharmacySlot ? kHospitalFirstAidStockId
+                : hospitalSplintSlot ? kRaidFieldSplintId
                 : sealedFreightSlot ? kFreightCrateSupplyId
                 : fuelSlot ? kRaidFuelCanId : entry.itemDefinitionId;
             if (nightVisionSlot)
                 snapshot.hospitalNightVisionLoot = true;
+            if (hospitalSplintSlot)
+                hospitalSplintPlaced = true;
             if (nightVisionSlot || hospitalFloorplanSlot || hospitalPharmacySlot ||
-                sealedFreightSlot || fuelSlot)
+                hospitalSplintSlot || sealedFreightSlot || fuelSlot)
                 quantity = 1U;
             const AssetInstanceId assetId = candidate.assets.create(
                 content.item(item),
@@ -1370,8 +1398,11 @@ DeployReceipt executeDeploy(
         return deployFailure(RaidLifecycleError::InvalidProfile,
             "fuel extraction requires the fixed service bay Loot slot", profile.revision);
 
-    if (selfRecoveryRecord &&
-        content.contentVersion() == kRaidLostWeaponPursuitContentVersion)
+    if (hospitalFractureRules && !hospitalSplintPlaced)
+        return deployFailure(RaidLifecycleError::InvalidProfile,
+            "hospital splint Loot slot is missing", profile.revision);
+
+    if (selfRecoveryRecord && supportsLostWeaponPursuitContent(content.contentVersion()))
     {
         if (const auto weapon = selectRaidPursuitWeapon(candidate.assets, content, *selfRecoveryRecord))
         {
