@@ -13,6 +13,7 @@
 #include "base_world.h"
 #include "base_workforce_domain.h"
 #include "game_session.h"
+#include "raid_fire_support_domain.h"
 #include "weapon_component_domain.h"
 #include "profile_ui_test_wait.h"
 #include "medical_domain.h"
@@ -3131,6 +3132,51 @@ TEST(AlphaExtractionSessionTest, NightRendezvousSurvivesAbnormalExitAndCannotBeR
     ASSERT_TRUE(reopened.deployAlpha(1U, kRaidNightRendezvousMapId)) << reopened.persistenceMessage();
     EXPECT_FALSE(reopened.profile().pendingRaid->nightRendezvous);
     EXPECT_TRUE(reopened.profile().pendingRaid->rescue);
+}
+
+TEST(AlphaExtractionSessionTest, FireSupportReplacementCommitSurvivesAbnormalExitOnce)
+{
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-fire-support-", "replacement-rescue");
+    const auto &content = publishedContentRegistry();
+    const SaveRepository repository{directory.path()};
+    auto profile = makeNewAlphaProfile("fire-support-replacement", content);
+    const std::string death{"previous-teammate-death"};
+    profile.committedSettlements.insert(death);
+    profile.committedRescues.insert(kRaidFireSupportReplacementRescueId);
+    profile.fireSupportReplacement = RaidFireSupportReplacement{death, kRaidFireSupportReplacementDelayMinutes};
+    profile.worldClock.elapsedWorldMinutes = kRaidFireSupportReplacementDelayMinutes;
+    ASSERT_TRUE(repository.save(profile, content.contentVersion()).succeeded);
+
+    {
+        GameSession session;
+        session.configurePersistence(directory.path());
+        ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+        ASSERT_TRUE(session.deployAlpha(1U, kRaidFireSupportReplacementMapId)) << session.persistenceMessage();
+        ASSERT_TRUE(session.profile().pendingRaid->rescue);
+        ASSERT_EQ(session.profile().pendingRaid->fireSupportReplacementSource, death);
+        ASSERT_NO_FATAL_FAILURE(clearNightRendezvousEnemies(session));
+        ASSERT_TRUE(session.ordinarySurvivorRescuePlan()->canCommit);
+        ASSERT_FALSE(session.ordinarySurvivorRescuePlan()->alreadyCommitted);
+        ASSERT_NO_FATAL_FAILURE(placeAtTransferCenter(session, session.profile().pendingRaid->rescue->transferPoint));
+        GameplayInput hold;
+        hold.interactPressed = true;
+        session.update(hold, session.profile().pendingRaid->rescue->interactionDurationSeconds + 0.1F);
+        ASSERT_TRUE(session.profileUiCommitPending()) << session.persistenceMessage();
+        ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+        EXPECT_TRUE(session.profile().pendingRaid->rescue->secured);
+        EXPECT_FALSE(session.profile().fireSupportReplacement);
+    }
+
+    GameSession reopened;
+    reopened.configurePersistence(directory.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_FALSE(reopened.profile().pendingRaid);
+    EXPECT_FALSE(reopened.profile().fireSupportReplacement);
+    EXPECT_EQ(reopened.profile().basePopulation.ordinaryResidents, profile.basePopulation.ordinaryResidents + 1U);
+    EXPECT_TRUE(reopened.profile().committedTransactions.contains(raidFireSupportReplacementTransactionId(death)));
+    ASSERT_TRUE(reopened.deployAlpha(1U, kRaidFireSupportReplacementMapId)) << reopened.persistenceMessage();
+    EXPECT_FALSE(reopened.profile().pendingRaid->rescue);
 }
 
 TEST(AlphaExtractionSessionTest, SecuredRescuePersistsThroughActiveQuit)

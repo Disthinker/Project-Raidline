@@ -38,6 +38,7 @@ struct DeployCommand
     std::optional<RegionalOutpostDefinitionId> outpostRestorationId;
     std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId;
     std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId;
+    std::optional<RaidFireSupportLoadout> fireSupport;
 };
 
 enum class RaidDeploymentProgressStage

@@ -2,6 +2,7 @@
 #include "test_temp_directory.h"
 #include "ui_app_persistence_wait.h"
 #include "alpha_content_ids.h"
+#include "base_workforce_domain.h"
 #include "ui_base_deployment_presentation.h"
 #include "ui_lost_recovery_presentation.h"
 
@@ -40,6 +41,14 @@ struct UiBaseDeploymentTestAccess {
     static void refresh(App &a) { a.refreshBaseDeploymentUi(true); }
     static void reset(App &a) { a.resetBaseDeploymentUi(); }
     static void draw(App &a) { a.renderBaseDeployment(); }
+    static void drawFireSupportOrders(App &a) { a.renderFireSupportOrders(); }
+    static bool ordersOpen(const App &a) { return a.fireSupportOrdersOpen_; }
+    static bool captured(const App &a) { return a.relativeMouseModeActive_; }
+    static bool paused(const App &a) { return a.pauseMenu_.isOpen(); }
+    static Vec2 screenAim(const App &a) {
+        return raidWorldToScreen(a.gameSession_.world().weaponAimWorldPosition(), a.raidWorldCameraOffset());
+    }
+    static bool primaryActive(const App &a) { return a.input_.isPrimaryPointerPressed(); }
     static void frame(App &a) {
         a.processEvents(); a.update(0); a.syncRaidPointerCapture(); a.pendingRelativeAimMotion_={}; a.input_.endFrame();
         ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
@@ -272,6 +281,120 @@ protected:
         return result;
     }
 };
+
+TEST_F(UiBaseDeploymentTest, FireSupportDeploymentAndOrdersPreservePointerAndInventory)
+{
+    const auto eligibleMap = std::find_if(content.maps().begin(), content.maps().end(), [](const auto &m) {
+        return m.id == kRaidFireSupportMapId;
+    });
+    ASSERT_NE(eligibleMap, content.maps().end());
+    map(static_cast<std::size_t>(eligibleMap - content.maps().begin()));
+    control(C::FireSupportToggle);
+    EXPECT_TRUE(A::state(*app).fireSupport);
+    EXPECT_EQ(A::projection(*app).fireSupport.failure, RaidFireSupportLoadoutFailure::NoAvailableCombatResident);
+    control(C::Deploy);
+    expectNoRaid();
+    EXPECT_TRUE(A::state(*app).fireSupport);
+
+    auto &residents = profile().basePopulation.professionResidents;
+    --residents[baseProfessionIndex(BaseResidentProfession::General)];
+    ++residents[baseProfessionIndex(BaseResidentProfession::Combat)];
+    const auto addToStash = [&](const ItemDefinitionId &id, std::uint32_t quantity) -> AssetInstanceId {
+        const auto &definition = content.item(id);
+        for (int y = 0; y < 16; ++y)
+            for (int x = 0; x < 24; ++x)
+                if (profilePlacementFits(profile(), content, ProfileContainerId::stash(),
+                    {x,y}, definition, ItemOrientation::Degrees0))
+                    return profile().assets.create(definition, StoredAssetLocation{ProfileContainerId::stash(), {x,y}}, quantity);
+        return {};
+    };
+    const auto rifle = addToStash(kRaidFireSupportRifleId, 1);
+    const auto rounds = addToStash(kRaidFireSupportAmmunitionId, 30);
+    const auto spare = addToStash(ItemDefinitionId{"item.magazine.5_45x39_30"}, 1);
+    ASSERT_NE(rifle, 0U);
+    ASSERT_NE(rounds, 0U);
+    ASSERT_NE(spare, 0U);
+    profile().assets.findMutable(spare)->magazineRounds.assign(5U, {kRaidFireSupportAmmunitionId, std::nullopt});
+    ++profile().revision;
+    ASSERT_TRUE(validateProfileState(profile(), content).valid) << validateProfileState(profile(), content).message;
+    A::refresh(*app);
+    control(C::FireSupportRifle);
+    control(C::FireSupportMagazine);
+    ASSERT_EQ(A::state(*app).fireSupport, (RaidFireSupportLoadout{rifle, spare}));
+
+    const auto renderAtWindowSizes = [&](bool orders) {
+        for (const auto size : kUiWindowSizes) {
+            for (const auto language : {UiLanguage::SimplifiedChinese, UiLanguage::English}) {
+                detach();
+                attach(size.width, size.height);
+                A::text(*app).setLanguage(language);
+                const auto before = profileStateFingerprint(profile());
+                ASSERT_TRUE(SDL_SetRenderDrawColor(renderer, 10, 16, 18, 255));
+                ASSERT_TRUE(SDL_RenderClear(renderer));
+                if (orders) A::drawFireSupportOrders(*app);
+                else A::draw(*app);
+                ASSERT_TRUE(SDL_RenderPresent(renderer));
+                EXPECT_EQ(profileStateFingerprint(profile()), before);
+                EXPECT_GT(bright(orders ? SDL_FRect{940, 72, 310, 74} :
+                    uiDeploymentControlRect(C::FireSupportMagazine)), 20);
+                if (const char *output = std::getenv("RAIDLINE_FIRE_SUPPORT_UI_REVIEW_DIR"); output && *output) {
+                    const std::filesystem::path destination(output);
+                    ASSERT_TRUE(destination.is_absolute());
+                    std::filesystem::create_directories(destination);
+                    const auto name = std::string(orders ? "orders-" : "preparation-") +
+                        std::to_string(size.width) + "-" + uiLanguageCode(language) + ".png";
+                    ASSERT_TRUE(IMG_SavePNG(surface, (destination / name).string().c_str()));
+                }
+            }
+        }
+        detach();
+        attach(1280, 720);
+        A::text(*app).setLanguage(UiLanguage::English);
+    };
+    renderAtWindowSizes(false);
+    control(C::Deploy);
+    ASSERT_EQ(A::flow(*app).state(), GameFlowState::Raid);
+    ASSERT_TRUE(profile().pendingRaid && profile().pendingRaid->fireSupport);
+    const auto &loan = *profile().pendingRaid->fireSupport;
+    EXPECT_EQ(loan.rifle.assetId, rifle);
+    ASSERT_TRUE(loan.spareMagazine);
+    EXPECT_EQ(loan.spareMagazine->assetId, spare);
+
+    auto &world = A::session(*app).world();
+    ASSERT_TRUE(world.fireSupport());
+    EXPECT_EQ(world.fireSupport()->movementOrder, FireSupportMovementOrder::Follow);
+    EXPECT_EQ(world.fireSupport()->fireOrder, FireSupportFireOrder::HoldFire);
+    ASSERT_TRUE(A::captured(*app));
+    const auto before = world.weaponAimWorldPosition();
+    const auto screen = A::screenAim(*app);
+    key(SDL_SCANCODE_F2);
+    A::frame(*app);
+    ASSERT_TRUE(A::ordersOpen(*app));
+    ASSERT_FALSE(A::captured(*app));
+    Vec2 cursor{};
+    SDL_GetMouseState(&cursor.x, &cursor.y);
+    EXPECT_NEAR(cursor.x, std::clamp(screen.x, 0.0F, 1279.0F), 0.01F);
+    EXPECT_NEAR(cursor.y, std::clamp(screen.y, 0.0F, 719.0F), 0.01F);
+    renderAtWindowSizes(true);
+
+    click({1176, 88});
+    key(SDL_SCANCODE_4);
+    A::frame(*app);
+    ASSERT_TRUE(world.fireSupport());
+    EXPECT_EQ(world.fireSupport()->movementOrder, FireSupportMovementOrder::Hold);
+    EXPECT_EQ(world.fireSupport()->fireOrder, FireSupportFireOrder::FreeFire);
+    down({1176, 126});
+    key(SDL_SCANCODE_ESCAPE);
+    A::frame(*app);
+    EXPECT_FALSE(A::primaryActive(*app));
+    up({1176, 126});
+    EXPECT_FALSE(A::ordersOpen(*app));
+    EXPECT_FALSE(A::paused(*app));
+    EXPECT_TRUE(A::captured(*app));
+    const auto after = world.weaponAimWorldPosition();
+    EXPECT_NEAR(after.x, before.x, 0.01F);
+    EXPECT_NEAR(after.y, before.y, 0.01F);
+}
 
 TEST_F(UiBaseDeploymentTest, BrowsingTabsDetailsAndMapsDoesNotMutateOrGenerateRaid) {
     const auto before = profileStateFingerprint(profile()); const auto highWater = profile().assets.nextAssetId();

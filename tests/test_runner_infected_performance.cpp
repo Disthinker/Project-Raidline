@@ -311,3 +311,63 @@ TEST(WeaponOpticsPerformanceTest, LowScopeDenseObservationAndSimulationStayWithi
 {
     expectScopeBudget(WeaponOpticMode::Low);
 }
+
+TEST(RaidFireSupportRuntimeTest, ReportsDensePursuitShotAndObservationAtBothEnemyCounts)
+{
+    for (const int count : {32, 100})
+    {
+        SCOPED_TRACE(count);
+        auto config = mixedArena(count);
+        config.fireSupport = FireSupportConfig{20, 7000.0F, 12, 460.0F};
+        config.initialEnemies.front().position = {1327.0F, 790.0F};
+        ASSERT_EQ(config.initialEnemies.size(), static_cast<std::size_t>(count));
+        ASSERT_EQ(config.ballisticBlockers.size(), 220U);
+
+        std::vector<double> samples;
+        std::size_t actorsObserved{};
+        for (int iteration = 0; iteration < 160; ++iteration)
+        {
+            GameplayWorld world{config};
+            ASSERT_TRUE(world.setFireSupportOrders(
+                FireSupportMovementOrder::Follow, FireSupportFireOrder::FreeFire));
+            for (auto &enemy : RunnerInfectedTestAccess::actors(world))
+                enemy.hearTarget(center);
+            const auto victim = world.enemies().front().combatTargetId();
+            const auto initialSupport = world.fireSupport()->bounds.position;
+            const float heading = iteration * 0.09F;
+            GameplayInput input;
+            input.moveLeft = true;
+            input.aimWorldPosition = {center.x + std::cos(heading) * 500,
+                center.y + std::sin(heading) * 500};
+            input.aimWorldBounds = Rect{{}, config.worldSize};
+
+            const auto start = Clock::now();
+            world.update(input, 1.0F / 60.0F);
+            const auto &observation = world.raidObservation();
+            for (const auto &enemy : world.enemies())
+                actorsObserved += world.raidEnemyObservable(enemy.combatTargetId()) ? 1U : 0U;
+            const auto support = world.fireSupport();
+            const double elapsed = std::chrono::duration<double, std::milli>(
+                Clock::now() - start).count();
+            if (iteration >= 10)
+                samples.push_back(elapsed);
+
+            ASSERT_TRUE(support);
+            EXPECT_LT(support->bounds.position.x, initialSupport.x);
+            EXPECT_TRUE(world.fireSupportShotLastUpdate());
+            EXPECT_FALSE(RunnerInfectedTestAccess::actors(world).hasState(victim));
+            EXPECT_EQ(world.simulationWorkloadLastUpdate().activeBlockers, 220U);
+            EXPECT_EQ(world.simulationWorkloadLastUpdate().activeEnemies,
+                static_cast<std::size_t>(count));
+            EXPECT_GT(world.simulationWorkloadLastUpdate().navigationQueries, 0U);
+            EXPECT_TRUE(observation.validGeometry());
+        }
+        ASSERT_EQ(samples.size(), 150U);
+        EXPECT_GT(actorsObserved, 0U);
+        std::sort(samples.begin(), samples.end());
+        RecordProperty("support_" + std::to_string(count) + "_dense_update_p95_ms",
+            std::to_string(samples[142]));
+        std::cout << "Fire support dense update p95: enemies=" << count
+            << " blockers=220 samples=150 p95_ms=" << samples[142] << '\n';
+    }
+}

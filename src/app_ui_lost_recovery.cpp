@@ -287,10 +287,14 @@ void App::renderLostRaidRecords() {
             const auto &record = projection.records[first + row];
             const auto bounds = uiLostRecoveryRecordRect(row);
             const bool selected = projection.selectedRecordId == std::optional<std::string>{record.recordId};
+            const bool teammate = record.kind == LostRaidRecordKind::FireSupport;
+            const auto mapName = tr(record.mapDisplayName);
+            const auto title = teammate ? tr("FIRE SUPPORT TEAMMATE LOST GEAR") : mapName;
             renderFoundationButton(8700 + static_cast<int>(row), bounds, {}, true,
-                record.retainedSettlementsRemaining == 0U, selected, tr(record.mapDisplayName), 14);
-            text({bounds.x + 14, bounds.y + 5, bounds.w - 28, 21}, tr(record.mapDisplayName));
-            text({bounds.x + 14, bounds.y + 29, bounds.w - 28, 17}, retention(record, true), 12);
+                record.retainedSettlementsRemaining == 0U, selected, title, 14);
+            text({bounds.x + 14, bounds.y + 5, bounds.w - 28, 21}, title);
+            text({bounds.x + 14, bounds.y + 29, bounds.w - 28, 17},
+                teammate ? mapName + " · " + retention(record, true) : retention(record, true), 12);
         }
         if (projection.records.empty()) {
             text({76, 186, 252, 76}, "NO RECOVERABLE LOST LOADOUTS", 14, 3);
@@ -304,7 +308,8 @@ void App::renderLostRaidRecords() {
         if (projection.selectedRecord) {
             const auto &record = *projection.selectedRecord;
             text({378, 174, 490, 46}, tr(record.mapDisplayName), 16, 2);
-            const auto outcome = tr(record.outcome == RaidResultOutcome::PlayerDead ? "PLAYER DEAD" : "RAID ABANDONED");
+            const auto outcome = tr(record.kind == LostRaidRecordKind::FireSupport ? "FIRE SUPPORT TEAMMATE LOST GEAR" :
+                record.outcome == RaidResultOutcome::PlayerDead ? "PLAYER DEAD" : "RAID ABANDONED");
             text({378, 220, 490, 21}, fmt::format("{} · {} · {}", outcome,
                 tr(fmt::format("DIFFICULTY {}", record.difficulty)), timestamp(record.createdWorldMinute)), 12);
             text({378, 246, 490, 20}, fmt::format("{} {} · {} {}", tr("ENTRIES"), projection.assets.size(),
@@ -391,6 +396,8 @@ void App::renderLostRaidRecords() {
             if (!uiContains(uiLostRecoveryRecordRect(row), point)) continue;
             const auto &record = projection.records[first + row];
             reason = tr(record.mapDisplayName);
+            if (record.kind == LostRaidRecordKind::FireSupport)
+                reason += " · " + tr("FIRE SUPPORT TEAMMATE LOST GEAR");
             break;
         }
         for (std::size_t row = 0; reason.empty() && row < uiLostRecoveryAssetVisibleRows() &&

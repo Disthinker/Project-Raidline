@@ -592,6 +592,9 @@ private:
         UiDiscretePress press;
         std::string_view feedback;
     } fieldIntelligenceTradeUi_;
+    UiDiscretePress fireSupportPress_;
+    bool fireSupportOrdersOpen_{};
+    bool fireSupportUiBlocksGameplayThisFrame_{};
     std::string raidChalkRaidId_;
     bool raidChalkAimBlockedUntilRelease_{};
     std::vector<AssetInstanceId> medicalWheelOptions_;
@@ -717,7 +720,8 @@ private:
         std::optional<RegionalBaseSiteDefinitionId>
             baseSiteClearanceId = std::nullopt,
         std::optional<RegionalBaseSiteDefinitionId>
-            basePerimeterSweepId = std::nullopt);
+            basePerimeterSweepId = std::nullopt,
+        std::optional<RaidFireSupportLoadout> fireSupport = std::nullopt);
     [[nodiscard]] const MapDefinition &selectedRaidMap() const;
     void cycleSelectedRaidMap(int direction) noexcept;
     void handleRaidIntelligenceSelection(RaidIntelligenceCategory category);
@@ -933,7 +937,11 @@ private:
     bool tryOpenFieldIntelligenceTrade();
     void closeFieldIntelligenceTrade(std::string_view feedback = {});
     void updateFieldIntelligenceTradeAfterWorld();
-    void suppressFieldIntelligenceTradeControls(GameplayInput &);
+    void suppressRaidPanelControls(GameplayInput &);
+    bool routeFireSupportInput(const SDL_Event &);
+    void closeFireSupportOrders();
+    void renderFireSupportWorld();
+    void renderFireSupportOrders();
     void renderFieldIntelligenceContact();
     void renderFieldIntelligenceTrade();
     void drawFieldIntelligenceTradePanel(const RaidFieldTradeView &);

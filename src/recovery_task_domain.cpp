@@ -1,5 +1,6 @@
 #include "weapon_ammo_domain.h"
 #include "recovery_task_domain.h"
+#include "raid_fire_support_domain.h"
 
 #include <algorithm>
 #include <limits>
@@ -363,6 +364,7 @@ RecoveryTaskReceipt executeStartRecoveryTask(
     {
         candidate.lastRaidResult->lostRaidRecordId.reset();
     }
+    forgetRaidFireSupportLostRecord(candidate, recordId);
     candidate.currency -= quote.serviceFee;
     candidate.recoveryTask = std::move(task);
     candidate.committedTransactions.insert(context.transactionId);

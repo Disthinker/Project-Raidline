@@ -19,6 +19,7 @@
 #include "loot_table.h"
 #include "raid_corpse_search.h"
 #include "raid_credential_extraction.h"
+#include "raid_fire_support_runtime.h"
 #include "particle_system.h"
 #include "player.h"
 #include "player_damage_observation.h"
@@ -182,6 +183,7 @@ struct RaidWorldConfig
     std::optional<Vec2> lostWeaponPursuitFallback;
     std::optional<ContentRect> nightRendezvous;
     bool nightRendezvousUnavailable{};
+    std::optional<FireSupportConfig> fireSupport;
 };
 
 struct RaidNightRendezvousView
@@ -536,6 +538,13 @@ public:
     takePlayerDamageObservations();
 
     void emitPlayerNoise(float radius) noexcept;
+    bool setFireSupportOrders(FireSupportMovementOrder, FireSupportFireOrder) noexcept;
+    [[nodiscard]] std::optional<FireSupportView> fireSupport() const;
+    [[nodiscard]] std::optional<int> fireSupportHealth() const noexcept;
+    // A companion remains in the outdoor space, including after death.
+    [[nodiscard]] std::optional<Vec2> fireSupportDeathPosition() const noexcept;
+    [[nodiscard]] bool canInteractWithFireSupport() const noexcept;
+    [[nodiscard]] std::optional<FireSupportShotEvent> fireSupportShotLastUpdate() const noexcept;
     [[nodiscard]] bool noiseDecoyEnabled() const noexcept { return noiseDecoyEnabled_; }
     [[nodiscard]] const RaidNoiseDecoyRuntime &noiseDecoy() const noexcept { return noiseDecoy_; }
     [[nodiscard]] std::optional<NoiseDecoyLanding> previewNoiseDecoy(Vec2 aim, const NoiseDecoyUseDefinition &) const;
@@ -707,6 +716,10 @@ private:
 
     WorldShootingRuntime shooting_;
     WorldMeleeRuntime melee_;
+    std::optional<RaidFireSupportRuntime> fireSupport_;
+    template <bool FireSupportEnabled>
+    bool advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *support);
+    void emitRaidNoise(Vec2 source, float radius) noexcept;
     void consumeEnemyRemovals(std::span<const EnemyRemovalFact>);
     [[nodiscard]] Vec2 lostWeaponCorpseSearchPoint(Vec2 deathCenter) const noexcept;
     CombatTargetId nextCombatTargetId_{1};

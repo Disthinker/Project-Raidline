@@ -1,6 +1,7 @@
 #include "game_session.h"
 #include "base_world.h"
 #include "base_emergency_power_domain.h"
+#include "raid_fire_support_domain.h"
 #include <algorithm>
 #include <limits>
 #include <utility>
@@ -139,7 +140,8 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
             std::move(selfRecoveryRecordId),
             std::move(outpostRestorationId),
             std::move(baseSiteClearanceId),
-            std::move(basePerimeterSweepId)},
+            std::move(basePerimeterSweepId),
+            request.fireSupport},
         CommandContext{
             recoveryProfile.revision,
             "deploy:" + raidId},
@@ -256,6 +258,14 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
         };
 
         RaidWorldConfig worldConfig;
+        if (snapshot.fireSupport)
+        {
+            const auto &content = publishedContentRegistry();
+            const auto weapon = effectiveWeaponUse(candidate, content, snapshot.fireSupport->rifle.assetId);
+            const auto &ammunition = content.item(kRaidFireSupportAmmunitionId).ammunitionUse;
+            worldConfig.fireSupport = FireSupportConfig{weapon.baseDamage, weapon.logicalBallisticSpeed,
+                ammunition->penetration, 900.0F * weapon.acoustics.noiseRadiusMultiplier};
+        }
         const bool ordinaryToolsEnabled = !snapshot.selfRecovery && !snapshot.outpostRestoration &&
             !snapshot.baseSiteClearance && !snapshot.basePerimeterSweep;
         worldConfig.noiseDecoyEnabled = pursuit || ordinaryToolsEnabled;

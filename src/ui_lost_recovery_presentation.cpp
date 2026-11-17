@@ -54,6 +54,7 @@ std::string contextKey(const ProfileState &profile, const UiLostRecoveryProjecti
         key.add(record.mapDisplayName);
         key.add(record.difficulty);
         key.number(record.outcome);
+        key.number(record.kind);
         key.number(record.createdWorldMinute);
         key.number(record.subsequentRaidSettlementCount);
         key.number(record.retainedSettlementsRemaining);

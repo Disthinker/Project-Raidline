@@ -618,6 +618,9 @@ public:
     [[nodiscard]] std::optional<OrdinarySurvivorAdmissionPlan>
     nightRendezvousAdmissionPlan() const;
 
+    [[nodiscard]] bool canTakeFireSupportMagazine() const;
+    [[nodiscard]] InventoryReceipt takeFireSupportMagazine(std::string transactionId);
+
     [[nodiscard]] bool canSelectNoiseDecoy() const;
     [[nodiscard]] bool beginNoiseDecoySelection();
     [[nodiscard]] InventoryReceipt throwNoiseDecoy(AssetInstanceId, Vec2 aim, const CommandContext &);
@@ -877,6 +880,7 @@ private:
         float deltaTime);
     [[nodiscard]] bool settleAlphaRaid(RaidResultOutcome outcome);
     [[nodiscard]] bool secureOrdinarySurvivorRescue();
+    [[nodiscard]] bool recordFireSupportDeath(ProfileState &);
     [[nodiscard]] std::string nextRaidTransaction(std::string_view prefix);
     [[nodiscard]] std::optional<AssetInstanceId> nearbyRaidLoot() const;
     [[nodiscard]] RaidSceneContainerAccess raidSceneAccess(AssetInstanceId) const;

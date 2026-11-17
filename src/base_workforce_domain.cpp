@@ -57,6 +57,8 @@ BaseProfessionCounts facilityAssignedCounts(
     }
     if (profile.activeEngineeringTraining)
         ++counts[baseProfessionIndex(BaseResidentProfession::General)];
+    if (profile.pendingRaid && profile.pendingRaid->fireSupport)
+        ++counts[baseProfessionIndex(BaseResidentProfession::Combat)];
     return counts;
 }
 

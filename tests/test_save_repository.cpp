@@ -27,6 +27,7 @@
 #include "base_service_domain.h"
 #include "economy_domain.h"
 #include "raid_lifecycle.h"
+#include "raid_fire_support_domain.h"
 #include "raid_corpse_legacy_fixture.h"
 #include "raid_optics_legacy_fixture.h"
 #include "raid_credential_legacy_fixture.h"
@@ -123,7 +124,7 @@ TEST(SaveRepositoryTest, FrontierRoadBlockadeFrozenGeometryRoundTripsAndCannotDo
     ASSERT_TRUE(profile.pendingRaid->highRiskCrisis->roadBlockade);
     const auto saved = serializeProfileEnvelope(profile, content.contentVersion());
     const auto envelope = nlohmann::json::parse(saved);
-    EXPECT_EQ(envelope.at("schema_version"), 73U);
+    EXPECT_EQ(envelope.at("schema_version"), 74U);
     const auto loaded = deserializeProfileEnvelope(saved, content);
     ASSERT_TRUE(loaded.profile && loaded.profile->pendingRaid) << loaded.message;
     EXPECT_EQ(loaded.profile->pendingRaid->highRiskCrisis, profile.pendingRaid->highRiskCrisis);
@@ -187,12 +188,12 @@ TEST(SaveRepositoryTest, FrontierRoadBlockadeUpgradePreservesSchema69FrozenRaidA
         std::ifstream file(path, std::ios::binary);
         return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
     };
-    const auto marker = std::string{".pre-raid-night-rendezvous-and-engineering-training-v1."};
+    const auto marker = std::string{".pre-raid-single-fire-support-v1."};
     EXPECT_EQ(read(directory.path() / ("profile" + marker + testSaveChecksum(frozen) + ".json")), frozen);
     EXPECT_EQ(read(directory.path() / ("profile.backup" + marker + testSaveChecksum(backup) + ".json")), backup);
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile && reopened.sourceEnvelope) << reopened.message;
-    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 73U);
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 74U);
     EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
 }
 
@@ -232,12 +233,12 @@ TEST(SaveRepositoryTest, LostWeaponPursuitUpgradeKeepsExactContent88BlockadeAndA
         std::ifstream file(path, std::ios::binary);
         return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
     };
-    const auto marker = std::string{".pre-raid-night-rendezvous-and-engineering-training-v1."};
+    const auto marker = std::string{".pre-raid-single-fire-support-v1."};
     EXPECT_EQ(read(directory.path() / ("profile" + marker + testSaveChecksum(frozen) + ".json")), frozen);
     EXPECT_EQ(read(directory.path() / ("profile.backup" + marker + testSaveChecksum(backup) + ".json")), backup);
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile && reopened.sourceEnvelope) << reopened.message;
-    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 73U);
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 74U);
     EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
 }
 
@@ -289,6 +290,95 @@ TEST(SaveRepositoryTest, NightRendezvousRoundTripsAlongsideOrdinaryRescue)
     EXPECT_FALSE(deserializeProfileEnvelope(malformed.dump(), content).profile);
 }
 
+TEST(SaveRepositoryTest, FireSupportMigratesSchema73AndRetainsFrozenNightRendezvous)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("before-fire-support", content);
+    profile.nightRendezvousUnlocked = true;
+    profile.worldClock.elapsedWorldMinutes = 2U * kWorldMinutesPerDay + 17U * kWorldMinutesPerHour;
+    const auto departure = executeDeploy(profile, content,
+        {"schema73-night", "schema73-settlement", 9403U, kRaidNightRendezvousMapId},
+        {profile.revision, "depart"});
+    ASSERT_TRUE(departure.succeeded) << departure.message;
+    ASSERT_TRUE(profile.pendingRaid->nightRendezvous);
+
+    const auto original = serializeProfileEnvelope(profile, kRaidNightRendezvousContentVersion, 73U);
+    const auto migrated = deserializeProfileEnvelope(original, content);
+    ASSERT_TRUE(migrated.profile && migrated.sourceEnvelope && migrated.profile->pendingRaid) << migrated.message;
+    EXPECT_EQ(migrated.sourceEnvelope->schemaVersion, 73U);
+    EXPECT_FALSE(migrated.profile->pendingRaid->fireSupport);
+    EXPECT_FALSE(migrated.profile->fireSupportReplacement);
+    EXPECT_EQ(migrated.profile->pendingRaid->nightRendezvous, profile.pendingRaid->nightRendezvous);
+    EXPECT_EQ(profileStateFingerprint(*migrated.profile), profileStateFingerprint(profile));
+    EXPECT_EQ(serializeProfileEnvelope(*migrated.profile, kRaidNightRendezvousContentVersion, 73U), original);
+
+    const auto upgraded = deserializeProfileEnvelope(
+        serializeProfileEnvelope(*migrated.profile, content.contentVersion()), content);
+    ASSERT_TRUE(upgraded.profile && upgraded.sourceEnvelope) << upgraded.message;
+    EXPECT_EQ(upgraded.sourceEnvelope->schemaVersion, 74U);
+    EXPECT_EQ(profileStateFingerprint(*upgraded.profile), profileStateFingerprint(profile));
+}
+
+TEST(SaveRepositoryTest, FireSupportRoundTripsLoansCasualtyAndIndependentLoss)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("fire-support-save", content);
+    auto &residents = profile.basePopulation.professionResidents;
+    --residents[baseProfessionIndex(BaseResidentProfession::General)];
+    ++residents[baseProfessionIndex(BaseResidentProfession::Combat)];
+    const auto add = [&](const ItemDefinitionId &id, unsigned quantity) {
+        const auto &item = content.item(id);
+        const auto stash = ProfileContainerId::stash();
+        const auto room = findFirstProfileFit(profile, content, stash, item, ItemOrientation::Degrees0);
+        return room ? profile.assets.create(item, StoredAssetLocation{stash, *room}, quantity) : 0U;
+    };
+    const auto rifle = add(kRaidFireSupportRifleId, 1U);
+    const auto loose = add(kRaidFireSupportAmmunitionId, 30U);
+    const auto magazine = add(ItemDefinitionId{"item.magazine.5_45x39_30"}, 1U);
+    ASSERT_NE(rifle, 0U);
+    ASSERT_NE(loose, 0U);
+    ASSERT_NE(magazine, 0U);
+    profile.assets.findMutable(magazine)->magazineRounds.assign(
+        8U, MagazineRoundRecord{kRaidFireSupportAmmunitionId, std::nullopt});
+    DeployCommand command{"support-save-raid", "support-save-settlement", 903U, kRaidFireSupportMapId};
+    command.fireSupport = RaidFireSupportLoadout{rifle, magazine};
+    const auto departure = executeDeploy(profile, content, command, {profile.revision, "depart"});
+    ASSERT_TRUE(departure.succeeded) << departure.message;
+    ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->fireSupport);
+    const auto container = profile.pendingRaid->fireSupport->containerAssetId;
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, kRaidNightRendezvousContentVersion)),
+        std::invalid_argument);
+
+    ASSERT_TRUE(revealRaidFireSupportCorpseInSimulation(profile, content,
+        outdoorRaidSpaceId(), profile.pendingRaid->playerSpawn));
+    const auto frozen = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto opened = deserializeProfileEnvelope(frozen, content);
+    ASSERT_TRUE(opened.profile && opened.profile->pendingRaid) << opened.message;
+    EXPECT_EQ(opened.profile->pendingRaid->fireSupport, profile.pendingRaid->fireSupport);
+    EXPECT_EQ(std::get<RaidCorpseContainerAssetLocation>(opened.profile->assets.find(container)->location).sourceKind,
+        RaidCorpseSourceKind::FireSupport);
+    EXPECT_EQ(profileStateFingerprint(*opened.profile), profileStateFingerprint(profile));
+    auto malformed = nlohmann::json::parse(frozen);
+    auto &payload = malformed["payload"];
+    payload["pending_raid"]["fire_support"]["rifle"]["asset_id"] = magazine;
+    malformed["payload_checksum"] = testSaveChecksum(payload.dump());
+    EXPECT_FALSE(deserializeProfileEnvelope(malformed.dump(), content).profile);
+
+    const auto settlement = settlePendingRaid(profile, content, command.settlementId, RaidResultOutcome::Extracted);
+    ASSERT_TRUE(settlement.succeeded) << settlement.message;
+    ASSERT_TRUE(profile.lastRaidResult && profile.lastRaidResult->fireSupport && profile.fireSupportReplacement);
+    const auto loss = raidFireSupportLostRecordId(command.settlementId);
+    ASSERT_TRUE(profile.lostRaidRecords.contains(loss));
+    const auto reopened = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()), content);
+    ASSERT_TRUE(reopened.profile) << reopened.message;
+    EXPECT_EQ(reopened.profile->fireSupportReplacement, profile.fireSupportReplacement);
+    EXPECT_EQ(reopened.profile->lastRaidResult->fireSupport, profile.lastRaidResult->fireSupport);
+    EXPECT_EQ(reopened.profile->lostRaidRecords.at(loss).kind, LostRaidRecordKind::FireSupport);
+    EXPECT_EQ(reopened.profile->lostRaidRecords.at(loss).outcome, RaidResultOutcome::Extracted);
+    EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
+}
+
 TEST(SaveRepositoryTest, EngineeringTrainingOrderRoundTripsAndRejectsTamperedReservations)
 {
     const auto &content = publishedContentRegistry();
@@ -311,7 +401,7 @@ TEST(SaveRepositoryTest, EngineeringTrainingOrderRoundTripsAndRejectsTamperedRes
     const auto saved = serializeProfileEnvelope(profile, content.contentVersion());
     const auto loaded = deserializeProfileEnvelope(saved, content);
     ASSERT_TRUE(loaded.profile && loaded.sourceEnvelope) << loaded.message;
-    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 73U);
+    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 74U);
     EXPECT_EQ(loaded.profile->activeEngineeringTraining, profile.activeEngineeringTraining);
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
     EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, kRaidFractureContentVersion)),
@@ -345,7 +435,7 @@ TEST(SaveRepositoryTest, LostWeaponPursuitSnapshotRoundTripRejectsDowngradeAndIn
     const auto saved = serializeProfileEnvelope(profile, content.contentVersion());
     const auto loaded = deserializeProfileEnvelope(saved, content);
     ASSERT_TRUE(loaded.profile && loaded.sourceEnvelope) << loaded.message;
-    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 73U);
+    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 74U);
     EXPECT_EQ(loaded.profile->pendingRaid->selfRecovery->pursuit, recovery.pursuit);
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
     EXPECT_EQ(serializeProfileEnvelope(*loaded.profile, content.contentVersion()), saved);
@@ -384,7 +474,7 @@ TEST(SaveRepositoryTest, FractureRollsBackStartingStateAndFreezesHospitalEncount
     const auto saved = serializeProfileEnvelope(profile, content.contentVersion());
     const auto loaded = deserializeProfileEnvelope(saved, content);
     ASSERT_TRUE(loaded.profile && loaded.sourceEnvelope && loaded.profile->pendingRaid) << loaded.message;
-    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 73U);
+    EXPECT_EQ(loaded.sourceEnvelope->schemaVersion, 74U);
     EXPECT_FALSE(loaded.profile->medicalStatus.legFractured);
     EXPECT_TRUE(loaded.profile->pendingRaid->startingMedicalStatus.legFractured);
     EXPECT_EQ(loaded.profile->pendingRaid->enemies, profile.pendingRaid->enemies);
@@ -459,12 +549,12 @@ TEST(SaveRepositoryTest, FractureUpgradePreservesOldHospitalSnapshotAndBothSaveS
         std::ifstream file(path, std::ios::binary);
         return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
     };
-    const auto marker = std::string{".pre-raid-night-rendezvous-and-engineering-training-v1."};
+    const auto marker = std::string{".pre-raid-single-fire-support-v1."};
     EXPECT_EQ(read(directory.path() / ("profile" + marker + testSaveChecksum(frozen) + ".json")), frozen);
     EXPECT_EQ(read(directory.path() / ("profile.backup" + marker + testSaveChecksum(backup) + ".json")), backup);
     const auto reopened = repository.load(content);
     ASSERT_TRUE(reopened.profile && reopened.sourceEnvelope) << reopened.message;
-    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 73U);
+    EXPECT_EQ(reopened.sourceEnvelope->schemaVersion, 74U);
     EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
 }
 
@@ -4264,7 +4354,7 @@ TEST(SaveRepositoryTest, Schema55RoundTripsIndependentPagesOverflowAndOwnedSubtr
     ASSERT_TRUE(validateProfileState(profile, content).valid);
     const auto text = serializeProfileEnvelope(profile, content.contentVersion());
     const auto envelope = nlohmann::json::parse(text);
-    EXPECT_EQ(envelope.at("schema_version"), 73U);
+    EXPECT_EQ(envelope.at("schema_version"), 74U);
     EXPECT_EQ(envelope.at("payload").at("stash_layout_version"), 1U);
     const auto loaded = deserializeProfileEnvelope(text, content);
     ASSERT_TRUE(loaded.profile) << loaded.message;

@@ -1,8 +1,17 @@
-# 当前 · 夜间接应与工坊带教 v1 已验收
+# 当前 · 单名火力队友出击 v1 已验收
 
-灰烬工场的夜间接应连到回营带教。用桌面固定入口 **Project Raidline Debug** 打开隔离验收档，集中验收抵达预览、接应和回营带教。[联合验收清单](../acceptance/raid-night-rendezvous-and-engineering-training-v1.md)
+在边境交换站接纳战斗居民。在灰线仓库用 F2 指挥一名队友。主角失败时，存活队友带回未领取的借装。[联合验收清单](../acceptance/raid-single-fire-support-v1.md)
 
-- task_id raid-night-rendezvous-and-engineering-training-v1，plan_version RL-RAID-NIGHT-RENDEZVOUS-AND-ENGINEERING-TRAINING-v1，state accepted。用户确认“验收通过，请继续下一项开发”，验收候选为 75a3dad9d551。按约定提交并推送功能分支。
+- task_id raid-single-fire-support-v1，plan_version RL-RAID-SINGLE-FIRE-SUPPORT-v1，state accepted。用户批准整阶段，包括主角失败时的归队规则。基线 main@2e97ca723ca2904c932ba9e3e6ad470009a52fae。候选 RL-RAID-SINGLE-FIRE-SUPPORT-v1-local-e71b443eb59b 已冻结，固定桌面入口使用隔离档。
+- Windows Debug 全量 3393/3393、专项 17/17、原有 14 项 3 ms 通过。原玩家档留在原处，使用副本验证了迁移和回读。用户明确验收通过并授权提交和合并。[开发记录](../exec-plans/active/raid-single-fire-support-v1.md)
+
+---
+
+# 夜间接应与工坊带教 v1 已合并
+
+灰烬工场的夜间接应连到回营带教。用户已验收抵达预览、接应和工坊带教。[联合验收清单](../acceptance/raid-night-rendezvous-and-engineering-training-v1.md)
+
+- task_id raid-night-rendezvous-and-engineering-training-v1，plan_version RL-RAID-NIGHT-RENDEZVOUS-AND-ENGINEERING-TRAINING-v1，state merged。用户验收候选 75a3dad9d551。通过 Windows、Ubuntu CI 后，[PR #214](https://github.com/Disthinker/Project-Raidline/pull/214) 合入 main@2e97ca7。[合并后主线 CI](https://github.com/Disthinker/Project-Raidline/actions/runs/44038933202) 双平台均通过。
 - 基线 origin/main@2b472894f0ff3402d52d778562600aeb2d40a598。候选 RL-RAID-NIGHT-RENDEZVOUS-AND-ENGINEERING-TRAINING-v1-local-75a3dad9d551 已冻结。Windows Debug 全量 3376/3376、专项 52/52，原 14 项 3 ms 检查全部通过。历史档及实际玩家主备档副本已迁移回读。
 - 原策划线程回复 MAIN-NEXT-STAGE-20261117-AFTER-FRACTURE-01。验证记录和回退方式见[具体方案](../exec-plans/active/raid-night-rendezvous-and-engineering-training-v1.md)。
 

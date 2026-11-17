@@ -82,13 +82,13 @@ ProfileUiSubmission GameFlow::requestBaseWorldUiCommand(const BaseWorldUiCommand
 ProfileUiSubmission GameFlow::requestDeploy(MapDefinitionId map,RaidIntelligenceLoadout intelligence,
     std::optional<std::string> selfRecovery,std::optional<RegionalOutpostDefinitionId> restoration,
     std::optional<RegionalBaseSiteDefinitionId> clearance,std::optional<RegionalBaseSiteDefinitionId> sweep,
-    const RaidDeploymentProgressCallback &progress)
+    const RaidDeploymentProgressCallback &progress, std::optional<RaidFireSupportLoadout> fireSupport)
 {
     if(state_!=GameFlowState::Base || !persistentAlphaMode_)
         return {0,false,false,DomainErrorCode::IllegalDestination,"Persistent Base deployment is not active"};
     auto seed=profileStateFingerprint(gameSession_.profile())^0x726169646c696e65ULL;if(!seed)seed=1;
     return gameSession_.requestDeployAlpha({seed,std::move(map),intelligence,std::move(selfRecovery),
-        std::move(restoration),std::move(clearance),std::move(sweep)},progress);
+        std::move(restoration),std::move(clearance),std::move(sweep),std::move(fireSupport)},progress);
 }
 
 bool GameFlow::completeDeploy(std::uint64_t requestId)

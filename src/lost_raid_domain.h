@@ -27,6 +27,7 @@ struct LostRaidRecordProjection
     std::uint32_t subsequentRaidSettlementCount{};
     std::uint32_t retainedSettlementsRemaining{};
     std::vector<LostRaidAssetProjection> assets;
+    LostRaidRecordKind kind{LostRaidRecordKind::Player};
 };
 
 struct LostRaidAgingPreview

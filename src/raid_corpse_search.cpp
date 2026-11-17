@@ -1,5 +1,6 @@
 #include "raid_corpse_search.h"
 #include "inventory_domain.h"
+#include "raid_fire_support_domain.h"
 
 #include <algorithm>
 #include <cmath>
@@ -72,6 +73,8 @@ ProfileValidationResult freezeRaidCorpseLoot(ProfileState &profile, const Conten
 
 ProfileValidationResult validateRaidCorpseBindings(const ProfileState &profile, const ContentRegistry &content)
 {
+    const auto support = validateRaidFireSupportCorpse(profile, content);
+    if (!support.valid) return support;
     std::set<std::string> expected, roots;
     if (profile.pendingRaid && trial(*profile.pendingRaid))
     {
@@ -96,6 +99,15 @@ ProfileValidationResult validateRaidCorpseBindings(const ProfileState &profile, 
     for (const auto &[id, asset] : profile.assets.records())
         if (const auto *corpse = std::get_if<RaidCorpseContainerAssetLocation>(&asset.location))
         {
+            if (corpse->sourceKind == RaidCorpseSourceKind::FireSupport)
+            {
+                if (!profile.pendingRaid || !profile.pendingRaid->fireSupport ||
+                    profile.pendingRaid->fireSupport->containerAssetId != id)
+                    return {false, "unexpected fire support corpse"};
+                continue;
+            }
+            if (corpse->sourceKind != RaidCorpseSourceKind::Enemy)
+                return {false, "unknown corpse source kind"};
             if (!profile.pendingRaid || !expected.contains(corpse->sourceEnemyId) || !roots.insert(corpse->sourceEnemyId).second ||
                 corpse->raidId != profile.pendingRaid->raidId || corpse->spaceId != outdoorRaidSpaceId() ||
                 asset.definitionId != ItemDefinitionId{"item.container.base_storage_crate"} || asset.quantity != 1U)
@@ -118,7 +130,8 @@ ProfileValidationResult validateRaidCorpseBindings(const ProfileState &profile, 
                 const auto *corpse = root ? std::get_if<RaidCorpseContainerAssetLocation>(&root->location) : nullptr;
                 const auto point = std::find_if(profile.pendingRaid->spatialLayout.resourcePoints.begin(), profile.pendingRaid->spatialLayout.resourcePoints.end(),
                     [&](const auto &p) { return p.instanceId == loot.resourcePointInstanceId; });
-                if (!corpse || loot.sceneContainerAssetId || loot.requiresHighRisk || loot.spaceId != corpse->spaceId ||
+                if (!corpse || corpse->sourceKind != RaidCorpseSourceKind::Enemy || loot.sceneContainerAssetId ||
+                    loot.requiresHighRisk || loot.spaceId != corpse->spaceId ||
                     point == profile.pendingRaid->spatialLayout.resourcePoints.end() || point->kind != RaidResourcePointKind::Ordinary ||
                     (!loot.collected && raidSceneContainerRoot(profile, loot.assetId) != loot.corpseContainerAssetId))
                     return {false, "corpse Loot origin invalid"};
@@ -131,7 +144,8 @@ bool revealRaidCorpse(ProfileState &profile, const ContentRegistry &content, con
     if (!profile.pendingRaid || !finite(fact.position) || fact.spaceId != outdoorRaidSpaceId()) return false;
     for (const auto &[id, asset] : profile.assets.records())
         if (const auto *corpse = std::get_if<RaidCorpseContainerAssetLocation>(&asset.location);
-            corpse && corpse->sourceEnemyId == fact.sourceEnemyId && corpse->spaceId == fact.spaceId)
+            corpse && corpse->sourceKind == RaidCorpseSourceKind::Enemy &&
+            corpse->sourceEnemyId == fact.sourceEnemyId && corpse->spaceId == fact.spaceId)
         {
             if (corpse->deathPosition) return true; // Once exposed, never move or award again.
             if (profile.revision == std::numeric_limits<ProfileRevision>::max()) return false;
@@ -157,7 +171,8 @@ bool revealRaidCorpseInSimulation(ProfileState &profile, const ContentRegistry &
         for (const auto &[id, root] : profile.assets.records())
         {
             const auto *corpse = std::get_if<RaidCorpseContainerAssetLocation>(&root.location);
-            if (!corpse || corpse->sourceEnemyId != fact.sourceEnemyId || corpse->spaceId != fact.spaceId) continue;
+            if (!corpse || corpse->sourceKind != RaidCorpseSourceKind::Enemy ||
+                corpse->sourceEnemyId != fact.sourceEnemyId || corpse->spaceId != fact.spaceId) continue;
             if (!id || root.instanceId != id || id >= profile.assets.nextAssetId() || corpse->raidId != raid.raidId) return false;
             // Preserve the strict entry's once-only rule, including collected loot
             // and a finite repeated fact at a different position or max revision.

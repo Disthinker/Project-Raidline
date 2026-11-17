@@ -8,6 +8,7 @@
 #include "base_wish_expedition.h"
 #include "loadout_progression.h"
 #include "lost_raid_domain.h"
+#include "raid_fire_support_domain.h"
 #include "raid_intelligence_domain.h"
 #include "raid_lifecycle.h"
 #include "ui_foundation.h"
@@ -18,7 +19,8 @@ enum class UiDeploymentControl {
     Map, MapPrevious, MapNext, Briefing, Intelligence, BriefingDetails,
     IntelligenceRow, IntelligenceAction, Interior, InteriorAction,
     InteriorPrevious, InteriorNext, LoadoutPrevious, LoadoutNext,
-    ReadinessDetails, RecoveryClear, Deploy, Close, Regional, LostRecords
+    ReadinessDetails, RecoveryClear, Deploy, Close, Regional, LostRecords,
+    FireSupportToggle, FireSupportRifle, FireSupportMagazine
 };
 enum class UiDeploymentEventKind { Down, Up, Move, Wheel };
 struct UiDeploymentEvent {
@@ -47,6 +49,7 @@ struct UiDeploymentState {
     bool briefingDetails{}, readinessDetails{};
     std::optional<UiDeploymentPress> press;
     std::optional<std::string> confirmationKey;
+    std::optional<RaidFireSupportLoadout> fireSupport;
     int briefingScroll{}, briefingMaximum{}, readinessScroll{}, readinessMaximum{};
     int feedbackScroll{}, feedbackMaximum{};
 };
@@ -93,6 +96,7 @@ struct UiDeploymentProjection {
     std::size_t selectedLoadoutIndex{};
     std::optional<LoadoutReadinessProjection> selectedLoadout;
     WeaponSupplyProjection weaponSupply;
+    RaidFireSupportLoadoutAvailability fireSupport;
     LostRaidAgingPreview aging;
     std::optional<std::string> recoveryRecordId;
     std::optional<LostRaidRecordProjection> recovery;
@@ -113,6 +117,7 @@ struct UiDeploymentProjection {
     const UiDeploymentState &);
 [[nodiscard]] std::string uiNightRendezvousArrivalText(
     const RaidNightRendezvousPreview &, UiLanguage);
+[[nodiscard]] std::string_view uiFireSupportLoadoutFailure(RaidFireSupportLoadoutFailure) noexcept;
 [[nodiscard]] std::string uiDeploymentViewKey(const UiDeploymentState &);
 [[nodiscard]] std::string uiDeploymentActionKey(
     const UiDeploymentHit &, const UiDeploymentState &, const UiDeploymentProjection &);
@@ -131,7 +136,7 @@ struct UiDeploymentProjection {
 [[nodiscard]] SDL_FRect uiDeploymentInteriorRect(std::size_t visibleRow, bool action = false) noexcept;
 [[nodiscard]] SDL_FRect uiDeploymentBriefingRect() noexcept;
 [[nodiscard]] SDL_FRect uiDeploymentIntelligenceDetailsRect() noexcept;
-[[nodiscard]] SDL_FRect uiDeploymentReadinessRect() noexcept;
+[[nodiscard]] SDL_FRect uiDeploymentReadinessRect(bool fireSupportVisible = false) noexcept;
 [[nodiscard]] SDL_FRect uiDeploymentFeedbackRect() noexcept;
 [[nodiscard]] std::optional<UiDeploymentHit> hitUiDeployment(
     Vec2, const UiDeploymentState &, const UiDeploymentProjection &);

@@ -35,7 +35,7 @@ void addClock(Key &key, const WorldClockProjection &clock) {
     key.number(clock.timeOfDay);
 }
 
-std::string contextKey(const ProfileState &profile, const UiDeploymentProjection &p) {
+std::string contextKey(const ProfileState &profile, const UiDeploymentProjection &p, const UiDeploymentState &state) {
     Key key;
     key.add(p.profileId);
     key.number(p.revision);
@@ -141,6 +141,23 @@ std::string contextKey(const ProfileState &profile, const UiDeploymentProjection
             key.number(asset.quantity);
             key.number(asset.ownershipRoot);
         }
+    }
+    key.number(state.fireSupport.has_value());
+    if (state.fireSupport) {
+        key.number(state.fireSupport->rifleAssetId);
+        key.number(state.fireSupport->spareMagazineAssetId.value_or(0));
+    }
+    const auto &fireSupport = p.fireSupport;
+    key.number(fireSupport.mapEligible);
+    key.number(fireSupport.availableCombatResidents);
+    key.number(fireSupport.preparationRoundCount);
+    key.number(fireSupport.failure);
+    key.number(fireSupport.rifleAssetIds.size());
+    for (const auto assetId : fireSupport.rifleAssetIds) key.number(assetId);
+    key.number(fireSupport.spareMagazines.size());
+    for (const auto &magazine : fireSupport.spareMagazines) {
+        key.number(magazine.assetId);
+        key.number(magazine.roundCount);
     }
     key.number(p.aging.activeRecordCount);
     key.number(p.aging.recordsExpiringOnNextSettlement);
@@ -278,6 +295,8 @@ UiDeploymentProjection projectUiDeployment(
         result.selectedLoadout = result.loadouts[result.selectedLoadoutIndex];
     result.weaponSupply = projectWeaponSupply(profile, content, false);
     result.aging = queryLostRaidAging(profile);
+    if (!recoveryRecordId)
+        result.fireSupport = queryRaidFireSupportLoadout(profile, content, mapId, state.fireSupport);
     if (recoveryRecordId) {
         // The established query walks lost ownership, never a frozen Raid
         // layout. Only the explicitly chosen target is retained by this page.
@@ -301,8 +320,20 @@ UiDeploymentProjection projectUiDeployment(
         result.riskReasons.push_back(fmt::format(
             "WARNING: {} RECORD(S) EXPIRE AFTER NEXT RAID SETTLEMENT",
             result.aging.recordsExpiringOnNextSettlement));
-    result.contextKey = contextKey(profile, result);
+    result.contextKey = contextKey(profile, result, state);
     return result;
+}
+
+std::string_view uiFireSupportLoadoutFailure(RaidFireSupportLoadoutFailure failure) noexcept {
+    switch (failure) {
+    case RaidFireSupportLoadoutFailure::None: return {};
+    case RaidFireSupportLoadoutFailure::IneligibleMap: return "FIRE SUPPORT IS UNAVAILABLE FOR THIS RAID";
+    case RaidFireSupportLoadoutFailure::NoAvailableCombatResident: return "NO HEALTHY COMBAT RESIDENT IS FREE";
+    case RaidFireSupportLoadoutFailure::InsufficientPreparationRounds: return "NOT ENOUGH STANDARD AMMO IN STASH";
+    case RaidFireSupportLoadoutFailure::InvalidRifle: return "SELECT AN EMPTY SERVICE RIFLE";
+    case RaidFireSupportLoadoutFailure::InvalidSpareMagazine: return "SELECT A VALID SPARE MAGAZINE";
+    }
+    return {};
 }
 
 std::string uiDeploymentViewKey(const UiDeploymentState &state) {
@@ -316,6 +347,11 @@ std::string uiDeploymentViewKey(const UiDeploymentState &state) {
     if (state.selectedInterior) key.add(state.selectedInterior->value());
     key.number(state.briefingDetails);
     key.number(state.readinessDetails);
+    key.number(state.fireSupport.has_value());
+    if (state.fireSupport) {
+        key.number(state.fireSupport->rifleAssetId);
+        key.number(state.fireSupport->spareMagazineAssetId.value_or(0));
+    }
     return std::move(key.value);
 }
 
@@ -357,7 +393,16 @@ bool uiDeploymentEnabled(C control, const UiDeploymentState &state,
             projection.interiorPage < lastPage(projection.interiors.size(), uiDeploymentInteriorPageSize());
     case C::LoadoutPrevious: case C::LoadoutNext: return projection.loadouts.size() > 1U;
     case C::RecoveryClear: return projection.recoveryRecordId.has_value();
-    case C::Deploy: return projection.mapValid;
+    case C::FireSupportToggle: return projection.fireSupport.mapEligible;
+    case C::FireSupportRifle:
+        return state.fireSupport && !projection.fireSupport.rifleAssetIds.empty();
+    case C::FireSupportMagazine:
+        return state.fireSupport && (!projection.fireSupport.spareMagazines.empty() ||
+            state.fireSupport->spareMagazineAssetId);
+    case C::Deploy:
+        return projection.mapValid && (!state.fireSupport ||
+            (projection.fireSupport.mapEligible &&
+             projection.fireSupport.failure == RaidFireSupportLoadoutFailure::None));
     default: return true;
     }
 }
@@ -370,7 +415,13 @@ std::string uiDeploymentUnavailable(const UiDeploymentHit &hit,
     if (hit.control == C::InteriorAction && hit.index < projection.interiors.size())
         return projection.interiors[hit.index].known ? "PERMANENTLY KNOWN" :
             projection.interiors[hit.index].purchase.message;
-    if (hit.control == C::Deploy) return "Raid intelligence map does not exist";
+    if (hit.control == C::Deploy) {
+        if (state.fireSupport && !projection.fireSupport.mapEligible)
+            return "FIRE SUPPORT IS UNAVAILABLE FOR THIS RAID";
+        if (state.fireSupport)
+            return std::string(uiFireSupportLoadoutFailure(projection.fireSupport.failure));
+        return "Raid intelligence map does not exist";
+    }
     return {};
 }
 
@@ -393,6 +444,9 @@ SDL_FRect uiDeploymentControlRect(C control) noexcept {
     case C::LoadoutNext: return {916, 144, 36, 30};
     case C::ReadinessDetails: return {1086, 144, 128, 30};
     case C::RecoveryClear: return {1086, 556, 128, 26};
+    case C::FireSupportToggle: return {872, 412, 342, 28};
+    case C::FireSupportRifle: return {872, 446, 342, 28};
+    case C::FireSupportMagazine: return {872, 480, 342, 28};
     case C::Regional: return {62, 612, 112, 40};
     case C::LostRecords: return {184, 612, 112, 40};
     case C::Deploy: return {878, 612, 220, 40};
@@ -413,7 +467,9 @@ SDL_FRect uiDeploymentInteriorRect(std::size_t row, bool action) noexcept {
 }
 SDL_FRect uiDeploymentBriefingRect() noexcept { return {310, 166, 516, 388}; }
 SDL_FRect uiDeploymentIntelligenceDetailsRect() noexcept { return {310, 492, 516, 62}; }
-SDL_FRect uiDeploymentReadinessRect() noexcept { return {872, 188, 342, 362}; }
+SDL_FRect uiDeploymentReadinessRect(bool fireSupportVisible) noexcept {
+    return {872, 188, 342, fireSupportVisible ? 214.0F : 362.0F};
+}
 SDL_FRect uiDeploymentFeedbackRect() noexcept { return {310, 572, 760, 32}; }
 
 std::optional<UiDeploymentHit> hitUiDeployment(Vec2 point,
@@ -423,6 +479,11 @@ std::optional<UiDeploymentHit> hitUiDeployment(Vec2 point,
         C::LoadoutPrevious, C::LoadoutNext, C::ReadinessDetails})
         if (uiContains(uiDeploymentControlRect(control), point))
             return UiDeploymentHit{control};
+    if (projection.fireSupport.mapEligible) {
+        for (auto control : {C::FireSupportToggle, C::FireSupportRifle, C::FireSupportMagazine})
+            if (uiContains(uiDeploymentControlRect(control), point))
+                return UiDeploymentHit{control};
+    }
     if (projection.recoveryRecordId && uiContains(uiDeploymentControlRect(C::RecoveryClear), point))
         return UiDeploymentHit{C::RecoveryClear};
     const auto mapFirst = projection.mapPage * uiDeploymentMapPageSize();

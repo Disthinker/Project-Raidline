@@ -360,6 +360,26 @@ TEST(UiRaidResultProjectionTest, FailureRecoveryTextUsesItsSavedRecordPresence) 
     EXPECT_FALSE(contains(withRecord.detailLines, "PERMANENTLY DESTROYED"));
 }
 
+TEST(UiRaidResultProjectionTest, FireSupportCasualtyAndPlayerOutcomeRemainIndependent) {
+    auto saved = result();
+    saved.fireSupport = RaidFireSupportResult{true, 0U, "support-loss"};
+    const auto casualty = project(saved, {}, UiLanguage::SimplifiedChinese);
+    EXPECT_TRUE(casualty.extracted);
+    EXPECT_FALSE(casualty.lostRaidRecordId);
+    EXPECT_TRUE(contains(casualty.summaryLines, "火力队友已阵亡"));
+    EXPECT_TRUE(contains(casualty.detailLines, "队友借装已列入失物记录"));
+
+    saved.outcome = RaidResultOutcome::PlayerDead;
+    saved.lostRaidRecordId = "player-loss";
+    saved.fireSupport = RaidFireSupportResult{false, 2U, std::nullopt};
+    const auto returned = project(saved);
+    EXPECT_FALSE(returned.extracted);
+    EXPECT_EQ(returned.lostRaidRecordId, "player-loss");
+    EXPECT_TRUE(contains(returned.summaryLines, "FIRE SUPPORT TEAMMATE RETURNED"));
+    EXPECT_TRUE(contains(returned.detailLines, "TEAMMATE LOAN ITEMS RETURNED"));
+    EXPECT_NE(returned.contextKey, casualty.contextKey);
+}
+
 TEST(UiRaidResultProjectionTest, RescueThreatTravelAndCurrencyComeDirectlyFromTheSavedResult) {
     auto r = result(RaidResultOutcome::ActiveQuit);
     r.currencyDelta = -12; r.travelMinutesApplied = 137;

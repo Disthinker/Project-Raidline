@@ -3,6 +3,7 @@
 #include "tactical_device_domain.h"
 #include "weapon_component_domain.h"
 #include "inventory_domain.h"
+#include "raid_fire_support_domain.h"
 #include <cmath>
 
 #include "lost_raid_domain.h"
@@ -909,10 +910,12 @@ void markPursuitWeaponClaimed(ProfileState &profile)
         profile.lostRaidRecords.erase(recordId);
         if (profile.lastRaidResult && profile.lastRaidResult->lostRaidRecordId == recordId)
             profile.lastRaidResult->lostRaidRecordId.reset();
+        forgetRaidFireSupportLostRecord(profile, recordId);
     }
 }
 
-bool sceneCommandAllowed(const ProfileState &profile, const InventoryCommand &command, const RaidSceneContainerAccess *access)
+bool sceneCommandAllowed(const ProfileState &profile, const ContentRegistry &content,
+                         const InventoryCommand &command, const RaidSceneContainerAccess *access)
 {
     const auto sourceId = std::visit([](const auto &value) { return value.instanceId; }, command);
     if (profile.pendingRaid && assetIsLegacyOverflowAsset(profile, sourceId)) return false;
@@ -928,6 +931,9 @@ bool sceneCommandAllowed(const ProfileState &profile, const InventoryCommand &co
     }
     if (destinationRoot && recoveryForPursuitCorpse(profile, *destinationRoot))
         return false;
+    if (destinationRoot && profile.pendingRaid && profile.pendingRaid->fireSupport &&
+        profile.pendingRaid->fireSupport->containerAssetId == *destinationRoot)
+        return false;
     if (claimsPursuitWeapon(profile, sourceId, access))
         return raidSceneContainerAccessible(profile, *access) &&
             pursuitDestinationAllowed(profile, command);
@@ -938,6 +944,23 @@ bool sceneCommandAllowed(const ProfileState &profile, const InventoryCommand &co
     if (!source || std::holds_alternative<RaidSceneContainerAssetLocation>(source->location) ||
         std::holds_alternative<RaidCorpseContainerAssetLocation>(source->location)) return false;
     if (!sourceRoot && !assetIsCarried(profile, sourceId)) return false;
+    if (sourceRoot && profile.pendingRaid && profile.pendingRaid->fireSupport &&
+        profile.pendingRaid->fireSupport->containerAssetId == *sourceRoot)
+    {
+        // Taking a loan must not swap a carried item into the corpse.
+        const auto &support = *profile.pendingRaid->fireSupport;
+        if (sourceId != support.rifle.assetId &&
+            (!support.spareMagazine || sourceId != support.spareMagazine->assetId))
+            return false;
+        if (const auto *move = std::get_if<InventoryMoveCommand>(&command))
+        {
+            if (!profilePlacementFits(profile, content, move->destination.container, move->destination.origin,
+                    content.item(source->definitionId), move->destinationOrientation))
+                return false;
+        }
+        else if (equippedAsset(profile, std::get<InventoryEquipCommand>(command).slot))
+            return false;
+    }
     if (const auto *move = std::get_if<InventoryMoveCommand>(&command); move && !destinationRoot)
         return move->destination.container.kind == ProfileContainerKind::AssetCompartment && assetIsCarried(profile, move->destination.container.ownerAssetId);
     return true;
@@ -950,7 +973,7 @@ InventoryPlan queryInventory(
     const InventoryCommand &command,
     const RaidSceneContainerAccess *sceneAccess)
 {
-    if (!sceneCommandAllowed(profile, command, sceneAccess))
+    if (!sceneCommandAllowed(profile, content, command, sceneAccess))
         return {false, DomainErrorCode::IllegalDestination, "Scene container is outside the accessible inventory scope", profile.revision};
     ProfileState candidate;
     candidate.stashLayoutVersion = profile.stashLayoutVersion;
@@ -960,6 +983,12 @@ InventoryPlan queryInventory(
     const auto sourceId = std::visit([](const auto &value) { return value.instanceId; }, command);
     const InventoryReceipt receipt = apply(
         candidate, content, command, false, claimsPursuitWeapon(profile, sourceId, sceneAccess));
+    if (receipt.succeeded)
+    {
+        const auto reservations = validateRaidFireSupportStashReservations(profile, content, candidate.assets);
+        if (!reservations.valid)
+            return {false, DomainErrorCode::Capacity, reservations.message, profile.revision};
+    }
     return InventoryPlan{
         receipt.succeeded,
         receipt.error,
@@ -1001,7 +1030,7 @@ InventoryReceipt executeInventory(
             profile.revision);
     }
 
-    if (!sceneCommandAllowed(profile, command, sceneAccess))
+    if (!sceneCommandAllowed(profile, content, command, sceneAccess))
         return failure(DomainErrorCode::IllegalDestination, "Scene container is outside the accessible inventory scope", profile.revision);
 
     const auto sourceId = std::visit([](const auto &value) { return value.instanceId; }, command);
@@ -1020,6 +1049,12 @@ InventoryReceipt executeInventory(
         // and settlement boundaries instead of rescanning the megamap for
         // every pickup or drag.
         receipt = apply(profile, content, command, false, claimingPursuit);
+        if (receipt.succeeded)
+        {
+            const auto reservations = validateRaidFireSupportStashReservations(profile, content, profile.assets);
+            if (!reservations.valid)
+                receipt = failure(DomainErrorCode::Capacity, reservations.message, profile.revision);
+        }
     }
     catch (...)
     {

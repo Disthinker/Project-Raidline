@@ -24,6 +24,7 @@
 #include "base_population_domain.h"
 #include "base_resident_medical_domain.h"
 #include "lost_raid_domain.h"
+#include "raid_fire_support_domain.h"
 #include "raid_map_generation.h"
 #include "stable_random.h"
 
@@ -329,6 +330,7 @@ void ageLostRaidRecords(ProfileState &profile)
             static_cast<void>(profile.assets.erase(assetId));
         }
         profile.lostRaidRecords.erase(recordId);
+        forgetRaidFireSupportLostRecord(profile, recordId);
     }
 }
 
@@ -790,6 +792,9 @@ DeployReceipt executeDeploy(
             "regional mission modes cannot be combined",
             profile.revision);
     }
+    if (command.fireSupport && regionalMissionCount != 0U)
+        return deployFailure(RaidLifecycleError::InvalidCommand,
+            "FIRE SUPPORT REQUIRES AN ORDINARY GREYLINE RAID", profile.revision);
 
     std::optional<RegionalOutpostRestorationSnapshot> outpostRestoration;
     if (command.outpostRestorationId.has_value())
@@ -1004,7 +1009,7 @@ DeployReceipt executeDeploy(
         snapshot.fieldIntelligenceTrade = RaidFieldIntelligenceTrade{
             map->fieldIntelligenceTradePositions[positionIndex], extraCategory};
     }
-    if (snapshot.backpackRecoveryEnabled)
+    if (snapshot.backpackRecoveryEnabled || command.fireSupport)
         snapshot.startingAssets = profile.assets;
     const bool corpseTrial = command.mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"} &&
         std::any_of(map->proceduralOutdoor.encounterArchetypes.begin(), map->proceduralOutdoor.encounterArchetypes.end(),
@@ -1086,9 +1091,11 @@ DeployReceipt executeDeploy(
     {
         candidate.raidIntelligence.counts.erase(found);
     }
+    if (regionalMissionCount == 0U)
+        snapshot.fireSupportReplacementSource = readyRaidFireSupportReplacement(candidate, content, command.mapDefinitionId);
     if (map->rescue.has_value() &&
         (map->rescue->id != kHospitalMedicalRescueId || snapshot.hospitalMedicalReserveEnabled) &&
-        !candidate.committedRescues.contains(map->rescue->id))
+        (!candidate.committedRescues.contains(map->rescue->id) || snapshot.fireSupportReplacementSource))
     {
         snapshot.rescue = RaidRescueSnapshot{
             map->rescue->id,
@@ -2351,6 +2358,12 @@ DeployReceipt executeDeploy(
         supply->sceneContainerAssetId = containerId;
         raid.sealedFreightCrate = RaidSealedFreightCrateSnapshot{containerId, false};
     }
+    if (command.fireSupport)
+    {
+        const auto prepared = prepareRaidFireSupportInCandidate(candidate, content, *command.fireSupport);
+        if (!prepared.valid)
+            return deployFailure(RaidLifecycleError::InvalidCommand, prepared.message, profile.revision);
+    }
     if (!advanceProfileWorldTime(
             candidate,
             content,
@@ -2465,6 +2478,7 @@ RaidSettlementReceipt settlePendingRaid(
     const PendingRaidSnapshot raidSnapshot = *candidate.pendingRaid;
     if (raidSnapshot.credentialExtraction || fuel || hasDroppedBackpacks ||
         raidSnapshot.fieldIntelligenceTrade || raidSnapshot.nightRendezvous ||
+        raidSnapshot.fireSupport || raidSnapshot.fireSupportReplacementSource ||
         (raidSnapshot.selfRecovery && raidSnapshot.selfRecovery->pursuit))
     {
         // Validate pending-only facts before settlement removes their sources.
@@ -2524,6 +2538,15 @@ RaidSettlementReceipt settlePendingRaid(
         // same location-preserving settlement rule.
     }
 
+    ageLostRaidRecords(candidate);
+    std::optional<RaidFireSupportResult> fireSupportResult;
+    if (raidSnapshot.fireSupport)
+    {
+        fireSupportResult.emplace();
+        const auto support = settleRaidFireSupportLoansInCandidate(candidate, content, outcome, *fireSupportResult);
+        if (!support.valid)
+            return settlementFailure(RaidLifecycleError::InvalidProfile, support.message, profile.revision, outcome);
+    }
     std::set<AssetInstanceId> eraseIds;
     for (const auto &[assetId, asset] : candidate.assets.records())
     {
@@ -2543,7 +2566,6 @@ RaidSettlementReceipt settlePendingRaid(
     {
         static_cast<void>(candidate.assets.erase(assetId));
     }
-    ageLostRaidRecords(candidate);
     applySettledRaidBaseThreat(candidate);
     const RegionalOutpostThreatAdvance outpostThreat =
         applySettledRegionalRouteUsage(
@@ -2668,6 +2690,15 @@ RaidSettlementReceipt settlePendingRaid(
             candidate.worldClock.elapsedWorldMinutes;
     }
     candidate.pendingRaid.reset();
+    if (fireSupportResult && fireSupportResult->died)
+    {
+        if (fireSupportResult->lostRecordId)
+            candidate.lostRaidRecords.at(*fireSupportResult->lostRecordId).createdWorldMinute =
+                candidate.worldClock.elapsedWorldMinutes;
+        const auto casualty = applyRaidFireSupportCasualtyInCandidate(candidate, id);
+        if (!casualty.valid)
+            return settlementFailure(RaidLifecycleError::InvalidProfile, casualty.message, profile.revision, outcome);
+    }
     for (const auto &permission : newlyUnlockedPermissions)
         candidate.raidExtractionPermissions.insert(permission);
     static_cast<void>(applyBaseManufacturingThrough(candidate, content));
@@ -2701,6 +2732,7 @@ RaidSettlementReceipt settlePendingRaid(
     candidate.lastRaidResult->unlockedExtractionPermissions =
         std::move(newlyUnlockedPermissions);
     candidate.lastRaidResult->fuelExtractionPaid = fuel.has_value();
+    candidate.lastRaidResult->fireSupport = std::move(fireSupportResult);
     if (raidSnapshot.wishFocus)
         candidate.lastRaidResult->wishReturn = summarizeBaseWishReturn(
             candidate, content, *raidSnapshot.wishFocus,

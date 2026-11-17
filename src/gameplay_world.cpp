@@ -280,6 +280,37 @@ namespace
                deltaY * deltaY;
     }
 
+    Vec2 fireSupportSpawn(const Player &player, const RaidSpaceBlockerIndex &blockers)
+    {
+        constexpr float offset = 56.0F;
+        constexpr float diagonal = 40.0F;
+        constexpr std::array<Vec2, 9> starts{{
+            {offset, 0.0F}, {0.0F, offset}, {-offset, 0.0F}, {0.0F, -offset},
+            {diagonal, diagonal}, {-diagonal, diagonal},
+            {-diagonal, -diagonal}, {diagonal, -diagonal}, {}}};
+        constexpr Vec2 half{
+            RaidFireSupportRuntime::kSize.x * 0.5F,
+            RaidFireSupportRuntime::kSize.y * 0.5F};
+        const Vec2 playerOrigin = playerCenter(player);
+        const ContentRect world{{}, blockers.worldSize()};
+        for (const Vec2 displacement : starts)
+        {
+            const Vec2 center{playerOrigin.x + displacement.x,
+                              playerOrigin.y + displacement.y};
+            const Rect initial = centeredBounds(center, half);
+            if (!pointInside(world, initial.position) ||
+                !pointInside(world, {center.x + half.x, center.y + half.y}) ||
+                !blockers.hasLineOfSight(playerOrigin, center) ||
+                std::ranges::any_of(blockers.allBlockerBounds(),
+                    [&](Rect wall) { return isCollision(initial, wall); }))
+            {
+                continue;
+            }
+            return initial.position;
+        }
+        throw std::invalid_argument{"RaidWorldConfig fire support spawn is blocked"};
+    }
+
 }
 
 GameplayWorld::GameplayWorld()
@@ -864,6 +895,13 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         worldSize_,
         ballisticBlockers_,
         enemies_.view());
+    if (config.fireSupport)
+    {
+        fireSupport_.emplace(*config.fireSupport, fireSupportSpawn(player_, *outdoorBlockerIndex_));
+        cacheNavigationFieldForSpace(
+            navigationFieldCache_, outdoorRaidSpaceId(), RaidFireSupportRuntime::kSize,
+            worldSize_, ballisticBlockers_);
+    }
     for (const InteriorRuntime &interior : interiors_)
     {
         cacheNavigationFieldsForSpace(
@@ -1205,6 +1243,8 @@ void GameplayWorld::update(
     enemiesAlertedLastUpdate_ = 0U;
     navigationQueriesLastUpdate_ = 0U;
     simulationWorkloadLastUpdate_ = RaidSimulationWorkload{};
+    if (fireSupport_)
+        fireSupport_->beginFrame();
     if (!raidSession_.isActive())
     {
         noiseDecoy_.clear();
@@ -1384,6 +1424,63 @@ void GameplayWorld::update(
     if(grenade_.pendingExplosion() && commitGrenade && !commitGrenade())return;
     if(!raidSession_.isActive())return;
 
+    RaidFireSupportRuntime *support = fireSupport_ && inOutdoorRaidSpace()
+        ? &*fireSupport_ : nullptr;
+    const bool enemiesAdvanced = support
+        ? advanceRaidEnemies<true>(deltaTime, support)
+        : advanceRaidEnemies<false>(deltaTime, nullptr);
+    if (!enemiesAdvanced)
+        return;
+
+    const bool controlsSuppressed =
+        controlsSuppressedAtFrameStart ||
+        player_.isControlled();
+
+    if (nightRendezvous_)
+        updateNightRendezvous(input, deltaTime, controlsSuppressed);
+
+    if (!spaceTransitionedLastUpdate_ && !controlsSuppressed &&
+        !raidSession_.signalCalledLastUpdate() && input.interactJustPressed &&
+        !nightRendezvousConsumedInteraction_ &&
+        !(input.credentialInvestigationAllowed && credentialInvestigationInRange()))
+    {
+        tryPickupOne();
+    }
+
+    auto &activeEnemySet = activeEnemies();
+    const auto &activeBlockerSet = activeBallisticBlockers();
+    const WorldShootingAdvance shootingAdvance = shooting_.advanceShots(
+        input,
+        deltaTime,
+        playerCenter(player_),
+        player_.size(),
+        player_.isMoving(),
+        controlsSuppressed,
+        activeWorldSize(),
+        activeEnemySet,
+        activeBlockerSet);
+
+    consumeEnemyRemovals(shootingAdvance.removals);
+    if (support)
+    {
+        const auto advance = support->updateWeapon(
+            deltaTime, playerBounds(player_), activeEnemySet, activeBlockerIndex(), activeBlockerSet);
+        consumeEnemyRemovals(advance.removals);
+        if (const auto &shot = support->shotEvent())
+            emitRaidNoise(shot->origin, shot->noiseRadius);
+    }
+    melee_.prepare(input.meleeJustPressed,controlsSuppressed || input.inventoryOpen || !raidSession_.isActive(),
+        playerCenter(player_),shooting_.aimDirection(),
+        activeEnemySet,[&](Vec2 a,Vec2 b){return activeBlockerIndex().hasLineOfSight(a,b);});
+
+    updateCredentialInvestigation(input, deltaTime, controlsSuppressedAtFrameStart);
+    if (player_.isControlled() || !raidSession_.isActive())
+        shooting_.cancelWeaponOptic();
+}
+
+template <bool FireSupportEnabled>
+bool GameplayWorld::advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *support)
+{
     // Bounded substeps keep attack phase transitions and one-shot hit
     // opportunities observable even when a render frame is long.
     std::size_t enemySubsteps{1U};
@@ -1404,8 +1501,6 @@ void GameplayWorld::update(
         static_cast<float>(enemySubsteps);
 
     auto &activeEnemySet = activeEnemies();
-    const std::vector<BallisticBlocker> &activeBlockerSet =
-        activeBallisticBlockers();
     const RaidSpaceBlockerIndex &activeStaticBlockers =
         activeBlockerIndex();
     const bool soundActionsEnabled = noiseDecoyEnabled_ || grenadeEnabled_ ||
@@ -1427,6 +1522,20 @@ void GameplayWorld::update(
     const auto enemyCount = activeEnemySet.size();
     std::vector<EnemyNavigationIntent> navigationIntents(enemyCount);
     auto *const intents = navigationIntents.data();
+    // The solo specialization allocates and queries no companion state.
+    enum class EnemyTargetChoice { Player, VisibleSupport, LockedSupport };
+    std::vector<EnemyTargetChoice> targetChoices;
+    if constexpr (FireSupportEnabled)
+        targetChoices.resize(enemyCount);
+    const auto hasLineOfSight = [&](Vec2 start, Vec2 end)
+    {
+        std::size_t blockerTests{};
+        const bool visible = activeStaticBlockers.hasLineOfSight(
+            start, end, &blockerTests);
+        simulationWorkloadLastUpdate_.lineOfSightBlockersExamined += blockerTests;
+        return visible;
+    };
+
     for (std::size_t step{0U};
          step < enemySubsteps;
          ++step)
@@ -1440,6 +1549,23 @@ void GameplayWorld::update(
         const Vec2 playerPosition =
             playerCenter(player_);
         const Vec2 worldSize = activeWorldSize();
+        Vec2 supportPosition{};
+        if constexpr (FireSupportEnabled)
+        {
+            const Rect beforeMovement = support->bounds();
+            const Vec2 requested = support->prepareMovement(
+                playerPosition, activeNavigationField(beforeMovement.size),
+                activeStaticBlockers, enemyStepTime);
+            if (requested.x != beforeMovement.position.x ||
+                requested.y != beforeMovement.position.y)
+            {
+                support->setPosition(resolveMovementAgainstBlockers(
+                    beforeMovement.position, beforeMovement.size, requested,
+                    activeStaticBlockers, blockerQueryScratch_,
+                    &simulationWorkloadLastUpdate_.movementBlockersExamined));
+            }
+            supportPosition = support->center();
+        }
         std::vector<EnemySquadMemberSnapshot> enemySnapshots;
         enemySnapshots.reserve(enemyCount);
         auto *nextIntent = intents;
@@ -1449,14 +1575,43 @@ void GameplayWorld::update(
             intent = EnemyNavigationIntent{};
             intent.boundsBeforeMovement = enemy.bounds();
             const auto &bounds = intent.boundsBeforeMovement;
+            const Vec2 position{
+                bounds.position.x + bounds.size.x / 2.0F,
+                bounds.position.y + bounds.size.y / 2.0F};
+            const auto attackPhase = enemy.attackPhase();
+            Vec2 targetPosition = playerPosition;
+            if constexpr (FireSupportEnabled)
+            {
+                auto &choice = targetChoices[enemySnapshots.size()];
+                choice = EnemyTargetChoice::Player;
+                if (attackPhase != EnemyAttackPhase::Idle)
+                {
+                    if (support->hasAttackLock(enemy.combatTargetId()))
+                        choice = EnemyTargetChoice::LockedSupport;
+                }
+                else if (support->alive() && !enemy.isDead())
+                {
+                    const float supportDistance = distanceSquared(position, supportPosition);
+                    const float playerDistance = distanceSquared(position, playerPosition);
+                    const float acquire = enemy.acquireTargetDistance();
+                    if ((supportDistance < playerDistance ||
+                         (supportDistance <= acquire * acquire &&
+                          !hasLineOfSight(position, playerPosition))) &&
+                        hasLineOfSight(position, supportPosition))
+                    {
+                        choice = EnemyTargetChoice::VisibleSupport;
+                    }
+                }
+                if (choice != EnemyTargetChoice::Player)
+                    targetPosition = supportPosition;
+            }
             enemySnapshots.push_back(
                 EnemySquadMemberSnapshot{
-                    {bounds.position.x + bounds.size.x / 2.0F,
-                     bounds.position.y + bounds.size.y / 2.0F},
+                    position,
                     !enemy.isDead(),
                     enemy.awarenessState(),
-                    enemy.attackPhase(),
-                    enemy.hasAttackOpportunity(playerPosition)});
+                    attackPhase,
+                    enemy.hasAttackOpportunity(targetPosition)});
         }
 
         const auto *const snapshots = enemySnapshots.data();
@@ -1468,18 +1623,6 @@ void GameplayWorld::update(
                 &squadMetrics);
         simulationWorkloadLastUpdate_.neighborCandidatesExamined +=
             squadMetrics.neighborCandidatesExamined;
-
-        const auto hasLineOfSight = [&](Vec2 start, Vec2 end)
-        {
-            std::size_t blockerTests{};
-            const bool visible = activeStaticBlockers.hasLineOfSight(
-                start,
-                end,
-                &blockerTests);
-            simulationWorkloadLastUpdate_.lineOfSightBlockersExamined +=
-                blockerTests;
-            return visible;
-        };
 
         std::size_t refreshRequiredCount{};
         for (std::size_t enemyIndex{};
@@ -1502,10 +1645,16 @@ void GameplayWorld::update(
             }
 
             const Vec2 enemyPosition = snapshot.position;
+            Vec2 targetPosition = playerPosition;
+            if constexpr (FireSupportEnabled)
+            {
+                if (targetChoices[enemyIndex] != EnemyTargetChoice::Player)
+                    targetPosition = supportPosition;
+            }
             const bool hasNoiseInvestigation=noiseDecoy_.investigations().contains(targetId) ||
                 localNoiseInvestigations_.contains(targetId);
             const bool investigatingNoise=soundActionsEnabled && hasNoiseInvestigation;
-            const bool outsideAcquisition=distanceSquared(enemyPosition,playerPosition) >
+            const bool outsideAcquisition=distanceSquared(enemyPosition,targetPosition) >
                 enemy.acquireTargetDistance()*enemy.acquireTargetDistance();
             // Unaware actors cannot acquire a player beyond acquisition range;
             // sound investigators also have an independent navigation goal.
@@ -1520,10 +1669,23 @@ void GameplayWorld::update(
                 (snapshot.awareness==EnemyAwarenessState::Unaware ||
                  (investigatingNoise && snapshot.awareness==EnemyAwarenessState::Searching)) &&
                 snapshot.attackPhase==EnemyAttackPhase::Idle;
-            intent.targetVisible = !skipNoiseSight && hasLineOfSight(enemyPosition,playerPosition);
+            if constexpr (FireSupportEnabled)
+            {
+                const auto choice = targetChoices[enemyIndex];
+                if (choice == EnemyTargetChoice::VisibleSupport)
+                    intent.targetVisible = true;
+                else if (choice == EnemyTargetChoice::LockedSupport && !support->alive())
+                    intent.targetVisible = false;
+                else
+                    intent.targetVisible = !skipNoiseSight && hasLineOfSight(enemyPosition,targetPosition);
+            }
+            else
+            {
+                intent.targetVisible = !skipNoiseSight && hasLineOfSight(enemyPosition,targetPosition);
+            }
             if (encounter.kind == RaidEncounterKind::Ambush &&
                 snapshot.awareness == EnemyAwarenessState::Unaware &&
-                distanceSquared(enemyPosition, playerPosition) >
+                distanceSquared(enemyPosition, targetPosition) >
                     encounter.ambushActivationDistance *
                         encounter.ambushActivationDistance)
             {
@@ -1558,14 +1720,14 @@ void GameplayWorld::update(
             }
             const bool visibleTargetIsRelevant = intent.targetVisible &&
                 (snapshot.awareness != EnemyAwarenessState::Unaware ||
-                 distanceSquared(enemyPosition, playerPosition) <=
+                 distanceSquared(enemyPosition, targetPosition) <=
                      enemy.acquireTargetDistance() *
                          enemy.acquireTargetDistance());
             const auto investigation = investigatingNoise
-                ? noiseInvestigationGoal(enemy, intent.targetVisible, playerPosition)
+                ? noiseInvestigationGoal(enemy, intent.targetVisible, targetPosition)
                 : std::optional<Vec2>{};
             const std::optional<Vec2> navigationGoal = investigation ? investigation : visibleTargetIsRelevant
-                ? std::optional<Vec2>{playerPosition}
+                ? std::optional<Vec2>{targetPosition}
                 : enemy.lastKnownTargetPosition().has_value()
                 ? enemy.lastKnownTargetPosition()
                 : passiveGoal;
@@ -1636,6 +1798,14 @@ void GameplayWorld::update(
                     std::nullopt));
                 continue;
             }
+            if constexpr (FireSupportEnabled)
+            {
+                if (targetChoices[enemyIndex] == EnemyTargetChoice::VisibleSupport &&
+                    !support->alive())
+                {
+                    continue;
+                }
+            }
 
             std::optional<Vec2> navigationTarget;
             if (intent.reachableGoal.has_value())
@@ -1668,9 +1838,15 @@ void GameplayWorld::update(
                 navigationTarget = navigation.waypoint;
             }
 
+            Vec2 targetPosition = playerPosition;
+            if constexpr (FireSupportEnabled)
+            {
+                if (targetChoices[enemyIndex] != EnemyTargetChoice::Player)
+                    targetPosition = supportPosition;
+            }
             static_cast<void>(
                 enemy.updateTowardsTarget(
-                    playerPosition,
+                    targetPosition,
                     directives[enemyIndex],
                     enemyStepTime,
                     worldSize.x,
@@ -1692,6 +1868,39 @@ void GameplayWorld::update(
                 ++enemiesAlertedLastUpdate_;
             }
 
+            if constexpr (FireSupportEnabled)
+            {
+                if (targetChoices[enemyIndex] != EnemyTargetChoice::Player)
+                {
+                    const auto updatedPhase = enemy.attackPhase();
+                    if (snapshot.attackPhase == EnemyAttackPhase::Idle &&
+                        updatedPhase != EnemyAttackPhase::Idle)
+                    {
+                        support->lockAttack(enemy.combatTargetId());
+                    }
+                    else if (updatedPhase == EnemyAttackPhase::Idle &&
+                             snapshot.attackPhase != EnemyAttackPhase::Idle)
+                    {
+                        support->forgetAttack(enemy.combatTargetId());
+                    }
+
+                    const Rect bounds = support->bounds();
+                    const auto contact = resolveEnemyAttackContact(
+                        enemy, bounds, support->alive(), support->contactProtection(), [&] {
+                            if (enemy.attackType() == EnemyAttackType::LowLunge)
+                            {
+                                const auto corridor = lowLungeTelegraph(enemy);
+                                return corridor && corridor->overlaps(bounds) &&
+                                    hasLineOfSight(corridor->origin, supportPosition);
+                            }
+                            return hasLineOfSight(enemyCenter(enemy), supportPosition);
+                        });
+                    if (contact.damage)
+                        support->applyContact(*contact.damage, contact.controlDuration);
+                    continue;
+                }
+            }
+
             const auto contact = resolveEnemyAttackContact(
                 enemy, playerBounds(player_), !player_.isDead(),
                 enemyDamageProtectionRemainingSeconds_, [&] {
@@ -1711,7 +1920,7 @@ void GameplayWorld::update(
             if (deferPlayerDamageResolution_)
                 pendingPlayerDamageObservations_.push_back(*contact.damage);
             else if (damagePlayer(contact.legacyDamage))
-                return;
+                return false;
 
             if (contact.controlDuration > 0.0F)
             {
@@ -1726,41 +1935,7 @@ void GameplayWorld::update(
         }
     }
 
-    const bool controlsSuppressed =
-        controlsSuppressedAtFrameStart ||
-        player_.isControlled();
-
-    if (nightRendezvous_)
-        updateNightRendezvous(input, deltaTime, controlsSuppressed);
-
-    if (!spaceTransitionedLastUpdate_ && !controlsSuppressed &&
-        !raidSession_.signalCalledLastUpdate() && input.interactJustPressed &&
-        !nightRendezvousConsumedInteraction_ &&
-        !(input.credentialInvestigationAllowed && credentialInvestigationInRange()))
-    {
-        tryPickupOne();
-    }
-
-    const WorldShootingAdvance shootingAdvance = shooting_.advanceShots(
-        input,
-        deltaTime,
-        playerCenter(player_),
-        player_.size(),
-        player_.isMoving(),
-        controlsSuppressed,
-        activeWorldSize(),
-        activeEnemySet,
-        activeBlockerSet);
-
-    consumeEnemyRemovals(shootingAdvance.removals);
-    melee_.prepare(input.meleeJustPressed,controlsSuppressed || input.inventoryOpen || !raidSession_.isActive(),
-        playerCenter(player_),shooting_.aimDirection(),
-        activeEnemySet,[&](Vec2 a,Vec2 b){return activeBlockerIndex().hasLineOfSight(a,b);});
-
-    updateCredentialInvestigation(input, deltaTime, controlsSuppressedAtFrameStart);
-    if (player_.isControlled() || !raidSession_.isActive())
-        shooting_.cancelWeaponOptic();
-
+    return true;
 }
 
 void GameplayWorld::acknowledgeCorpseDeath(std::string_view sourceId)
@@ -3453,11 +3628,66 @@ bool GameplayWorld::canCallSignalExtraction(const GameplayInput &input) const no
 
 void GameplayWorld::emitPlayerNoise(float radius) noexcept
 {
+    emitRaidNoise(playerCenter(player_), radius);
+}
+
+bool GameplayWorld::setFireSupportOrders(
+    FireSupportMovementOrder movement, FireSupportFireOrder fire) noexcept
+{
+    if (!fireSupport_ || !fireSupport_->alive() || !raidSession_.isActive())
+        return false;
+    fireSupport_->setOrders(movement, fire);
+    return true;
+}
+
+std::optional<FireSupportView> GameplayWorld::fireSupport() const
+{
+    if (!fireSupport_)
+        return std::nullopt;
+    auto result = fireSupport_->view();
+    result.outdoor = inOutdoorRaidSpace();
+    result.inInteractionRange = canInteractWithFireSupport();
+    result.visible = result.outdoor &&
+        (result.inInteractionRange || raidBoundsObservable(result.bounds));
+    return result;
+}
+
+std::optional<int> GameplayWorld::fireSupportHealth() const noexcept
+{
+    return fireSupport_ ? std::optional{fireSupport_->view().health} : std::nullopt;
+}
+
+std::optional<Vec2> GameplayWorld::fireSupportDeathPosition() const noexcept
+{
+    return fireSupport_ && !fireSupport_->alive()
+        ? std::optional{fireSupport_->center()} : std::nullopt;
+}
+
+bool GameplayWorld::canInteractWithFireSupport() const noexcept
+{
+    if (!fireSupport_ || !raidSession_.isActive() || !inOutdoorRaidSpace() ||
+        player_.isDead() || player_.isControlled())
+    {
+        return false;
+    }
+    const Vec2 center = playerCenter(player_);
+    const Vec2 target = fireSupport_->center();
+    constexpr float reach = RaidFireSupportRuntime::kInteractionReach;
+    return distanceSquared(center, target) <= reach * reach &&
+        activeBlockerIndex().hasLineOfSight(center, target);
+}
+
+std::optional<FireSupportShotEvent> GameplayWorld::fireSupportShotLastUpdate() const noexcept
+{
+    return fireSupport_ ? fireSupport_->shotEvent() : std::nullopt;
+}
+
+void GameplayWorld::emitRaidNoise(Vec2 source, float radius) noexcept
+{
     if (!raidSession_.isActive() || !std::isfinite(radius) || radius <= 0.0F)
     {
         return;
     }
-    const Vec2 source = playerCenter(player_);
     const float radiusSquared = radius * radius;
     auto &enemies = activeEnemies();
     std::vector<std::string_view> alertedGroups;
@@ -4081,6 +4311,8 @@ bool GameplayWorld::tryTransitionRaidSpace(
 
 void GameplayWorld::clearSpatialTransientPresentation() noexcept
 {
+    if (fireSupport_)
+        fireSupport_->clearSpatialTransient();
     shooting_.clearSpatialTransientPresentation();
     shooting_.cancelWeaponOptic();
     pendingPlayerDamageObservations_.clear();
@@ -4451,6 +4683,8 @@ void GameplayWorld::consumeEnemyRemovals(std::span<const EnemyRemovalFact> death
 {
     for (const auto &death:deaths)
     {
+        if (fireSupport_)
+            fireSupport_->forgetAttack(death.id);
         noiseDecoy_.forget(death.id);
         localNoiseInvestigations_.erase(death.id);
         if (death.reason!=EnemyRemovalReason::Death) continue;

@@ -1,6 +1,7 @@
 #include "app.h"
 
 #include <algorithm>
+#include <iterator>
 #include <fmt/format.h>
 
 #include "first_raid_guidance.h"
@@ -66,6 +67,7 @@ void App::refreshBaseDeploymentUi(bool force) {
     if (mapChanged) {
         s.interiorPage = 0;
         s.selectedInterior.reset();
+        s.fireSupport.reset();
         s.briefingScroll = s.readinessScroll = 0;
         s.press.reset();
     }
@@ -74,6 +76,7 @@ void App::refreshBaseDeploymentUi(bool force) {
         s.briefingScroll = s.readinessScroll = s.feedbackScroll = 0;
         deploymentFeedback_.clear();
     }
+    if (selectedRaidSelfRecoveryRecordId_) s.fireSupport.reset();
     const auto viewKey = uiDeploymentViewKey(s) + deploymentSelectionKey(
         mapId, selectedRaidIntelligence_, selectedRaidSelfRecoveryRecordId_, selectedLoadoutArchetypeIndex_);
     if (!force && deploymentProjectionRevision_ &&
@@ -113,6 +116,13 @@ bool App::handleBaseDeploymentConfirm() {
     refreshBaseDeploymentUi(true);
     auto &s = deploymentUi_;
     s.press.reset();
+    if (!uiDeploymentEnabled(C::Deploy, s, deploymentProjection_)) {
+        deploymentFeedback_ = uiDeploymentUnavailable({C::Deploy}, s, deploymentProjection_);
+        uiMessage_ = deploymentFeedback_;
+        s.feedbackScroll = 0;
+        gameAudio_.play(SoundEventId::UiDeny);
+        return false;
+    }
     const std::string context = deploymentProjection_.contextKey;
     // The old shared deploy path consults this cache. Force-querying above
     // must also refresh it when facts change without a revision bump.
@@ -124,7 +134,7 @@ bool App::handleBaseDeploymentConfirm() {
         gameSession_.lostRaidAgingPreview().recordsExpiringOnNextSettlement > 0U;
     const bool confirmed = s.confirmationKey && *s.confirmationKey == context;
     deploymentWarningArmed_ = risk && confirmed;
-    const bool transitioned = tryDeployFromBase();
+    const bool transitioned = tryDeployFromBase({}, {}, {}, s.fireSupport);
     if (transitioned) {
         resetBaseDeploymentUi();
         profileAssetSelection_.reset();
@@ -164,7 +174,7 @@ void App::handleBaseDeploymentEvent(const UiDeploymentEvent &event) {
         s.press.reset();
         if (uiContains(uiDeploymentFeedbackRect(), event.position))
             s.feedbackScroll = std::clamp(s.feedbackScroll + event.delta * 2, 0, s.feedbackMaximum);
-        else if (uiContains(uiDeploymentReadinessRect(), event.position))
+        else if (uiContains(uiDeploymentReadinessRect(p.fireSupport.mapEligible), event.position))
             s.readinessScroll = std::clamp(s.readinessScroll + event.delta * 2, 0, s.readinessMaximum);
         else if (uiContains(s.tab == T::Briefing ? uiDeploymentBriefingRect() : uiDeploymentIntelligenceDetailsRect(), event.position))
             s.briefingScroll = std::clamp(s.briefingScroll + event.delta * 2, 0, s.briefingMaximum);
@@ -276,6 +286,34 @@ void App::handleBaseDeploymentEvent(const UiDeploymentEvent &event) {
     if (!uiDeploymentEnabled(control, s, p, hit->index)) {
         feedback(tr(uiDeploymentUnavailable(*hit, s, p)));
         gameAudio_.play(SoundEventId::UiDeny);
+        return;
+    }
+    if (control == C::FireSupportToggle) {
+        if (s.fireSupport) s.fireSupport.reset();
+        else s.fireSupport = RaidFireSupportLoadout{
+            p.fireSupport.rifleAssetIds.empty() ? AssetInstanceId{} : p.fireSupport.rifleAssetIds.front(),
+            std::nullopt};
+    } else if (control == C::FireSupportRifle) {
+        const auto &rifles = p.fireSupport.rifleAssetIds;
+        auto next = std::find(rifles.begin(), rifles.end(), s.fireSupport->rifleAssetId);
+        if (next == rifles.end() || ++next == rifles.end()) next = rifles.begin();
+        s.fireSupport->rifleAssetId = *next;
+    } else if (control == C::FireSupportMagazine) {
+        const auto &magazines = p.fireSupport.spareMagazines;
+        const auto current = std::find_if(magazines.begin(), magazines.end(), [&](const auto &entry) {
+            return s.fireSupport->spareMagazineAssetId == entry.assetId;
+        });
+        const auto next = current == magazines.end() ? magazines.begin() : std::next(current);
+        if (next == magazines.end()) s.fireSupport->spareMagazineAssetId.reset();
+        else s.fireSupport->spareMagazineAssetId = next->assetId;
+    }
+    if (control == C::FireSupportToggle || control == C::FireSupportRifle ||
+        control == C::FireSupportMagazine) {
+        s.confirmationKey.reset();
+        deploymentWarningArmed_ = false;
+        deploymentFeedback_.clear();
+        uiMessage_.clear();
+        refreshBaseDeploymentUi(true);
         return;
     }
     if (control == C::Deploy) { static_cast<void>(handleBaseDeploymentConfirm()); return; }
@@ -497,7 +535,44 @@ void App::renderBaseDeployment() {
         if (!p.recoveryValid || !p.recoveryMapMatches) append(readiness, tr("RAID RECOVERY TARGET IS NO LONGER AVAILABLE"));
     } else append(readiness, tr("NO SELF RECOVERY TARGET"));
     if (p.expiryRisk) append(readiness, fmt::format("{} {}", tr("RECORDS EXPIRING AFTER THIS RAID"), p.aging.recordsExpiringOnNextSettlement));
-    scroll(uiDeploymentReadinessRect(), readiness, s.readinessScroll, s.readinessMaximum);
+    scroll(uiDeploymentReadinessRect(p.fireSupport.mapEligible), readiness,
+        s.readinessScroll, s.readinessMaximum);
+    if (p.fireSupport.mapEligible) {
+        const auto &plan = p.fireSupport;
+        button(C::FireSupportToggle, fmt::format("{} · {} {}", tr(s.fireSupport ? "FIRE SUPPORT TEAM" : "SOLO DEPLOYMENT"),
+            tr("FIGHTERS READY"), plan.availableCombatResidents), s.fireSupport.has_value());
+        if (s.fireSupport) {
+            const auto &assets = gameSession_.profile().assets;
+            const auto &registry = publishedContentRegistry();
+            const auto rifle = std::find(plan.rifleAssetIds.begin(), plan.rifleAssetIds.end(), s.fireSupport->rifleAssetId);
+            std::string rifleText = tr("SELECT AN EMPTY SERVICE RIFLE");
+            if (rifle != plan.rifleAssetIds.end())
+                if (const auto *asset = assets.find(*rifle)) {
+                    rifleText = compactUiItemName(registry.item(asset->definitionId), language);
+                    if (plan.rifleAssetIds.size() > 1U)
+                        rifleText += fmt::format(" · {}/{}", rifle - plan.rifleAssetIds.begin() + 1, plan.rifleAssetIds.size());
+                }
+            button(C::FireSupportRifle, fmt::format("{} · {}  ›", tr("LOAN RIFLE"), rifleText));
+
+            const auto magazine = std::find_if(plan.spareMagazines.begin(), plan.spareMagazines.end(),
+                [&](const auto &entry) { return s.fireSupport->spareMagazineAssetId == entry.assetId; });
+            std::string magazineText = tr(s.fireSupport->spareMagazineAssetId
+                ? "SELECT A VALID SPARE MAGAZINE" : "NO SPARE MAGAZINE");
+            if (magazine != plan.spareMagazines.end())
+                if (const auto *asset = assets.find(magazine->assetId)) {
+                    magazineText = fmt::format("{} · {} {}", compactUiItemName(registry.item(asset->definitionId), language),
+                        magazine->roundCount, language == UiLanguage::SimplifiedChinese ? "发" : "rds");
+                    if (plan.spareMagazines.size() > 1U)
+                        magazineText += fmt::format(" · {}/{}", magazine - plan.spareMagazines.begin() + 1, plan.spareMagazines.size());
+                }
+            button(C::FireSupportMagazine, fmt::format("{}  ›", magazineText));
+        }
+        text({878, 515, 330, 20}, fmt::format("{} {}  ·  {} {}",
+            tr("STASH STANDARD AMMO"), plan.preparationRoundCount,
+            tr("TEAM COST"), kRaidFireSupportPreparationRoundCount), 12);
+        if (s.fireSupport && plan.failure != RaidFireSupportLoadoutFailure::None)
+            text({878, 536, 330, 20}, uiFireSupportLoadoutFailure(plan.failure), 12);
+    }
     if (p.recoveryRecordId) button(C::RecoveryClear, "CLEAR TARGET");
     button(C::Regional, "REGIONS");
     button(C::LostRecords, "LOST ITEMS");

@@ -62,6 +62,12 @@ namespace
 
 }
 
+bool shotSegmentIntersectsBounds(
+    Vec2 start, Vec2 end, const Rect &bounds, float extent) noexcept
+{
+    return firstIntersectionFraction(start, end, bounds, extent).has_value();
+}
+
 std::optional<HitRegion> hitRegionAtPoint(
     const Rect &target,
     Vec2 point) noexcept
