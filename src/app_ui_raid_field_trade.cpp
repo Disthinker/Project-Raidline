@@ -223,7 +223,7 @@ void App::updateFieldIntelligenceTradeAfterWorld()
         trade.feedback = "Trade conditions changed · try again";
 }
 
-void App::suppressFieldIntelligenceTradeControls(GameplayInput &gameplayInput)
+void App::suppressRaidPanelControls(GameplayInput &gameplayInput)
 {
     input_.suppressPrimaryPointerUntilRelease();
     gameSession_.cancelPlayerControlIntent();

@@ -44,6 +44,10 @@ struct HitResolutionResult
     const Rect &target,
     Vec2 point) noexcept;
 
+// A firing gate can use the same swept extent as the eventual projectile.
+[[nodiscard]] bool shotSegmentIntersectsBounds(
+    Vec2 start, Vec2 end, const Rect &bounds, float extent) noexcept;
+
 [[nodiscard]]
 HitResolutionResult resolveShotEnemyHits(
     const std::vector<ShotCollisionCandidate> &shots,

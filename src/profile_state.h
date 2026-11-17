@@ -111,15 +111,19 @@ struct RaidSceneContainerAssetLocation
 
 // One deploy-frozen, non-carryable root. No position means the source enemy
 // is still alive; the first accepted death exposes the same asset tree.
+enum class RaidCorpseSourceKind { Enemy, FireSupport };
+
 struct RaidCorpseContainerAssetLocation
 {
     std::string raidId;
     RaidSpaceDefinitionId spaceId;
     std::string sourceEnemyId;
     std::optional<Vec2> deathPosition;
+    RaidCorpseSourceKind sourceKind{RaidCorpseSourceKind::Enemy};
     friend bool operator==(const RaidCorpseContainerAssetLocation &a, const RaidCorpseContainerAssetLocation &b)
     {
         return a.raidId == b.raidId && a.spaceId == b.spaceId && a.sourceEnemyId == b.sourceEnemyId &&
+            a.sourceKind == b.sourceKind &&
             a.deathPosition.has_value() == b.deathPosition.has_value() &&
             (!a.deathPosition || (a.deathPosition->x == b.deathPosition->x && a.deathPosition->y == b.deathPosition->y));
     }
@@ -434,6 +438,8 @@ enum class RaidResultOutcome
 
 inline constexpr std::uint32_t kLostRaidRecordRetainedSettlementCount = 3U;
 
+enum class LostRaidRecordKind { Player, FireSupport };
+
 struct LostRaidRecord
 {
     std::string recordId;
@@ -444,6 +450,7 @@ struct LostRaidRecord
     RaidResultOutcome outcome{RaidResultOutcome::PlayerDead};
     std::uint64_t createdWorldMinute{};
     std::uint32_t subsequentRaidSettlementCount{};
+    LostRaidRecordKind kind{LostRaidRecordKind::Player};
 
     friend bool operator==(
         const LostRaidRecord &,
@@ -1271,6 +1278,49 @@ struct RaidFieldIntelligenceTrade
     bool extraPurchased{};
 };
 
+struct RaidFireSupportLoadout
+{
+    AssetInstanceId rifleAssetId{};
+    std::optional<AssetInstanceId> spareMagazineAssetId;
+
+    friend bool operator==(const RaidFireSupportLoadout &, const RaidFireSupportLoadout &) = default;
+};
+
+struct RaidFireSupportLoan
+{
+    AssetInstanceId assetId{};
+    GridPosition returnOrigin;
+    ItemOrientation originalOrientation{ItemOrientation::Degrees0};
+
+    friend bool operator==(const RaidFireSupportLoan &, const RaidFireSupportLoan &) = default;
+};
+
+struct RaidFireSupportSnapshot
+{
+    AssetInstanceId containerAssetId{};
+    RaidFireSupportLoan rifle;
+    std::optional<RaidFireSupportLoan> spareMagazine;
+
+    friend bool operator==(const RaidFireSupportSnapshot &, const RaidFireSupportSnapshot &) = default;
+};
+
+struct RaidFireSupportReplacement
+{
+    std::string deathSettlementId;
+    std::uint64_t readyWorldMinute{};
+
+    friend bool operator==(const RaidFireSupportReplacement &, const RaidFireSupportReplacement &) = default;
+};
+
+struct RaidFireSupportResult
+{
+    bool died{};
+    std::uint32_t returnedLoanCount{};
+    std::optional<std::string> lostRecordId;
+
+    friend bool operator==(const RaidFireSupportResult &, const RaidFireSupportResult &) = default;
+};
+
 struct PendingRaidSnapshot
 {
     std::string raidId;
@@ -1310,6 +1360,8 @@ struct PendingRaidSnapshot
     bool freightBreachEnabled{};
     bool hospitalMedicalReserveEnabled{};
     std::optional<RaidFieldIntelligenceTrade> fieldIntelligenceTrade;
+    std::optional<RaidFireSupportSnapshot> fireSupport;
+    std::optional<std::string> fireSupportReplacementSource;
 };
 
 struct LastRaidResult
@@ -1326,6 +1378,7 @@ struct LastRaidResult
     std::optional<BaseWishReturnSummary> wishReturn;
     std::vector<RaidExtractionPermissionDefinitionId> unlockedExtractionPermissions;
     bool fuelExtractionPaid{};
+    std::optional<RaidFireSupportResult> fireSupport;
 };
 
 struct ProfileState
@@ -1378,6 +1431,7 @@ struct ProfileState
     std::set<std::string> committedSettlements;
     std::set<RescueDefinitionId> committedRescues;
     bool nightRendezvousUnlocked{};
+    std::optional<RaidFireSupportReplacement> fireSupportReplacement;
     std::optional<PendingRaidSnapshot> pendingRaid;
     std::optional<LastRaidResult> lastRaidResult;
 };

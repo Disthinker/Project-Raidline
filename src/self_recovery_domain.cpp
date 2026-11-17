@@ -1,4 +1,5 @@
 #include "self_recovery_domain.h"
+#include "raid_fire_support_domain.h"
 
 #include <algorithm>
 #include <cmath>
@@ -67,8 +68,10 @@ InventoryReceipt applyOpen(
         }
         try
         {
-            if (!itemCanEquipInSlot(
-                    content.item(asset->definitionId), root.sourceSlot))
+            const bool validRoot = record->second.kind == LostRaidRecordKind::FireSupport
+                ? isRaidFireSupportLossRoot(content, *asset, root.sourceSlot)
+                : itemCanEquipInSlot(content.item(asset->definitionId), root.sourceSlot);
+            if (!validRoot)
             {
                 return failure(
                     DomainErrorCode::InvalidProfile,
@@ -102,6 +105,7 @@ InventoryReceipt applyOpen(
             outdoorRaidSpaceId()});
     }
     candidate.lostRaidRecords.erase(record);
+    forgetRaidFireSupportLostRecord(candidate, recovery.sourceRecord.recordId);
     if (candidate.lastRaidResult.has_value() &&
         candidate.lastRaidResult->lostRaidRecordId ==
             std::optional<std::string>{recovery.sourceRecord.recordId})

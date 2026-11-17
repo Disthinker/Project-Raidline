@@ -18,6 +18,7 @@ struct AlphaDeployRequest
     std::optional<RegionalOutpostDefinitionId> outpostRestorationId;
     std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId;
     std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId;
+    std::optional<RaidFireSupportLoadout> fireSupport;
 };
 
 // Service-only continuation data. No UI callback or second running session.

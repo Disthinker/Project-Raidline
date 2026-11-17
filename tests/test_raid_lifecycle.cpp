@@ -20,6 +20,10 @@
 #include "base_siege_domain.h"
 #include "economy_domain.h"
 #include "raid_lifecycle.h"
+#include "raid_fire_support_domain.h"
+#include "raid_corpse_search.h"
+#include "lost_raid_domain.h"
+#include "recovery_task_domain.h"
 #include "raid_corpse_legacy_fixture.h"
 #include "raid_credential_legacy_fixture.h"
 #include "raid_optics_legacy_fixture.h"
@@ -3039,4 +3043,280 @@ TEST(RaidLifecycleTest, ArmorBlueprintIsExcludedFromCatalogGrantsAndTrade)
     EXPECT_FALSE(executeEconomy(fresh, content, RecycleCommand{asset},
         {fresh.revision, "armor-recycle-blueprint"}).succeeded);
     EXPECT_EQ(profileStateFingerprint(fresh), fingerprint);
+}
+
+namespace
+{
+class RaidFireSupportTest : public testing::Test
+{
+protected:
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("fire-support-contract", content);
+    const ItemDefinitionId magazineId{"item.magazine.5_45x39_30"};
+    const std::size_t combat = baseProfessionIndex(BaseResidentProfession::Combat);
+    AssetInstanceId rifle{};
+    AssetInstanceId spare{};
+    AssetInstanceId ammunition{};
+    AssetInstanceId pack{};
+    StoredAssetLocation rifleOrigin{ProfileContainerId::stash(), {}};
+    StoredAssetLocation spareOrigin{ProfileContainerId::stash(), {}};
+
+    AssetInstanceId addStash(const ItemDefinitionId &id, unsigned count = 1U)
+    {
+        const auto &definition = content.item(id);
+        const auto fits = findFirstProfileFit(profile, content, ProfileContainerId::stash(),
+            definition, ItemOrientation::Degrees0);
+        EXPECT_TRUE(fits);
+        if (!fits)
+            return 0U;
+        return profile.assets.create(definition, StoredAssetLocation{ProfileContainerId::stash(), *fits}, count);
+    }
+
+    void SetUp() override
+    {
+        ++profile.basePopulation.ordinaryResidents;
+        ++profile.basePopulation.professionResidents[combat];
+        profile.committedRescues.insert(kRaidFireSupportReplacementRescueId);
+        rifle = addStash(kRaidFireSupportRifleId);
+        spare = addStash(magazineId);
+        ammunition = addStash(kRaidFireSupportAmmunitionId, 42U);
+        ASSERT_TRUE(rifle && spare && ammunition);
+        rifleOrigin = std::get<StoredAssetLocation>(profile.assets.find(rifle)->location);
+        spareOrigin = std::get<StoredAssetLocation>(profile.assets.find(spare)->location);
+        profile.assets.findMutable(spare)->magazineRounds.assign(5U, {kRaidFireSupportAmmunitionId, std::nullopt});
+        pack = profile.assets.create(content.item(ItemDefinitionId{"item.container.backpack_expedition"}),
+            EquippedAssetLocation{EquipmentSlotKind::Backpack});
+        ASSERT_TRUE(validateProfileState(profile, content).valid);
+    }
+
+    DeployReceipt deploySupport(ProfileState &candidate, const MapDefinitionId &map = kRaidFireSupportMapId) const
+    {
+        DeployCommand command{"support-raid", "support-settlement", 8847U, map};
+        command.fireSupport = RaidFireSupportLoadout{rifle, spare};
+        return executeDeploy(candidate, content, command, {candidate.revision, "support-deploy"});
+    }
+
+    RaidSceneContainerAccess expose()
+    {
+        const auto &raid = *profile.pendingRaid;
+        const auto id = raid.fireSupport->containerAssetId;
+        const auto space = outdoorRaidSpaceId();
+        const Vec2 position = raid.playerSpawn;
+        EXPECT_TRUE(revealRaidFireSupportCorpseInSimulation(profile, content, space, position));
+        RaidSceneContainerAccess access{id, space, position};
+        access.observation = observeAssetContractPoint(profile, space, position);
+        access.currentObservation = access.observation->key();
+        return access;
+    }
+};
+}
+
+TEST_F(RaidFireSupportTest, QualificationAndAtomicDeploymentKeepLoansAndPreparationSeparate)
+{
+    const RaidFireSupportLoadout loadout{rifle, spare};
+    auto plan = queryRaidFireSupportLoadout(profile, content, kRaidFireSupportMapId, loadout);
+    EXPECT_EQ(plan.availableCombatResidents, 1U);
+    const auto prepared = std::find_if(plan.spareMagazines.begin(), plan.spareMagazines.end(),
+        [this](const auto &option) { return option.assetId == spare; });
+    ASSERT_NE(prepared, plan.spareMagazines.end());
+    EXPECT_EQ(prepared->roundCount, 5U);
+    const auto balance = plan.preparationRoundCount;
+    auto wrongMap = profile;
+    const auto initial = profileStateFingerprint(wrongMap);
+    EXPECT_FALSE(deploySupport(wrongMap, kRaidFireSupportReplacementMapId).succeeded);
+    EXPECT_EQ(profileStateFingerprint(wrongMap), initial);
+
+    auto wounded = profile;
+    ++wounded.basePopulation.injuredResidents;
+    ++wounded.basePopulation.injuredByProfession[combat];
+    EXPECT_EQ(queryRaidFireSupportLoadout(wounded, content, kRaidFireSupportMapId).failure,
+        RaidFireSupportLoadoutFailure::NoAvailableCombatResident);
+    auto chambered = profile;
+    chambered.assets.findMutable(rifle)->chamberedRound = MagazineRoundRecord{kRaidFireSupportAmmunitionId};
+    EXPECT_EQ(queryRaidFireSupportLoadout(chambered, content, kRaidFireSupportMapId, loadout).failure,
+        RaidFireSupportLoadoutFailure::InvalidRifle);
+    auto mixed = profile;
+    mixed.assets.findMutable(spare)->magazineRounds.front().definitionId = kExpanding545AmmunitionId;
+    EXPECT_EQ(queryRaidFireSupportLoadout(mixed, content, kRaidFireSupportMapId, loadout).failure,
+        RaidFireSupportLoadoutFailure::InvalidSpareMagazine);
+
+    const auto receipt = deploySupport(profile);
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    ASSERT_TRUE(profile.pendingRaid->fireSupport);
+    EXPECT_EQ(profile.pendingRaid->fireSupport->rifle.assetId, rifle);
+    EXPECT_EQ(profile.pendingRaid->fireSupport->rifle.returnOrigin, rifleOrigin.origin);
+    EXPECT_EQ(profile.pendingRaid->fireSupport->spareMagazine->assetId, spare);
+    EXPECT_EQ(profile.assets.find(spare)->magazineRounds.size(), 5U);
+    plan = queryRaidFireSupportLoadout(profile, content, kRaidFireSupportMapId);
+    EXPECT_EQ(plan.availableCombatResidents, 0U);
+    EXPECT_EQ(plan.preparationRoundCount, balance - kRaidFireSupportPreparationRoundCount);
+    const auto frozen = profileStateFingerprint(profile);
+    EXPECT_TRUE(deploySupport(profile).alreadyCommitted);
+    EXPECT_EQ(profileStateFingerprint(profile), frozen);
+
+    const InventoryMoveCommand occupy{ammunition, 0U, {ProfileContainerId::stash(), rifleOrigin.origin}};
+    EXPECT_FALSE(queryInventory(profile, content, occupy).canCommit);
+    EXPECT_FALSE(executeInventory(profile, content, occupy, {profile.revision, "use-reserved-cell"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), frozen);
+}
+
+TEST_F(RaidFireSupportTest, SurvivingTeammateReturnsUnclaimedLoansForEveryFormalOutcome)
+{
+    for (const auto outcome : {RaidResultOutcome::Extracted, RaidResultOutcome::PlayerDead, RaidResultOutcome::ActiveQuit})
+    {
+        auto candidate = profile;
+        const auto deployed = deploySupport(candidate);
+        ASSERT_TRUE(deployed.succeeded) << deployed.message;
+        const auto settled = settlePendingRaid(candidate, content, "support-settlement", outcome);
+        ASSERT_TRUE(settled.succeeded) << settled.message;
+        EXPECT_EQ(candidate.lastRaidResult->outcome, outcome);
+        ASSERT_TRUE(candidate.lastRaidResult->fireSupport);
+        EXPECT_EQ(*candidate.lastRaidResult->fireSupport, (RaidFireSupportResult{false, 2U, std::nullopt}));
+        EXPECT_EQ(candidate.assets.find(rifle)->location, AssetLocation{rifleOrigin});
+        EXPECT_EQ(candidate.assets.find(spare)->location, AssetLocation{spareOrigin});
+        EXPECT_EQ(candidate.assets.find(spare)->magazineRounds, profile.assets.find(spare)->magazineRounds);
+        EXPECT_EQ(candidate.basePopulation.professionResidents[combat], profile.basePopulation.professionResidents[combat]);
+        EXPECT_FALSE(candidate.fireSupportReplacement);
+        const auto fingerprint = profileStateFingerprint(candidate);
+        EXPECT_TRUE(settlePendingRaid(candidate, content, "support-settlement", outcome).alreadyCommitted);
+        EXPECT_EQ(profileStateFingerprint(candidate), fingerprint);
+    }
+
+    auto claimed = profile;
+    const auto deployed = deploySupport(claimed);
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(takeRaidFireSupportMagazine(claimed, content, {claimed.revision, "claimed-before-death"}).succeeded);
+    const auto failed = settlePendingRaid(claimed, content, "support-settlement", RaidResultOutcome::PlayerDead);
+    ASSERT_TRUE(failed.succeeded) << failed.message;
+    EXPECT_EQ(claimed.lastRaidResult->fireSupport->returnedLoanCount, 1U);
+    EXPECT_EQ(claimed.assets.find(rifle)->location, AssetLocation{rifleOrigin});
+    EXPECT_EQ(lostRaidRecordForAsset(claimed, spare), claimed.lastRaidResult->lostRaidRecordId);
+}
+
+TEST_F(RaidFireSupportTest, ResupplyKeepsTheOriginalMagazineAndAbnormalExitRestoresAllLoanState)
+{
+    auto full = profile;
+    const auto packSpace = ProfileContainerId::compartment(pack, 0U);
+    const auto size = profileContainerSize(full, content, packSpace);
+    for (int y = 0; y < size.height; ++y)
+        for (int x = 0; x < size.width; ++x)
+            static_cast<void>(full.assets.create(content.item(kRaidFireSupportAmmunitionId),
+                StoredAssetLocation{packSpace, {x, y}}));
+    const auto loaded = deploySupport(full);
+    ASSERT_TRUE(loaded.succeeded) << loaded.message;
+    const auto untouched = profileStateFingerprint(full);
+    EXPECT_EQ(takeRaidFireSupportMagazine(full, content, {full.revision, "support-full"}).error, DomainErrorCode::Capacity);
+    EXPECT_EQ(profileStateFingerprint(full), untouched);
+
+    const auto original = profile;
+    const auto deployed = deploySupport(profile);
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    const auto receipt = takeRaidFireSupportMagazine(profile, content, {profile.revision, "take-support-magazine"});
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_TRUE(assetIsCarried(profile, spare));
+    EXPECT_EQ(profile.assets.find(spare)->magazineRounds, original.assets.find(spare)->magazineRounds);
+    EXPECT_TRUE(takeRaidFireSupportMagazine(profile, content, {profile.revision, "take-support-magazine"}).alreadyCommitted);
+    EXPECT_FALSE(takeRaidFireSupportMagazine(profile, content, {profile.revision, "take-again"}).succeeded);
+    ASSERT_TRUE(rollbackPendingRaidToBase(profile, content).succeeded);
+    EXPECT_EQ(profile.assets.nextAssetId(), original.assets.nextAssetId());
+    EXPECT_EQ(profile.assets.find(ammunition)->quantity, original.assets.find(ammunition)->quantity);
+    EXPECT_EQ(profile.assets.find(rifle)->location, AssetLocation{rifleOrigin});
+    EXPECT_EQ(profile.assets.find(spare)->location, AssetLocation{spareOrigin});
+    EXPECT_EQ(profile.assets.find(spare)->magazineRounds, original.assets.find(spare)->magazineRounds);
+    EXPECT_EQ(profile.basePopulation.professionResidents[combat], original.basePopulation.professionResidents[combat]);
+}
+
+TEST_F(RaidFireSupportTest, CasualtyCannotExchangeCargoAndHasIndependentLossAfterExtraction)
+{
+    const auto ownRifle = profile.assets.create(content.item(kRaidFireSupportRifleId),
+        EquippedAssetLocation{EquipmentSlotKind::PrimaryWeapon});
+    const auto carried = profile.assets.create(content.item(kRaidFireSupportAmmunitionId),
+        StoredAssetLocation{ProfileContainerId::compartment(pack, 0U), {0, 0}});
+    const auto deployed = deploySupport(profile);
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    const auto access = expose();
+    const auto fingerprint = profileStateFingerprint(profile);
+    EXPECT_FALSE(executeInventory(profile, content, InventoryEquipCommand{rifle, EquipmentSlotKind::PrimaryWeapon},
+        {profile.revision, "corpse-swap-slot"}, &access).succeeded);
+    EXPECT_FALSE(executeInventory(profile, content, InventoryMoveCommand{spare, 0U, {ProfileContainerId::compartment(pack, 0U), {0, 0}}},
+        {profile.revision, "corpse-swap-move"}, &access).succeeded);
+    EXPECT_FALSE(executeInventory(profile, content, InventoryMoveCommand{carried, 0U, {ProfileContainerId::compartment(access.containerAssetId, 0U), {6, 1}}},
+        {profile.revision, "corpse-dump"}, &access).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
+    const auto claimed = executeInventory(profile, content, InventoryEquipCommand{rifle, EquipmentSlotKind::SecondaryWeapon},
+        {profile.revision, "corpse-take"}, &access);
+    ASSERT_TRUE(claimed.succeeded) << claimed.message;
+
+    const auto settled = settlePendingRaid(profile, content, "support-settlement", RaidResultOutcome::Extracted);
+    ASSERT_TRUE(settled.succeeded) << settled.message;
+    EXPECT_EQ(profile.lastRaidResult->outcome, RaidResultOutcome::Extracted);
+    EXPECT_FALSE(profile.lastRaidResult->lostRaidRecordId);
+    EXPECT_TRUE(profile.lastRaidResult->fireSupport->died);
+    EXPECT_EQ(profile.basePopulation.professionResidents[combat], 0U);
+    ASSERT_TRUE(profile.lastRaidResult->fireSupport->lostRecordId);
+    const auto recordId = *profile.lastRaidResult->fireSupport->lostRecordId;
+    EXPECT_EQ(recordId, raidFireSupportLostRecordId("support-settlement"));
+    EXPECT_EQ(profile.lostRaidRecords.at(recordId).kind, LostRaidRecordKind::FireSupport);
+    EXPECT_EQ(profile.lostRaidRecords.at(recordId).subsequentRaidSettlementCount, 0U);
+    EXPECT_EQ(lostRaidRecordForAsset(profile, spare), recordId);
+    EXPECT_TRUE(assetIsCarried(profile, rifle));
+    EXPECT_TRUE(assetIsCarried(profile, ownRifle));
+
+    auto selfRecovery = profile;
+    DeployCommand recoveryRaid{"support-recovery-raid", "support-recovery-settlement", 8847U, kRaidFireSupportMapId};
+    recoveryRaid.selfRecoveryRecordId = recordId;
+    const auto dispatched = executeDeploy(selfRecovery, content, recoveryRaid, {selfRecovery.revision, "support-self-recovery"});
+    ASSERT_TRUE(dispatched.succeeded) << dispatched.message;
+    const auto opened = openObservedRaidSelfRecovery(selfRecovery, content, {selfRecovery.revision, "open-support-recovery"});
+    ASSERT_TRUE(opened.succeeded) << opened.message;
+    EXPECT_FALSE(lostRaidRecordForAsset(selfRecovery, spare));
+    EXPECT_TRUE(std::holds_alternative<RaidGroundAssetLocation>(selfRecovery.assets.find(spare)->location));
+    EXPECT_EQ(selfRecovery.assets.find(spare)->magazineRounds, profile.assets.find(spare)->magazineRounds);
+
+    const auto recover = executeStartRecoveryTask(profile, content, recordId, {profile.revision, "support-paid-recovery"});
+    ASSERT_TRUE(recover.succeeded) << recover.message;
+    EXPECT_FALSE(profile.lastRaidResult->fireSupport->lostRecordId);
+    EXPECT_EQ(recoveryTaskForAsset(profile, spare), recover.taskId);
+}
+
+TEST_F(RaidFireSupportTest, BothLossRecordsCoexistAndReplacementUnlocksExactlyAt72Hours)
+{
+    const auto ownRifle = profile.assets.create(content.item(kRaidFireSupportRifleId),
+        EquippedAssetLocation{EquipmentSlotKind::PrimaryWeapon});
+    const auto deployed = deploySupport(profile);
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    static_cast<void>(expose());
+    const auto settled = settlePendingRaid(profile, content, "support-settlement", RaidResultOutcome::PlayerDead);
+    ASSERT_TRUE(settled.succeeded) << settled.message;
+    ASSERT_TRUE(profile.lastRaidResult->fireSupport->lostRecordId);
+    EXPECT_EQ(lostRaidRecordForAsset(profile, ownRifle), profile.lastRaidResult->lostRaidRecordId);
+    EXPECT_EQ(lostRaidRecordForAsset(profile, rifle), profile.lastRaidResult->fireSupport->lostRecordId);
+    EXPECT_EQ(lostRaidRecordForAsset(profile, spare), profile.lastRaidResult->fireSupport->lostRecordId);
+    ASSERT_TRUE(profile.fireSupportReplacement);
+    const auto ticket = *profile.fireSupportReplacement;
+    EXPECT_EQ(ticket.readyWorldMinute, profile.worldClock.elapsedWorldMinutes + kRaidFireSupportReplacementDelayMinutes);
+
+    profile.worldClock.elapsedWorldMinutes = ticket.readyWorldMinute - 1U;
+    EXPECT_FALSE(readyRaidFireSupportReplacement(profile, content, kRaidFireSupportReplacementMapId));
+    profile.worldClock.elapsedWorldMinutes = ticket.readyWorldMinute;
+    EXPECT_EQ(readyRaidFireSupportReplacement(profile, content, kRaidFireSupportReplacementMapId), ticket.deathSettlementId);
+    auto recovery = profile;
+    const auto frontier = executeDeploy(profile, content,
+        {"replacement-raid", "replacement-settlement", 8847U, kRaidFireSupportReplacementMapId},
+        {profile.revision, "replacement-deploy"});
+    ASSERT_TRUE(frontier.succeeded) << frontier.message;
+    EXPECT_EQ(profile.pendingRaid->fireSupportReplacementSource, ticket.deathSettlementId);
+    const auto transactionId = raidFireSupportReplacementTransactionId(ticket.deathSettlementId);
+    for (auto *snapshot : {&profile, &recovery})
+    {
+        const auto admission = executeRaidFireSupportReplacementAdmission(*snapshot, content,
+            ticket.deathSettlementId, {snapshot->revision, transactionId});
+        ASSERT_TRUE(admission.succeeded) << admission.message;
+        EXPECT_EQ(snapshot->basePopulation.professionResidents[combat], 1U);
+        EXPECT_FALSE(snapshot->fireSupportReplacement);
+        EXPECT_TRUE(executeRaidFireSupportReplacementAdmission(*snapshot, content,
+            ticket.deathSettlementId, {snapshot->revision, transactionId}).alreadyCommitted);
+    }
+    EXPECT_TRUE(profile.pendingRaid->rescue->secured);
+    EXPECT_FALSE(recovery.pendingRaid);
 }

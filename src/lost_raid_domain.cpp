@@ -80,6 +80,7 @@ std::vector<LostRaidRecordProjection> queryLostRaidRecords(
             content.map(record.mapDefinitionId).displayName;
         projection.difficulty = record.difficulty;
         projection.outcome = record.outcome;
+        projection.kind = record.kind;
         projection.createdWorldMinute = record.createdWorldMinute;
         projection.subsequentRaidSettlementCount =
             record.subsequentRaidSettlementCount;

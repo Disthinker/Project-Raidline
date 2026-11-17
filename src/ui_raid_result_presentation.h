@@ -49,6 +49,7 @@ struct UiRaidResultProjection {
         rescuedInjuredResidents{}, baseThreatReducedUnits{};
     std::optional<std::string> lostRaidRecordId;
     std::optional<BaseWishReturnSummary> wishReturn;
+    std::optional<RaidFireSupportResult> fireSupport;
     std::string title, status, message, recordHeading, recordNote;
     std::vector<std::string> summaryLines, detailLines;
     std::vector<UiRaidResultItem> returned;

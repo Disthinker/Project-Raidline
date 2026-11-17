@@ -2012,10 +2012,12 @@ bool App::handleScreenConfirm()
 bool App::tryDeployFromBase(
     std::optional<RegionalOutpostDefinitionId> outpostRestorationId,
     std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId,
-    std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId)
+    std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId,
+    std::optional<RaidFireSupportLoadout> fireSupport)
 {
-    if(gameSession_.inventoryPersistencePending() && deferInventoryBarrier([this,outpostRestorationId,baseSiteClearanceId,basePerimeterSweepId] {
-        static_cast<void>(tryDeployFromBase(outpostRestorationId,baseSiteClearanceId,basePerimeterSweepId));
+    if (gameSession_.inventoryPersistencePending() &&
+        deferInventoryBarrier([this, outpostRestorationId, baseSiteClearanceId, basePerimeterSweepId, fireSupport] {
+            static_cast<void>(tryDeployFromBase(outpostRestorationId, baseSiteClearanceId, basePerimeterSweepId, fireSupport));
     }))return false;
     const ContentRegistry &content = publishedContentRegistry();
     const ProfileState &profile = gameSession_.profile();
@@ -2080,10 +2082,12 @@ bool App::tryDeployFromBase(
                       {
                           renderRaidLoadingScreen(targetMap, progress);
                       }}
-                : RaidDeploymentProgressCallback{});
+                : RaidDeploymentProgressCallback{},
+            std::move(fireSupport));
     trackProfileUiSubmission(submission,[this](const ProfileUiCompletion &completion) {
         if(!completion.succeeded){uiMessage_=completion.message;return;}
         if(!gameFlow_.completeDeploy(completion.requestId)){uiMessage_="CHANGES SAVED | REOPEN THE PAGE";return;}
+        resetBaseDeploymentUi();
         deploymentWarningArmed_=false;lostRaidRecordsOpen_=false;regionalOperationsOpen_=false;
         resetRegionalOperationsUi();resetLostRecoveryUi();selectedRaidSelfRecoveryRecordId_.reset();selectedRaidIntelligence_={};
         developerMapFogEnabled_=true;developerInfiniteAmmoEnabled_=false;developerCrisisRevealEnabled_=false;
@@ -2562,10 +2566,13 @@ void App::openRaidSceneContainer(AssetInstanceId id)
     input_.suppressPrimaryPointerUntilRelease();
     const auto *root = gameSession_.profile().assets.find(id);
     const auto *pursuit = lostWeaponPursuit(gameSession_.profile());
-    uiMessage_ = gameSession_.isRaidFreightCrate(id)
-        ? "FREIGHT CRATE OPENED | WORLD CONTINUES"
-        : ((pursuit && pursuit->corpseAssetId == id) ||
-           (root && std::holds_alternative<RaidCorpseContainerAssetLocation>(root->location)))
+    const auto *corpse = root ? std::get_if<RaidCorpseContainerAssetLocation>(&root->location) : nullptr;
+    if (gameSession_.isRaidFreightCrate(id))
+        uiMessage_ = "FREIGHT CRATE OPENED | WORLD CONTINUES";
+    else if (corpse && corpse->sourceKind == RaidCorpseSourceKind::FireSupport)
+        uiMessage_ = "TEAMMATE CORPSE OPENED | WORLD CONTINUES";
+    else
+        uiMessage_ = corpse || (pursuit && pursuit->corpseAssetId == id)
             ? "CORPSE OPENED | WORLD CONTINUES" : "SCENE CONTAINER OPENED | WORLD CONTINUES";
 }
 
@@ -4740,6 +4747,7 @@ void App::processEvents()
     raidResultConfirmRequested_ = false;
     raidResultInputCancelledThisFrame_ = false;
     fieldIntelligenceTradeUi_.interactRequested = false;
+    fireSupportUiBlocksGameplayThisFrame_ = fireSupportOrdersOpen_;
     homeFoundingInputBlockedThisFrame_ = homeFoundingPrompt_.has_value();
     developerWeaponPanelBlocksGameplayThisFrame_ =
         developerWeaponPanelOpen_;
@@ -4770,6 +4778,7 @@ void App::processEvents()
             raidChalkRoutes_.endStroke();
             raidChalkPress_.cancel();
             fieldIntelligenceTradeUi_.press.cancel();
+            fireSupportPress_.cancel();
             fieldIntelligenceTradeUi_.pendingRow.reset();
             itemDetailsInteraction_ = {}; deviceBatteryDrag_.reset();
             raidResultUi_.press.reset();
@@ -4835,6 +4844,7 @@ void App::processEvents()
                 gameSession_.cancelRaidFreightBreach();
                 gameSession_.cancelRaidFuelExtraction();
                 closeFieldIntelligenceTrade();
+                closeFireSupportOrders();
                 windowHasInputFocus_ = false;
                 homeFoundingPrompt_.reset();
                 static_cast<void>(
@@ -4915,7 +4925,7 @@ void App::processEvents()
             if ((gameFlow_.state() == GameFlowState::Raid ||
                  gameFlow_.state() == GameFlowState::Base) &&
                 !inventoryOverlayState_.isOpen() &&
-                !fieldIntelligenceTradeUi_.open &&
+                !fieldIntelligenceTradeUi_.open && !fireSupportUiBlocksGameplayThisFrame_ &&
                 !pauseMenu_.isOpen() &&
                 !developerWeaponPanelOpen_ &&
                 !quickWheelOpen() &&
@@ -4949,6 +4959,7 @@ void App::processEvents()
             event.type==SDL_EVENT_MOUSE_BUTTON_UP || event.type==SDL_EVENT_MOUSE_WHEEL)) {
             input_.suppressPrimaryPointerUntilRelease();continue;
         }
+        if (routeFireSupportInput(event)) continue;
 
         if (baseConstructionPanelOpen_ && baseFinalDetailsOpen_ && !baseFacilityContextMenu_ &&
             !fortificationBuildUi_.menu && event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
@@ -5764,6 +5775,11 @@ void App::update(float deltaTime)
         !windowHasInputFocus_ || developerWeaponPanelOpen_ || developerRangePanelOpen_ ||
         raidSaveProtectionVisible())
         closeFieldIntelligenceTrade();
+    if (fireSupportOrdersOpen_ &&
+        (gameFlow_.state() != GameFlowState::Raid || pauseMenu_.isOpen() ||
+         !windowHasInputFocus_ || developerWeaponPanelOpen_ || developerRangePanelOpen_ ||
+         inventoryOverlayState_.isOpen() || tacticalMapOpen_ || raidSaveProtectionVisible()))
+        closeFireSupportOrders();
     updateWeaponOpticPointerGate();
     uiClockSeconds_+=std::max(0.0F,deltaTime);
     updateInventoryUiPersistence(deltaTime);
@@ -5986,7 +6002,7 @@ void App::update(float deltaTime)
         baseDefenseResultVisible_ ||
         baseConstructionPanelOpen_ ||
         inventoryOverlayState_.isOpen() ||
-        fieldIntelligenceTradeUi_.open ||
+        fieldIntelligenceTradeUi_.open || fireSupportUiBlocksGameplayThisFrame_ ||
         basePlacementState_.has_value() ||
         baseFixedFacilityPlacementState_.has_value() ||
         quickWheelOpen() || selectedThrowable_.has_value() ||
@@ -6066,7 +6082,8 @@ void App::update(float deltaTime)
         return;
     }
 
-    const bool tacticalToggle = !fieldIntelligenceTradeUi_.open && input_.wasActionJustPressed(
+    const bool tacticalToggle = !fieldIntelligenceTradeUi_.open &&
+        !fireSupportUiBlocksGameplayThisFrame_ && input_.wasActionJustPressed(
         GameAction::ToggleTacticalMap);
     if (tacticalMapOpen_ && (tacticalToggle || escapePressed))
     {
@@ -6095,11 +6112,11 @@ void App::update(float deltaTime)
             inventoryOverlayState_.isOpen(),
             !developerWeaponPanelBlocksGameplayThisFrame_ &&
             !tacticalMapOpen_ && !fieldIntelligenceTradeUi_.open &&
-            raidAcceptsInventoryInput &&
+            !fireSupportUiBlocksGameplayThisFrame_ && raidAcceptsInventoryInput &&
                 input_.wasActionJustPressed(
                     GameAction::ToggleInventory),
             !developerWeaponPanelBlocksGameplayThisFrame_ && !fieldIntelligenceTradeUi_.open &&
-            input_.wasActionJustPressed(
+            !fireSupportUiBlocksGameplayThisFrame_ && input_.wasActionJustPressed(
                 GameAction::InventoryCancel));
 
     switch (inputDecision.controlAction)
@@ -6223,8 +6240,8 @@ void App::update(float deltaTime)
             gameSession_.world().weaponAimWorldPosition();
         gameplayInput.aimMotionDelta = Vec2{};
     }
-    if (fieldIntelligenceTradeUi_.open)
-        suppressFieldIntelligenceTradeControls(gameplayInput);
+    if (fieldIntelligenceTradeUi_.open || fireSupportUiBlocksGameplayThisFrame_)
+        suppressRaidPanelControls(gameplayInput);
     else
         updatePlayerActionInput(gameplayInput);
     if (inputDecision.controlAction != InventoryFrameControlAction::None)
@@ -6256,10 +6273,18 @@ void App::update(float deltaTime)
             uiMessage_=inspection.canCommit?"CORPSE EMPTY":inspection.message;
             gameplayInput.interactJustPressed=gameplayInput.interactPressed=false;
         }
+        else if (!gameSession_.world().raidSpacePortalInteractionInRange() &&
+                 !gameSession_.world().ordinarySurvivorRescueInteractionInRange() &&
+                 !gameSession_.canCallSignalExtraction() && gameSession_.canTakeFireSupportMagazine())
+        {
+            const auto receipt = gameSession_.takeFireSupportMagazine(nextProfileTransactionId("fire-support-magazine"));
+            uiMessage_ = receipt.succeeded ? "TEAMMATE MAGAZINE TAKEN" : receipt.message;
+            gameplayInput.interactJustPressed = gameplayInput.interactPressed = false;
+        }
         else if (tryOpenFieldIntelligenceTrade())
         {
             if (fieldIntelligenceTradeUi_.open)
-                suppressFieldIntelligenceTradeControls(gameplayInput);
+                suppressRaidPanelControls(gameplayInput);
             else
                 gameplayInput.interactJustPressed = gameplayInput.interactPressed = false;
         }
@@ -6302,6 +6327,13 @@ void App::update(float deltaTime)
     if (gameSession_.world().nightRendezvousSignaledLastUpdate())
         gameAudio_.play(SoundEventId::NoiseDecoyPulse);
     updateFieldIntelligenceTradeAfterWorld();
+    if (fireSupportOrdersOpen_)
+    {
+        const auto teammate = gameSession_.world().fireSupport();
+        if (!teammate || !teammate->alive() ||
+            gameSession_.world().raidSession().state() != RaidSessionState::InRaid)
+            closeFireSupportOrders();
+    }
     syncRaidChalkRoutes();
     if (!deviceWheelWasOpen && gameSession_.tacticalDeviceWheelOpen()) {
         wheelPointerOffset_ = tacticalDeviceReleasePointer_ = pendingRelativeAimMotion_ = {};
@@ -6360,6 +6392,19 @@ void App::update(float deltaTime)
             weaponShotSound(tuning), acoustics.fireGain);
         gameAudio_.play(SoundEventId::WeaponFireTailOutdoor,
                         acoustics.outdoorTailGain);
+    }
+    if (const auto shot = gameSession_.world().fireSupportShotLastUpdate())
+    {
+        const auto &player = gameSession_.world().player();
+        const Vec2 listener{player.position().x + player.size() / 2.0F,
+                            player.position().y + player.size() / 2.0F};
+        const float distance = std::hypot(shot->origin.x - listener.x, shot->origin.y - listener.y);
+        const float gain = std::clamp(1.0F - distance / std::max(kFireSupportRange, shot->noiseRadius), 0.0F, 0.7F);
+        if (gain > 0.0F)
+        {
+            gameAudio_.play(SoundEventId::WeaponRifleFire, gain);
+            gameAudio_.play(SoundEventId::WeaponFireTailOutdoor, gain);
+        }
     }
     for (const HitResult &hit : gameSession_.world().hitResultsLastUpdate())
     {
@@ -9128,7 +9173,7 @@ bool App::shouldCaptureWorldPointer() const noexcept
             raidWorldActive || baseWorldActive,
             raidWorldActive || baseWorldActive,
             inventoryOverlayState_.isOpen() ||
-                fieldIntelligenceTradeUi_.open ||
+                fieldIntelligenceTradeUi_.open || fireSupportOrdersOpen_ ||
                 basePlacementState_.has_value() ||
                 baseFixedFacilityPlacementState_.has_value() ||
                 baseConstructionPanelOpen_ || homeFoundingPrompt_.has_value(),
@@ -9202,7 +9247,7 @@ void App::renderAimCrosshair()
     const bool inRaidWorld = gameFlow_.isRaidScreen() &&
         gameSession_.world().raidSession().isActive();
     if (inventoryOverlayState_.isOpen() ||
-        fieldIntelligenceTradeUi_.open ||
+        fieldIntelligenceTradeUi_.open || fireSupportOrdersOpen_ ||
         basePlacementState_.has_value() ||
         baseFixedFacilityPlacementState_.has_value() ||
         baseConstructionPanelOpen_ ||
@@ -9812,6 +9857,7 @@ void App::renderPlayer()
 
 void App::renderEnemies()
 {
+    renderFireSupportWorld();
     const auto &world = gameSession_.world();
     const std::vector<Enemy> &enemies =
         world.enemies();
@@ -12983,10 +13029,11 @@ void App::renderProfileInventory(
         if(externalContainerId) {
             const auto *owner=profile.assets.find(*externalContainerId);
             const auto *pursuit=lostWeaponPursuit(profile);
-            title = freightCrate ? "SEALED FREIGHT CRATE"
-                : ((pursuit && pursuit->corpseAssetId == *externalContainerId) ||
-                   (owner && std::holds_alternative<RaidCorpseContainerAssetLocation>(owner->location)))
-                    ? "CORPSE" : inRaid ? "SCENE STORAGE" : "BASE GROUND CONTAINER";
+            const auto *corpse = owner ? std::get_if<RaidCorpseContainerAssetLocation>(&owner->location) : nullptr;
+            if (freightCrate) title = "SEALED FREIGHT CRATE";
+            else if (corpse && corpse->sourceKind == RaidCorpseSourceKind::FireSupport) title = "TEAMMATE CORPSE";
+            else if (corpse || (pursuit && pursuit->corpseAssetId == *externalContainerId)) title = "CORPSE";
+            else title = inRaid ? "SCENE STORAGE" : "BASE GROUND CONTAINER";
         }
         const int titleSize = externalContainerId && (!inRaid || freightCrate) &&
             uiTextRenderer_.language()==UiLanguage::English ? 13 : 16;
@@ -13148,10 +13195,12 @@ void App::renderAlphaRaidLoot()
         SDL_RenderRect(renderer_, &body);
         SDL_RenderLine(renderer_, p.x - 14, p.y, p.x + 14, p.y);
         const bool empty = assetsInContainer(profile, ProfileContainerId::compartment(id, 0)).empty();
+        const bool canSearch = !inventoryOverlayState_.isOpen() && gameSession_.canOpenRaidSceneContainer(id);
         SDL_SetRenderDrawColor(renderer_, 244, 230, 180, 255);
-        renderWorldLabel(body.x, body.y - 20,
-            !inventoryOverlayState_.isOpen() && gameSession_.canOpenRaidSceneContainer(id) ? "F: SEARCH CORPSE" :
-            empty ? "EMPTY CORPSE" : "SEARCHABLE CORPSE");
+        const char *label = corpse->sourceKind == RaidCorpseSourceKind::FireSupport
+            ? (canSearch ? "F: SEARCH TEAMMATE CORPSE" : empty ? "EMPTY TEAMMATE CORPSE" : "TEAMMATE CORPSE")
+            : (canSearch ? "F: SEARCH CORPSE" : empty ? "EMPTY CORPSE" : "SEARCHABLE CORPSE");
+        renderWorldLabel(body.x, body.y - 20, label);
     }
     for (const auto &[id, asset] : profile.assets.records())
     {
@@ -14779,6 +14828,7 @@ void App::renderRaidScreen()
     // Player HUD consumes current public projections; diagnostics use F9.
     renderDebugText();
     renderFieldIntelligenceTrade();
+    renderFireSupportOrders();
 }
 
 void App::render()

@@ -1,4 +1,5 @@
 #include "raid_corpse_search.h"
+#include "raid_fire_support_domain.h"
 #include "raid_credential_extraction.h"
 #include "game_session.h"
 #include "base_defense_preparation.h"
@@ -3743,6 +3744,8 @@ GameSession::ordinarySurvivorRescuePlan() const
     {
         return std::nullopt;
     }
+    if (const auto &replacement = profile_.pendingRaid->fireSupportReplacementSource)
+        return queryRaidFireSupportReplacementAdmission(profile_, *replacement);
     const RaidRescueSnapshot &rescue = *profile_.pendingRaid->rescue;
     return queryOrdinarySurvivorAdmission(
         profile_,
@@ -3760,6 +3763,29 @@ GameSession::nightRendezvousAdmissionPlan() const
     const auto &rescue = *profile_.pendingRaid->nightRendezvous;
     return queryOrdinarySurvivorAdmission(profile_, {
         rescue.definitionId, rescue.ordinaryResidentCount, rescue.injuredResidentCount});
+}
+
+bool GameSession::canTakeFireSupportMagazine() const
+{
+    if (!alphaRaidActive_ || !world_ || profileUiCommitPending() || !profile_.pendingRaid ||
+        !profile_.pendingRaid->fireSupport || world_->fireSupportHealth().value_or(0) <= 0 ||
+        !world_->canInteractWithFireSupport())
+        return false;
+    const auto &support = *profile_.pendingRaid->fireSupport;
+    const auto *spare = support.spareMagazine ? profile_.assets.find(support.spareMagazine->assetId) : nullptr;
+    const auto *stored = spare ? std::get_if<StoredAssetLocation>(&spare->location) : nullptr;
+    return stored && stored->container == ProfileContainerId::compartment(support.containerAssetId, 0U);
+}
+
+InventoryReceipt GameSession::takeFireSupportMagazine(std::string transactionId)
+{
+    if (!transactionId.empty() && profile_.committedTransactions.contains(transactionId))
+        return {true, true, DomainErrorCode::None, {}, profile_.revision};
+    if (!canTakeFireSupportMagazine())
+        return {false, false, DomainErrorCode::IllegalDestination,
+            "FIRE SUPPORT IS NOT AVAILABLE FOR RESUPPLY", profile_.revision};
+    return takeRaidFireSupportMagazine(profile_, publishedContentRegistry(),
+        {profile_.revision, std::move(transactionId)});
 }
 
 void GameSession::advanceBaseWorldClock(float deltaTime, bool allowAutomaticAdmission)
@@ -4539,6 +4565,8 @@ void GameSession::updateAlphaRaid(
             state_ = GameSessionState::SettlementBlocked;
             return false;
         }, weaponActionPortal, selectFuel);
+    if (profile_.pendingRaid && profile_.pendingRaid->fireSupport)
+        static_cast<void>(recordFireSupportDeath(profile_));
     if(!world_->raidSession().isActive())world_->commitNoiseDecoy({});
     const bool meleeFrame=world_->melee().result().attempted;
     if(meleeFrame)
@@ -5008,6 +5036,13 @@ void GameSession::applyAlphaIncomingDamage()
     }
 }
 
+bool GameSession::recordFireSupportDeath(ProfileState &profile)
+{
+    const auto death = world_->fireSupportDeathPosition();
+    return !death || revealRaidFireSupportCorpseInSimulation(
+        profile, publishedContentRegistry(), outdoorRaidSpaceId(), *death);
+}
+
 bool GameSession::prepareRaidSettlementCandidate(RaidResultOutcome outcome,ProfileState &candidate)
 {
     if (!profile_.pendingRaid.has_value())
@@ -5015,6 +5050,12 @@ bool GameSession::prepareRaidSettlementCandidate(RaidResultOutcome outcome,Profi
         return false;
     }
     candidate = profile_;
+    if (candidate.pendingRaid->fireSupport && !recordFireSupportDeath(candidate))
+    {
+        persistenceMessage_ = "FIRE SUPPORT DEATH COULD NOT BE RECORDED";
+        state_ = GameSessionState::SettlementBlocked;
+        return false;
+    }
     // Extraction resolves held magazines in the SAME durability candidate.
     // Failed/active-quit loss goes directly through Held -> Retained in the
     // lifecycle transaction; normal cancellation would wrongly drop assets.
@@ -5171,15 +5212,17 @@ bool GameSession::prepareSurvivorRescueCandidate(
         rescue.injuredResidentCount};
     raidCandidate = profile_;
     recoveryCandidate = *activeRaidRecoveryProfile_;
+    const auto &replacement = pending.fireSupportReplacementSource;
+    const bool replacementRescue = !nightRendezvous && replacement.has_value();
+    const auto admit = [&](ProfileState &candidate, std::string transactionId) {
+        if (replacementRescue)
+            return executeRaidFireSupportReplacementAdmission(candidate, publishedContentRegistry(),
+                *replacement, {candidate.revision, raidFireSupportReplacementTransactionId(*replacement)});
+        return executeOrdinarySurvivorAdmission(candidate, publishedContentRegistry(),
+            command, {candidate.revision, std::move(transactionId)});
+    };
     const OrdinarySurvivorAdmissionReceipt recoveryReceipt =
-        executeOrdinarySurvivorAdmission(
-            recoveryCandidate,
-            publishedContentRegistry(),
-            command,
-            CommandContext{
-                recoveryCandidate.revision,
-                "rescue-checkpoint:" +
-                    std::string{rescue.definitionId.value()}});
+        admit(recoveryCandidate, "rescue-checkpoint:" + std::string{rescue.definitionId.value()});
     if (!recoveryReceipt.succeeded)
     {
         persistenceMessage_ = recoveryReceipt.message;
@@ -5188,15 +5231,9 @@ bool GameSession::prepareSurvivorRescueCandidate(
     }
     auto &marked = nightRendezvous
         ? raidCandidate.pendingRaid->nightRendezvous : raidCandidate.pendingRaid->rescue;
-    marked->secured = true;
+    if (!replacementRescue) marked->secured = true;
     const OrdinarySurvivorAdmissionReceipt raidReceipt =
-        executeOrdinarySurvivorAdmission(
-            raidCandidate,
-            publishedContentRegistry(),
-            command,
-            CommandContext{
-                raidCandidate.revision,
-                nextRaidTransaction("rescue")});
+        admit(raidCandidate, nextRaidTransaction("rescue"));
     if (!raidReceipt.succeeded)
     {
         persistenceMessage_ = raidReceipt.message;

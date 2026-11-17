@@ -61,6 +61,12 @@ std::string uiRaidResultContextKey(const std::string &profileId,
         key.number(result->fuelExtractionPaid);
         key.number(result->unlockedExtractionPermissions.size());
         for (const auto &id : result->unlockedExtractionPermissions) key.add(id.value());
+        key.number(result->fireSupport.has_value());
+        if (result->fireSupport) {
+            key.number(result->fireSupport->died);
+            key.number(result->fireSupport->returnedLoanCount);
+            key.add(result->fireSupport->lostRecordId.value_or(""));
+        }
         key.number(result->wishReturn.has_value());
         if (result->wishReturn) {
             const auto &wish = *result->wishReturn;
@@ -121,6 +127,17 @@ UiRaidResultProjection projectUiRaidResult(const std::string &profileId,
     p.baseThreatReducedUnits = result.baseThreatReducedUnits;
     p.lostRaidRecordId = result.lostRaidRecordId;
     p.wishReturn = result.wishReturn;
+    p.fireSupport = result.fireSupport;
+    if (p.fireSupport) {
+        const auto &team = *p.fireSupport;
+        p.summaryLines.push_back(text(team.died ? "FIRE SUPPORT TEAMMATE KILLED" : "FIRE SUPPORT TEAMMATE RETURNED"));
+        p.detailLines.push_back(p.summaryLines.back());
+        if (!team.died)
+            p.detailLines.push_back(text("TEAMMATE LOAN ITEMS RETURNED") + " · " +
+                std::to_string(team.returnedLoanCount));
+        if (team.lostRecordId)
+            p.detailLines.push_back(text("TEAMMATE LOSS RECORDED · SEE LOST ITEMS"));
+    }
 
     const auto rescued = static_cast<std::uint64_t>(p.rescuedOrdinaryResidents) +
         static_cast<std::uint64_t>(p.rescuedInjuredResidents);

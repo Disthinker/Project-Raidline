@@ -329,6 +329,7 @@ add_library(raidline_domain STATIC
     src/raid_visibility.cpp
     src/raid_visibility.h
     src/raid_lifecycle.cpp
+    src/raid_fire_support_domain.cpp
     src/regional_operations_domain.cpp
     src/regional_operations_domain.h
     src/self_recovery_domain.cpp
@@ -411,6 +412,7 @@ add_library(raidline_simulation STATIC
     src/extraction_point.h
     src/gameplay_input.h
     src/gameplay_world.cpp
+    src/raid_fire_support_runtime.cpp
     src/gameplay_world.h
     src/ground_item.cpp
     src/ground_item.h
@@ -558,6 +560,7 @@ add_library(raidline_sdl_client STATIC
     src/app_ui_regional_operations.cpp
     src/app_ui_raid_result.cpp
     src/app_ui_raid_field_trade.cpp
+    src/app_ui_raid_fire_support.cpp
     src/ui_raid_result_presentation.cpp
     src/ui_raid_result_presentation.h
     src/ui_regional_operations_presentation.cpp
@@ -766,6 +769,10 @@ raidline_add_test(
 raidline_add_test(
     GameplayWorldTest
     tests/test_gameplay_world.cpp
+    raidline::simulation)
+raidline_add_test(
+    RaidFireSupportRuntimeTest
+    tests/test_raid_fire_support_runtime.cpp
     raidline::simulation)
 raidline_add_test(
     RaidSpaceQueryTest
