@@ -3752,6 +3752,16 @@ GameSession::ordinarySurvivorRescuePlan() const
             rescue.injuredResidentCount});
 }
 
+std::optional<OrdinarySurvivorAdmissionPlan>
+GameSession::nightRendezvousAdmissionPlan() const
+{
+    if (!alphaRaidActive_ || !profile_.pendingRaid || !profile_.pendingRaid->nightRendezvous)
+        return std::nullopt;
+    const auto &rescue = *profile_.pendingRaid->nightRendezvous;
+    return queryOrdinarySurvivorAdmission(profile_, {
+        rescue.definitionId, rescue.ordinaryResidentCount, rescue.injuredResidentCount});
+}
+
 void GameSession::advanceBaseWorldClock(float deltaTime, bool allowAutomaticAdmission)
 {
     if(profileUiCommitPending())return;
@@ -4001,13 +4011,15 @@ void GameSession::advanceWorldClockFromSimulation(
                 pendingWorldSeconds_ = scaledSeconds;
                 return;
             }
+            const bool trainingWasActive = profile_.activeEngineeringTraining.has_value();
             const auto [demand, construction, manufacturing, residentTreatment] =
                 synchronizeBaseWorkThrough(profile_, publishedContentRegistry(), advanced.minutesApplied);
+            const bool trainingCompleted = trainingWasActive && !profile_.activeEngineeringTraining;
             const RecoveryTaskAdvanceResult recovery =
                 applyRecoveryTaskThrough(profile_);
             const bool revisionRequired =
                 construction.completed || manufacturing.completed ||
-                residentTreatment.completed || recovery.becameReady;
+                residentTreatment.completed || recovery.becameReady || trainingCompleted;
             if (revisionRequired)
             {
                 if (profile_.revision ==
@@ -4037,12 +4049,15 @@ void GameSession::advanceWorldClockFromSimulation(
             advanceWorldClock(candidate.worldClock, minutes);
         if (advanced.minutesApplied > 0U)
         {
+            const bool trainingWasActive = candidate.activeEngineeringTraining.has_value();
             const auto [demand, construction, manufacturing, residentTreatment] =
                 synchronizeBaseWorkThrough(candidate, publishedContentRegistry(), advanced.minutesApplied);
+            const bool trainingCompleted = trainingWasActive && !candidate.activeEngineeringTraining;
             const RecoveryTaskAdvanceResult recovery =
                 applyRecoveryTaskThrough(candidate);
-            if (construction.completed || manufacturing.completed ||
-                residentTreatment.completed || recovery.becameReady)
+            const bool timedCompletion = construction.completed || manufacturing.completed ||
+                residentTreatment.completed || recovery.becameReady || trainingCompleted;
+            if (timedCompletion)
             {
                 if (candidate.revision ==
                     std::numeric_limits<ProfileRevision>::max())
@@ -4068,8 +4083,7 @@ void GameSession::advanceWorldClockFromSimulation(
                 pendingWorldSeconds_ = scaledSeconds;
                 return;
             }
-            if (construction.completed || manufacturing.completed ||
-                residentTreatment.completed || recovery.becameReady || treatmentStarted)
+            if (timedCompletion || treatmentStarted)
             {
                 auto prepared=std::make_shared<PreparedPlayerTransition>();
                 prepared->kind=PreparedPlayerTransition::Kind::TimedBaseCompletion;
@@ -4635,6 +4649,11 @@ void GameSession::updateAlphaRaid(
         static_cast<void>(requestOrdinarySurvivorRescue());
         if(profileUiCommitPending())return;
     }
+    if (world_->takeNightRendezvousCommitRequest() && profile_.currentHealth > 0)
+    {
+        static_cast<void>(requestNightRendezvous());
+        if (profileUiCommitPending()) return;
+    }
     advanceAlphaMedicalStatus(deltaTime);
 
     if (const auto fact = world_->pendingCredentialInvestigation())
@@ -4732,6 +4751,7 @@ void GameSession::updateAlphaRaid(
     if (input.interactJustPressed &&
         !world_->spaceTransitionedLastUpdate() &&
         !world_->raidSession().signalCalledLastUpdate() &&
+        !world_->nightRendezvousConsumedInteraction() &&
         !raidActionState_.active().has_value() &&
         !world_->highRiskControlInteractionInRange() &&
         !(simulationInput.credentialInvestigationAllowed &&
@@ -5128,18 +5148,23 @@ GameSession::purchaseRaidInteriorIntelligence(
     return receipt;
 }
 
-bool GameSession::prepareOrdinarySurvivorRescueCandidate(ProfileState &raidCandidate,ProfileState &recoveryCandidate)
+bool GameSession::prepareSurvivorRescueCandidate(
+    ProfileState &raidCandidate, ProfileState &recoveryCandidate, bool nightRendezvous)
 {
-    if (!alphaRaidActive_ || !activeRaidRecoveryProfile_.has_value() ||
-        !profile_.pendingRaid.has_value() ||
-        !profile_.pendingRaid->rescue.has_value() ||
-        profile_.pendingRaid->rescue->secured ||
-        !world_->ordinarySurvivorRescueReady())
-    {
+    if (!alphaRaidActive_ || !activeRaidRecoveryProfile_ || !profile_.pendingRaid)
         return false;
-    }
+    const auto &pending = *profile_.pendingRaid;
+    const auto &selected = nightRendezvous ? pending.nightRendezvous : pending.rescue;
+    if (!selected || selected->secured ||
+        (nightRendezvous ? !world_->nightRendezvousReady() : !world_->ordinarySurvivorRescueReady()))
+        return false;
 
-    const RaidRescueSnapshot rescue = *profile_.pendingRaid->rescue;
+    const RaidRescueSnapshot &rescue = *selected;
+    const auto cancelInteraction = [&]
+    {
+        if (!nightRendezvous)
+            world_->cancelOrdinarySurvivorRescueInteraction();
+    };
     const OrdinarySurvivorAdmissionCommand command{
         rescue.definitionId,
         rescue.ordinaryResidentCount,
@@ -5158,10 +5183,12 @@ bool GameSession::prepareOrdinarySurvivorRescueCandidate(ProfileState &raidCandi
     if (!recoveryReceipt.succeeded)
     {
         persistenceMessage_ = recoveryReceipt.message;
-        world_->cancelOrdinarySurvivorRescueInteraction();
+        cancelInteraction();
         return false;
     }
-    raidCandidate.pendingRaid->rescue->secured = true;
+    auto &marked = nightRendezvous
+        ? raidCandidate.pendingRaid->nightRendezvous : raidCandidate.pendingRaid->rescue;
+    marked->secured = true;
     const OrdinarySurvivorAdmissionReceipt raidReceipt =
         executeOrdinarySurvivorAdmission(
             raidCandidate,
@@ -5170,11 +5197,10 @@ bool GameSession::prepareOrdinarySurvivorRescueCandidate(ProfileState &raidCandi
             CommandContext{
                 raidCandidate.revision,
                 nextRaidTransaction("rescue")});
-    if (!raidReceipt.succeeded || !raidCandidate.pendingRaid.has_value() ||
-        !raidCandidate.pendingRaid->rescue.has_value())
+    if (!raidReceipt.succeeded)
     {
         persistenceMessage_ = raidReceipt.message;
-        world_->cancelOrdinarySurvivorRescueInteraction();
+        cancelInteraction();
         return false;
     }
     const ProfileValidationResult validation = validateProfileState(
@@ -5183,7 +5209,7 @@ bool GameSession::prepareOrdinarySurvivorRescueCandidate(ProfileState &raidCandi
     if (!validation.valid)
     {
         persistenceMessage_ = validation.message;
-        world_->cancelOrdinarySurvivorRescueInteraction();
+        cancelInteraction();
         return false;
     }
 
@@ -5193,7 +5219,7 @@ bool GameSession::prepareOrdinarySurvivorRescueCandidate(ProfileState &raidCandi
 bool GameSession::secureOrdinarySurvivorRescue()
 {
     ProfileState raidCandidate,recoveryCandidate;
-    if(!prepareOrdinarySurvivorRescueCandidate(raidCandidate,recoveryCandidate))return false;
+    if(!prepareSurvivorRescueCandidate(raidCandidate,recoveryCandidate,false))return false;
     if(saveRepository_) {
         const auto saved=saveRepository_->save(recoveryCandidate,publishedContentRegistry().contentVersion());
         if(!saved.succeeded){persistenceMessage_=saved.message;world_->cancelOrdinarySurvivorRescueInteraction();return false;}

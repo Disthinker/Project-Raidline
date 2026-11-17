@@ -934,6 +934,18 @@ struct BaseManufacturingOrder
         const BaseManufacturingOrder &) = default;
 };
 
+struct BaseEngineeringTrainingOrder
+{
+    BaseServiceJobId jobId{};
+    std::uint32_t remainingMinutes{};
+    std::uint64_t updatedThroughWorldMinute{};
+    std::vector<AssetInstanceId> inputAssetIds;
+
+    friend bool operator==(
+        const BaseEngineeringTrainingOrder &,
+        const BaseEngineeringTrainingOrder &) = default;
+};
+
 struct BaseManufacturingState
 {
     std::optional<BaseManufacturingOrder> activeOrder;
@@ -1275,6 +1287,7 @@ struct PendingRaidSnapshot
     std::vector<RaidLootSnapshot> loot;
     std::optional<AssetRegistry> startingAssets; // Exact pre-deploy assets for Raid rollback.
     std::optional<RaidRescueSnapshot> rescue;
+    std::optional<RaidRescueSnapshot> nightRendezvous;
     std::optional<RaidCredentialExtractionSnapshot> credentialExtraction;
     std::optional<RaidSelfRecoverySnapshot> selfRecovery;
     std::optional<RegionalOutpostRestorationSnapshot> outpostRestoration;
@@ -1347,6 +1360,7 @@ struct ProfileState
     BaseResidentMedicalState residentMedical;
     ResidentMedicalReservePolicy residentMedicalReservePolicy;
     BaseManufacturingState baseManufacturing;
+    std::optional<BaseEngineeringTrainingOrder> activeEngineeringTraining;
     std::optional<BaseEmergencyPowerState> emergencyPower;
     BaseConstructionState baseConstruction;
     BaseFacilityLayoutState baseFacilityLayout;
@@ -1363,6 +1377,7 @@ struct ProfileState
     std::set<std::string> committedTransactions;
     std::set<std::string> committedSettlements;
     std::set<RescueDefinitionId> committedRescues;
+    bool nightRendezvousUnlocked{};
     std::optional<PendingRaidSnapshot> pendingRaid;
     std::optional<LastRaidResult> lastRaidResult;
 };

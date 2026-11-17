@@ -3,12 +3,21 @@
 #include <fmt/format.h>
 
 UiWorkshopProjection projectUiWorkshop(const ProfileState &p, const ContentRegistry &c, UiLanguage language,
-    std::optional<BaseManufacturingRecipeDefinitionId> selected) {
+    std::optional<BaseManufacturingRecipeDefinitionId> selected, bool trainingSelected) {
     UiWorkshopProjection r;
     r.profileId=p.profileId; r.revision=p.revision; r.worldMinute=p.worldClock.elapsedWorldMinutes;
     r.installed=baseFacilityInstalled(p,BaseFacilityDefinitionId{"base_facility.workshop"});
     r.level=p.baseConstruction.workshopLevel; r.order=p.baseManufacturing.activeOrder;
     r.production=projectBaseManufacturing(p); r.workforce=projectBaseWorkforce(p);
+    r.training = projectBaseEngineeringTraining(p);
+    r.trainingSelected = trainingSelected || r.training.orderPresent;
+    if (r.trainingSelected) {
+        if (r.training.orderPresent) r.trainingCancel = queryCancelBaseEngineeringTraining(p, c);
+        else r.trainingStart = queryStartBaseEngineeringTraining(p, c);
+        for (const auto &input : kBaseEngineeringTrainingInputs)
+            r.trainingMaterials += fmt::format("{}  x{}\n",
+                localizeUiText(language, c.item(input.itemDefinitionId).displayName), input.quantity);
+    }
     if (p.baseManufacturing.armorRepairRecipeUnlocked && selected == kArmorRepairResearchId)
         selected = kArmorRepairRecipeId;
     for(const auto &recipe:c.baseManufacturingRecipes()) {
@@ -46,7 +55,20 @@ UiWorkshopProjection projectUiWorkshop(const ProfileState &p, const ContentRegis
 }
 std::string uiWorkshopActionKey(const UiWorkshopHit &hit,const UiWorkshopProjection &p) {
     std::string key=fmt::format("{}:{}:{}:{}",p.profileId,p.installed,static_cast<int>(hit.control),hit.recipe?hit.recipe->value():"");
-    if(hit.recipe) return key+fmt::format(":{}",p.order?p.order->jobId:0);
+    if(hit.recipe) return key+fmt::format(":{}:{}",p.order?p.order->jobId:0,p.training.orderPresent);
+    if (hit.control == UiWorkshopControl::Training)
+        return key + fmt::format(":{}:{}", p.trainingSelected, p.training.jobId);
+    if (p.trainingSelected && (hit.control == UiWorkshopControl::Main || hit.control == UiWorkshopControl::Cancel)) {
+        key += fmt::format(":{}:{}:{}:{}:{}:{}", p.training.jobId, p.training.orderPresent,
+            p.trainingStart.canCommit, p.trainingCancel.canCommit,
+            p.trainingStart.revision, p.trainingCancel.revision);
+        for (const auto &input : p.trainingStart.inputs)
+            key += fmt::format(":{}:{}:{}", input.assetId, input.definitionId.value(), input.quantity);
+        for (const auto &entry : p.trainingCancel.returns)
+            key += fmt::format(":{}:{}:{}:{}", entry.assetId,
+                entry.destination.container.compartmentIndex, entry.destination.origin.x, entry.destination.origin.y);
+        return key;
+    }
     if(hit.control==UiWorkshopControl::Main || hit.control==UiWorkshopControl::Cancel) {
         key+=fmt::format(":{}:{}:{}:{}:{}:{}:{}",p.selection?p.selection->value():"",p.order?p.order->jobId:0,
             p.order && p.order->outputReady,p.start.canCommit,p.start.durationMinutes,p.start.workerCount,static_cast<int>(p.start.workerProfession));
@@ -66,6 +88,9 @@ std::string uiWorkshopActionKey(const UiWorkshopHit &hit,const UiWorkshopProject
 }
 bool uiWorkshopEnabled(UiWorkshopControl c,const UiWorkshopProjection &p) {
     if(c==UiWorkshopControl::Close || c==UiWorkshopControl::Facilities || c==UiWorkshopControl::Previous || c==UiWorkshopControl::Next)return true;
+    if (c == UiWorkshopControl::Training) return !p.training.orderPresent;
+    if (p.trainingSelected && c == UiWorkshopControl::Main) return !p.training.orderPresent && p.trainingStart.canCommit;
+    if (p.trainingSelected && c == UiWorkshopControl::Cancel) return p.training.orderPresent && p.trainingCancel.canCommit;
     if(!p.installed)return false;
     switch(c) {
     case UiWorkshopControl::Main:return p.order?p.order->outputReady && p.returns.canCommit:p.selection && p.start.canCommit;
@@ -84,6 +109,7 @@ SDL_FRect uiWorkshopControlRect(UiWorkshopControl c) noexcept {
     case UiWorkshopControl::Staffing:return {464,302,728,34};
     case UiWorkshopControl::Upgrade:return {464,346,728,34};
     case UiWorkshopControl::Close:return {1084,80,132,34};
+    case UiWorkshopControl::Training:return {812,80,248,34};
     case UiWorkshopControl::Previous:return {80,494,144,32};
     case UiWorkshopControl::Next:return {264,494,144,32};
     }
@@ -93,13 +119,13 @@ SDL_FRect uiWorkshopRecipeRect(std::size_t i) noexcept {return {80,158+54.0F*i,3
 SDL_FRect uiWorkshopDetailsRect() noexcept {return {464,342,728,156};}
 SDL_FRect uiWorkshopFeedbackRect() noexcept {return {76,616,1128,44};}
 std::optional<UiWorkshopHit> hitUiWorkshop(Vec2 point,const UiWorkshopState &s,const UiWorkshopProjection &p) {
-    for(auto c:{UiWorkshopControl::Close,UiWorkshopControl::Main,UiWorkshopControl::Facilities,UiWorkshopControl::Cancel,UiWorkshopControl::Staffing,UiWorkshopControl::Upgrade,UiWorkshopControl::Previous,UiWorkshopControl::Next}) {
-        if(c==UiWorkshopControl::Cancel && (!p.order || p.order->outputReady))continue;
+    for(auto c:{UiWorkshopControl::Close,UiWorkshopControl::Training,UiWorkshopControl::Main,UiWorkshopControl::Facilities,UiWorkshopControl::Cancel,UiWorkshopControl::Staffing,UiWorkshopControl::Upgrade,UiWorkshopControl::Previous,UiWorkshopControl::Next}) {
+        if (c == UiWorkshopControl::Cancel && (p.trainingSelected ? !p.training.orderPresent : (!p.order || p.order->outputReady))) continue;
         if((c==UiWorkshopControl::Staffing || c==UiWorkshopControl::Upgrade) && !s.facilities)continue;
         if((c==UiWorkshopControl::Previous || c==UiWorkshopControl::Next) && uiWorkshopPageCount(p.recipes.size())==1)continue;
         if(uiContains(uiWorkshopControlRect(c),point))return UiWorkshopHit{{},c};
     }
-    if(!p.order)for(std::size_t i=0;i<6;++i) {
+    if (!p.order && !p.training.orderPresent) for (std::size_t i = 0; i < kUiWorkshopPageSize; ++i) {
         const auto index=s.page*6+i;
         if(index<p.recipes.size() && uiContains(uiWorkshopRecipeRect(i),point))return UiWorkshopHit{p.recipes[index].id};
     }

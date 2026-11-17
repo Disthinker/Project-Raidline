@@ -16,9 +16,12 @@ void App::refreshBaseWorkshopUi(bool force) {
     }
     if(!force && workshopProjectionRevision_ && *workshopProjectionRevision_==p.revision &&
         workshopProjection_.worldMinute==p.worldClock.elapsedWorldMinutes && workshopProjectionLanguage_==language &&
-        workshopProjection_.selection==workshopUi_.selection)return;
-    workshopProjection_=projectUiWorkshop(p,publishedContentRegistry(),language,workshopUi_.selection);
+        workshopProjection_.selection==workshopUi_.selection &&
+        workshopProjection_.trainingSelected==workshopUi_.trainingSelected)return;
+    workshopProjection_=projectUiWorkshop(p,publishedContentRegistry(),language,workshopUi_.selection,
+        workshopUi_.trainingSelected);
     workshopUi_.selection=workshopProjection_.selection;
+    workshopUi_.trainingSelected=workshopProjection_.trainingSelected;
     workshopUi_.page=std::min(workshopUi_.page,uiWorkshopPageCount(workshopProjection_.recipes.size())-1);
     if(workshopProjection_.order) {
         const auto it=std::find_if(workshopProjection_.recipes.begin(),workshopProjection_.recipes.end(),[&](const auto &r){return workshopProjection_.selection==r.id;});
@@ -56,14 +59,36 @@ void App::handleBaseWorkshopEvent(const UiWorkshopEvent &e) {
     if(!press || !hit || *hit!=press->hit || press->language!=language)return;
     const auto feedback=[&](std::string s){workshopFeedback_=std::move(s);uiMessage_=workshopFeedback_;workshopUi_.feedbackScroll=0;};
     if(press->action!=uiWorkshopActionKey(*hit,workshopProjection_)) {feedback("PRODUCTION PLAN CHANGED - CHECK AND CLICK AGAIN");return;}
-    if(hit->recipe) {workshopUi_.selection=hit->recipe;workshopUi_.detailScroll=0;workshopFeedback_.clear();refreshBaseWorkshopUi(true);return;}
+    if (hit->recipe) {
+        workshopUi_.selection = hit->recipe;
+        workshopUi_.trainingSelected = false;
+        workshopUi_.detailScroll = workshopUi_.feedbackScroll = 0;
+        workshopFeedback_.clear();
+        refreshBaseWorkshopUi(true);
+        return;
+    }
     const auto control=hit->control;
     if(control==Control::Close) {gameFlow_.closeBaseFacility();resetBaseWorkshopUi();uiMessage_.clear();input_.suppressPrimaryPointerUntilRelease();return;}
+    if (control == Control::Training) {
+        if (uiWorkshopEnabled(control, workshopProjection_)) {
+            workshopUi_.trainingSelected = !workshopUi_.trainingSelected;
+            workshopUi_.facilities = false;
+            workshopUi_.detailScroll = workshopUi_.feedbackScroll = 0;
+            workshopFeedback_.clear();
+            refreshBaseWorkshopUi(true);
+        }
+        return;
+    }
     if(control==Control::Facilities) {workshopUi_.facilities=!workshopUi_.facilities;workshopUi_.detailScroll=0;return;}
     if(control==Control::Previous || control==Control::Next) {changePage(control==Control::Previous?-1:1);return;}
     const auto &p=workshopProjection_;
     const bool research = p.selection == kArmorRepairResearchId;
     if(!uiWorkshopEnabled(control,p)) {
+        if (p.trainingSelected && (control == Control::Main || control == Control::Cancel)) {
+            feedback(control == Control::Cancel ? p.trainingCancel.message :
+                p.training.orderPresent ? "TRAINING IN PROGRESS" : p.trainingStart.message);
+            return;
+        }
         feedback(!p.installed?"WORKSHOP IS PACKED | PRODUCTION AND UPGRADES ARE PAUSED":
             control==Control::Staffing?p.staffing.message:control==Control::Upgrade?p.upgrade.message:
             p.order?p.order->outputReady || control==Control::Cancel?p.returns.message:(research?"RESEARCH IN PROGRESS":"PRODUCTION ACTIVE"):p.selection?p.start.message:"NO PUBLISHED MANUFACTURING RECIPE");
@@ -72,7 +97,19 @@ void App::handleBaseWorkshopEvent(const UiWorkshopEvent &e) {
     const auto finish=[this,feedback](bool succeeded,std::string message){
         feedback(std::move(message));gameAudio_.play(succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);refreshBaseWorkshopUi(true);
     };
-    if(control==Control::Main && p.selection && !p.order) {
+    if (p.trainingSelected && control == Control::Main) {
+        submitProfileUi<BaseManufacturingReceipt>(ProfileUiStartEngineeringTrainingCommand{},
+            nextProfileTransactionId("workshop-training-start"),
+            [finish](const auto &result) {
+                finish(result.succeeded, result.succeeded ? "TRAINING STARTED" : result.message);
+            });
+    } else if (p.trainingSelected && control == Control::Cancel) {
+        submitProfileUi<BaseManufacturingReceipt>(ProfileUiCancelEngineeringTrainingCommand{},
+            nextProfileTransactionId("workshop-training-cancel"),
+            [finish](const auto &result) {
+                finish(result.succeeded, result.succeeded ? "TRAINING CANCELLED | MATERIALS RETURNED" : result.message);
+            });
+    } else if(control==Control::Main && p.selection && !p.order) {
         submitProfileUi<BaseManufacturingReceipt>(StartBaseManufacturingCommand{*p.selection},nextProfileTransactionId("workshop-start"),
             [finish,research](const auto &r){finish(r.succeeded,r.succeeded?(research?"RESEARCH STARTED":"MANUFACTURING STARTED"):r.message);});
     } else if(control==Control::Main) {
@@ -110,17 +147,21 @@ void App::renderBaseWorkshop() {
     };
     SDL_BlendMode previous{};SDL_GetRenderDrawBlendMode(renderer_,&previous);SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_BLEND);
     fill({40,60,1200,620},{21,29,31,252});fill({64,138,360,400},{27,38,40,255});fill({444,138,772,400},{27,38,40,255});
-    text({64,80,900,34},"WORKSHOP & PRODUCTION",22);button(Control::Close,language==UiLanguage::English?"CLOSE":tr("CLOSE WORKSHOP"));
+    text({64,80,724,34},"WORKSHOP & PRODUCTION",22);button(Control::Close,language==UiLanguage::English?"CLOSE":tr("CLOSE WORKSHOP"));
+    button(Control::Training, "ENGINEERING TRAINING", p.trainingSelected);
     for(std::size_t i=0;i<6;++i) {
         const auto index=workshopUi_.page*6+i;if(index>=p.recipes.size())break;const auto &row=p.recipes[index];
         const auto box=uiWorkshopRecipeRect(i);
-        renderFoundationButton(6000+static_cast<int>(i),box,"",!p.order,false,p.selection==row.id,row.fullName,14);
+        renderFoundationButton(6000+static_cast<int>(i),box,"",!p.order && !p.training.orderPresent,false,
+            !p.trainingSelected && p.selection==row.id,row.fullName,14);
         renderBaseSupplyImage(row.output,{box.x+8,box.y+5,52,38});
         text({box.x+72,box.y+5,244,38},fmt::format("{}  x{}",row.shortName,row.quantity),14);
     }
     if(uiWorkshopPageCount(p.recipes.size())>1){button(Control::Previous,"PREVIOUS PAGE");button(Control::Next,"NEXT");text({80,118,328,20},fmt::format("{} / {}",workshopUi_.page+1,uiWorkshopPageCount(p.recipes.size())),12);}
     const auto row=std::find_if(p.recipes.begin(),p.recipes.end(),[&](const auto &r){return p.selection==r.id;});
-    if(row!=p.recipes.end()) {
+    if (p.trainingSelected) {
+        text({464,158,728,56}, "GENERAL RESIDENT → ENGINEERING", 20);
+    } else if(row!=p.recipes.end()) {
         renderBaseSupplyImage(row->output,{464,154,172,66});
         text({656,158,536,56},fmt::format("{}  x{}",row->fullName,row->quantity),16);
     }
@@ -128,7 +169,11 @@ void App::renderBaseWorkshop() {
     const bool armorRecipe = p.selection == kArmorRepairRecipeId;
     const auto activeLabel = research ? "RESEARCH IN PROGRESS" : "PRODUCTION ACTIVE";
     const char *status = "PRODUCTION PREPARATION";
-    if (!p.installed)
+    if (p.trainingSelected)
+        status = p.training.orderPresent
+            ? (p.training.paused ? "TRAINING PAUSED" : "TRAINING IN PROGRESS")
+            : "TRAINING PREPARATION";
+    else if (!p.installed)
         status = "WORKSHOP PAUSED IN RESERVE";
     else if (p.order)
         status = p.order->outputReady ? "PRODUCTION OUTPUT WAITING" : activeLabel;
@@ -144,6 +189,9 @@ void App::renderBaseWorkshop() {
         fmt::format("{} {}",tr(research?"RESEARCH DURATION":"PRODUCTION DURATION"),p.start.canCommit?duration(p.start.durationMinutes):tr("AVAILABLE WITH VALID PLAN"));
     if((!p.order || !p.order->outputReady) && row!=p.recipes.end())
         time+=fmt::format("  |  {} {}",tr(p.order?"WORKERS COMMITTED":"WORKERS REQUIRED"),p.order?p.production.committedWorkers:row->workers);
+    if (p.trainingSelected)
+        time = fmt::format("{} {}", tr(p.training.orderPresent ? "WORLD TIME REMAINING" : "TRAINING DURATION"),
+            duration(p.training.orderPresent ? p.training.remainingMinutes : kBaseEngineeringTrainingMinutes));
     text({464,270,728,28},time);
     if(workshopUi_.facilities) {
         button(Control::Staffing,p.workforce.workshopWorker?"CLEAR WORKSHOP WORKER":"ASSIGN BEST WORKER");
@@ -153,25 +201,42 @@ void App::renderBaseWorkshop() {
         if(!p.staffing.canCommit)info+="\n"+tr(p.staffing.message);
         if(p.upgradeId && !p.upgrade.canCommit && !p.upgradeComplete)info+="\n"+tr(p.upgrade.message);
         scroll({464,392,728,112},info,14,workshopUi_.detailScroll,workshopUi_.detailMaximum);
+    } else if (p.trainingSelected) {
+        text({464,308,728,26}, p.training.orderPresent ? "RESERVED MATERIALS" : "REQUIRED INPUTS");
+        scroll(uiWorkshopDetailsRect(), p.trainingMaterials + "\n" +
+            tr("TRAINING REQUIRES A HEALTHY ENGINEER AND AN AVAILABLE HEALTHY GENERAL RESIDENT"),
+            14, workshopUi_.detailScroll, workshopUi_.detailMaximum);
     } else {
         text({464,308,728,26},research?(p.order?"RESERVED BLUEPRINT":"REQUIRED BLUEPRINT"):
             p.order?"RESERVED MATERIALS":"REQUIRED INPUTS");
         scroll(uiWorkshopDetailsRect(),p.order && p.order->outputReady?tr("MATERIALS CONSUMED - OUTPUT IS KEPT"):
             row!=p.recipes.end()?row->materials:tr("NO PUBLISHED MANUFACTURING RECIPE"),14,workshopUi_.detailScroll,workshopUi_.detailMaximum);
     }
-    text({464,510,728,22},powerRunning?"ORDER POWERED · DOUBLE PROGRESS":
+    text({464,510,728,22}, p.trainingSelected
+        ? (p.training.paused ? p.training.pauseReason : "TRAINING USES THE WORKSHOP PRODUCTION SLOT")
+        : powerRunning?"ORDER POWERED · DOUBLE PROGRESS":
         p.order && !p.order->outputReady && !research && power && power->target == BaseEmergencyPowerTarget::Workshop && !power->activeJobId ?
             "ORDER POWER PAUSED":
         !p.installed?"INSTALL IT FREE ON THE REGIONAL PAGE TO RESUME EXACT PROGRESS":research?(p.order?"COMPLETION UNLOCKS THE ARMOR REPAIR RECIPE":"LEVEL 2 WORKSHOP · ASSIGNED HEALTHY ENGINEER"):
         p.order?"AUTO STASH ON COMPLETION - COLLECT ONLY WHEN FULL":"RESERVE ON START - COMPLETE USING WORLD TIME",12);
     button(Control::Facilities,workshopUi_.facilities?"HIDE FACILITY AND STAFF":"FACILITY AND STAFF",workshopUi_.facilities);
-    if(p.order && !p.order->outputReady)button(Control::Cancel,research?"CANCEL & RETURN BLUEPRINT":"CANCEL & RETURN INPUTS");
-    const auto startLabel = research ? "START RESEARCH" : "START PRODUCTION";
-    button(Control::Main, p.order
-        ? (p.order->outputReady ? "COLLECT TO STASH" : activeLabel)
-        : startLabel);
+    if (p.trainingSelected) {
+        if (p.training.orderPresent)
+            button(Control::Cancel, "CANCEL & RETURN INPUTS");
+        button(Control::Main, p.training.orderPresent ? status : "START TRAINING");
+    } else {
+        if(p.order && !p.order->outputReady)button(Control::Cancel,research?"CANCEL & RETURN BLUEPRINT":"CANCEL & RETURN INPUTS");
+        const auto startLabel = research ? "START RESEARCH" : "START PRODUCTION";
+        button(Control::Main, p.order
+            ? (p.order->outputReady ? "COLLECT TO STASH" : activeLabel)
+            : startLabel);
+    }
     std::string message=workshopFeedback_;
-    if(message.empty())message=!p.installed?"WORKSHOP IS PACKED | PRODUCTION AND UPGRADES ARE PAUSED":
+    if (message.empty() && p.trainingSelected) {
+        if (!p.training.orderPresent && !p.trainingStart.canCommit) message = p.trainingStart.message;
+        else if (p.training.paused) message = p.training.pauseReason;
+        else if (p.training.orderPresent && !p.trainingCancel.canCommit) message = p.trainingCancel.message;
+    } else if(message.empty())message=!p.installed?"WORKSHOP IS PACKED | PRODUCTION AND UPGRADES ARE PAUSED":
         p.order?!p.returns.canCommit?p.returns.message:"":p.selection?!p.start.canCommit?p.start.message:"":"NO PUBLISHED MANUFACTURING RECIPE";
     scroll(uiWorkshopFeedbackRect(),message,14,workshopUi_.feedbackScroll,workshopUi_.feedbackMaximum);
     SDL_SetRenderDrawBlendMode(renderer_,previous);

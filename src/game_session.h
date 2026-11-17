@@ -615,6 +615,8 @@ public:
     [[nodiscard]] const std::string &persistenceMessage() const noexcept;
     [[nodiscard]] std::optional<OrdinarySurvivorAdmissionPlan>
     ordinarySurvivorRescuePlan() const;
+    [[nodiscard]] std::optional<OrdinarySurvivorAdmissionPlan>
+    nightRendezvousAdmissionPlan() const;
 
     [[nodiscard]] bool canSelectNoiseDecoy() const;
     [[nodiscard]] bool beginNoiseDecoySelection();
@@ -671,10 +673,12 @@ private:
         const RaidDeploymentProgressCallback &);
     [[nodiscard]] ProfileUiSubmission requestRaidSettlement(RaidResultOutcome);
     [[nodiscard]] ProfileUiSubmission requestOrdinarySurvivorRescue();
+    [[nodiscard]] ProfileUiSubmission requestNightRendezvous();
     [[nodiscard]] bool tryLearnHospitalFloorplan(
         AssetInstanceId, bool inventoryOpen, const RaidObservationKey &);
     [[nodiscard]] bool prepareRaidSettlementCandidate(RaidResultOutcome, ProfileState &);
-    [[nodiscard]] bool prepareOrdinarySurvivorRescueCandidate(ProfileState &, ProfileState &);
+    [[nodiscard]] bool prepareSurvivorRescueCandidate(
+        ProfileState &raidCandidate, ProfileState &recoveryCandidate, bool nightRendezvous);
     [[nodiscard]] ProfileState inventoryCheckpointCandidate(const ProfileState &current);
     void noteInventoryCheckpointRequested(std::uint64_t generation, bool defense);
     [[nodiscard]] bool drainProfileWritersForReplacement();

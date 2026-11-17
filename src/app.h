@@ -949,6 +949,7 @@ private:
     SDL_FRect worldLabelBounds(float x, float y, std::string_view label);
     void renderWorldLabel(float x, float y, std::string_view label);
     void renderExtractionPoint();
+    void renderNightRendezvousWorld();
     void renderRaidCredentialDocuments();
     void renderRaidSpacePortal();
     void renderStorageCabinet();

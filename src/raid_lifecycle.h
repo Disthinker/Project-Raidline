@@ -132,6 +132,30 @@ struct RaidTravelPreview
     const ContentRegistry &content,
     const MapDefinition &map) noexcept;
 
+enum class RaidNightRendezvousAvailability
+{
+    NotApplicable,
+    Locked,
+    AlreadySecured,
+    Unavailable,
+    Missed,
+    Available
+};
+
+struct RaidNightRendezvousPreview
+{
+    RaidNightRendezvousAvailability availability{RaidNightRendezvousAvailability::NotApplicable};
+    std::uint64_t nextOpeningDay{};
+};
+
+[[nodiscard]] RaidNightRendezvousPreview queryRaidNightRendezvous(
+    const ProfileState &profile, const MapDefinition &map, const RaidTravelPreview &travel) noexcept;
+
+[[nodiscard]] bool raidNightRendezvousWindowOpen(const WorldClockProjection &arrival) noexcept;
+
+[[nodiscard]] bool raidNightRendezvousPlacementValid(
+    const MapDefinition &map, const PendingRaidSnapshot &raid, ContentRect bounds);
+
 [[nodiscard]] std::optional<AssetInstanceId> selectRaidPursuitWeapon(
     const AssetRegistry &assets, const ContentRegistry &content,
     const LostRaidRecord &record);

@@ -1,12 +1,13 @@
 #pragma once
 
 #include "base_construction_domain.h"
+#include "base_engineering_training_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_workforce_domain.h"
 #include "ui_item_context_presentation.h"
 
 inline constexpr std::size_t kUiWorkshopPageSize = 6;
-enum class UiWorkshopControl { Main, Cancel, Facilities, Staffing, Upgrade, Close, Previous, Next };
+enum class UiWorkshopControl { Main, Cancel, Facilities, Staffing, Upgrade, Close, Previous, Next, Training };
 enum class UiWorkshopEventKind { Down, Up, Move, Wheel };
 struct UiWorkshopEvent { UiWorkshopEventKind kind{}; Vec2 position{}; int delta{}; };
 struct UiWorkshopHit {
@@ -33,6 +34,11 @@ struct UiWorkshopProjection {
     BaseManufacturingProjection production;
     BaseManufacturingStartPlan start;
     BaseManufacturingReturnPlan returns;
+    bool trainingSelected{};
+    BaseEngineeringTrainingProjection training;
+    BaseEngineeringTrainingStartPlan trainingStart;
+    BaseManufacturingReturnPlan trainingCancel;
+    std::string trainingMaterials;
     BaseWorkforceProjection workforce;
     BaseWorkforcePlan staffing;
     std::optional<BaseConstructionProjectDefinitionId> upgradeId;
@@ -44,12 +50,12 @@ struct UiWorkshopPress { UiWorkshopHit hit; UiLanguage language{}; std::string a
 struct UiWorkshopState {
     std::optional<BaseManufacturingRecipeDefinitionId> selection;
     std::size_t page{};
-    bool facilities{};
+    bool facilities{}, trainingSelected{};
     int detailScroll{}, detailMaximum{}, feedbackScroll{}, feedbackMaximum{};
     std::optional<UiWorkshopPress> press;
 };
 [[nodiscard]] UiWorkshopProjection projectUiWorkshop(const ProfileState &, const ContentRegistry &, UiLanguage,
-    std::optional<BaseManufacturingRecipeDefinitionId>);
+    std::optional<BaseManufacturingRecipeDefinitionId>, bool trainingSelected = false);
 [[nodiscard]] std::string uiWorkshopActionKey(const UiWorkshopHit &, const UiWorkshopProjection &);
 [[nodiscard]] bool uiWorkshopEnabled(UiWorkshopControl, const UiWorkshopProjection &);
 [[nodiscard]] std::size_t uiWorkshopPageCount(std::size_t) noexcept;

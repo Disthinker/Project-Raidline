@@ -105,6 +105,19 @@ struct BaseManufacturingAdvanceResult
     const ContentRegistry &content,
     const CommandContext &context);
 
+// Reserve chosen units or stage their return in a disposable workshop candidate.
+[[nodiscard]] DomainErrorCode reserveBaseWorkshopInputs(
+    ProfileState &candidate,
+    const ContentRegistry &content,
+    const std::vector<BaseManufacturingInputSelection> &inputs,
+    BaseServiceJobId jobId,
+    std::vector<AssetInstanceId> &inputIds);
+[[nodiscard]] bool prepareBaseWorkshopReturns(
+    ProfileState &candidate,
+    const ContentRegistry &content,
+    const std::vector<AssetInstanceId> &assetIds,
+    std::vector<BaseManufacturingReturnSelection> &returns);
+
 // Applies a due order to an already-owned candidate Profile. While a Raid is
 // pending, materialization is deliberately deferred until settlement closes
 // the activity so abnormal rollback never needs to clone the asset registry.

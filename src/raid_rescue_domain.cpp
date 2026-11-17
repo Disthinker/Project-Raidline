@@ -18,6 +18,10 @@ const RaidRescueDefinition *findRescueDefinition(
         {
             return &*map.rescue;
         }
+        if (map.nightRendezvous && map.nightRendezvous->id == id)
+        {
+            return &*map.nightRendezvous;
+        }
     }
     return nullptr;
 }

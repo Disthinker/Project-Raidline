@@ -187,6 +187,7 @@ void App::renderRaidOpticScene(Rect visible, bool terrainOnly, bool drawAvatar)
     if (terrainOnly)
         return;
     renderExtractionPoint();
+    renderNightRendezvousWorld();
     renderRaidSpacePortal();
     if (gameSession_.world().isAlphaRaidWorld())
         renderAlphaRaidLoot();

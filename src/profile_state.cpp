@@ -13,6 +13,7 @@
 #include "home_founding_domain.h"
 #include "base_wish_expedition.h"
 
+#include "base_engineering_training_domain.h"
 #include "base_population_domain.h"
 #include "base_morale_domain.h"
 #include "base_resident_medical_domain.h"
@@ -1773,6 +1774,8 @@ ProfileValidationResult validateProfileState(
     {
         assignedByProfession[index] += regionalStaffByProfession[index];
     }
+    if (profile.activeEngineeringTraining)
+        ++assignedByProfession[baseProfessionIndex(BaseResidentProfession::General)];
     bool professionAssignmentsValid = true;
     for (std::size_t index = 0; index < assignedByProfession.size(); ++index)
     {
@@ -2060,10 +2063,18 @@ ProfileValidationResult validateProfileState(
          claimBaseServiceJob(profile.gunsmithMaintenanceJob->jobId)) ||
         (profile.baseManufacturing.activeOrder.has_value() &&
          claimBaseServiceJob(
-             profile.baseManufacturing.activeOrder->jobId)))
+             profile.baseManufacturing.activeOrder->jobId)) ||
+        (profile.activeEngineeringTraining &&
+         claimBaseServiceJob(profile.activeEngineeringTraining->jobId)))
     {
         return {false, "Base service job identity is duplicated"};
     }
+    if ((profile.nightRendezvousUnlocked || profile.activeEngineeringTraining) &&
+        !supportsRaidNightRendezvousContent(content.contentVersion()))
+        return {false, "night rendezvous and engineering training require compatible content"};
+    if (profile.committedRescues.contains(kRaidNightRendezvousRescueId) &&
+        !profile.nightRendezvousUnlocked)
+        return {false, "night rendezvous receipt requires an unlocked profile"};
     for (const RescueDefinitionId &rescue : profile.committedRescues)
     {
         const bool published = std::any_of(
@@ -2071,7 +2082,8 @@ ProfileValidationResult validateProfileState(
             content.maps().end(),
             [&rescue](const MapDefinition &map)
             {
-                return map.rescue.has_value() && map.rescue->id == rescue;
+                return (map.rescue && map.rescue->id == rescue) ||
+                    (map.nightRendezvous && map.nightRendezvous->id == rescue);
             });
         if (!rescue.valid() || !published)
         {
@@ -2728,6 +2740,18 @@ ProfileValidationResult validateProfileState(
         if (!order.outputReady && !remainingInputUnits.empty())
         {
             return {false, "Base manufacturing inputs are incomplete"};
+        }
+    }
+
+    if (profile.activeEngineeringTraining)
+    {
+        const auto trainingValidation = validateBaseEngineeringTrainingOrder(profile);
+        if (!trainingValidation.valid)
+            return trainingValidation;
+        for (const AssetInstanceId id : profile.activeEngineeringTraining->inputAssetIds)
+        {
+            if (!claimedServiceAssetIds.insert(id).second)
+                return {false, "engineering training material is claimed by another job"};
         }
     }
 
@@ -5335,6 +5359,28 @@ ProfileValidationResult validateProfileState(
                 return {false, "pending Raid carried root is invalid"};
             }
         }
+        if (raid.nightRendezvous)
+        {
+            const auto &rescue = *raid.nightRendezvous;
+            const auto &definition = raidMap->nightRendezvous;
+            WorldClockState arrival = raid.travel.startingWorldClock;
+            const auto advance = advanceWorldClock(arrival, raid.travel.outboundMinutes);
+            if (!profile.nightRendezvousUnlocked ||
+                !supportsRaidNightRendezvousContent(content.contentVersion()) ||
+                raid.mapDefinitionId != kRaidNightRendezvousMapId ||
+                raid.selfRecovery || raid.outpostRestoration ||
+                raid.baseSiteClearance || raid.basePerimeterSweep ||
+                advance.saturated || !raidNightRendezvousWindowOpen(projectWorldClock(arrival)) ||
+                !definition || rescue.definitionId != definition->id ||
+                rescue.subjectKind != definition->subjectKind ||
+                rescue.profession != definition->profession ||
+                rescue.interactionDurationSeconds != definition->interactionDurationSeconds ||
+                rescue.ordinaryResidentCount != definition->ordinaryResidentCount ||
+                rescue.injuredResidentCount != definition->injuredResidentCount ||
+                rescue.secured != profile.committedRescues.contains(rescue.definitionId) ||
+                !raidNightRendezvousPlacementValid(*raidMap, raid, rescue.transferPoint))
+                return {false, "pending Raid night rendezvous is invalid"};
+        }
         if (raid.rescue.has_value())
         {
             const RaidRescueSnapshot &rescue = *raid.rescue;
@@ -5776,6 +5822,16 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, order.emergencyPowerBonusMinutes);
         }
     }
+    if (profile.activeEngineeringTraining)
+    {
+        const auto &training = *profile.activeEngineeringTraining;
+        hashBytes(hash, "base-engineering-training-v1");
+        hashInteger(hash, training.jobId);
+        hashInteger(hash, training.remainingMinutes);
+        hashInteger(hash, training.updatedThroughWorldMinute);
+        for (const AssetInstanceId id : training.inputAssetIds)
+            hashInteger(hash, id);
+    }
     hashInteger(hash, profile.basePriority.cycleIndex);
     hashInteger(hash, profile.basePriority.frozenPopulation);
     for (const BasePriorityWishState &wish : profile.basePriority.wishes)
@@ -6044,6 +6100,8 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     {
         hashBytes(hash, rescue.value());
     }
+    if (profile.nightRendezvousUnlocked)
+        hashBytes(hash, "raid-night-rendezvous-unlocked-v1");
     // Empty migrated archives preserve historical fingerprint-seeded events.
     if (!profile.raidExtractionPermissions.empty())
     {
@@ -6341,21 +6399,26 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         {
             hashInteger(hash, root);
         }
-        if (raid.rescue.has_value())
+        const auto hashRescue = [&](const RaidRescueSnapshot &rescue)
         {
-            hashBytes(hash, raid.rescue->definitionId.value());
-            hashInteger(hash, static_cast<std::uint32_t>(
-                raid.rescue->subjectKind));
-            hashFloat(hash, raid.rescue->transferPoint.position.x);
-            hashFloat(hash, raid.rescue->transferPoint.position.y);
-            hashFloat(hash, raid.rescue->transferPoint.size.x);
-            hashFloat(hash, raid.rescue->transferPoint.size.y);
-            hashFloat(hash, raid.rescue->interactionDurationSeconds);
-            hashInteger(hash, raid.rescue->ordinaryResidentCount);
-            hashInteger(hash, raid.rescue->injuredResidentCount);
-            hashInteger(hash, static_cast<std::uint32_t>(
-                raid.rescue->profession));
-            hashInteger(hash, raid.rescue->secured ? 1U : 0U);
+            hashBytes(hash, rescue.definitionId.value());
+            hashInteger(hash, static_cast<std::uint32_t>(rescue.subjectKind));
+            hashFloat(hash, rescue.transferPoint.position.x);
+            hashFloat(hash, rescue.transferPoint.position.y);
+            hashFloat(hash, rescue.transferPoint.size.x);
+            hashFloat(hash, rescue.transferPoint.size.y);
+            hashFloat(hash, rescue.interactionDurationSeconds);
+            hashInteger(hash, rescue.ordinaryResidentCount);
+            hashInteger(hash, rescue.injuredResidentCount);
+            hashInteger(hash, static_cast<std::uint32_t>(rescue.profession));
+            hashInteger(hash, rescue.secured ? 1U : 0U);
+        };
+        if (raid.rescue)
+            hashRescue(*raid.rescue);
+        if (raid.nightRendezvous)
+        {
+            hashBytes(hash, "raid-night-rendezvous-v1");
+            hashRescue(*raid.nightRendezvous);
         }
         if (raid.selfRecovery.has_value())
         {

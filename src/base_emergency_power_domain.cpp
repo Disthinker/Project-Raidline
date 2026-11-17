@@ -1,5 +1,7 @@
 #include "base_emergency_power_domain.h"
 
+#include "base_engineering_training_domain.h"
+
 #include <algorithm>
 #include <limits>
 #include <type_traits>
@@ -70,6 +72,9 @@ void resolveBaseWork(ProfileState &profile, const ContentRegistry &content,
     auto manufacturing = applyBaseManufacturingThrough(profile, content);
     if (manufacturing.completed)
         result.manufacturing = std::move(manufacturing);
+    // Credit the elapsed interval to the mentor present during that interval.
+    // Resident treatment may make an engineer available for later work.
+    static_cast<void>(applyBaseEngineeringTrainingThrough(profile, content));
     auto treatment = applyResidentTreatmentThrough(profile);
     if (treatment.completed)
         result.residentTreatment = std::move(treatment);

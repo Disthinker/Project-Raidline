@@ -376,6 +376,9 @@ void App::renderBaseDeployment() {
         append(briefing, "");
         append(briefing, fmt::format("{}  {}", tr("DEPARTURE"), clock(p.travel.departure)));
         append(briefing, fmt::format("{}  {}", tr("ARRIVAL"), clock(p.travel.arrival)));
+        if (const auto rendezvous = uiNightRendezvousArrivalText(p.nightRendezvous, language);
+            !rendezvous.empty())
+            append(briefing, rendezvous);
         append(briefing, fmt::format("{}  {}", tr("OUTBOUND TRAVEL"), minutes(p.travel.outboundMinutes)));
         if (!p.travel.reachable) append(briefing, tr("ROUTE IS NOT AVAILABLE"));
         if (s.briefingDetails) {

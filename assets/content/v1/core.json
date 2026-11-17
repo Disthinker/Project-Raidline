@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-fracture-and-field-stabilization-content-90",
+  "content_version": "raid-night-rendezvous-and-engineering-training-content-91",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -2755,6 +2755,15 @@
         "interaction_duration_seconds": 2,
         "ordinary_resident_count": 1,
         "injured_resident_count": 1,
+        "profession": "engineering"
+      },
+      "night_rendezvous": {
+        "id": "rescue.night_rendezvous.ashworks_yard",
+        "subject_kind": "ordinary_residents",
+        "transfer_point": {"position": {"x": 639, "y": 111}, "size": {"x": 192, "y": 192}},
+        "interaction_duration_seconds": 12,
+        "ordinary_resident_count": 1,
+        "injured_resident_count": 0,
         "profession": "engineering"
       },
       "high_risk": {

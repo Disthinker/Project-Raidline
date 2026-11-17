@@ -3294,6 +3294,86 @@ TEST(GameplayWorldRaidTest,
     EXPECT_TRUE(world.visibleRaidSpacePortals().front().returnsOutside);
 }
 
+TEST(GameplayWorldRaidTest, NightRendezvousSignalPlaysOnceAndCoverAllowsMovement)
+{
+    RaidWorldConfig config;
+    config.playerSpawn = {334.0F, 334.0F};
+    config.extractionPoint = {{1080.0F, 260.0F}, {140.0F, 140.0F}};
+    config.nightRendezvous = ContentRect{{254.0F, 254.0F}, {192.0F, 192.0F}};
+    GameplayWorld world{config};
+    GameplayInput signal;
+    signal.interactJustPressed = true;
+    world.update(signal, 0.0F);
+    ASSERT_TRUE(world.nightRendezvousView());
+    EXPECT_TRUE(world.nightRendezvousView()->inProgress);
+    EXPECT_TRUE(world.nightRendezvousView()->discovered);
+    EXPECT_TRUE(world.nightRendezvousSignaledLastUpdate());
+
+    GameplayInput moving;
+    moving.moveRight = true;
+    moving.firePressed = true;
+    world.update(moving, 0.05F);
+    EXPECT_GT(world.nightRendezvousView()->progress, 0.0F);
+    EXPECT_GT(world.player().position().x, config.playerSpawn.x);
+    EXPECT_FALSE(world.nightRendezvousSignaledLastUpdate());
+    const auto partial = world.nightRendezvousView()->progress;
+    GameplayInput blocked;
+    blocked.freezeObservationDirection = true;
+    world.update(blocked, 0.5F);
+    EXPECT_TRUE(world.nightRendezvousView()->interactionBlocked);
+    EXPECT_EQ(world.nightRendezvousView()->progress, partial);
+
+    auto &player = const_cast<Player &>(world.player());
+    ASSERT_TRUE(player.setPosition({470.0F, 334.0F}));
+    world.update({}, 0.0F);
+    EXPECT_FALSE(world.nightRendezvousView()->inProgress);
+    EXPECT_EQ(world.nightRendezvousView()->progress, 0.0F);
+    ASSERT_TRUE(player.setPosition(config.playerSpawn));
+    world.update(signal, 0.0F);
+    EXPECT_TRUE(world.nightRendezvousView()->inProgress);
+    EXPECT_FALSE(world.nightRendezvousSignaledLastUpdate());
+    world.update({}, kRaidNightRendezvousDurationSeconds);
+    EXPECT_TRUE(world.takeNightRendezvousCommitRequest());
+    EXPECT_FALSE(world.takeNightRendezvousCommitRequest());
+    EXPECT_TRUE(world.nightRendezvousView()->ready);
+    world.update(signal, 0.0F);
+    EXPECT_TRUE(world.takeNightRendezvousCommitRequest());
+    EXPECT_FALSE(world.nightRendezvousSignaledLastUpdate());
+    world.confirmNightRendezvous();
+    EXPECT_TRUE(world.nightRendezvousView()->secured);
+    EXPECT_FALSE(world.nightRendezvousReady());
+}
+
+TEST(GameplayWorldRaidTest, NightRendezvousUsesOneLocalStimulusAndPausesForAnEnemyInTheCircle)
+{
+    RaidWorldConfig config;
+    config.playerSpawn = {334.0F, 334.0F};
+    config.extractionPoint = {{1080.0F, 260.0F}, {140.0F, 140.0F}};
+    config.nightRendezvous = ContentRect{{254.0F, 254.0F}, {192.0F, 192.0F}};
+    // Keep the first enemy outside its 360-unit visual acquisition radius.
+    config.initialEnemies = {{{705.0F, 325.0F}, {50.0F, 50.0F}, 100},
+                             {{1000.0F, 325.0F}, {50.0F, 50.0F}, 100}};
+    GameplayWorld world{config};
+    GameplayInput signal;
+    signal.interactJustPressed = true;
+    world.update(signal, 0.0F);
+    ASSERT_EQ(world.enemies().size(), 2U);
+    const auto &listening = world.enemies().front();
+    EXPECT_EQ(listening.awarenessState(), EnemyAwarenessState::Searching);
+    EXPECT_EQ(world.enemies().back().awarenessState(), EnemyAwarenessState::Unaware);
+
+    auto &enemy = const_cast<Enemy &>(listening);
+    ASSERT_TRUE(enemy.setPosition({407.0F, 325.0F}));
+    world.update({}, 0.05F);
+    EXPECT_TRUE(world.nightRendezvousView()->enemyInRange);
+    EXPECT_EQ(world.nightRendezvousView()->progress, 0.0F);
+    ASSERT_TRUE(enemy.takeDamage(1000));
+    world.update({}, 0.05F);
+    EXPECT_FALSE(world.nightRendezvousView()->enemyInRange);
+    EXPECT_GT(world.nightRendezvousView()->progress, 0.0F);
+    EXPECT_EQ(world.aliveEnemyCount(), 1U);
+}
+
 TEST(GameplayWorldRaidTest, OrdinarySurvivorTransferRequiresContinuousHold)
 {
     RaidWorldConfig config;

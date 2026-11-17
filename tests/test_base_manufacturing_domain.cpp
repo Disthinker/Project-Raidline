@@ -6,6 +6,8 @@
 #include <utility>
 
 #include "alpha_content_ids.h"
+#include "base_engineering_training_domain.h"
+#include "base_workforce_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_site_feature_domain.h"
 #include "world_clock.h"
@@ -445,6 +447,8 @@ TEST(BaseManufacturingDomainTest,
     EXPECT_TRUE(result.outputBlocked);
     ASSERT_TRUE(profile.baseManufacturing.activeOrder.has_value());
     EXPECT_TRUE(profile.baseManufacturing.activeOrder->outputReady);
+    EXPECT_EQ(queryStartBaseEngineeringTraining(profile, publishedContentRegistry()).message,
+              "the workshop production slot is occupied");
     EXPECT_EQ(profile.baseManufacturing.activeOrder->committedWorkers, 0U);
     EXPECT_FALSE(queryCollectBaseManufacturing(
         profile, publishedContentRegistry()).canCommit);
@@ -762,5 +766,143 @@ TEST(BaseManufacturingDomainTest, ArmorResearchUnlocksOnceAndManufacturesRepairT
     EXPECT_EQ(output->definitionId, ItemDefinitionId{"item.maintenance.armor_kit_basic"});
     EXPECT_EQ(output->remainingCharges, content.item(output->definitionId).maximumCharges);
     EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(output->location));
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
+}
+
+TEST(BaseManufacturingDomainTest, EngineeringTrainingReservesMaterialsAndConvertsOneResident)
+{
+    const auto &content = publishedContentRegistry();
+    ProfileState profile = makeProfile();
+    const auto scrapA = addToStash(profile, kBaseEngineeringTrainingInputs[0].itemDefinitionId);
+    const auto scrapB = addToStash(profile, kBaseEngineeringTrainingInputs[0].itemDefinitionId);
+    const auto copper = addToStash(profile, kBaseEngineeringTrainingInputs[1].itemDefinitionId);
+    const auto beforePopulation = profile.basePopulation;
+    const auto beforeWorkers = projectBaseWorkforce(profile);
+    const auto before = profileStateFingerprint(profile);
+    const auto preview = queryStartBaseEngineeringTraining(profile, content);
+    ASSERT_TRUE(preview.canCommit) << preview.message;
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+    const CommandContext context{profile.revision, "training-start"};
+    const auto start = executeStartBaseEngineeringTraining(profile, content, context);
+    ASSERT_TRUE(start.succeeded) << start.message;
+    ASSERT_TRUE(profile.activeEngineeringTraining);
+    EXPECT_EQ(profile.activeEngineeringTraining->jobId, start.jobId);
+    EXPECT_EQ(profile.activeEngineeringTraining->inputAssetIds,
+        (std::vector<AssetInstanceId>{scrapA, scrapB, copper}));
+    EXPECT_EQ(projectBaseEngineeringTraining(profile).remainingMinutes, 720U);
+    EXPECT_EQ(projectBaseWorkforce(profile).availableResidents, beforeWorkers.availableResidents - 1U);
+    EXPECT_EQ(projectBaseWorkforce(profile).availableByProfession[0],
+        beforeWorkers.availableByProfession[0] - 1U);
+    EXPECT_FALSE(queryClearBaseWorker(profile, {BaseFacilityStaffingKind::Workshop}).canCommit);
+    EXPECT_FALSE(queryStartBaseManufacturing(profile, content, {kWeaponKitRecipe}).canCommit);
+    EXPECT_FALSE(queryStartBaseManufacturing(profile, content, {kArmorRepairResearchId}).canCommit);
+    EXPECT_TRUE(executeStartBaseEngineeringTraining(profile, content, context).alreadyCommitted);
+    for (const auto id : profile.activeEngineeringTraining->inputAssetIds)
+    {
+        ASSERT_NE(profile.assets.find(id), nullptr);
+        EXPECT_EQ(profile.assets.find(id)->location, AssetLocation{BaseServiceAssetLocation{start.jobId}});
+    }
+
+    static_cast<void>(advanceWorldClock(profile.worldClock, 719U));
+    EXPECT_FALSE(applyBaseEngineeringTrainingThrough(profile, content));
+    EXPECT_EQ(projectBaseEngineeringTraining(profile).remainingMinutes, 1U);
+    static_cast<void>(advanceWorldClock(profile.worldClock, 1U));
+    EXPECT_TRUE(applyBaseEngineeringTrainingThrough(profile, content));
+    EXPECT_FALSE(applyBaseEngineeringTrainingThrough(profile, content));
+    EXPECT_FALSE(projectBaseEngineeringTraining(profile).orderPresent);
+    EXPECT_EQ(profile.basePopulation.ordinaryResidents, beforePopulation.ordinaryResidents);
+    EXPECT_EQ(profile.basePopulation.injuredResidents, beforePopulation.injuredResidents);
+    EXPECT_EQ(profile.basePopulation.bedCapacity, beforePopulation.bedCapacity);
+    EXPECT_EQ(profile.basePopulation.professionResidents[0], beforePopulation.professionResidents[0] - 1U);
+    EXPECT_EQ(profile.basePopulation.professionResidents[2], beforePopulation.professionResidents[2] + 1U);
+    EXPECT_EQ(projectBaseWorkforce(profile).availableResidents, beforeWorkers.availableResidents);
+    EXPECT_EQ(profile.assets.find(scrapA), nullptr);
+    EXPECT_EQ(profile.assets.find(scrapB), nullptr);
+    EXPECT_EQ(profile.assets.find(copper), nullptr);
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
+}
+
+TEST(BaseManufacturingDomainTest, EngineeringTrainingCancellationRequiresRoomForAllOriginalInputs)
+{
+    const auto &content = publishedContentRegistry();
+    ProfileState profile = makeProfile();
+    const auto scrapA = addToStash(profile, kBaseEngineeringTrainingInputs[0].itemDefinitionId);
+    const auto scrapB = addToStash(profile, kBaseEngineeringTrainingInputs[0].itemDefinitionId);
+    const auto copper = addToStash(profile, kBaseEngineeringTrainingInputs[1].itemDefinitionId);
+    addToStash(profile, ItemDefinitionId{"item.loot.electronics"});
+    const auto production = startOrder(profile);
+    ASSERT_TRUE(production.succeeded) << production.message;
+    EXPECT_FALSE(queryStartBaseEngineeringTraining(profile, content).canCommit);
+    const auto canceledProduction = executeCancelBaseManufacturing(
+        profile, content, {profile.revision, "cancel-existing-weapon-kit"});
+    ASSERT_TRUE(canceledProduction.succeeded) << canceledProduction.message;
+    const auto started = executeStartBaseEngineeringTraining(profile, content, {profile.revision, "training"});
+    ASSERT_TRUE(started.succeeded) << started.message;
+    const auto plannedReturns = profile.activeEngineeringTraining->inputAssetIds;
+    ASSERT_EQ(plannedReturns, (std::vector<AssetInstanceId>{scrapA, scrapB, copper}));
+
+    const auto filler = fillStash(profile);
+    static_cast<void>(advanceWorldClock(profile.worldClock, 120U));
+    EXPECT_FALSE(applyBaseEngineeringTrainingThrough(profile, content));
+    const auto elapsed = profile.worldClock.elapsedWorldMinutes;
+    const auto full = profileStateFingerprint(profile);
+    const CommandContext cancel{profile.revision, "cancel-training"};
+    EXPECT_EQ(executeCancelBaseEngineeringTraining(profile, content, cancel).error, DomainErrorCode::Capacity);
+    EXPECT_EQ(profileStateFingerprint(profile), full);
+    for (const auto id : filler)
+        ASSERT_TRUE(profile.assets.erase(id));
+
+    const auto canceled = executeCancelBaseEngineeringTraining(profile, content, cancel);
+    ASSERT_TRUE(canceled.succeeded) << canceled.message;
+    EXPECT_TRUE(executeCancelBaseEngineeringTraining(profile, content, cancel).alreadyCommitted);
+    EXPECT_FALSE(profile.activeEngineeringTraining);
+    EXPECT_EQ(profile.worldClock.elapsedWorldMinutes, elapsed);
+    for (const auto id : plannedReturns)
+    {
+        const auto *asset = profile.assets.find(id);
+        ASSERT_NE(asset, nullptr);
+        const auto *location = std::get_if<StoredAssetLocation>(&asset->location);
+        ASSERT_NE(location, nullptr);
+        EXPECT_EQ(location->container.kind, ProfileContainerKind::Stash);
+    }
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
+}
+
+TEST(BaseManufacturingDomainTest, EngineeringTrainingPausesWithoutMentorAndDefersAnActiveRaid)
+{
+    const auto &content = publishedContentRegistry();
+    ProfileState profile = makeProfile();
+    addToStash(profile, kBaseEngineeringTrainingInputs[0].itemDefinitionId);
+    addToStash(profile, kBaseEngineeringTrainingInputs[0].itemDefinitionId);
+    addToStash(profile, kBaseEngineeringTrainingInputs[1].itemDefinitionId);
+    const auto started = executeStartBaseEngineeringTraining(profile, content, {profile.revision, "training"});
+    ASSERT_TRUE(started.succeeded) << started.message;
+
+    profile.baseWorkforce.workshopWorker.reset();
+    profile.basePopulation.injuredByProfession[2] = 1U;
+    profile.basePopulation.injuredResidents = 1U;
+    EXPECT_TRUE(projectBaseEngineeringTraining(profile).paused);
+    EXPECT_FALSE(queryAssignBestBaseWorker(profile, {BaseFacilityStaffingKind::Workshop}).canCommit);
+    static_cast<void>(advanceWorldClock(profile.worldClock, 120U));
+    EXPECT_FALSE(applyBaseEngineeringTrainingThrough(profile, content));
+    EXPECT_EQ(projectBaseEngineeringTraining(profile).remainingMinutes, 720U);
+
+    profile.basePopulation.injuredByProfession[2] = 0U;
+    profile.basePopulation.injuredResidents = 0U;
+    static_cast<void>(advanceWorldClock(profile.worldClock, 120U));
+    const auto assigned = executeAssignBestBaseWorker(
+        profile, content, {BaseFacilityStaffingKind::Workshop}, {profile.revision, "mentor-return"});
+    ASSERT_TRUE(assigned.succeeded) << assigned.message;
+    EXPECT_FALSE(projectBaseEngineeringTraining(profile).paused);
+    EXPECT_EQ(projectBaseEngineeringTraining(profile).remainingMinutes, 720U);
+
+    const auto checkpoint = profile.activeEngineeringTraining;
+    profile.pendingRaid.emplace();
+    static_cast<void>(advanceWorldClock(profile.worldClock, 720U));
+    EXPECT_FALSE(applyBaseEngineeringTrainingThrough(profile, content));
+    EXPECT_EQ(profile.activeEngineeringTraining, checkpoint);
+    profile.pendingRaid.reset();
+    EXPECT_TRUE(applyBaseEngineeringTrainingThrough(profile, content));
+    EXPECT_FALSE(profile.activeEngineeringTraining);
     EXPECT_TRUE(validateProfileState(profile, content).valid);
 }

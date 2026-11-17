@@ -84,6 +84,7 @@ struct UiDeploymentProjection {
     std::optional<bool> credentialUnlocked;
     std::string mapName, difficulty, warning, routeProfile, routeName;
     RaidTravelPreview travel;
+    RaidNightRendezvousPreview nightRendezvous;
     std::array<UiDeploymentIntelligence, kRaidIntelligenceCategoryCount> intelligence;
     std::vector<UiDeploymentInterior> interiors;
     std::optional<RaidIntelligenceCategory> selectedIntelligence;
@@ -110,6 +111,8 @@ struct UiDeploymentProjection {
     const MapDefinitionId &, const RaidIntelligenceLoadout &,
     const std::optional<std::string> &recoveryRecordId, std::size_t loadoutIndex,
     const UiDeploymentState &);
+[[nodiscard]] std::string uiNightRendezvousArrivalText(
+    const RaidNightRendezvousPreview &, UiLanguage);
 [[nodiscard]] std::string uiDeploymentViewKey(const UiDeploymentState &);
 [[nodiscard]] std::string uiDeploymentActionKey(
     const UiDeploymentHit &, const UiDeploymentState &, const UiDeploymentProjection &);

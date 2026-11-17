@@ -39,6 +39,8 @@ struct ProfileUiClearWorkerCommand { BaseFacilityStaffingKind facility{}; };
 struct ProfileUiAutoFillWorkersCommand {};
 struct ProfileUiWishFocusCommand { std::optional<BaseWishInstanceId> focus; };
 struct ProfileUiCancelManufacturingCommand {};
+struct ProfileUiStartEngineeringTrainingCommand {};
+struct ProfileUiCancelEngineeringTrainingCommand {};
 struct ProfileUiCollectManufacturingCommand {};
 struct ProfileUiCollectGunsmithCommand {};
 struct ProfileUiStartRecoveryCommand { std::string recordId; };
@@ -84,6 +86,8 @@ using ProfileUiCommand = std::variant<
     ProfileUiAutoFillWorkersCommand,
     ProfileUiWishFocusCommand,
     ProfileUiCancelManufacturingCommand,
+    ProfileUiStartEngineeringTrainingCommand,
+    ProfileUiCancelEngineeringTrainingCommand,
     ProfileUiCollectManufacturingCommand,
     ProfileUiCollectGunsmithCommand,
     ProfileUiStartRecoveryCommand,

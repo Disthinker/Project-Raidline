@@ -261,6 +261,7 @@ add_library(raidline_domain STATIC
     src/base_workforce_domain.h
     src/base_resident_medical_domain.cpp
     src/base_manufacturing_domain.cpp
+    src/base_engineering_training_domain.cpp
     src/base_emergency_power_domain.cpp
     src/base_morale_domain.cpp
     src/base_morale_domain.h

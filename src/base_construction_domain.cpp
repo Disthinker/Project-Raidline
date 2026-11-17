@@ -1,5 +1,7 @@
 #include "base_construction_domain.h"
 
+#include "base_engineering_training_domain.h"
+
 #include "base_facility_layout_domain.h"
 #include "base_siege_domain.h"
 
@@ -781,6 +783,8 @@ InstallBaseFacilityReceipt executeInstallBaseFacility(
   shiftBaseFacilityTasks(
       candidate, content, command.definitionId,
       candidate.worldClock.elapsedWorldMinutes - reserveStarted);
+  if (command.definitionId == BaseFacilityDefinitionId{"base_facility.workshop"})
+    pauseBaseEngineeringTrainingThrough(candidate);
   candidate.baseConstruction.facilities[command.definitionId] =
       BaseConstructionState::FacilityPlacement::Installed;
   candidate.baseConstruction.facilityReserveStartedWorldMinutes.erase(
