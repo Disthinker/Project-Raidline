@@ -1,3 +1,13 @@
+# 当前 · 夜间接应与工坊带教 v1 已验收
+
+灰烬工场的夜间接应连到回营带教。用桌面固定入口 **Project Raidline Debug** 打开隔离验收档，集中验收抵达预览、接应和回营带教。[联合验收清单](../acceptance/raid-night-rendezvous-and-engineering-training-v1.md)
+
+- task_id raid-night-rendezvous-and-engineering-training-v1，plan_version RL-RAID-NIGHT-RENDEZVOUS-AND-ENGINEERING-TRAINING-v1，state accepted。用户确认“验收通过，请继续下一项开发”，验收候选为 75a3dad9d551。按约定提交并推送功能分支。
+- 基线 origin/main@2b472894f0ff3402d52d778562600aeb2d40a598。候选 RL-RAID-NIGHT-RENDEZVOUS-AND-ENGINEERING-TRAINING-v1-local-75a3dad9d551 已冻结。Windows Debug 全量 3376/3376、专项 52/52，原 14 项 3 ms 检查全部通过。历史档及实际玩家主备档副本已迁移回读。
+- 原策划线程回复 MAIN-NEXT-STAGE-20261117-AFTER-FRACTURE-01。验证记录和回退方式见[具体方案](../exec-plans/active/raid-night-rendezvous-and-engineering-training-v1.md)。
+
+---
+
 # 当前 · 重伤撤离与野战夹板 v1 已验收
 
 从医院遭遇、临时止痛、带伤撤离，到基地治疗和工坊补给，完成一个可联合验收的阶段。[具体开发方案](../exec-plans/active/raid-fracture-and-field-stabilization-v1.md)

@@ -644,6 +644,20 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
             rescue.interactionDurationSeconds;
     }
 
+    if (config.nightRendezvous)
+    {
+        const auto &bounds = *config.nightRendezvous;
+        constexpr float diameter = kRaidNightRendezvousCoverRadius * 2.0F;
+        if (!std::isfinite(bounds.position.x) || !std::isfinite(bounds.position.y) ||
+            bounds.size.x != diameter || bounds.size.y != diameter ||
+            bounds.position.x < 0.0F || bounds.position.y < 0.0F ||
+            bounds.position.x + diameter > worldSize_.x ||
+            bounds.position.y + diameter > worldSize_.y)
+            throw std::invalid_argument{"Raid night rendezvous has invalid bounds"};
+        nightRendezvous_ = RaidNightRendezvousView{bounds};
+    }
+    nightRendezvousUnavailable_ = config.nightRendezvousUnavailable;
+
     if (config.highRisk.enabled)
     {
         const HighRiskWorldConfig &highRisk = config.highRisk;
@@ -1179,6 +1193,8 @@ void GameplayWorld::update(
     const RaidFuelSelector &selectFuel)
 {
     spaceTransitionedLastUpdate_ = false;
+    nightRendezvousConsumedInteraction_ = false;
+    nightRendezvousSignaledLastUpdate_ = false;
     grenadeExplodedLastUpdate_=false;
     if(std::isfinite(deltaTime) && deltaTime>0)grenadeFlashSeconds_=std::max(0.0F,grenadeFlashSeconds_-deltaTime);
     if(grenadeFlashSeconds_<=0)lastGrenadeExplosion_.reset();
@@ -1714,8 +1730,12 @@ void GameplayWorld::update(
         controlsSuppressedAtFrameStart ||
         player_.isControlled();
 
+    if (nightRendezvous_)
+        updateNightRendezvous(input, deltaTime, controlsSuppressed);
+
     if (!spaceTransitionedLastUpdate_ && !controlsSuppressed &&
         !raidSession_.signalCalledLastUpdate() && input.interactJustPressed &&
+        !nightRendezvousConsumedInteraction_ &&
         !(input.credentialInvestigationAllowed && credentialInvestigationInRange()))
     {
         tryPickupOne();
@@ -2651,6 +2671,41 @@ std::optional<RaidRoadBlockadeView> GameplayWorld::roadBlockade() const
     return view;
 }
 
+GameplayWorld::LocalNoiseListeners GameplayWorld::prepareOutdoorLocalNoise(
+    Vec2 origin, float radius) const
+{
+    LocalNoiseListeners listeners;
+    const auto &space = outdoorRaidSpaceId();
+    for (const Enemy &enemy : enemies_)
+    {
+        const auto id = enemy.combatTargetId();
+        if (!enemy.isDead() && enemies_.state(id).noiseResponsive &&
+            enemy.awarenessState() != EnemyAwarenessState::Alerted &&
+            enemy.attackPhase() == EnemyAttackPhase::Idle &&
+            distanceSquared(enemyCenter(enemy), origin) <= radius * radius)
+        {
+            listeners.emplace(id, LocalNoiseInvestigation{space, origin, 0.0F, false});
+        }
+    }
+    return listeners;
+}
+
+void GameplayWorld::publishOutdoorLocalNoise(LocalNoiseListeners listeners, Vec2 origin)
+{
+    for (Enemy &enemy : enemies_)
+    {
+        const auto id = enemy.combatTargetId();
+        const auto listener = listeners.find(id);
+        if (listener == listeners.end())
+            continue;
+        noiseDecoy_.forget(id);
+        enemy.investigateSound(origin);
+        listener->second.remaining = enemy.searchTimeRemaining();
+        localNoiseInvestigations_.erase(id);
+    }
+    localNoiseInvestigations_.merge(listeners);
+}
+
 bool GameplayWorld::tryOpenRoadBlockade(const std::function<bool()> &commitWedge)
 {
     const auto view = roadBlockade();
@@ -2659,39 +2714,15 @@ bool GameplayWorld::tryOpenRoadBlockade(const std::function<bool()> &commitWedge
 
     const Vec2 noise{view->bounds.position.x + view->bounds.size.x * 0.5F,
         view->bounds.position.y + view->bounds.size.y * 0.5F};
-    const auto &space = outdoorRaidSpaceId();
     // Reserve the local sound event before touching the asset. On success,
     // all resulting world changes use the prepared geometry and map nodes.
-    decltype(localNoiseInvestigations_) listeners;
-    for (const Enemy &enemy : enemies_)
-    {
-        const auto id = enemy.combatTargetId();
-        if (!enemy.isDead() && enemies_.state(id).noiseResponsive &&
-            enemy.awarenessState() != EnemyAwarenessState::Alerted &&
-            enemy.attackPhase() == EnemyAttackPhase::Idle &&
-            distanceSquared(enemyCenter(enemy), noise) <=
-                kRoadBlockadeBreachNoiseRadius * kRoadBlockadeBreachNoiseRadius)
-        {
-            listeners.emplace(id, LocalNoiseInvestigation{space, noise, 0.0F, false});
-        }
-    }
+    auto listeners = prepareOutdoorLocalNoise(noise, kRoadBlockadeBreachNoiseRadius);
     if (!commitWedge())
         return false;
 
     switchRoadBlockadeGeometry();
     setRoadBlockadePhase(RaidRoadBlockadePhase::Breached);
-    for (Enemy &enemy : enemies_)
-    {
-        const auto id = enemy.combatTargetId();
-        const auto listener = listeners.find(id);
-        if (listener == listeners.end())
-            continue;
-        noiseDecoy_.forget(id);
-        enemy.investigateSound(noise);
-        listener->second.remaining = enemy.searchTimeRemaining();
-        localNoiseInvestigations_.erase(id);
-    }
-    localNoiseInvestigations_.merge(listeners);
+    publishOutdoorLocalNoise(std::move(listeners), noise);
     return true;
 }
 
@@ -4142,6 +4173,117 @@ void GameplayWorld::updateOrdinarySurvivorRescue(
     ordinarySurvivorRescueElapsedSeconds_ = std::min(
         ordinarySurvivorRescueDurationSeconds_,
         ordinarySurvivorRescueElapsedSeconds_ + deltaTime);
+}
+
+std::optional<RaidNightRendezvousView> GameplayWorld::nightRendezvousView() const noexcept
+{
+    if (!nightRendezvous_)
+        return std::nullopt;
+    auto view = *nightRendezvous_;
+    view.visible = view.visible && inOutdoorRaidSpace();
+    view.inRange = view.inRange && inOutdoorRaidSpace() && raidSession_.isActive();
+    return view;
+}
+
+bool GameplayWorld::nightRendezvousReady() const noexcept
+{
+    return nightRendezvous_ && nightRendezvous_->ready && !nightRendezvous_->secured &&
+        nightRendezvous_->inRange && !nightRendezvous_->interactionBlocked &&
+        inOutdoorRaidSpace() && raidSession_.isActive() && !player_.isDead() &&
+        !player_.isControlled();
+}
+
+bool GameplayWorld::takeNightRendezvousCommitRequest() noexcept
+{
+    const bool requested = std::exchange(nightRendezvousCommitRequested_, false);
+    return requested && nightRendezvousReady();
+}
+
+void GameplayWorld::confirmNightRendezvous() noexcept
+{
+    if (nightRendezvous_ && nightRendezvous_->ready)
+    {
+        nightRendezvous_->secured = true;
+        nightRendezvous_->inProgress = false;
+    }
+}
+
+void GameplayWorld::updateNightRendezvous(
+    const GameplayInput &input, float deltaTime, bool controlsSuppressed)
+{
+    constexpr float coverRadius = kRaidNightRendezvousCoverRadius;
+    constexpr float localNoiseRadius{400.0F};
+    auto &task = *nightRendezvous_;
+    const Vec2 center{task.bounds.position.x + coverRadius,
+                      task.bounds.position.y + coverRadius};
+    const Vec2 position = playerCenter(player_);
+    const float distance = distanceSquared(position, center);
+    const bool outdoors = inOutdoorRaidSpace();
+    task.inRange = outdoors && distance <= coverRadius * coverRadius;
+    task.visible = outdoors && distance <= localNoiseRadius * localNoiseRadius &&
+        activeBlockerIndex().hasLineOfSight(position, center) &&
+        (!lightConeObservationEnabled() || raidBoundsObservable(
+            Rect{{center.x - 12.0F, center.y - 12.0F}, {24.0F, 24.0F}}));
+    task.discovered = task.discovered || task.visible;
+    task.interactionBlocked = controlsSuppressed || player_.isDead() ||
+        input.inventoryOpen || input.throwableModal || input.freezeObservationDirection ||
+        input.nightRendezvousInteractionBlocked || spaceTransitionedLastUpdate_;
+    task.enemyInRange = false;
+
+    if (task.secured)
+        return;
+    if (!task.inRange)
+    {
+        if (!task.ready)
+        {
+            task.inProgress = false;
+            task.remainingSeconds = kRaidNightRendezvousDurationSeconds;
+            task.progress = 0.0F;
+        }
+        return;
+    }
+    if (task.ready)
+    {
+        if (input.interactJustPressed && !task.interactionBlocked)
+        {
+            nightRendezvousConsumedInteraction_ = true;
+            nightRendezvousCommitRequested_ = true;
+        }
+        return;
+    }
+
+    const auto &enemies = activeEnemies();
+    task.enemyInRange = std::any_of(enemies.begin(), enemies.end(), [&](const Enemy &enemy)
+    {
+        return !enemy.isDead() &&
+            distanceSquared(enemyCenter(enemy), center) <= coverRadius * coverRadius;
+    });
+    if (task.interactionBlocked)
+        return;
+    if (!task.inProgress)
+    {
+        if (!input.interactJustPressed || !task.visible)
+            return;
+        task.inProgress = true;
+        nightRendezvousConsumedInteraction_ = true;
+        if (!task.signalSent)
+        {
+            publishOutdoorLocalNoise(prepareOutdoorLocalNoise(center, localNoiseRadius), center);
+            task.signalSent = true;
+            nightRendezvousSignaledLastUpdate_ = true;
+        }
+        return;
+    }
+    if (task.enemyInRange || !std::isfinite(deltaTime) || deltaTime <= 0.0F)
+        return;
+
+    task.remainingSeconds = std::max(0.0F, task.remainingSeconds - deltaTime);
+    task.progress = 1.0F - task.remainingSeconds / kRaidNightRendezvousDurationSeconds;
+    if (task.remainingSeconds == 0.0F)
+    {
+        task.ready = true;
+        nightRendezvousCommitRequested_ = true;
+    }
 }
 
 void GameplayWorld::updateCredentialInvestigation(

@@ -180,6 +180,24 @@ struct RaidWorldConfig
     std::optional<Vec2> fieldIntelligenceContact;
     std::optional<RaidRoadBlockadeSnapshot> roadBlockade;
     std::optional<Vec2> lostWeaponPursuitFallback;
+    std::optional<ContentRect> nightRendezvous;
+    bool nightRendezvousUnavailable{};
+};
+
+struct RaidNightRendezvousView
+{
+    ContentRect bounds;
+    bool visible{};
+    bool discovered{};
+    bool inRange{};
+    bool inProgress{};
+    bool enemyInRange{};
+    bool interactionBlocked{};
+    bool ready{};
+    bool secured{};
+    bool signalSent{};
+    float progress{};
+    float remainingSeconds{kRaidNightRendezvousDurationSeconds};
 };
 
 struct RaidRoadBlockadeView
@@ -451,6 +469,16 @@ public:
     [[nodiscard]] bool ordinarySurvivorRescueReady() const noexcept;
     void confirmOrdinarySurvivorRescue() noexcept;
     void cancelOrdinarySurvivorRescueInteraction() noexcept;
+
+    [[nodiscard]] std::optional<RaidNightRendezvousView> nightRendezvousView() const noexcept;
+    [[nodiscard]] bool nightRendezvousUnavailable() const noexcept { return nightRendezvousUnavailable_; }
+    [[nodiscard]] bool nightRendezvousReady() const noexcept;
+    [[nodiscard]] bool takeNightRendezvousCommitRequest() noexcept;
+    [[nodiscard]] bool nightRendezvousConsumedInteraction() const noexcept
+    { return nightRendezvousConsumedInteraction_; }
+    [[nodiscard]] bool nightRendezvousSignaledLastUpdate() const noexcept
+    { return nightRendezvousSignaledLastUpdate_; }
+    void confirmNightRendezvous() noexcept;
 
     [[nodiscard]] float weaponSpreadDegrees() const noexcept;
     [[nodiscard]] WeaponAccuracyProjection
@@ -797,6 +825,11 @@ private:
     float ordinarySurvivorRescueDurationSeconds_{};
     float ordinarySurvivorRescueElapsedSeconds_{};
     bool ordinarySurvivorRescueSecured_{};
+    std::optional<RaidNightRendezvousView> nightRendezvous_;
+    bool nightRendezvousUnavailable_{};
+    bool nightRendezvousConsumedInteraction_{};
+    bool nightRendezvousCommitRequested_{};
+    bool nightRendezvousSignaledLastUpdate_{};
 
     // 0 被 ItemInstance 保留为无效 ID。
     ItemInstanceId nextItemInstanceId_{1};
@@ -826,7 +859,10 @@ private:
         float remaining{};
         bool fromGrenade{};
     };
-    std::map<CombatTargetId, LocalNoiseInvestigation> localNoiseInvestigations_;
+    using LocalNoiseListeners = std::map<CombatTargetId, LocalNoiseInvestigation>;
+    LocalNoiseListeners localNoiseInvestigations_;
+    [[nodiscard]] LocalNoiseListeners prepareOutdoorLocalNoise(Vec2 origin, float radius) const;
+    void publishOutdoorLocalNoise(LocalNoiseListeners listeners, Vec2 origin);
     void updateLocalNoiseInvestigations(float);
     void emitGrenadeNoise(Vec2, float);
     RaidNoiseDecoyRuntime noiseDecoy_;
@@ -898,6 +934,7 @@ private:
         const GameplayInput &input,
         float deltaTime,
         Vec2 playerCenter);
+    void updateNightRendezvous(const GameplayInput &input, float deltaTime, bool controlsSuppressed);
     void updateCredentialInvestigation(
         const GameplayInput &input, float deltaTime,
         bool controlsSuppressedAtFrameStart);

@@ -136,6 +136,31 @@ protected:
         attach(1280, 720); A::text(*app).setLanguage(UiLanguage::English); A::refresh(*app);
         initialWorld = captureWorld();
     }
+    void drawRendezvousArrival(std::string_view state) {
+        for (const auto size : kUiWindowSizes) {
+            for (const auto language : {UiLanguage::SimplifiedChinese, UiLanguage::English}) {
+                detach();
+                attach(size.width, size.height);
+                A::text(*app).setLanguage(language);
+                const auto before = profileStateFingerprint(profile());
+                ASSERT_TRUE(SDL_SetRenderDrawColor(renderer, 10, 16, 18, 255));
+                ASSERT_TRUE(SDL_RenderClear(renderer));
+                A::draw(*app);
+                ASSERT_TRUE(SDL_RenderPresent(renderer));
+                EXPECT_EQ(profileStateFingerprint(profile()), before);
+                if (const char *output = std::getenv("RAIDLINE_RENDEZVOUS_UI_REVIEW_DIR"); output && *output) {
+                    const auto destination = std::filesystem::path(output);
+                    ASSERT_TRUE(destination.is_absolute());
+                    std::filesystem::create_directories(destination);
+                    const auto name = "arrival-" + std::string(state) + "-" +
+                        std::to_string(size.width) + "-" + uiLanguageCode(language) + ".png";
+                    ASSERT_TRUE(IMG_SavePNG(surface, (destination / name).string().c_str()));
+                }
+            }
+        }
+        detach();
+        attach(1280, 720);
+    }
     void attach(int width, int height) {
         surface = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_RGBA32); ASSERT_NE(surface, nullptr);
         renderer = SDL_CreateSoftwareRenderer(surface); ASSERT_NE(renderer, nullptr);
@@ -683,6 +708,36 @@ TEST_F(UiBaseDeploymentTest, OffscreenMatrixCoversWindowsLanguagesAndCriticalSta
                 (destination / (std::string(names[scenario]) + "-" + std::to_string(size.width) + "-" + uiLanguageCode(language) + ".png")).string().c_str()));
         }
     }
+}
+
+TEST_F(UiBaseDeploymentTest, NightRendezvousArrivalStatusSurfacesAtGate) {
+    const auto ashworks = std::find_if(content.maps().begin(), content.maps().end(),
+        [](const auto &definition) { return definition.id == kRaidNightRendezvousMapId; });
+    ASSERT_NE(ashworks, content.maps().end());
+    map(static_cast<std::size_t>(ashworks - content.maps().begin()));
+    using Availability = RaidNightRendezvousAvailability;
+    EXPECT_EQ(A::projection(*app).nightRendezvous.availability, Availability::Locked);
+
+    auto &p = profile();
+    p.nightRendezvousUnlocked = true;
+    p.worldClock.elapsedWorldMinutes = 2U * kWorldMinutesPerDay + 20U * 60U;
+    ++p.revision;
+    A::refresh(*app);
+    EXPECT_EQ(A::projection(*app).travel.outboundMinutes, 150U);
+    EXPECT_EQ(A::projection(*app).nightRendezvous.availability, Availability::Missed);
+    const auto missed = uiNightRendezvousArrivalText(
+        A::projection(*app).nightRendezvous, UiLanguage::SimplifiedChinese);
+    EXPECT_NE(missed.find("抵达时接应未开放"), std::string::npos);
+    EXPECT_NE(missed.find("第7天"), std::string::npos);
+    drawRendezvousArrival("missed");
+
+    p.worldClock.elapsedWorldMinutes = 2U * kWorldMinutesPerDay + 18U * 60U;
+    ++p.revision;
+    A::refresh(*app);
+    EXPECT_EQ(A::projection(*app).nightRendezvous.availability, Availability::Available);
+    EXPECT_EQ(uiNightRendezvousArrivalText(A::projection(*app).nightRendezvous, UiLanguage::English),
+        "NIGHT RENDEZVOUS OPEN · 18:00–22:00");
+    drawRendezvousArrival("available");
 }
 
 TEST(UiDeploymentGeometryTest, LongListsClampToTheLastPageAndHitOnlyVisibleStableIds) {

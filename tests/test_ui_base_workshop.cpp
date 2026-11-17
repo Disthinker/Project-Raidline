@@ -468,6 +468,75 @@ TEST_F(UiBaseWorkshopTest, GeneratorPanelSupportsTargetActionsAtAllWindowSizes) 
     EXPECT_EQ(saved.profile->emergencyPower, profile().emergencyPower);
 }
 
+TEST_F(UiBaseWorkshopTest, EngineeringTrainingUsesSharedWorkshopActionsAndPersists) {
+    for (const auto &input : kBaseEngineeringTrainingInputs) {
+        const auto maximumStack = content.item(input.itemDefinitionId).maxStackSize;
+        for (auto remaining = input.quantity; remaining != 0U;) {
+            const auto quantity = std::min(remaining, maximumStack);
+            ASSERT_NE(create(input.itemDefinitionId, quantity), 0U);
+            remaining -= quantity;
+        }
+    }
+    ASSERT_TRUE(queryStartBaseEngineeringTraining(profile(), content).canCommit);
+    const auto originalPopulation = profile().basePopulation.ordinaryResidents;
+    std::array<std::uint64_t, kBaseEngineeringTrainingInputs.size()> originalMaterials{};
+    for (std::size_t index = 0; index < originalMaterials.size(); ++index)
+        originalMaterials[index] = quantity(kBaseEngineeringTrainingInputs[index].itemDefinitionId);
+    const auto recipeCount = A::projection(*app).recipes.size();
+    control(Control::Training);
+    ASSERT_TRUE(A::projection(*app).trainingSelected);
+    EXPECT_EQ(A::projection(*app).recipes.size(), recipeCount);
+    EXPECT_TRUE(uiWorkshopEnabled(Control::Main, A::projection(*app)));
+
+    const auto drawState = [&](std::string_view state) {
+        for (const auto size : kUiWindowSizes) {
+            for (const auto language : {UiLanguage::SimplifiedChinese, UiLanguage::English}) {
+                detach();
+                attach(size.width, size.height);
+                A::text(*app).setLanguage(language);
+                const auto before = profileStateFingerprint(profile());
+                ASSERT_TRUE(SDL_SetRenderDrawColor(renderer, 10, 16, 18, 255));
+                ASSERT_TRUE(SDL_RenderClear(renderer));
+                A::draw(*app);
+                ASSERT_TRUE(SDL_RenderPresent(renderer));
+                EXPECT_EQ(profileStateFingerprint(profile()), before);
+                if (const char *output = std::getenv("RAIDLINE_RENDEZVOUS_UI_REVIEW_DIR"); output && *output) {
+                    const auto destination = std::filesystem::path(output);
+                    ASSERT_TRUE(destination.is_absolute());
+                    std::filesystem::create_directories(destination);
+                    const auto name = "training-" + std::string(state) + "-" +
+                        std::to_string(size.width) + "-" + uiLanguageCode(language) + ".png";
+                    ASSERT_TRUE(IMG_SavePNG(surface, (destination / name).string().c_str()));
+                }
+            }
+        }
+        detach();
+        attach(1280, 720);
+    };
+    drawState("ready");
+    down();
+    EXPECT_FALSE(profile().activeEngineeringTraining);
+    up();
+    ASSERT_TRUE(profile().activeEngineeringTraining) << A::message(*app);
+    EXPECT_EQ(profile().basePopulation.ordinaryResidents, originalPopulation);
+    EXPECT_FALSE(profile().baseManufacturing.activeOrder);
+    EXPECT_FALSE(uiWorkshopEnabled(Control::Main, A::projection(*app)));
+    EXPECT_TRUE(uiWorkshopEnabled(Control::Cancel, A::projection(*app)));
+    const auto saved = SaveRepository(path).load(content);
+    ASSERT_TRUE(saved.profile && saved.profile->activeEngineeringTraining);
+    EXPECT_EQ(saved.profile->activeEngineeringTraining->jobId, profile().activeEngineeringTraining->jobId);
+    drawState("active");
+
+    control(Control::Cancel);
+    EXPECT_FALSE(profile().activeEngineeringTraining);
+    const auto cancelled = SaveRepository(path).load(content);
+    ASSERT_TRUE(cancelled.profile);
+    EXPECT_FALSE(cancelled.profile->activeEngineeringTraining);
+    EXPECT_EQ(profile().basePopulation.ordinaryResidents, originalPopulation);
+    for (std::size_t index = 0; index < originalMaterials.size(); ++index)
+        EXPECT_EQ(quantity(kBaseEngineeringTrainingInputs[index].itemDefinitionId), originalMaterials[index]);
+}
+
 TEST(UiWorkshopGeometryTest, PaginationAndStateActionsRemainSeparate) {
     EXPECT_EQ(uiWorkshopPageCount(0),1U);EXPECT_EQ(uiWorkshopPageCount(6),1U);EXPECT_EQ(uiWorkshopPageCount(7),2U);
     UiWorkshopState s;UiWorkshopProjection p;

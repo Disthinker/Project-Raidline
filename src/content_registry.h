@@ -49,6 +49,13 @@ inline constexpr std::string_view kRaidLostWeaponPursuitContentVersion{
     "raid-lost-weapon-pursuit-content-89"};
 inline constexpr std::string_view kRaidFractureContentVersion{
     "raid-fracture-and-field-stabilization-content-90"};
+inline constexpr std::string_view kRaidNightRendezvousContentVersion{
+    "raid-night-rendezvous-and-engineering-training-content-91"};
+inline const MapDefinitionId kRaidNightRendezvousMapId{"map.raid.industrial"};
+inline const RescueDefinitionId kRaidNightRendezvousRescueId{
+    "rescue.night_rendezvous.ashworks_yard"};
+inline constexpr float kRaidNightRendezvousCoverRadius{96.0F};
+inline constexpr float kRaidNightRendezvousDurationSeconds{12.0F};
 inline const ItemDefinitionId kRaidFieldSplintId{"item.medical.field_splint"};
 inline const BaseManufacturingRecipeDefinitionId kRaidFieldSplintRecipeId{
     "base_manufacturing.field_splint"};
@@ -132,9 +139,14 @@ inline constexpr std::string_view kRaidFuelLootSlotId{"freight_manifest"};
         instanceId.substr(archetypeId.size()) == ".1";
 }
 
+[[nodiscard]] inline bool supportsRaidNightRendezvousContent(std::string_view version) noexcept
+{
+    return version == kRaidNightRendezvousContentVersion;
+}
+
 [[nodiscard]] inline bool supportsRaidFractureContent(std::string_view version) noexcept
 {
-    return version == kRaidFractureContentVersion;
+    return version == kRaidFractureContentVersion || supportsRaidNightRendezvousContent(version);
 }
 
 [[nodiscard]] inline bool supportsLostWeaponPursuitContent(std::string_view version) noexcept
@@ -923,6 +935,7 @@ struct MapDefinition
     ProceduralOutdoorDefinition proceduralOutdoor;
     std::vector<RaidInteriorDefinition> interiors;
     std::vector<Vec2> fieldIntelligenceTradePositions;
+    std::optional<RaidRescueDefinition> nightRendezvous;
 };
 
 // A player-facing role target. It describes acceptable published content and

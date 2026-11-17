@@ -2,6 +2,7 @@
 
 #include "alpha_content_ids.h"
 #include "base_emergency_power_domain.h"
+#include "base_engineering_training_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_migration_domain.h"
 #include "base_facility_layout_domain.h"
@@ -337,4 +338,43 @@ TEST(BaseMigrationDomainTest,
         CommandContext{profile.revision, "install-during-warning"})
                      .succeeded);
     EXPECT_EQ(profileStateFingerprint(profile), before);
+}
+
+TEST(BaseMigrationDomainTest, EngineeringTrainingKeepsRemainingMinutesAcrossMigrationAndReinstall)
+{
+    const auto &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("engineering-training-migration", content);
+    prepareAshworks(profile);
+    completeKitchenWater(profile);
+    addToStash(profile, kBaseEngineeringTrainingInputs[0].itemDefinitionId);
+    addToStash(profile, kBaseEngineeringTrainingInputs[0].itemDefinitionId);
+    addToStash(profile, kBaseEngineeringTrainingInputs[1].itemDefinitionId);
+    const auto started = executeStartBaseEngineeringTraining(
+        profile, content, {profile.revision, "migration-training"});
+    ASSERT_TRUE(started.succeeded) << started.message;
+    const auto inputIds = profile.activeEngineeringTraining->inputAssetIds;
+    static_cast<void>(advanceWorldClock(profile.worldClock, 120U));
+    static_cast<void>(synchronizeBaseWorkThrough(profile, content, 120U));
+    EXPECT_EQ(projectBaseEngineeringTraining(profile).remainingMinutes, 600U);
+
+    const auto migrated = executeBaseMigration(
+        profile, content, {kAshworksSite}, {profile.revision, "migration"});
+    ASSERT_TRUE(migrated.succeeded) << migrated.message;
+    EXPECT_TRUE(projectBaseEngineeringTraining(profile).paused);
+    EXPECT_EQ(projectBaseEngineeringTraining(profile).remainingMinutes, 600U);
+    EXPECT_EQ(profile.activeEngineeringTraining->inputAssetIds, inputIds);
+    static_cast<void>(advanceWorldClock(profile.worldClock, 900U));
+    EXPECT_EQ(projectBaseEngineeringTraining(profile).remainingMinutes, 600U);
+
+    const auto installed = executeInstallBaseFacility(
+        profile, content, {kWorkshop}, {profile.revision, "install"});
+    ASSERT_TRUE(installed.succeeded) << installed.message;
+    EXPECT_FALSE(projectBaseEngineeringTraining(profile).paused);
+    static_cast<void>(advanceWorldClock(profile.worldClock, 599U));
+    static_cast<void>(synchronizeBaseWorkThrough(profile, content, 599U));
+    EXPECT_EQ(projectBaseEngineeringTraining(profile).remainingMinutes, 1U);
+    static_cast<void>(advanceWorldClock(profile.worldClock, 1U));
+    static_cast<void>(synchronizeBaseWorkThrough(profile, content, 1U));
+    EXPECT_FALSE(profile.activeEngineeringTraining);
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
 }

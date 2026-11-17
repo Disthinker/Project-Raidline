@@ -3255,11 +3255,9 @@ ContentRegistry ContentRegistry::fromJson(
                     "extraction_duration_seconds",
                     true)};
 
-            if (mapValue.contains("rescue") &&
-                (definition.id != kHospitalFloorplanMapId ||
-                 supportsHospitalMedicalReserveContent(registry.contentVersion())))
+            const auto parseRescue = [&](std::string_view key)
             {
-                const Json &rescue = requiredObject(mapValue, "rescue");
+                const Json &rescue = requiredObject(mapValue, key);
                 const std::string subjectKind =
                     requiredString(rescue, "subject_kind");
                 if (subjectKind != "ordinary_residents")
@@ -3284,7 +3282,31 @@ ContentRegistry ContentRegistry::fromJson(
                 {
                     fail("map rescue definition is invalid or duplicated");
                 }
-                definition.rescue = std::move(rescueDefinition);
+                return rescueDefinition;
+            };
+            if (mapValue.contains("rescue") &&
+                (definition.id != kHospitalFloorplanMapId ||
+                 supportsHospitalMedicalReserveContent(registry.contentVersion())))
+            {
+                definition.rescue = parseRescue("rescue");
+            }
+            if (mapValue.contains("night_rendezvous") &&
+                supportsRaidNightRendezvousContent(registry.contentVersion()))
+            {
+                RaidRescueDefinition rendezvous = parseRescue("night_rendezvous");
+                constexpr float diameter = kRaidNightRendezvousCoverRadius * 2.0F;
+                if (definition.id != kRaidNightRendezvousMapId ||
+                    rendezvous.id != kRaidNightRendezvousRescueId ||
+                    rendezvous.transferPoint.size.x != diameter ||
+                    rendezvous.transferPoint.size.y != diameter ||
+                    rendezvous.interactionDurationSeconds != kRaidNightRendezvousDurationSeconds ||
+                    rendezvous.ordinaryResidentCount != 1U ||
+                    rendezvous.injuredResidentCount != 0U ||
+                    rendezvous.profession != BaseResidentProfession::Engineering)
+                {
+                    fail("night rendezvous definition is invalid");
+                }
+                definition.nightRendezvous = std::move(rendezvous);
             }
             if (mapValue.contains("high_risk"))
             {

@@ -1,5 +1,6 @@
 #include "profile_ui_command.h"
 
+#include "base_engineering_training_domain.h"
 #include "base_wish_expedition.h"
 #include "base_world.h"
 #include "collision.h"
@@ -214,6 +215,10 @@ ProfileUiPrepared prepareProfileUiCommand(ProfileState &candidate, const Content
                 return resultOf(executeAutoFillBaseWorkers(candidate, content, context));
             else if constexpr (std::is_same_v<Command, ProfileUiWishFocusCommand>)
                 return resultOf(executeBaseWishFocus(candidate, content, typed.focus, context));
+            else if constexpr (std::is_same_v<Command, ProfileUiStartEngineeringTrainingCommand>)
+                return resultOf(executeStartBaseEngineeringTraining(candidate, content, context));
+            else if constexpr (std::is_same_v<Command, ProfileUiCancelEngineeringTrainingCommand>)
+                return resultOf(executeCancelBaseEngineeringTraining(candidate, content, context));
             else if constexpr (std::is_same_v<Command, ProfileUiCancelManufacturingCommand>)
                 return resultOf(executeCancelBaseManufacturing(candidate, content, context));
             else if constexpr (std::is_same_v<Command, ProfileUiCollectManufacturingCommand>)

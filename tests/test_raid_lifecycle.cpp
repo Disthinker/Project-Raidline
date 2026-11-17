@@ -830,6 +830,116 @@ TEST(RaidLifecycleTest, TravelPreviewUsesMapTimeWithoutMutatingProfile)
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 }
 
+TEST(RaidLifecycleTest, NightRendezvousUsesActualArrivalAndOptionalShortcut)
+{
+    using Availability = RaidNightRendezvousAvailability;
+    const auto &content = publishedContentRegistry();
+    const auto &map = content.map(kRaidNightRendezvousMapId);
+    auto profile = makeNewAlphaProfile("night-rendezvous-travel", content);
+    profile.worldClock.elapsedWorldMinutes = 2U * kWorldMinutesPerDay + 20U * kWorldMinutesPerHour;
+    auto travel = queryRaidTravel(profile, content, map);
+    EXPECT_EQ(queryRaidNightRendezvous(profile, map, travel).availability, Availability::Locked);
+    profile.nightRendezvousUnlocked = true;
+    ASSERT_EQ(travel.outboundMinutes, 150U);
+    EXPECT_EQ(travel.arrival.hour, 22U);
+    EXPECT_EQ(travel.arrival.minute, 30U);
+    auto forecast = queryRaidNightRendezvous(profile, map, travel);
+    EXPECT_EQ(forecast.availability, Availability::Missed);
+    EXPECT_EQ(forecast.nextOpeningDay, 7U);
+
+    const RegionalOutpostDefinitionId relay{"regional_outpost.old_service_relay"};
+    ASSERT_TRUE(executeEstablishRegionalOutpost(profile, content, {relay},
+        {profile.revision, "night-rendezvous-relay"}).succeeded);
+    const auto staffed = executeRegionalOutpostStaffing(profile, content, {relay, true},
+        {profile.revision, "night-rendezvous-relay-staff"});
+    ASSERT_TRUE(staffed.succeeded) << staffed.message;
+    ASSERT_EQ(staffed.assignedStaff, 2U);
+    travel = queryRaidTravel(profile, content, map);
+    EXPECT_EQ(travel.outboundMinutes, 95U);
+    EXPECT_EQ(travel.arrival.hour, 21U);
+    EXPECT_EQ(travel.arrival.minute, 35U);
+    forecast = queryRaidNightRendezvous(profile, map, travel);
+    EXPECT_EQ(forecast.availability, Availability::Available);
+    EXPECT_EQ(forecast.nextOpeningDay, 3U);
+
+    const MapDefinition &hospital = content.map(kHospitalFloorplanMapId);
+    EXPECT_EQ(queryRaidNightRendezvous(profile, hospital,
+        queryRaidTravel(profile, content, hospital)).availability, Availability::NotApplicable);
+}
+
+TEST(RaidLifecycleTest, NightRendezvousChecksBothOpeningBoundariesAndRepeatsEveryFourDays)
+{
+    const auto opens = [](std::uint64_t day, std::uint32_t hour, std::uint32_t minute)
+    {
+        const WorldClockState clock{(day - 1U) * kWorldMinutesPerDay +
+                                    hour * kWorldMinutesPerHour + minute};
+        return raidNightRendezvousWindowOpen(projectWorldClock(clock));
+    };
+    EXPECT_FALSE(opens(2U, 20U, 0U));
+    EXPECT_FALSE(opens(3U, 17U, 59U));
+    EXPECT_TRUE(opens(3U, 18U, 0U));
+    EXPECT_TRUE(opens(3U, 21U, 59U));
+    EXPECT_FALSE(opens(3U, 22U, 0U));
+    EXPECT_FALSE(opens(4U, 20U, 0U));
+    EXPECT_TRUE(opens(7U, 20U, 0U));
+}
+
+TEST(RaidLifecycleTest, NightRendezvousFreezesASeparateRescueWithoutChangingAnyDraw)
+{
+    const auto &content = publishedContentRegistry();
+    const auto &map = content.map(kRaidNightRendezvousMapId);
+    std::set<std::string> pairs;
+    for (std::uint64_t seed = 1U; seed <= 128U; ++seed)
+    {
+        SCOPED_TRACE(seed);
+        auto ineligible = makeNewAlphaProfile("night-rendezvous-seeds", content);
+        ineligible.worldClock.elapsedWorldMinutes = 2U * kWorldMinutesPerDay + 16U * kWorldMinutesPerHour;
+        auto eligible = ineligible;
+        eligible.nightRendezvousUnlocked = true;
+        const DeployCommand command{"night-rendezvous-raid", "night-rendezvous-settle",
+            seed, kRaidNightRendezvousMapId};
+        const auto excluded = executeDeploy(ineligible, content, command,
+            {ineligible.revision, "night-rendezvous-deploy"});
+        const auto included = executeDeploy(eligible, content, command,
+            {eligible.revision, "night-rendezvous-deploy"});
+        ASSERT_TRUE(excluded.succeeded) << excluded.message;
+        ASSERT_TRUE(included.succeeded) << included.message;
+        const auto &oldRaid = *ineligible.pendingRaid;
+        const auto &raid = *eligible.pendingRaid;
+        ASSERT_TRUE(raid.nightRendezvous);
+        EXPECT_FALSE(oldRaid.nightRendezvous);
+        ASSERT_TRUE(raid.rescue);
+        EXPECT_EQ(raid.rescue, oldRaid.rescue);
+        EXPECT_EQ(raid.rescue->injuredResidentCount, 1U);
+        EXPECT_EQ(raid.nightRendezvous->definitionId, kRaidNightRendezvousRescueId);
+        EXPECT_EQ(raid.nightRendezvous->injuredResidentCount, 0U);
+        EXPECT_EQ(raid.nightRendezvous->profession, BaseResidentProfession::Engineering);
+        EXPECT_TRUE(raidNightRendezvousPlacementValid(map, raid, raid.nightRendezvous->transferPoint));
+        EXPECT_FALSE(raidNightRendezvousPlacementValid(map, raid, raid.rescue->transferPoint));
+        EXPECT_EQ(raid.spatialLayout, oldRaid.spatialLayout);
+        EXPECT_EQ(raid.enemies, oldRaid.enemies);
+        EXPECT_EQ(raid.loot, oldRaid.loot);
+        EXPECT_EQ(raid.spawnExtractionPairId, oldRaid.spawnExtractionPairId);
+        pairs.insert(raid.spawnExtractionPairId);
+    }
+    EXPECT_EQ(pairs.size(), 3U);
+}
+
+TEST(RaidLifecycleTest, NightRendezvousUnlockRequiresSuccessfulOrdinarySettlement)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("night-rendezvous-unlock", content);
+    const DeployCommand first{"first-raid", "first-settle", 1U, kRaidNightRendezvousMapId};
+    ASSERT_TRUE(executeDeploy(profile, content, first, {profile.revision, "deploy-first"}).succeeded);
+    ASSERT_TRUE(settlePendingRaid(profile, content, "first-settle", RaidResultOutcome::ActiveQuit).succeeded);
+    EXPECT_FALSE(profile.nightRendezvousUnlocked);
+
+    const DeployCommand second{"second-raid", "second-settle", 2U, kRaidNightRendezvousMapId};
+    ASSERT_TRUE(executeDeploy(profile, content, second, {profile.revision, "deploy-second"}).succeeded);
+    ASSERT_TRUE(settlePendingRaid(profile, content, "second-settle", RaidResultOutcome::Extracted).succeeded);
+    EXPECT_TRUE(profile.nightRendezvousUnlocked);
+}
+
 TEST(RaidLifecycleTest, DeployFreezesAndAppliesOutboundTravel)
 {
     ProfileState profile = makeNewAlphaProfile(

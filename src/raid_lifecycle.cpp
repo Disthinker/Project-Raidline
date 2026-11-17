@@ -6,6 +6,7 @@
 #include "base_wish_expedition.h"
 
 #include "base_construction_domain.h"
+#include "base_engineering_training_domain.h"
 #include "base_emergency_power_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_morale_domain.h"
@@ -409,18 +410,18 @@ bool pursuitSegmentClear(Vec2 start, Vec2 finish, Vec2 padding,
         });
 }
 
-// Only Riverside uses this proof. Connecting the clearance corners gives a
-// deterministic visibility graph for the small map's rectangular blockers.
-bool pursuitPlayerPaths(const MapDefinition &map, const PendingRaidSnapshot &raid,
-                        Vec2 fallback, std::optional<Vec2> deathPosition)
+// Connecting the clearance corners gives a deterministic path proof for
+// the fixed outdoor maps' rectangular blockers.
+bool fixedRaidPlayerPaths(const MapDefinition &map, const PendingRaidSnapshot &raid,
+                         Vec2 objective, std::optional<Vec2> secondaryObjective)
 {
     constexpr Vec2 clearance{kPursuitPlayerClearance, kPursuitPlayerClearance};
     const Vec2 spawnCenter{raid.playerSpawn.x + kPursuitPlayerHalfSize,
         raid.playerSpawn.y + kPursuitPlayerHalfSize};
-    std::vector<Vec2> nodes{fallback, spawnCenter, pursuitCentre(raid.extractionPoint),
+    std::vector<Vec2> nodes{objective, spawnCenter, pursuitCentre(raid.extractionPoint),
         pursuitCentre(map.highRisk.emergencyExtractionPoint)};
-    if (deathPosition)
-        nodes.push_back(*deathPosition);
+    if (secondaryObjective)
+        nodes.push_back(*secondaryObjective);
     const std::size_t required = nodes.size();
     for (const auto &blocker : raid.spatialLayout.ballisticBlockers)
     {
@@ -433,8 +434,8 @@ bool pursuitPlayerPaths(const MapDefinition &map, const PendingRaidSnapshot &rai
     }
     std::vector<bool> connected(nodes.size());
     std::vector<std::size_t> queue;
-    if (!pursuitPointWithin(fallback, map.walkableBounds, clearance) ||
-        !pursuitSegmentClear(fallback, fallback, clearance, raid.spatialLayout))
+    if (!pursuitPointWithin(objective, map.walkableBounds, clearance) ||
+        !pursuitSegmentClear(objective, objective, clearance, raid.spatialLayout))
         return false;
     connected[0] = true;
     queue.push_back(0U);
@@ -563,7 +564,7 @@ bool raidPursuitGeometryValid(
         (pursuitSegmentClear(pursuit.fallbackSearchPosition, pursuit.fallbackSearchPosition,
              bodyClearance, raid.spatialLayout)) &&
         std::all_of(pursuit.patrolPoints.begin(), pursuit.patrolPoints.end(), waypointLegal) &&
-        pursuitPlayerPaths(map, raid, pursuit.fallbackSearchPosition, pursuit.deathPosition);
+        fixedRaidPlayerPaths(map, raid, pursuit.fallbackSearchPosition, pursuit.deathPosition);
 }
 
 bool hasFixedRaidResourceOptic(
@@ -619,6 +620,81 @@ RaidTravelPreview queryRaidTravel(
         projectWorldClock(failureClock),
         route.routeIds,
         route.usesOnlineOutpost};
+}
+
+bool raidNightRendezvousWindowOpen(const WorldClockProjection &arrival) noexcept
+{
+    constexpr std::uint64_t firstOpeningDay = 3U;
+    constexpr std::uint64_t daysBetweenOpenings = 4U;
+    return arrival.day >= firstOpeningDay &&
+        (arrival.day - firstOpeningDay) % daysBetweenOpenings == 0U &&
+        arrival.hour >= 18U && arrival.hour < 22U;
+}
+
+RaidNightRendezvousPreview queryRaidNightRendezvous(
+    const ProfileState &profile, const MapDefinition &map, const RaidTravelPreview &travel) noexcept
+{
+    using Availability = RaidNightRendezvousAvailability;
+    if (map.id != kRaidNightRendezvousMapId || !map.nightRendezvous)
+        return {};
+    if (profile.committedRescues.contains(map.nightRendezvous->id))
+        return {Availability::AlreadySecured};
+    if (!profile.nightRendezvousUnlocked)
+        return {Availability::Locked};
+    if (!travel.reachable)
+        return {Availability::Unavailable};
+
+    constexpr std::uint64_t firstOpeningDay = 3U;
+    constexpr std::uint64_t daysBetweenOpenings = 4U;
+    const auto &arrival = travel.arrival;
+    if (raidNightRendezvousWindowOpen(arrival))
+        return {Availability::Available, arrival.day};
+    if (arrival.day < firstOpeningDay)
+        return {Availability::Missed, firstOpeningDay};
+    const auto phase = (arrival.day - firstOpeningDay) % daysBetweenOpenings;
+    if (phase == 0U && arrival.hour < 18U)
+        return {Availability::Missed, arrival.day};
+    return {Availability::Missed, arrival.day + daysBetweenOpenings - phase};
+}
+
+bool raidNightRendezvousPlacementValid(
+    const MapDefinition &map, const PendingRaidSnapshot &raid, ContentRect bounds)
+{
+    if (map.id != kRaidNightRendezvousMapId || raid.mapDefinitionId != map.id ||
+        map.proceduralOutdoor.enabled || !map.nightRendezvous ||
+        map.nightRendezvous->transferPoint != bounds)
+        return false;
+
+    const Vec2 minimum = bounds.position;
+    const Vec2 maximum{minimum.x + bounds.size.x, minimum.y + bounds.size.y};
+    const auto overlaps = [&](ContentRect other)
+    {
+        return minimum.x < other.position.x + other.size.x && maximum.x > other.position.x &&
+            minimum.y < other.position.y + other.size.y && maximum.y > other.position.y;
+    };
+    if (!pursuitPointWithin(minimum, map.walkableBounds) ||
+        !pursuitPointWithin(maximum, map.walkableBounds) ||
+        overlaps(raid.extractionPoint) ||
+        overlaps(map.highRisk.emergencyExtractionPoint) ||
+        overlaps(map.highRisk.conditionalExtractionPoint) ||
+        overlaps(map.highRisk.activationControlPoint) ||
+        overlaps(map.highRisk.advancedResourceArea) ||
+        overlaps(map.storageCabinet.bounds) ||
+        (map.rescue && overlaps(map.rescue->transferPoint)) ||
+        std::any_of(raid.spatialLayout.ballisticBlockers.begin(),
+                    raid.spatialLayout.ballisticBlockers.end(), overlaps))
+        return false;
+    const Vec2 center = pursuitCentre(bounds);
+    const Vec2 spawn{raid.playerSpawn.x + kPursuitPlayerHalfSize,
+                     raid.playerSpawn.y + kPursuitPlayerHalfSize};
+    if (pursuitPointWithin(spawn, bounds) ||
+        std::any_of(raid.interiors.begin(), raid.interiors.end(), [&](const auto &interior)
+        {
+            return overlaps(interior.exteriorEntrance) ||
+                pursuitPointWithin(interior.exteriorReturn, bounds);
+        }))
+        return false;
+    return fixedRaidPlayerPaths(map, raid, center, std::nullopt);
 }
 
 DeployReceipt executeDeploy(
@@ -2233,6 +2309,19 @@ DeployReceipt executeDeploy(
             enemy.variant = EnemyVariantSnapshot{EnemyVariantKind::Runner, *definition.movement};
         }
     }
+    if (regionalMissionCount == 0U &&
+        queryRaidNightRendezvous(candidate, *map, travel).availability ==
+            RaidNightRendezvousAvailability::Available)
+    {
+        const auto &definition = *map->nightRendezvous;
+        if (raidNightRendezvousPlacementValid(*map, snapshot, definition.transferPoint))
+        {
+            snapshot.nightRendezvous = RaidRescueSnapshot{
+                definition.id, definition.subjectKind, definition.transferPoint,
+                definition.interactionDurationSeconds, definition.ordinaryResidentCount,
+                definition.injuredResidentCount, definition.profession, false};
+        }
+    }
     candidate.pendingRaid = std::move(snapshot);
     const auto corpseFreeze = freezeRaidCorpseLoot(candidate, content);
     if (!corpseFreeze.valid) return deployFailure(RaidLifecycleError::InvalidProfile, corpseFreeze.message, profile.revision);
@@ -2375,7 +2464,8 @@ RaidSettlementReceipt settlePendingRaid(
 
     const PendingRaidSnapshot raidSnapshot = *candidate.pendingRaid;
     if (raidSnapshot.credentialExtraction || fuel || hasDroppedBackpacks ||
-        raidSnapshot.fieldIntelligenceTrade || (raidSnapshot.selfRecovery && raidSnapshot.selfRecovery->pursuit))
+        raidSnapshot.fieldIntelligenceTrade || raidSnapshot.nightRendezvous ||
+        (raidSnapshot.selfRecovery && raidSnapshot.selfRecovery->pursuit))
     {
         // Validate pending-only facts before settlement removes their sources.
         const ProfileValidationResult validation =
@@ -2581,6 +2671,22 @@ RaidSettlementReceipt settlePendingRaid(
     for (const auto &permission : newlyUnlockedPermissions)
         candidate.raidExtractionPermissions.insert(permission);
     static_cast<void>(applyBaseManufacturingThrough(candidate, content));
+    static_cast<void>(applyBaseEngineeringTrainingThrough(candidate, content));
+    if (supportsRaidNightRendezvousContent(content.contentVersion()) &&
+        outcome == RaidResultOutcome::Extracted &&
+        !raidSnapshot.selfRecovery && !raidSnapshot.outpostRestoration &&
+        !raidSnapshot.baseSiteClearance && !raidSnapshot.basePerimeterSweep)
+        candidate.nightRendezvousUnlocked = true;
+    std::uint32_t rescuedOrdinary{};
+    std::uint32_t rescuedInjured{};
+    for (const auto *rescue : {&raidSnapshot.rescue, &raidSnapshot.nightRendezvous})
+    {
+        if (*rescue && (*rescue)->secured)
+        {
+            rescuedOrdinary += (*rescue)->ordinaryResidentCount;
+            rescuedInjured += (*rescue)->injuredResidentCount;
+        }
+    }
     candidate.committedSettlements.insert(id);
     candidate.lastRaidResult = LastRaidResult{
         id,
@@ -2588,12 +2694,8 @@ RaidSettlementReceipt settlePendingRaid(
         std::move(returned),
         fieldTradeBalance,
         travelMinutes,
-        raidSnapshot.rescue.has_value() && raidSnapshot.rescue->secured
-            ? raidSnapshot.rescue->ordinaryResidentCount
-            : 0U,
-        raidSnapshot.rescue.has_value() && raidSnapshot.rescue->secured
-            ? raidSnapshot.rescue->injuredResidentCount
-            : 0U,
+        rescuedOrdinary,
+        rescuedInjured,
         lostRecordId,
         baseThreatReducedUnits};
     candidate.lastRaidResult->unlockedExtractionPermissions =

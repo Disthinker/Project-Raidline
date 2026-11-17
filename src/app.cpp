@@ -6232,7 +6232,11 @@ void App::update(float deltaTime)
         gameplayInput.quitRaidJustPressed = false;
     }
     const bool opticsBlocksInteraction = gameSession_.blocksInteractionForOptics(gameplayInput, deltaTime);
-    if (gameplayInput.interactJustPressed && !opticsBlocksInteraction &&
+    const auto rendezvous = gameplayInput.interactJustPressed
+        ? gameSession_.world().nightRendezvousView() : std::nullopt;
+    const bool rendezvousUsesInteract = rendezvous && rendezvous->inRange && !rendezvous->secured &&
+        (rendezvous->ready || (!rendezvous->inProgress && rendezvous->visible));
+    if (gameplayInput.interactJustPressed && !opticsBlocksInteraction && !rendezvousUsesInteract &&
         !inventoryOverlayState_.isOpen() && !tacticalMapOpen_ &&
         !medicalWheelOpen_ && !developerWeaponPanelOpen_ && !developerWeaponPanelBlocksGameplayThisFrame_ &&
         inputDecision.controlAction == InventoryFrameControlAction::None)
@@ -6288,11 +6292,15 @@ void App::update(float deltaTime)
     gameplayInput.freezeObservationDirection = gameplayInput.freezeObservationDirection ||
         inventoryOverlayState_.isOpen() || tacticalMapOpen_ || quickWheelOpen() ||
         developerWeaponPanelOpen_ || developerWeaponPanelBlocksGameplayThisFrame_ || !windowHasInputFocus_;
+    gameplayInput.nightRendezvousInteractionBlocked = gameplayInput.freezeObservationDirection ||
+        fieldIntelligenceTradeUi_.open;
     const bool deviceWheelWasOpen = gameSession_.tacticalDeviceWheelOpen();
     const auto actionMessageBefore=gameSession_.persistenceMessage();
     gameFlow_.update(
         gameplayInput,
         deltaTime);
+    if (gameSession_.world().nightRendezvousSignaledLastUpdate())
+        gameAudio_.play(SoundEventId::NoiseDecoyPulse);
     updateFieldIntelligenceTradeAfterWorld();
     syncRaidChalkRoutes();
     if (!deviceWheelWasOpen && gameSession_.tacticalDeviceWheelOpen()) {
@@ -6697,6 +6705,42 @@ void App::renderDebugText()
         {
             const bool open = raid.conditionalExtractionOpen();
             p.action = raidFuelExitStatusText(open, open && gameSession_.conditionalExtractionEligible());
+        }
+    }
+    // Ashworks can use the legacy objective row for its public enemy count.
+    // Keep that row and existing extraction notices, using the free line.
+    auto &rendezvousSummary = p.objective.empty() ? p.objective : p.signal;
+    if (world.nightRendezvousUnavailable() && rendezvousSummary.empty())
+        rendezvousSummary = "NIGHT RENDEZVOUS UNAVAILABLE THIS RAID";
+    if (const auto rendezvous = world.nightRendezvousView();
+        rendezvous && rendezvous->inRange && rendezvous->discovered)
+    {
+        const auto language = uiTextRenderer_.language();
+        const auto translate = [language](std::string_view key) { return localizeUiText(language, key); };
+        if (const auto plan = gameSession_.nightRendezvousAdmissionPlan(); plan && rendezvousSummary.empty())
+        {
+            rendezvousSummary = translate(rendezvous->secured ? "NIGHT RENDEZVOUS | TRANSFER COMPLETE" : "NIGHT RENDEZVOUS");
+            if (!plan->canCommit)
+                rendezvousSummary += "\n" + translate(plan->message);
+            else
+                rendezvousSummary += fmt::format("\n{} {}/{} · {} {}/{}",
+                    translate("BEDS"), plan->residentsAfter, plan->bedCapacity,
+                    translate("RATIONS"), plan->dailyRationsAfter, tr("天","day"));
+        }
+        if (p.action.empty() && !rendezvous->secured)
+        {
+            if (rendezvous->ready && !highOptic)
+                p.action = translate("F: RETRY SAFE TRANSFER");
+            else if (rendezvous->inProgress)
+            {
+                const auto label = rendezvous->enemyInRange ? "COVER PAUSED | ENEMIES NEARBY" :
+                    rendezvous->interactionBlocked ? "COVER PAUSED" : "COVER THE RENDEZVOUS";
+                p.actionActive = true;
+                p.actionFraction = rendezvous->progress;
+                p.action = fmt::format("{} · {:.1f}s", translate(label), rendezvous->remainingSeconds);
+            }
+            else if (!highOptic && rendezvous->visible && !rendezvous->interactionBlocked)
+                p.action = translate(rendezvous->signalSent ? "F: RESUME COVER" : "F: SIGNAL FOR RENDEZVOUS");
         }
     }
     const auto light = gameSession_.activeWeaponLight();
@@ -8401,6 +8445,38 @@ void App::renderExtractionPoint()
     SDL_SetRenderDrawBlendMode(
         renderer_,
         SDL_BLENDMODE_NONE);
+}
+
+void App::renderNightRendezvousWorld()
+{
+    const auto rendezvous = gameSession_.world().nightRendezvousView();
+    if (!rendezvous || !rendezvous->visible)
+        return;
+    const auto &bounds = rendezvous->bounds;
+    const Vec2 center{bounds.position.x + bounds.size.x * 0.5F,
+                      bounds.position.y + bounds.size.y * 0.5F};
+    const SDL_FRect signalMarker{center.x - 8.0F, center.y - 8.0F, 16.0F, 16.0F};
+    SDL_BlendMode previous{};
+    SDL_GetRenderDrawBlendMode(renderer_, &previous);
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, 27, 49, 52, 225);
+    SDL_RenderFillRect(renderer_, &signalMarker);
+    SDL_SetRenderDrawColor(renderer_, 135, 224, 205, 245);
+    SDL_RenderRect(renderer_, &signalMarker);
+    if (rendezvous->inRange && !rendezvous->secured)
+    {
+        std::array<SDL_FPoint, 25> circle{};
+        for (std::size_t i = 0; i < circle.size(); ++i)
+        {
+            const float angle = 6.283185307F * static_cast<float>(i) / (circle.size() - 1U);
+            circle[i] = {center.x + std::cos(angle) * bounds.size.x * 0.5F,
+                         center.y + std::sin(angle) * bounds.size.y * 0.5F};
+        }
+        SDL_SetRenderDrawColor(renderer_, 135, 224, 205, 170);
+        SDL_RenderLines(renderer_, circle.data(), static_cast<int>(circle.size()));
+    }
+    renderWorldLabel(center.x + 12.0F, center.y - 12.0F, "NIGHT RENDEZVOUS");
+    SDL_SetRenderDrawBlendMode(renderer_, previous);
 }
 
 void App::renderStorageCabinet()
@@ -14030,6 +14106,25 @@ void App::renderRaidTacticalMap()
         uiTextRenderer_.language() == UiLanguage::SimplifiedChinese ? "凭" : "C",
         172, 214, 176);
 
+    if (const auto rendezvous = gameSession_.world().nightRendezvousView();
+        rendezvous && rendezvous->discovered)
+    {
+        const auto &bounds = rendezvous->bounds;
+        const Vec2 center = screenPoint({bounds.position.x + bounds.size.x * 0.5F,
+                                         bounds.position.y + bounds.size.y * 0.5F});
+        constexpr float halfSize = 9.0F;
+        const std::array<SDL_FPoint, 5> marker{{
+            {center.x, center.y - halfSize}, {center.x + halfSize, center.y},
+            {center.x, center.y + halfSize}, {center.x - halfSize, center.y},
+            {center.x, center.y - halfSize}}};
+        SDL_SetRenderDrawColor(renderer_, 135, 224, 205, 245);
+        SDL_RenderLines(renderer_, marker.data(), static_cast<int>(marker.size()));
+        constexpr float labelWidth = 176.0F;
+        const float labelX = std::min(center.x + 14.0F, chart.x + chart.w - labelWidth);
+        const float labelY = std::clamp(center.y - 10.0F, chart.y, chart.y + chart.h - 20.0F);
+        uiFinalTextAt(renderer_, uiTextRenderer_, labelX, labelY, "NIGHT RENDEZVOUS", labelWidth, 11, 1);
+    }
+
     if (tacticalMapAdvancedResourceVisible(map, presentationMode))
     {
         ContentRect coarse = *map.advancedResourceArea();
@@ -14488,6 +14583,7 @@ bool App::renderIndoorInformationLayer(const SDL_Rect &worldViewport)
     drawUiThrownIllumination(renderer_, world.thrownIlluminationBackgroundObservations(), screenWorld,
         world.thrownIlluminationGlareSeconds());
     renderExtractionPoint();
+    renderNightRendezvousWorld();
     renderRaidSpacePortal();
     renderBallisticBlockers();
     renderAlphaRaidLoot();
@@ -14599,6 +14695,7 @@ void App::renderUnscopedRaidWorld()
         // 地面物品位于角色与敌人下层。
         if (gameSession_.world().isAlphaRaidWorld())
         {
+            renderNightRendezvousWorld();
             renderAlphaRaidLoot();
         }
         else

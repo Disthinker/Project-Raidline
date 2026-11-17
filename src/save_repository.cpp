@@ -1991,6 +1991,20 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
                 profile.baseManufacturing.armorRepairRecipeUnlocked;
         }
     }
+    if (schemaVersion >= 73)
+    {
+        payload["night_rendezvous_unlocked"] = profile.nightRendezvousUnlocked;
+        payload["active_engineering_training"] = nullptr;
+        if (profile.activeEngineeringTraining)
+        {
+            const auto &training = *profile.activeEngineeringTraining;
+            payload["active_engineering_training"] = {
+                {"job_id", training.jobId},
+                {"remaining_minutes", training.remainingMinutes},
+                {"updated_through_world_minute", training.updatedThroughWorldMinute},
+                {"input_asset_ids", training.inputAssetIds}};
+        }
+    }
     if (profile.emergencyPower)
         payload["emergency_power"] = emergencyPowerValue(*profile.emergencyPower);
     if (schemaVersion >= 18)
@@ -2895,6 +2909,24 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
         if (raid.travel.startingManufacturingPowerBonusMinutes)
             payload["pending_raid"]["travel"]["starting_manufacturing_power_bonus_minutes"] =
                 raid.travel.startingManufacturingPowerBonusMinutes;
+        if (schemaVersion >= 73)
+        {
+            payload["pending_raid"]["night_rendezvous"] = nullptr;
+            if (raid.nightRendezvous)
+            {
+                const auto &rescue = *raid.nightRendezvous;
+                payload["pending_raid"]["night_rendezvous"] = {
+                    {"definition_id", rescue.definitionId.value()},
+                    {"transfer_point", {
+                        {"position", vectorValue(rescue.transferPoint.position)},
+                        {"size", vectorValue(rescue.transferPoint.size)}}},
+                    {"interaction_duration_seconds", rescue.interactionDurationSeconds},
+                    {"ordinary_resident_count", rescue.ordinaryResidentCount},
+                    {"injured_resident_count", rescue.injuredResidentCount},
+                    {"profession", baseResidentProfessionValue(rescue.profession)},
+                    {"secured", rescue.secured}};
+            }
+        }
         if (schemaVersion >= 13)
         {
             if (raid.rescue.has_value())
@@ -3211,6 +3243,7 @@ bool isValidEnvelope(
 std::string serializeProfileEnvelope(const ProfileState &profile, std::string_view contentVersion)
 {
     return serializeProfileEnvelope(profile, contentVersion,
+        supportsRaidNightRendezvousContent(contentVersion) ? 73U :
         supportsRaidFractureContent(contentVersion) ? 72U :
         contentVersion == kRaidLostWeaponPursuitContentVersion ? 71U :
         contentVersion == kFrontierHighRiskBlockadeContentVersion ? 70U :
@@ -3253,7 +3286,16 @@ std::string serializeProfileEnvelope(
          (profile.baseManufacturing.activeOrder &&
           profile.baseManufacturing.activeOrder->recipeDefinitionId == kFreightBreachRecipeId)))
         throw std::invalid_argument{"freight breach requires schema 66 and compatible content"};
-    const bool fractureContract = schemaVersion == 72 && supportsRaidFractureContent(contentVersion);
+    const bool rendezvousContract =
+        schemaVersion == 73 && supportsRaidNightRendezvousContent(contentVersion);
+    if ((schemaVersion == 73 && !rendezvousContract) ||
+        (!rendezvousContract && (profile.nightRendezvousUnlocked ||
+            profile.activeEngineeringTraining ||
+            profile.committedRescues.contains(kRaidNightRendezvousRescueId) ||
+            (profile.pendingRaid && profile.pendingRaid->nightRendezvous))))
+        throw std::invalid_argument("night rendezvous and training require schema 73 and content 91");
+    const bool fractureContract = rendezvousContract ||
+        (schemaVersion == 72 && contentVersion == kRaidFractureContentVersion);
     if ((schemaVersion == 72 && !fractureContract) ||
         (!fractureContract && (profile.medicalStatus.legFractured ||
             (profile.pendingRaid && profile.pendingRaid->startingMedicalStatus.legFractured) ||
@@ -3313,7 +3355,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
         schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66 && schemaVersion != 67 && schemaVersion != 68 && schemaVersion != 69 &&
-        schemaVersion != 70 && schemaVersion != 71 && schemaVersion != 72)
+        schemaVersion != 70 && schemaVersion != 71 && schemaVersion != 72 && schemaVersion != 73)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -3508,7 +3550,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             (schemaVersion == 68 && contentVersion == kHospitalMedicalReserveContentVersion) ||
             (schemaVersion == 69 && contentVersion == kFieldIntelligenceTradeContentVersion) ||
             (schemaVersion == 70 && contentVersion == kFrontierHighRiskBlockadeContentVersion) ||
-            (schemaVersion == 71 && contentVersion == kRaidLostWeaponPursuitContentVersion);
+            (schemaVersion == 71 && contentVersion == kRaidLostWeaponPursuitContentVersion) ||
+            (schemaVersion == 72 && contentVersion == kRaidFractureContentVersion);
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -3531,7 +3574,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
                schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66 && schemaVersion != 67 && schemaVersion != 68 && schemaVersion != 69 &&
-               schemaVersion != 70 && schemaVersion != 71 && schemaVersion != 72) ||
+               schemaVersion != 70 && schemaVersion != 71 && schemaVersion != 72 && schemaVersion != 73) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3550,7 +3593,12 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             schemaVersion >= 65 && supportsThrownIlluminationContent(contentVersion);
         const bool backpackContract =
             schemaVersion >= 66 && supportsRaidBackpackRecoveryContent(contentVersion);
-        const bool fractureContract = schemaVersion == 72 && supportsRaidFractureContent(contentVersion);
+        const bool rendezvousContract =
+            schemaVersion == 73 && supportsRaidNightRendezvousContent(contentVersion);
+        if (schemaVersion == 73 && !rendezvousContract)
+            return {SaveLoadStatus::Failed, std::nullopt, "unsupported night rendezvous and training content"};
+        const bool fractureContract = rendezvousContract ||
+            (schemaVersion == 72 && contentVersion == kRaidFractureContentVersion);
         if (schemaVersion == 72 && !fractureContract)
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported fracture content"};
         const bool pursuitContract = fractureContract ||
@@ -4148,11 +4196,36 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                 }
             }
         }
+        if (rendezvousContract)
+        {
+            profile.nightRendezvousUnlocked =
+                payload.at("night_rendezvous_unlocked").get<bool>();
+            const auto &training = payload.at("active_engineering_training");
+            if (!training.is_null())
+            {
+                profile.activeEngineeringTraining = BaseEngineeringTrainingOrder{
+                    training.at("job_id").get<BaseServiceJobId>(),
+                    training.at("remaining_minutes").get<std::uint32_t>(),
+                    training.at("updated_through_world_minute").get<std::uint64_t>(),
+                    training.at("input_asset_ids").get<std::vector<AssetInstanceId>>()};
+            }
+        }
+        else if (payload.contains("night_rendezvous_unlocked") ||
+                 payload.contains("active_engineering_training"))
+        {
+            throw std::invalid_argument("night rendezvous and training require schema 73 and content 91");
+        }
+        else if (supportsRaidNightRendezvousContent(content.contentVersion()))
+        {
+            profile.nightRendezvousUnlocked = !profile.committedSettlements.empty();
+        }
         if (schemaVersion >= 13)
         {
             for (const Json &rescue : payload.at("committed_rescues"))
             {
                 RescueDefinitionId id{rescue.get<std::string>()};
+                if (id == kRaidNightRendezvousRescueId && !rendezvousContract)
+                    throw std::invalid_argument("night rendezvous receipt requires schema 73 and content 91");
                 if (!profile.committedRescues.insert(std::move(id)).second)
                 {
                     return {SaveLoadStatus::Failed, std::nullopt,
@@ -5294,6 +5367,31 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                 raid.travel.startingBaseCommunityEvent =
                     startingState.baseCommunityEvent;
             }
+            if (rendezvousContract)
+            {
+                const auto &rescue = value.at("night_rendezvous");
+                if (!rescue.is_null())
+                {
+                    const auto profession = parseBaseResidentProfession(
+                        rescue.at("profession").get<std::string>());
+                    if (!profession)
+                        throw std::invalid_argument("night rendezvous profession is invalid");
+                    const auto &point = rescue.at("transfer_point");
+                    raid.nightRendezvous = RaidRescueSnapshot{
+                        RescueDefinitionId{rescue.at("definition_id").get<std::string>()},
+                        RaidRescueSubjectKind::OrdinaryResidents,
+                        ContentRect{parseVector(point.at("position")), parseVector(point.at("size"))},
+                        rescue.at("interaction_duration_seconds").get<float>(),
+                        rescue.at("ordinary_resident_count").get<std::uint32_t>(),
+                        rescue.at("injured_resident_count").get<std::uint32_t>(),
+                        *profession,
+                        rescue.at("secured").get<bool>()};
+                }
+            }
+            else if (value.contains("night_rendezvous"))
+            {
+                throw std::invalid_argument("night rendezvous requires schema 73 and content 91");
+            }
             if (schemaVersion >= 13 && !value.at("rescue").is_null())
             {
                 const Json &rescue = value.at("rescue");
@@ -5730,7 +5828,8 @@ SaveWriteResult SaveRepository::save(
         const bool pursuit = contentVersion == kRaidLostWeaponPursuitContentVersion;
         const bool fracture = supportsRaidFractureContent(contentVersion);
         const bool fieldTrade = supportsFieldIntelligenceTradeContent(contentVersion);
-        const auto schema = fracture ? 72U : pursuit ? 71U : blockade ? 70U : fieldTrade ? 69U : reserve ? 68U : power ? 67U : backpack ? 66U
+        const bool rendezvous = supportsRaidNightRendezvousContent(contentVersion);
+        const auto schema = rendezvous ? 73U : fracture ? 72U : pursuit ? 71U : blockade ? 70U : fieldTrade ? 69U : reserve ? 68U : power ? 67U : backpack ? 66U
             : illumination ? 65U : armor ? 64U : fuel ? 63U : freight ? 62U : 61U;
         const auto isLegacy = [&](const std::optional<SaveEnvelopeMetadata> &source) {
             return source && (source->schemaVersion < schema || source->contentVersion != contentVersion);
@@ -5740,7 +5839,8 @@ SaveWriteResult SaveRepository::save(
         {
             // The former primary can remain in the rolling backup after upgrade.
             const std::string_view marker =
-                fracture ? "raid-fracture-and-field-stabilization-v1"
+                rendezvous ? "raid-night-rendezvous-and-engineering-training-v1"
+                : fracture ? "raid-fracture-and-field-stabilization-v1"
                 : pursuit ? "raid-lost-weapon-pursuit-v1"
                 : blockade ? "frontier-high-risk-blockade-and-salvage-v1"
                 : fieldTrade ? "raid-field-intelligence-trade-v1"

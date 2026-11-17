@@ -92,4 +92,5 @@ struct GameplayInput
     bool extractionEligible{true};
     // Service arbitration preserves portal/container/loot priority for F.
     bool credentialInvestigationAllowed{true};
+    bool nightRendezvousInteractionBlocked{};
 };

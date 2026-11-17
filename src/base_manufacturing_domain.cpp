@@ -56,39 +56,6 @@ bool hasChildren(
         });
 }
 
-bool prepareReturns(
-    ProfileState &candidate,
-    const ContentRegistry &content,
-    const std::vector<AssetInstanceId> &assetIds,
-    std::vector<BaseManufacturingReturnSelection> &returns)
-{
-    for (AssetInstanceId assetId : assetIds)
-    {
-        AssetRecord *asset = candidate.assets.findMutable(assetId);
-        if (asset == nullptr)
-        {
-            return false;
-        }
-        const ItemDefinition &definition = content.item(asset->definitionId);
-        const auto origin = findFirstProfileFit(
-            candidate,
-            content,
-            ProfileContainerId::stash(),
-            definition,
-            asset->orientation,
-            assetId);
-        if (!origin.has_value())
-        {
-            return false;
-        }
-        StoredAssetLocation destination{
-            ProfileContainerId::stash(), *origin};
-        asset->location = destination;
-        returns.push_back({assetId, destination});
-    }
-    return true;
-}
-
 bool validContext(
     const ProfileState &profile,
     const CommandContext &context,
@@ -120,6 +87,79 @@ bool validContext(
     }
     return true;
 }
+}
+
+DomainErrorCode reserveBaseWorkshopInputs(
+    ProfileState &candidate,
+    const ContentRegistry &content,
+    const std::vector<BaseManufacturingInputSelection> &inputs,
+    BaseServiceJobId jobId,
+    std::vector<AssetInstanceId> &inputIds)
+{
+    const BaseServiceAssetLocation reservation{jobId};
+    for (const BaseManufacturingInputSelection &selection : inputs)
+    {
+        AssetRecord *asset = candidate.assets.findMutable(selection.assetId);
+        if (asset == nullptr)
+            return DomainErrorCode::MissingAsset;
+        if (selection.quantity == asset->quantity)
+        {
+            asset->location = reservation;
+            inputIds.push_back(selection.assetId);
+            continue;
+        }
+
+        const ItemOrientation orientation = asset->orientation;
+        AssetInstanceId splitId{};
+        try
+        {
+            // Reserved units get an identity while the remainder stays in its slot.
+            splitId = candidate.assets.create(
+                content.item(selection.definitionId), reservation,
+                selection.quantity, asset->reliefBatchId);
+        }
+        catch (...)
+        {
+            return DomainErrorCode::RevisionOverflow;
+        }
+        candidate.assets.findMutable(selection.assetId)->quantity -= selection.quantity;
+        candidate.assets.findMutable(splitId)->orientation = orientation;
+        inputIds.push_back(splitId);
+    }
+    return DomainErrorCode::None;
+}
+
+bool prepareBaseWorkshopReturns(
+    ProfileState &candidate,
+    const ContentRegistry &content,
+    const std::vector<AssetInstanceId> &assetIds,
+    std::vector<BaseManufacturingReturnSelection> &returns)
+{
+    for (AssetInstanceId assetId : assetIds)
+    {
+        AssetRecord *asset = candidate.assets.findMutable(assetId);
+        if (asset == nullptr)
+        {
+            return false;
+        }
+        const ItemDefinition &definition = content.item(asset->definitionId);
+        const auto origin = findFirstProfileFit(
+            candidate,
+            content,
+            ProfileContainerId::stash(),
+            definition,
+            asset->orientation,
+            assetId);
+        if (!origin.has_value())
+        {
+            return false;
+        }
+        StoredAssetLocation destination{
+            ProfileContainerId::stash(), *origin};
+        asset->location = destination;
+        returns.push_back({assetId, destination});
+    }
+    return true;
 }
 
 BaseManufacturingProjection projectBaseManufacturing(
@@ -211,7 +251,7 @@ BaseManufacturingStartPlan queryStartBaseManufacturing(
             "manufacturing can only start in Base",
             profile.revision);
     }
-    if (profile.baseManufacturing.activeOrder.has_value())
+    if (profile.baseManufacturing.activeOrder || profile.activeEngineeringTraining)
     {
         return startFailure(
             DomainErrorCode::IllegalDestination,
@@ -393,46 +433,16 @@ BaseManufacturingReceipt executeStartBaseManufacturing(
 
     ProfileState candidate = profile;
     const BaseServiceJobId jobId = candidate.nextBaseServiceJobId++;
-    const BaseServiceAssetLocation reservation{jobId};
     std::vector<AssetInstanceId> inputIds;
-    for (const BaseManufacturingInputSelection &selection : plan.inputs)
+    const auto reservation = reserveBaseWorkshopInputs(candidate, content, plan.inputs, jobId, inputIds);
+    if (reservation != DomainErrorCode::None)
     {
-        AssetRecord *asset = candidate.assets.findMutable(selection.assetId);
-        if (asset == nullptr)
-        {
-            return receiptFailure(
-                DomainErrorCode::MissingAsset,
-                "manufacturing input disappeared",
-                profile);
-        }
-        if (selection.quantity == asset->quantity)
-        {
-            asset->location = reservation;
-            inputIds.push_back(selection.assetId);
-        }
-        else
-        {
-            const ItemOrientation orientation = asset->orientation;
-            AssetInstanceId splitId{};
-            try
-            {
-                // The reserved units have their own identity while the original
-                // stack keeps its slot and any remaining units.
-                splitId = candidate.assets.create(
-                    content.item(selection.definitionId), reservation,
-                    selection.quantity, asset->reliefBatchId);
-            }
-            catch (...)
-            {
-                return receiptFailure(
-                    DomainErrorCode::RevisionOverflow,
-                    "manufacturing input identity cannot be reserved",
-                    profile);
-            }
-            candidate.assets.findMutable(selection.assetId)->quantity -= selection.quantity;
-            candidate.assets.findMutable(splitId)->orientation = orientation;
-            inputIds.push_back(splitId);
-        }
+        return receiptFailure(
+            reservation,
+            reservation == DomainErrorCode::MissingAsset
+                ? "manufacturing input disappeared"
+                : "manufacturing input identity cannot be reserved",
+            profile);
     }
     std::optional<AssetInstanceId> outputId;
     if (command.recipeDefinitionId != kArmorRepairResearchId)
@@ -501,7 +511,7 @@ BaseManufacturingReturnPlan queryCancelBaseManufacturing(
     }
     ProfileState candidate = profile;
     std::vector<BaseManufacturingReturnSelection> returns;
-    if (!prepareReturns(
+    if (!prepareBaseWorkshopReturns(
             candidate,
             content,
             profile.baseManufacturing.activeOrder->inputAssetIds,
@@ -597,7 +607,7 @@ BaseManufacturingReturnPlan queryCollectBaseManufacturing(
         profile.baseManufacturing.activeOrder->outputAssetId;
     ProfileState candidate = profile;
     std::vector<BaseManufacturingReturnSelection> returns;
-    if (!prepareReturns(candidate, content, {outputId}, returns))
+    if (!prepareBaseWorkshopReturns(candidate, content, {outputId}, returns))
     {
         return returnFailure(
             DomainErrorCode::Capacity,

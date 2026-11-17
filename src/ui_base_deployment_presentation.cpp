@@ -49,6 +49,8 @@ std::string contextKey(const ProfileState &profile, const UiDeploymentProjection
     key.number(p.currency);
     key.number(profile.currentHealth);
     key.number(profile.pendingRaid.has_value());
+    key.number(p.nightRendezvous.availability);
+    key.number(p.nightRendezvous.nextOpeningDay);
     key.number(p.travel.reachable);
     key.number(p.travel.outboundMinutes);
     key.number(p.travel.returnMinutes);
@@ -157,6 +159,34 @@ std::size_t lastPage(std::size_t count, std::size_t size) {
 }
 }
 
+std::string uiNightRendezvousArrivalText(
+    const RaidNightRendezvousPreview &preview, UiLanguage language) {
+    using Availability = RaidNightRendezvousAvailability;
+    const auto tr = [language](std::string_view value) { return localizeUiText(language, value); };
+    switch (preview.availability) {
+    case Availability::NotApplicable:
+        return {};
+    case Availability::Locked:
+        return tr("NIGHT RENDEZVOUS | COMPLETE A NORMAL EXTRACTION FIRST");
+    case Availability::AlreadySecured:
+        return tr("NIGHT RENDEZVOUS | TRANSFER COMPLETE");
+    case Availability::Unavailable:
+        return tr("NIGHT RENDEZVOUS | ROUTE UNAVAILABLE");
+    case Availability::Available:
+        return tr("NIGHT RENDEZVOUS OPEN") + " · 18:00–22:00";
+    case Availability::Missed: {
+        auto text = tr("NIGHT RENDEZVOUS CLOSED AT ARRIVAL");
+        if (preview.nextOpeningDay) {
+            text += language == UiLanguage::SimplifiedChinese
+                ? fmt::format(" · 第{}天 18:00–22:00", preview.nextOpeningDay)
+                : fmt::format(" · Day {} 18:00–22:00", preview.nextOpeningDay);
+        }
+        return text;
+    }
+    }
+    return {};
+}
+
 UiDeploymentProjection projectUiDeployment(
     const ProfileState &profile, const ContentRegistry &content, UiLanguage language,
     const MapDefinitionId &mapId, const RaidIntelligenceLoadout &intelligence,
@@ -196,6 +226,8 @@ UiDeploymentProjection projectUiDeployment(
             result.credentialUnlocked = profile.raidExtractionPermissions.contains(
                 selectedMap->credentialExtraction->permissionId);
         result.travel = queryRaidTravel(profile, content, *selectedMap);
+        if (!recoveryRecordId)
+            result.nightRendezvous = queryRaidNightRendezvous(profile, *selectedMap, result.travel);
         for (const auto &routeId : result.travel.routeIds) {
             if (!result.routeName.empty()) result.routeName += " > ";
             result.routeName += content.regionRoute(routeId).displayName;

@@ -1,5 +1,7 @@
 #include "base_workforce_domain.h"
 
+#include "base_engineering_training_domain.h"
+
 #include <algorithm>
 #include <limits>
 #include <utility>
@@ -42,7 +44,7 @@ BaseResidentProfession preferredProfession(
 }
 
 BaseProfessionCounts facilityAssignedCounts(
-    const BaseWorkforceState &state) noexcept
+    const ProfileState &profile, const BaseWorkforceState &state) noexcept
 {
     BaseProfessionCounts counts{};
     for (const auto &worker : {state.workshopWorker, state.medicalWorker})
@@ -53,6 +55,8 @@ BaseProfessionCounts facilityAssignedCounts(
             ++counts[baseProfessionIndex(*worker)];
         }
     }
+    if (profile.activeEngineeringTraining)
+        ++counts[baseProfessionIndex(BaseResidentProfession::General)];
     return counts;
 }
 
@@ -76,7 +80,7 @@ BaseProfessionCounts availableCounts(
     const ProfileState &profile,
     const BaseWorkforceState &state) noexcept
 {
-    BaseProfessionCounts assigned = facilityAssignedCounts(state);
+    BaseProfessionCounts assigned = facilityAssignedCounts(profile, state);
     const BaseProfessionCounts regional = regionalAssignedCounts(profile);
     for (std::size_t index{}; index < assigned.size(); ++index)
     {
@@ -115,7 +119,10 @@ bool tryFill(
         slot(state, facility) = preferred;
         return true;
     }
-    if (available[baseProfessionIndex(BaseResidentProfession::General)] > 0U)
+    const bool requiresMentor =
+        facility == BaseFacilityStaffingKind::Workshop && profile.activeEngineeringTraining;
+    if (!requiresMentor &&
+        available[baseProfessionIndex(BaseResidentProfession::General)] > 0U)
     {
         slot(state, facility) = BaseResidentProfession::General;
         return true;
@@ -129,8 +136,9 @@ bool activeFacilityJob(
 {
     if (facility == BaseFacilityStaffingKind::Workshop)
     {
-        return profile.baseManufacturing.activeOrder.has_value() &&
-            !profile.baseManufacturing.activeOrder->outputReady;
+        return profile.activeEngineeringTraining ||
+            (profile.baseManufacturing.activeOrder &&
+             !profile.baseManufacturing.activeOrder->outputReady);
     }
     return profile.residentMedical.activeTreatment.has_value();
 }
@@ -183,6 +191,8 @@ BaseWorkforceReceipt executePlan(
         return receiptFailure(profile, plan.error, plan.message);
     }
     ProfileState candidate = profile;
+    if (candidate.baseWorkforce.workshopWorker != plan.resultingState.workshopWorker)
+        pauseBaseEngineeringTrainingThrough(candidate);
     candidate.baseWorkforce = plan.resultingState;
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
@@ -289,7 +299,7 @@ BaseWorkforceProjection projectBaseWorkforce(
     projection.healthyResidents = healthyBaseResidents(
         profile.basePopulation);
     BaseProfessionCounts assigned = facilityAssignedCounts(
-        profile.baseWorkforce);
+        profile, profile.baseWorkforce);
     const BaseProfessionCounts regional = regionalAssignedCounts(profile);
     for (std::size_t index = 0; index < kBaseResidentProfessionCount; ++index)
     {

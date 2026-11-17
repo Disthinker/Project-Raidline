@@ -368,6 +368,99 @@ TEST_F(UiRaidHudTest, RoadBlockadeWarningAndDiscoveredMapMarkerFitAllWindowSizes
     }
 }
 
+TEST_F(UiRaidHudTest, NightRendezvousSharesActionLaneAndItsMapPinNeedsDiscovery)
+{
+    auto &session = A::session(*app);
+    auto &profile = const_cast<ProfileState &>(session.profile());
+    profile.nightRendezvousUnlocked = true;
+    profile.worldClock.elapsedWorldMinutes = 2U * kWorldMinutesPerDay + 18U * 60U;
+    ASSERT_TRUE(session.deployAlpha(19U, kRaidNightRendezvousMapId)) << session.persistenceMessage();
+    ASSERT_TRUE(session.world().nightRendezvousView());
+    ASSERT_FALSE(session.world().nightRendezvousView()->discovered);
+    const auto bounds = session.world().nightRendezvousView()->bounds;
+    const Vec2 center{bounds.position.x + bounds.size.x * 0.5F, bounds.position.y + bounds.size.y * 0.5F};
+    const Vec2 worldSize = session.world().raidSpaceWorldSize();
+    const auto chart = kRaidTacticalChart;
+    const Vec2 pin{chart.position.x + chart.size.x * center.x / worldSize.x,
+                   chart.position.y + chart.size.y * center.y / worldSize.y};
+    const auto mapPinPixels = [&](float scale) {
+        unsigned total{};
+        const int x = static_cast<int>((pin.x - 10.0F) * scale);
+        const int y = static_cast<int>((pin.y - 10.0F) * scale);
+        const int side = static_cast<int>(20.0F * scale);
+        for (int row = y; row < y + side; ++row)
+            for (int col = x; col < x + side; ++col) {
+                Uint8 red{}, green{}, blue{}, alpha{};
+                if (SDL_ReadSurfacePixel(surface, col, row, &red, &green, &blue, &alpha) &&
+                    red < 150 && green > 202 && blue > 185)
+                    ++total;
+            }
+        return total;
+    };
+    clear();
+    A::tactical(*app);
+    ASSERT_TRUE(SDL_RenderPresent(renderer));
+    EXPECT_EQ(mapPinPixels(1.0F), 0U);
+
+    for (const auto &enemy : session.world().enemies())
+        static_cast<void>(const_cast<Enemy &>(enemy).takeDamage(enemy.maxHealth()));
+    auto &player = const_cast<Player &>(session.world().player());
+    const float half = player.size() * 0.5F;
+    ASSERT_TRUE(player.setPosition({center.x - half, center.y - half}));
+    GameplayInput input;
+    input.aimWorldPosition = Vec2{center.x + 130.0F, center.y};
+    input.aimWorldBounds = Rect{{}, worldSize};
+    session.update(input, 0.125F);
+    ASSERT_TRUE(session.world().nightRendezvousView()->discovered);
+    input.interactJustPressed = true;
+    session.update(input, 0.125F);
+    ASSERT_TRUE(session.world().nightRendezvousView()->inProgress);
+    input.interactJustPressed = false;
+    session.update(input, 0.5F);
+    EXPECT_GT(session.world().nightRendezvousView()->progress, 0.0F);
+
+    const char *reviewPath = std::getenv("RAIDLINE_RENDEZVOUS_UI_REVIEW_DIR");
+    const auto destination = reviewPath ? std::filesystem::path(reviewPath) : std::filesystem::path{};
+    if (reviewPath) {
+        ASSERT_TRUE(destination.is_absolute());
+        std::filesystem::create_directories(destination);
+    }
+    for (const auto size : kUiWindowSizes) {
+        detach();
+        attach(size.width, size.height);
+        const float scale = size.width / 1280.0F;
+        for (const auto language : {UiLanguage::English, UiLanguage::SimplifiedChinese}) {
+            A::text(*app).setLanguage(language);
+            clear();
+            A::hud(*app);
+            ASSERT_TRUE(SDL_RenderPresent(renderer));
+            EXPECT_GT(bright({static_cast<int>(446 * scale), static_cast<int>(485 * scale),
+                static_cast<int>(388 * scale), static_cast<int>(23 * scale)}), 30U);
+            const float summaryY = session.world().lightConeObservationEnabled() ? 68.0F : 152.0F;
+            unsigned summaryPixels{};
+            for (int y = static_cast<int>(summaryY * scale); y < static_cast<int>((summaryY + 38) * scale); ++y)
+                for (int x = 0; x < static_cast<int>(448 * scale); ++x) {
+                    Uint8 red{}, green{}, blue{}, alpha{};
+                    if (SDL_ReadSurfacePixel(surface, x, y, &red, &green, &blue, &alpha) &&
+                        red > 145 && green > 110 && blue > 80)
+                        ++summaryPixels;
+                }
+            EXPECT_GT(summaryPixels, 30U);
+            EXPECT_EQ(bright({static_cast<int>(480 * scale), static_cast<int>(210 * scale),
+                static_cast<int>(320 * scale), static_cast<int>(220 * scale)}), 0U);
+            const auto suffix = std::to_string(size.width) + "-" + uiLanguageCode(language) + ".png";
+            if (reviewPath)
+                ASSERT_TRUE(IMG_SavePNG(surface, (destination / ("cover-hud-" + suffix)).string().c_str()));
+            clear();
+            A::tactical(*app);
+            ASSERT_TRUE(SDL_RenderPresent(renderer));
+            EXPECT_GT(mapPinPixels(scale), 5U);
+            if (reviewPath)
+                ASSERT_TRUE(IMG_SavePNG(surface, (destination / ("rendezvous-map-" + suffix)).string().c_str()));
+        }
+    }
+}
+
 TEST(UiRaidHudLayoutTest, GuideCardsStayInsideWindowAtItsEdges){
     for(const auto x:{-90.0F,16.0F,1200.0F})for(const auto y:{-20.0F,590.0F,900.0F}){
         const auto b=uiAuxiliaryHintRect(4,x,y,620);EXPECT_GE(b.x,16);EXPECT_GE(b.y,12);EXPECT_LE(b.x+b.w,1264);EXPECT_LE(b.y+b.h,708);

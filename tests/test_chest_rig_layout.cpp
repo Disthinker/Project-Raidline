@@ -87,7 +87,7 @@ TEST(ChestRigLayoutTest, LegacySaveUpgradesOnceAndPreservesExactSourceBeforeWrit
     const auto again=saves.load(c);ASSERT_TRUE(again.profile);EXPECT_FALSE(again.migratedChestRigLayout);
     EXPECT_EQ(profileStateFingerprint(*again.profile),profileStateFingerprint(*loaded.profile));
     const auto json=nlohmann::json::parse(serializeProfileEnvelope(*again.profile,c.contentVersion()));
-    EXPECT_EQ(json["schema_version"],72);EXPECT_EQ(json["payload"]["chest_rig_layout_version"],1);
+    EXPECT_EQ(json["schema_version"],73);EXPECT_EQ(json["payload"]["chest_rig_layout_version"],1);
 }
 TEST(ChestRigLayoutTest, CorruptPrimaryRecoversLegacyBackupAndKeepsBothSources) {
     const auto &c=publishedContentRegistry();TemporaryDirectory temp;SaveRepository saves{temp.path};
@@ -157,7 +157,10 @@ TEST(ChestRigLayoutTest, LostRaidRootAndAllItsChildrenStayOwnedAfterMigration) {
     ASSERT_TRUE(receipt.succeeded)<<receipt.message;ASSERT_EQ(old.lostRaidRecords.size(),1);
     const auto loaded=deserializeProfileEnvelope(serializeProfileEnvelope(old,"raid-noise-decoy-content-67",55),c);
     ASSERT_TRUE(loaded.profile)<<loaded.message;EXPECT_EQ(loaded.profile->lostRaidRecords,old.lostRaidRecords);
-    EXPECT_EQ(profileStateFingerprint(legacyChestRigSnapshot(*loaded.profile)),profileStateFingerprint(old));
+    EXPECT_TRUE(loaded.profile->nightRendezvousUnlocked);
+    auto expected = old;
+    expected.nightRendezvousUnlocked = true;
+    EXPECT_EQ(profileStateFingerprint(legacyChestRigSnapshot(*loaded.profile)),profileStateFingerprint(expected));
 }
 TEST(ChestRigLayoutTest, FailedImmutableBackupPreventsContinueFromReplacingProfileOrOriginalFile) {
     const auto &c=publishedContentRegistry();TemporaryDirectory temp;SaveRepository saves{temp.path};

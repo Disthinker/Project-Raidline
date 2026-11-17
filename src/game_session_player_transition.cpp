@@ -327,6 +327,12 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
                 snapshot.rescue->transferPoint,
                 snapshot.rescue->interactionDurationSeconds};
         }
+        if (snapshot.nightRendezvous && !snapshot.nightRendezvous->secured)
+            worldConfig.nightRendezvous = snapshot.nightRendezvous->transferPoint;
+        worldConfig.nightRendezvousUnavailable = ordinaryToolsEnabled &&
+            map.nightRendezvous && !snapshot.nightRendezvous && candidate.nightRendezvousUnlocked &&
+            !candidate.committedRescues.contains(map.nightRendezvous->id) &&
+            raidNightRendezvousWindowOpen(projectWorldClock(candidate.worldClock));
         const RaidHighRiskCrisisSnapshot *crisis =
             snapshot.highRiskCrisis.has_value()
             ? &*snapshot.highRiskCrisis
@@ -447,10 +453,25 @@ ProfileUiSubmission GameSession::requestOrdinarySurvivorRescue()
 {
     if(profileUiCommitPending())return {0,false,false,DomainErrorCode::IllegalDestination,"A PLAYER TRANSITION IS ALREADY ACTIVE"};
     ProfileState live,recovery;
-    if(!prepareOrdinarySurvivorRescueCandidate(live,recovery))return {0,false,false,DomainErrorCode::IllegalDestination,persistenceMessage_};
+    if(!prepareSurvivorRescueCandidate(live,recovery,false))return {0,false,false,DomainErrorCode::IllegalDestination,persistenceMessage_};
     auto prepared=std::make_shared<PreparedPlayerTransition>();prepared->kind=PreparedPlayerTransition::Kind::Rescue;
     prepared->raidRecoveryProfile=recovery;
     return enqueuePreparedProfileUi(std::move(live),std::move(recovery),ProfileUiCompletionKind::Rescue,std::nullopt,std::move(prepared));
+}
+
+ProfileUiSubmission GameSession::requestNightRendezvous()
+{
+    if (profileUiCommitPending())
+        return {0, false, false, DomainErrorCode::IllegalDestination, "A PLAYER TRANSITION IS ALREADY ACTIVE"};
+    ProfileState live;
+    ProfileState recovery;
+    if (!prepareSurvivorRescueCandidate(live, recovery, true))
+        return {0, false, false, DomainErrorCode::IllegalDestination, persistenceMessage_};
+    auto prepared = std::make_shared<PreparedPlayerTransition>();
+    prepared->kind = PreparedPlayerTransition::Kind::NightRendezvous;
+    prepared->raidRecoveryProfile = recovery;
+    return enqueuePreparedProfileUi(std::move(live), std::move(recovery),
+        ProfileUiCompletionKind::Rescue, std::nullopt, std::move(prepared));
 }
 
 bool GameSession::tryLearnHospitalFloorplan(
@@ -581,9 +602,14 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     alphaRaidActive_ = false;
     publishDeferredRaidBasePresentationEvents();
     state_ = GameSessionState::BetweenRaids;
-    } else if(prepared->kind==PreparedPlayerTransition::Kind::Rescue) {
-        activeRaidRecoveryProfile_=std::move(prepared->raidRecoveryProfile);
-        world_->confirmOrdinarySurvivorRescue();presentationEvents_.push_back(GameSessionPresentationEvent::RescueSecured);
+    } else if (prepared->kind == PreparedPlayerTransition::Kind::Rescue ||
+               prepared->kind == PreparedPlayerTransition::Kind::NightRendezvous) {
+        activeRaidRecoveryProfile_ = std::move(prepared->raidRecoveryProfile);
+        if (prepared->kind == PreparedPlayerTransition::Kind::NightRendezvous)
+            world_->confirmNightRendezvous();
+        else
+            world_->confirmOrdinarySurvivorRescue();
+        presentationEvents_.push_back(GameSessionPresentationEvent::RescueSecured);
     } else if (prepared->kind == PreparedPlayerTransition::Kind::HospitalFloorplan) {
         activeRaidRecoveryProfile_ = std::move(prepared->raidRecoveryProfile);
         world_->confirmRaidInteriorLayout(kHospitalFloorplanSpaceId);

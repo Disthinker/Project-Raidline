@@ -1,5 +1,6 @@
 #include "base_migration_domain.h"
 #include "base_emergency_power_domain.h"
+#include "base_engineering_training_domain.h"
 #include "base_fortification_domain.h"
 
 #include "base_morale_domain.h"
@@ -240,6 +241,7 @@ BaseMigrationReceipt executeBaseMigration(
     }
 
     ProfileState candidate = profile;
+    static_cast<void>(applyBaseEngineeringTrainingThrough(candidate, content));
     pauseBaseEmergencyPower(candidate);
     if (!baseFacilityOwned(candidate, kBaseGeneratorFacilityId))
         shiftBaseFacilityTasks(candidate, content, kBaseGeneratorFacilityId, plan.migrationMinutes);
@@ -264,6 +266,7 @@ BaseMigrationReceipt executeBaseMigration(
                 "migration world time could not be committed",
                 profile.revision};
     }
+    pauseBaseEngineeringTrainingThrough(candidate);
     static_cast<void>(synchronizeBaseDailySystemsThrough(candidate, content));
     static_cast<void>(applyRecoveryTaskThrough(candidate));
 

@@ -11,6 +11,7 @@
 
 #include "alpha_content_ids.h"
 #include "base_world.h"
+#include "base_workforce_domain.h"
 #include "game_session.h"
 #include "weapon_component_domain.h"
 #include "profile_ui_test_wait.h"
@@ -3006,6 +3007,130 @@ TEST(AlphaExtractionSessionTest, CorruptPrimaryRecoversPreRaidBackup)
     EXPECT_FALSE(reopened.recoveredAbandonedRaid());
     EXPECT_FALSE(reopened.profile().pendingRaid.has_value());
     EXPECT_EQ(profileStateFingerprint(reopened.profile()), preRaidFingerprint);
+}
+
+namespace
+{
+void saveNightRendezvousProfile(const SaveRepository &repository, std::string profileId)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile(std::move(profileId), content);
+    profile.worldClock.elapsedWorldMinutes = 2U * kWorldMinutesPerDay + 16U * kWorldMinutesPerHour;
+    profile.nightRendezvousUnlocked = true;
+    ASSERT_TRUE(repository.save(profile, content.contentVersion()).succeeded);
+}
+
+void placeAtTransferCenter(GameSession &session, ContentRect point)
+{
+    auto &player = const_cast<Player &>(session.world().player());
+    const float playerHalf = player.size() * 0.5F;
+    ASSERT_TRUE(player.setPosition({
+        point.position.x + point.size.x * 0.5F - playerHalf,
+        point.position.y + point.size.y * 0.5F - playerHalf}));
+}
+
+void clearNightRendezvousEnemies(GameSession &session)
+{
+    for (const Enemy &enemy : session.world().enemies())
+        EXPECT_TRUE(const_cast<Enemy &>(enemy).takeDamage(1000));
+}
+
+void completeNightRendezvousCover(GameSession &session)
+{
+    ASSERT_TRUE(session.profile().pendingRaid && session.profile().pendingRaid->nightRendezvous);
+    ASSERT_NO_FATAL_FAILURE(placeAtTransferCenter(session,
+        session.profile().pendingRaid->nightRendezvous->transferPoint));
+    GameplayInput signal;
+    signal.interactJustPressed = true;
+    session.update(signal, 0.0F);
+    ASSERT_TRUE(session.world().nightRendezvousView()->inProgress);
+    session.update({}, kRaidNightRendezvousDurationSeconds);
+    EXPECT_TRUE(session.world().nightRendezvousView()->ready);
+}
+}
+
+TEST(AlphaExtractionSessionTest, NightRendezvousSaveFailureRetriesAndIndependentRescuesBothSettle)
+{
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-rendezvous-", "two-rescues");
+    const SaveRepository repository{directory.path()};
+    ASSERT_NO_FATAL_FAILURE(saveNightRendezvousProfile(repository, "night-rendezvous-two-rescues"));
+
+    GameSession session;
+    session.configurePersistence(directory.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    ASSERT_TRUE(session.deployAlpha(1U, kRaidNightRendezvousMapId)) << session.persistenceMessage();
+    ASSERT_TRUE(session.profile().pendingRaid && session.profile().pendingRaid->rescue);
+    ASSERT_NO_FATAL_FAILURE(clearNightRendezvousEnemies(session));
+    const auto staffBefore = session.profile().basePopulation.professionResidents[
+        baseProfessionIndex(BaseResidentProfession::Engineering)];
+    const auto blocker = directory.path() / "profile.tmp.json";
+    ASSERT_TRUE(std::filesystem::create_directory(blocker));
+    ASSERT_NO_FATAL_FAILURE(completeNightRendezvousCover(session));
+    ASSERT_TRUE(session.profileUiCommitPending());
+    EXPECT_FALSE(waitForProfileUiDurability(session));
+    EXPECT_EQ(session.profile().basePopulation.ordinaryResidents, 8U);
+    EXPECT_FALSE(session.profile().committedRescues.contains(kRaidNightRendezvousRescueId));
+    EXPECT_FALSE(session.profile().pendingRaid->nightRendezvous->secured);
+    EXPECT_TRUE(session.world().nightRendezvousView()->ready);
+    ASSERT_TRUE(std::filesystem::remove(blocker));
+    ASSERT_TRUE(session.retryProfileUiCommit().accepted) << session.persistenceMessage();
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+
+    EXPECT_TRUE(session.profile().pendingRaid->nightRendezvous->secured);
+    EXPECT_TRUE(session.profile().committedRescues.contains(kRaidNightRendezvousRescueId));
+    EXPECT_TRUE(session.world().nightRendezvousView()->secured);
+    EXPECT_EQ(session.profile().basePopulation.injuredResidents, 0U);
+    EXPECT_EQ(session.profile().basePopulation.professionResidents[
+        baseProfessionIndex(BaseResidentProfession::Engineering)], staffBefore + 1U);
+
+    const auto ordinary = *session.profile().pendingRaid->rescue;
+    ASSERT_NE(ordinary.definitionId, kRaidNightRendezvousRescueId);
+    ASSERT_NO_FATAL_FAILURE(placeAtTransferCenter(session, ordinary.transferPoint));
+    GameplayInput hold;
+    hold.interactPressed = true;
+    session.update(hold, 2.1F);
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+    EXPECT_TRUE(session.profile().committedRescues.contains(ordinary.definitionId));
+    EXPECT_EQ(session.profile().basePopulation.ordinaryResidents, 10U);
+    EXPECT_EQ(session.profile().basePopulation.injuredResidents, 1U);
+
+    ASSERT_TRUE(session.activeQuitAlphaRaid());
+    ASSERT_TRUE(session.profile().lastRaidResult);
+    EXPECT_EQ(session.profile().lastRaidResult->rescuedOrdinaryResidents, 2U);
+    EXPECT_EQ(session.profile().lastRaidResult->rescuedInjuredResidents, 1U);
+}
+
+TEST(AlphaExtractionSessionTest, NightRendezvousSurvivesAbnormalExitAndCannotBeRepeated)
+{
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-rendezvous-", "abnormal-exit");
+    const SaveRepository repository{directory.path()};
+    ASSERT_NO_FATAL_FAILURE(saveNightRendezvousProfile(repository, "night-rendezvous-recovery"));
+    const auto &content = publishedContentRegistry();
+    const auto before = repository.load(content);
+    ASSERT_TRUE(before.profile) << before.message;
+    {
+        GameSession session;
+        session.configurePersistence(directory.path());
+        ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+        ASSERT_TRUE(session.deployAlpha(1U, kRaidNightRendezvousMapId)) << session.persistenceMessage();
+        ASSERT_NO_FATAL_FAILURE(clearNightRendezvousEnemies(session));
+        ASSERT_NO_FATAL_FAILURE(completeNightRendezvousCover(session));
+        ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+        EXPECT_EQ(session.profile().basePopulation.ordinaryResidents, 9U);
+    }
+
+    GameSession reopened;
+    reopened.configurePersistence(directory.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(reopened.profile().worldClock, before.profile->worldClock);
+    EXPECT_FALSE(reopened.profile().pendingRaid);
+    EXPECT_TRUE(reopened.profile().committedRescues.contains(kRaidNightRendezvousRescueId));
+    EXPECT_EQ(reopened.profile().basePopulation.ordinaryResidents, 9U);
+    ASSERT_TRUE(reopened.deployAlpha(1U, kRaidNightRendezvousMapId)) << reopened.persistenceMessage();
+    EXPECT_FALSE(reopened.profile().pendingRaid->nightRendezvous);
+    EXPECT_TRUE(reopened.profile().pendingRaid->rescue);
 }
 
 TEST(AlphaExtractionSessionTest, SecuredRescuePersistsThroughActiveQuit)
