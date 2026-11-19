@@ -40,7 +40,7 @@ bool App::routeFireSupportInput(const SDL_Event &event)
             gameSession_.world().raidSession().state() != RaidSessionState::InRaid)
             return false;
         const auto teammate = gameSession_.world().fireSupport();
-        if (!teammate || !teammate->alive()) return false;
+        if (!teammate || !teammate->alive() || !teammate->sameSpace) return false;
 
         fireSupportOrdersOpen_ = true;
         fireSupportUiBlocksGameplayThisFrame_ = true;
@@ -118,7 +118,7 @@ void App::closeFireSupportOrders()
 void App::renderFireSupportWorld()
 {
     const auto teammate = gameSession_.world().fireSupport();
-    if (!teammate || !teammate->alive() || !teammate->outdoor || !teammate->visible) return;
+    if (!teammate || !teammate->alive() || !teammate->visible) return;
 
     const auto &bounds = teammate->bounds;
     const float middle = bounds.position.x + bounds.size.x * 0.5F;
@@ -160,7 +160,7 @@ void App::renderFireSupportOrders()
     if (teammate->alive())
     {
         summary += fmt::format("  {}/{}", teammate->health, kFireSupportMaxHealth);
-        if (!teammate->outdoor) summary += " · " + tr("WAITING OUTSIDE");
+        if (!teammate->sameSpace) summary += " · " + tr("WAITING IN ANOTHER AREA");
         else if (!fireSupportOrdersOpen_)
         {
             summary += fmt::format(" · {} / {}",

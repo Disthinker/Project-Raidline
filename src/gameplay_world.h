@@ -541,7 +541,8 @@ public:
     bool setFireSupportOrders(FireSupportMovementOrder, FireSupportFireOrder) noexcept;
     [[nodiscard]] std::optional<FireSupportView> fireSupport() const;
     [[nodiscard]] std::optional<int> fireSupportHealth() const noexcept;
-    // A companion remains in the outdoor space, including after death.
+    // Death does not move the companion out of its actual Raid space.
+    [[nodiscard]] const RaidSpaceDefinitionId &fireSupportSpaceId() const noexcept;
     [[nodiscard]] std::optional<Vec2> fireSupportDeathPosition() const noexcept;
     [[nodiscard]] bool canInteractWithFireSupport() const noexcept;
     [[nodiscard]] std::optional<FireSupportShotEvent> fireSupportShotLastUpdate() const noexcept;
@@ -717,6 +718,8 @@ private:
     WorldShootingRuntime shooting_;
     WorldMeleeRuntime melee_;
     std::optional<RaidFireSupportRuntime> fireSupport_;
+    // Like activeInteriorIndex_: the interior table is fixed for the life of this world.
+    std::optional<std::size_t> fireSupportInteriorIndex_;
     template <bool FireSupportEnabled>
     bool advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *support);
     void emitRaidNoise(Vec2 source, float radius) noexcept;

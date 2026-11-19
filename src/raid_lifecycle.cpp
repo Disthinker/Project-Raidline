@@ -794,7 +794,7 @@ DeployReceipt executeDeploy(
     }
     if (command.fireSupport && regionalMissionCount != 0U)
         return deployFailure(RaidLifecycleError::InvalidCommand,
-            "FIRE SUPPORT REQUIRES AN ORDINARY GREYLINE RAID", profile.revision);
+            "FIRE SUPPORT REQUIRES AN ELIGIBLE ORDINARY RAID", profile.revision);
 
     std::optional<RegionalOutpostRestorationSnapshot> outpostRestoration;
     if (command.outpostRestorationId.has_value())

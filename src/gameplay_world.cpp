@@ -280,7 +280,25 @@ namespace
                deltaY * deltaY;
     }
 
-    Vec2 fireSupportSpawn(const Player &player, const RaidSpaceBlockerIndex &blockers)
+    // Door decisions are infrequent. Check the full body corridor so a sightline
+    // through a slit cannot move the follower across cover.
+    bool fireSupportCanPass(Vec2 from, Vec2 to, const RaidSpaceBlockerIndex &walls)
+    {
+        constexpr Vec2 half{RaidFireSupportRuntime::kSize.x * 0.5F, RaidFireSupportRuntime::kSize.y * 0.5F};
+        for (const Rect wall : walls.allBlockerBounds())
+        {
+            const Rect expanded{{wall.position.x - half.x, wall.position.y - half.y},
+                                {wall.size.x + 2 * half.x, wall.size.y + 2 * half.y}};
+            if (raidSpaceSegmentIntersectsBlockerInterior(from, to, expanded))
+                return false;
+        }
+        return true;
+    }
+
+    // Never place a companion on the player or an occupied landing when passing a door.
+    // Only the original outdoor deployment permits the player's tile as a last resort.
+    std::optional<Vec2> fireSupportLanding(Rect player, const RaidSpaceBlockerIndex &blockers,
+        std::span<const Enemy> enemies, bool atPortal)
     {
         constexpr float offset = 56.0F;
         constexpr float diagonal = 40.0F;
@@ -291,24 +309,40 @@ namespace
         constexpr Vec2 half{
             RaidFireSupportRuntime::kSize.x * 0.5F,
             RaidFireSupportRuntime::kSize.y * 0.5F};
-        const Vec2 playerOrigin = playerCenter(player);
+        const Vec2 playerOrigin{player.position.x + player.size.x * .5F, player.position.y + player.size.y * .5F};
         const ContentRect world{{}, blockers.worldSize()};
-        for (const Vec2 displacement : starts)
+        const auto freeAt = [&](Vec2 displacement) -> std::optional<Vec2>
         {
             const Vec2 center{playerOrigin.x + displacement.x,
                               playerOrigin.y + displacement.y};
             const Rect initial = centeredBounds(center, half);
+            // The shared navigation field needs two units of clearance from walls.
+            const Rect navigable = atPortal ? centeredBounds(center, {half.x + 2, half.y + 2}) : initial;
             if (!pointInside(world, initial.position) ||
                 !pointInside(world, {center.x + half.x, center.y + half.y}) ||
                 !blockers.hasLineOfSight(playerOrigin, center) ||
+                (atPortal && (isCollision(initial, player) || !fireSupportCanPass(playerOrigin, center, blockers) ||
+                    std::ranges::any_of(enemies,
+                    [&](const Enemy &occupant) { return !occupant.isDead() && isCollision(initial, occupant.bounds()); }))) ||
                 std::ranges::any_of(blockers.allBlockerBounds(),
-                    [&](Rect wall) { return isCollision(initial, wall); }))
+                    [&](Rect wall) { return isCollision(navigable, wall); }))
             {
-                continue;
+                return std::nullopt;
             }
             return initial.position;
+        };
+        for (const auto offsetFromPlayer : starts)
+            if (auto point = freeAt(offsetFromPlayer))
+                return point;
+        if (atPortal)
+        {
+            // For small rooms, try a tight shoulder-to-shoulder landing too.
+            constexpr std::array<Vec2, 4> nearby{{{34, 0}, {0, 34}, {-34, 0}, {0, -34}}};
+            for (const auto offsetFromPlayer : nearby)
+                if (auto point = freeAt(offsetFromPlayer))
+                    return point;
         }
-        throw std::invalid_argument{"RaidWorldConfig fire support spawn is blocked"};
+        return std::nullopt;
     }
 
 }
@@ -897,7 +931,10 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         enemies_.view());
     if (config.fireSupport)
     {
-        fireSupport_.emplace(*config.fireSupport, fireSupportSpawn(player_, *outdoorBlockerIndex_));
+        const auto landing = fireSupportLanding(playerBounds(player_), *outdoorBlockerIndex_, {}, false);
+        if (!landing)
+            throw std::invalid_argument{"RaidWorldConfig fire support spawn is blocked"};
+        fireSupport_.emplace(*config.fireSupport, *landing);
         cacheNavigationFieldForSpace(
             navigationFieldCache_, outdoorRaidSpaceId(), RaidFireSupportRuntime::kSize,
             worldSize_, ballisticBlockers_);
@@ -909,6 +946,9 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
             interior.worldSize,
             interior.ballisticBlockers,
             interior.enemies.view());
+        if (fireSupport_)
+            cacheNavigationFieldForSpace(navigationFieldCache_, interior.id, RaidFireSupportRuntime::kSize,
+                interior.worldSize, interior.ballisticBlockers);
     }
     if (config.freightBreachEnabled)
     {
@@ -1424,7 +1464,7 @@ void GameplayWorld::update(
     if(grenade_.pendingExplosion() && commitGrenade && !commitGrenade())return;
     if(!raidSession_.isActive())return;
 
-    RaidFireSupportRuntime *support = fireSupport_ && inOutdoorRaidSpace()
+    RaidFireSupportRuntime *support = fireSupport_ && fireSupportInteriorIndex_ == activeInteriorIndex_
         ? &*fireSupport_ : nullptr;
     const bool enemiesAdvanced = support
         ? advanceRaidEnemies<true>(deltaTime, support)
@@ -2690,6 +2730,7 @@ void GameplayWorld::prepareRoadBlockade(const RaidRoadBlockadeSnapshot &snapshot
         prepareFootprint(enemy.size());
     for (const EnemySpawn &spawn : highRiskPressureSpawns_)
         prepareFootprint(spawn.size);
+    if (fireSupport_) prepareFootprint(RaidFireSupportRuntime::kSize);
     roadBlockade_ = std::move(blockade);
 }
 
@@ -2700,6 +2741,8 @@ bool GameplayWorld::roadBlockadeOccupied() const noexcept
     if (inOutdoorRaidSpace() && !player_.isDead() && isCollision(playerBounds(player_), blockade))
         return true;
 
+    if (fireSupport_ && !fireSupportInteriorIndex_ && isCollision(fireSupport_->bounds(), blockade))
+        return true;
     return std::any_of(enemies_.begin(), enemies_.end(), [&](const Enemy &enemy)
     {
         return !enemy.isDead() && isCollision(enemy.bounds(), blockade);
@@ -3634,7 +3677,8 @@ void GameplayWorld::emitPlayerNoise(float radius) noexcept
 bool GameplayWorld::setFireSupportOrders(
     FireSupportMovementOrder movement, FireSupportFireOrder fire) noexcept
 {
-    if (!fireSupport_ || !fireSupport_->alive() || !raidSession_.isActive())
+    if (!fireSupport_ || fireSupportInteriorIndex_ != activeInteriorIndex_ ||
+        !fireSupport_->alive() || !raidSession_.isActive())
         return false;
     fireSupport_->setOrders(movement, fire);
     return true;
@@ -3646,8 +3690,9 @@ std::optional<FireSupportView> GameplayWorld::fireSupport() const
         return std::nullopt;
     auto result = fireSupport_->view();
     result.outdoor = inOutdoorRaidSpace();
+    result.sameSpace = fireSupportInteriorIndex_ == activeInteriorIndex_;
     result.inInteractionRange = canInteractWithFireSupport();
-    result.visible = result.outdoor &&
+    result.visible = result.sameSpace &&
         (result.inInteractionRange || raidBoundsObservable(result.bounds));
     return result;
 }
@@ -3655,6 +3700,11 @@ std::optional<FireSupportView> GameplayWorld::fireSupport() const
 std::optional<int> GameplayWorld::fireSupportHealth() const noexcept
 {
     return fireSupport_ ? std::optional{fireSupport_->view().health} : std::nullopt;
+}
+
+const RaidSpaceDefinitionId &GameplayWorld::fireSupportSpaceId() const noexcept
+{
+    return fireSupportInteriorIndex_ ? interiors_[*fireSupportInteriorIndex_].id : outdoorRaidSpaceId();
 }
 
 std::optional<Vec2> GameplayWorld::fireSupportDeathPosition() const noexcept
@@ -3665,7 +3715,7 @@ std::optional<Vec2> GameplayWorld::fireSupportDeathPosition() const noexcept
 
 bool GameplayWorld::canInteractWithFireSupport() const noexcept
 {
-    if (!fireSupport_ || !raidSession_.isActive() || !inOutdoorRaidSpace() ||
+    if (!fireSupport_ || !raidSession_.isActive() || fireSupportInteriorIndex_ != activeInteriorIndex_ ||
         player_.isDead() || player_.isControlled())
     {
         return false;
@@ -4271,6 +4321,32 @@ bool GameplayWorld::tryTransitionRaidSpace(
         return false;
     }
     const Vec2 center = playerCenter(player_);
+    const auto transferSupport = [&](ContentRect entrance, std::optional<std::size_t> destination,
+        Vec2 playerLanding, const RaidSpaceBlockerIndex &destinationBlockers, std::span<const Enemy> occupants)
+    {
+        if (!fireSupport_ || fireSupportInteriorIndex_ != activeInteriorIndex_ || !fireSupport_->alive() ||
+            fireSupport_->view().movementOrder != FireSupportMovementOrder::Follow)
+            return;
+        constexpr float reach = 96.0F;
+        const auto companion = fireSupport_->center();
+        const auto gate = nearestPointOnRect(entrance, companion);
+        const auto &walls = activeBlockerIndex();
+        if (distanceSquared(companion, gate) > reach * reach ||
+            !fireSupportCanPass(companion, gate, walls) || !walls.hasLineOfSight(companion, center))
+            return;
+        const auto landing = fireSupportLanding({playerLanding, {player_.size(), player_.size()}},
+            destinationBlockers, occupants, true);
+        if (!landing) return;
+
+        // A windup already aimed at this actor must never strike a different
+        // target after the old space is re-entered. Held actors keep their locks.
+        for (Enemy &enemy : activeEnemies())
+            if (fireSupport_->hasAttackLock(enemy.combatTargetId()))
+                enemy.cancelAttackOnDepartedTarget();
+        fireSupport_->leaveSpace();
+        fireSupport_->setPosition(*landing);
+        fireSupportInteriorIndex_ = destination;
+    };
     if (activeInteriorIndex_.has_value())
     {
         InteriorRuntime &interior = interiors_[*activeInteriorIndex_];
@@ -4278,11 +4354,11 @@ bool GameplayWorld::tryTransitionRaidSpace(
         {
             return false;
         }
-        const Vec2 returnPosition = interior.exteriorReturn;
         if (beforeSpaceTransition && !beforeSpaceTransition()) return false;
+        transferSupport(interior.interiorExit, std::nullopt, interior.exteriorReturn, *outdoorBlockerIndex_, enemies_.view());
         activeInteriorIndex_.reset();
         activeGeometryRevision_ = outdoorGeometryRevision_;
-        static_cast<void>(player_.setPosition(returnPosition));
+        static_cast<void>(player_.setPosition(interior.exteriorReturn));
     }
     else
     {
@@ -4295,8 +4371,10 @@ bool GameplayWorld::tryTransitionRaidSpace(
             return false;
         }
         if (beforeSpaceTransition && !beforeSpaceTransition()) return false;
-        activeInteriorIndex_ = static_cast<std::size_t>(
-            std::distance(interiors_.begin(), interior));
+        const auto destination = static_cast<std::size_t>(std::distance(interiors_.begin(), interior));
+        transferSupport(interior->exteriorEntrance, destination, interior->interiorSpawn, *interior->blockerIndex,
+                        interior->enemies.view());
+        activeInteriorIndex_ = destination;
         activeGeometryRevision_ = interior->geometryRevision;
         static_cast<void>(player_.setPosition(interior->interiorSpawn));
     }
@@ -4311,8 +4389,6 @@ bool GameplayWorld::tryTransitionRaidSpace(
 
 void GameplayWorld::clearSpatialTransientPresentation() noexcept
 {
-    if (fireSupport_)
-        fireSupport_->clearSpatialTransient();
     shooting_.clearSpatialTransientPresentation();
     shooting_.cancelWeaponOptic();
     pendingPlayerDamageObservations_.clear();

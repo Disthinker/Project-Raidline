@@ -656,6 +656,7 @@ function(raidline_add_test target source module)
        OR target STREQUAL "NoiseDecoyTest" OR target STREQUAL "GrenadePerformanceTest"
        OR target STREQUAL "RunnerInfectedPerformanceTest"
        OR target STREQUAL "WeaponHandlingPerformanceTest"
+       OR target STREQUAL "RaidFireSupportRuntimeTest"
        OR target STREQUAL "NightVisionRuntimeTest"
        OR target STREQUAL "RaidFreightRuntimeTest"
        OR target STREQUAL "PlayerInventoryLatencyTest")

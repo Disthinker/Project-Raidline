@@ -63,9 +63,20 @@ const RaidCorpseContainerAssetLocation *corpseLocation(const ProfileState &profi
     return corpse && corpse->sourceKind == RaidCorpseSourceKind::FireSupport ? corpse : nullptr;
 }
 
-bool validCorpsePosition(const ContentRegistry &content, const MapDefinitionId &map, Vec2 position)
+bool validCorpsePosition(const ContentRegistry &content, const PendingRaidSnapshot &raid,
+                        const RaidSpaceDefinitionId &space, Vec2 position)
 {
-    const auto bounds = content.map(map).worldSize;
+    Vec2 bounds;
+    if (space == outdoorRaidSpaceId())
+        bounds = content.map(raid.mapDefinitionId).worldSize;
+    else
+    {
+        const auto interior = std::find_if(raid.interiors.begin(), raid.interiors.end(),
+            [&](const RaidInteriorSnapshot &room) { return room.id == space; });
+        if (interior == raid.interiors.end())
+            return false;
+        bounds = interior->worldSize;
+    }
     return std::isfinite(position.x) && std::isfinite(position.y) &&
         position.x >= 0.0F && position.y >= 0.0F && position.x <= bounds.x && position.y <= bounds.y;
 }
@@ -74,7 +85,7 @@ std::string loadoutError(RaidFireSupportLoadoutFailure failure)
 {
     switch (failure)
     {
-    case RaidFireSupportLoadoutFailure::IneligibleMap: return "FIRE SUPPORT REQUIRES AN ORDINARY GREYLINE RAID";
+    case RaidFireSupportLoadoutFailure::IneligibleMap: return "FIRE SUPPORT REQUIRES AN ELIGIBLE ORDINARY RAID";
     case RaidFireSupportLoadoutFailure::NoAvailableCombatResident: return "NO AVAILABLE COMBAT RESIDENT";
     case RaidFireSupportLoadoutFailure::InsufficientPreparationRounds: return "NEED 30 STANDARD 5.45 ROUNDS IN STASH";
     case RaidFireSupportLoadoutFailure::InvalidRifle: return "SELECT AN EMPTY SERVICE 5.45 RIFLE FROM STASH";
@@ -102,12 +113,17 @@ bool overlapped(GridPosition a, InventoryFootprint aSize, GridPosition b, Invent
 }
 }
 
+bool isRaidFireSupportMap(const MapDefinitionId &map) noexcept
+{
+    return map == kRaidFireSupportMapId || map == kHospitalFloorplanMapId || map == kRaidFireSupportReplacementMapId;
+}
+
 RaidFireSupportLoadoutAvailability queryRaidFireSupportLoadout(
     const ProfileState &profile, const ContentRegistry &content, const MapDefinitionId &map,
     const std::optional<RaidFireSupportLoadout> &selected)
 {
     RaidFireSupportLoadoutAvailability result;
-    result.mapEligible = map == kRaidFireSupportMapId && supportsRaidFireSupportContent(content.contentVersion());
+    result.mapEligible = isRaidFireSupportMap(map) && supportsRaidFireSupportContent(content.contentVersion());
     if (!result.mapEligible)
     {
         result.failure = RaidFireSupportLoadoutFailure::IneligibleMap;
@@ -259,13 +275,13 @@ ProfileValidationResult validateRaidFireSupportCorpse(const ProfileState &profil
     const auto *root = profile.assets.find(support.containerAssetId);
     const auto *corpse = corpseLocation(profile);
     if (!root || !corpse || root->definitionId != kCorpseDefinitionId || root->quantity != 1U ||
-        corpse->raidId != raid.raidId || corpse->spaceId != outdoorRaidSpaceId() ||
+        corpse->raidId != raid.raidId || (!corpse->deathPosition && corpse->spaceId != outdoorRaidSpaceId()) ||
         corpse->sourceEnemyId != raidFireSupportCorpseSourceId(raid.raidId) ||
-        raid.mapDefinitionId != kRaidFireSupportMapId ||
+        !isRaidFireSupportMap(raid.mapDefinitionId) ||
         !supportsRaidFireSupportContent(content.contentVersion()) || raid.selfRecovery ||
         raid.outpostRestoration || raid.baseSiteClearance || raid.basePerimeterSweep ||
         !raid.startingAssets || root->instanceId < raid.startingAssets->nextAssetId() ||
-        (corpse->deathPosition && !validCorpsePosition(content, raid.mapDefinitionId, *corpse->deathPosition)))
+        (corpse->deathPosition && !validCorpsePosition(content, raid, corpse->spaceId, *corpse->deathPosition)))
         return {false, "fire support corpse ownership is invalid"};
 
     const auto &starting = *raid.startingAssets;
@@ -305,15 +321,20 @@ bool revealRaidFireSupportCorpseInSimulation(ProfileState &profile, const Conten
     try
     {
         const auto *corpse = corpseLocation(profile);
-        if (!corpse || corpse->spaceId != space || !validCorpsePosition(content, profile.pendingRaid->mapDefinitionId, position))
+        if (!corpse)
             return false;
         if (corpse->deathPosition)
-            return true;
+            return corpse->spaceId == space && corpse->deathPosition->x == position.x &&
+                corpse->deathPosition->y == position.y;
+        if (!validCorpsePosition(content, *profile.pendingRaid, space, position))
+            return false;
         if (profile.revision == std::numeric_limits<ProfileRevision>::max() ||
             !validateRaidFireSupportCorpse(profile, content).valid)
             return false;
         auto *root = profile.assets.findMutable(profile.pendingRaid->fireSupport->containerAssetId);
-        std::get<RaidCorpseContainerAssetLocation>(root->location).deathPosition = position;
+        auto &location = std::get<RaidCorpseContainerAssetLocation>(root->location);
+        location.spaceId = space;
+        location.deathPosition = position;
         ++profile.revision;
         return true;
     }

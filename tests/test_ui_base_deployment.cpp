@@ -403,6 +403,23 @@ TEST_F(UiBaseDeploymentTest, BrowsingTabsDetailsAndMapsDoesNotMutateOrGenerateRa
     EXPECT_EQ(profileStateFingerprint(profile()), before); EXPECT_EQ(profile().assets.nextAssetId(), highWater); expectNoRaid();
 }
 
+TEST_F(UiBaseDeploymentTest, FireSupportIsOfferedForThreeOrdinaryMapsAndNeverForRecovery) {
+    const auto before = profileStateFingerprint(profile());
+    for (const auto &map : content.maps()) {
+        SCOPED_TRACE(map.id.value());
+        const auto ordinary = projectUiDeployment(profile(), content, UiLanguage::SimplifiedChinese,
+            map.id, {}, std::nullopt, 0, {});
+        const bool supportsTeam = map.id == kRaidFireSupportMapId ||
+            map.id == MapDefinitionId{"map.raid.hospital_district"} ||
+            map.id == MapDefinitionId{"map.raid.frontier_exchange"};
+        EXPECT_EQ(ordinary.fireSupport.mapEligible, supportsTeam);
+        const auto recovery = projectUiDeployment(profile(), content, UiLanguage::SimplifiedChinese,
+            map.id, {}, std::optional<std::string>{"recovery-preview"}, 0, {});
+        EXPECT_FALSE(recovery.fireSupport.mapEligible);
+    }
+    EXPECT_EQ(profileStateFingerprint(profile()), before);
+}
+
 TEST_F(UiBaseDeploymentTest, FuelBriefingIsLimitedToOrdinaryFrontierDeployments) {
     const auto fingerprint = profileStateFingerprint(profile());
     for (const auto &map : content.maps()) {

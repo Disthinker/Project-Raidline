@@ -2122,7 +2122,7 @@ ProfileValidationResult validateProfileState(
             record.outcome == RaidResultOutcome::ActiveQuit;
         const bool validKind = record.kind == LostRaidRecordKind::FireSupport
             ? supportsRaidFireSupportContent(content.contentVersion()) &&
-                record.mapDefinitionId == kRaidFireSupportMapId &&
+                isRaidFireSupportMap(record.mapDefinitionId) &&
                 record.recordId == raidFireSupportLostRecordId(record.settlementId) &&
                 (playerFailure || record.outcome == RaidResultOutcome::Extracted)
             : record.kind == LostRaidRecordKind::Player && playerFailure &&

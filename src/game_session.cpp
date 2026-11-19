@@ -5040,7 +5040,7 @@ bool GameSession::recordFireSupportDeath(ProfileState &profile)
 {
     const auto death = world_->fireSupportDeathPosition();
     return !death || revealRaidFireSupportCorpseInSimulation(
-        profile, publishedContentRegistry(), outdoorRaidSpaceId(), *death);
+        profile, publishedContentRegistry(), world_->fireSupportSpaceId(), *death);
 }
 
 bool GameSession::prepareRaidSettlementCandidate(RaidResultOutcome outcome,ProfileState &candidate)

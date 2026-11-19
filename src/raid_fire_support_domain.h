@@ -12,6 +12,8 @@ inline const RescueDefinitionId kRaidFireSupportReplacementRescueId{"rescue.ordi
 inline const ItemDefinitionId kRaidFireSupportRifleId{"item.weapon.rifle_5_45_service"};
 inline const ItemDefinitionId kRaidFireSupportAmmunitionId{"item.ammunition.5_45x39_standard"};
 
+[[nodiscard]] bool isRaidFireSupportMap(const MapDefinitionId &map) noexcept;
+
 enum class RaidFireSupportLoadoutFailure
 {
     None,

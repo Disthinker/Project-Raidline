@@ -391,6 +391,14 @@ EnemyAttackAdvance Enemy::updateTowardsTarget(
   return EnemyAttackAdvance{};
 }
 
+void Enemy::cancelAttackOnDepartedTarget() noexcept
+{
+  attack_.reset();
+  velocity_ = {};
+  refreshMovementStateFromAttack();
+  movementAnimator_.reset();
+}
+
 bool Enemy::tryStartAttack(
     EnemyAttackType type,
     Vec2 direction) noexcept

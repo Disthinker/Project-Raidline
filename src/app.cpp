@@ -6403,7 +6403,8 @@ void App::update(float deltaTime)
         if (gain > 0.0F)
         {
             gameAudio_.play(SoundEventId::WeaponRifleFire, gain);
-            gameAudio_.play(SoundEventId::WeaponFireTailOutdoor, gain);
+            if (gameSession_.world().inOutdoorRaidSpace())
+                gameAudio_.play(SoundEventId::WeaponFireTailOutdoor, gain);
         }
     }
     for (const HitResult &hit : gameSession_.world().hitResultsLastUpdate())
