@@ -1,3 +1,7 @@
+# 当前玩法 · 火力队友跨地图与室内协同 v1 已验收
+
+[四步验收](../acceptance/raid-fire-support-cross-space-v1.md) · [开发与验证记录](../exec-plans/active/raid-fire-support-cross-space-v1.md)。候选 7ed7c89189cb 在独立目录，保留工业郊区原固定入口和玩家原档。本地全量 3402/3402。用户已验收并授权提交和推送至功能分支，尚未合并。
+
 # 当前 · 单名火力队友出击 v1 已验收
 
 在边境交换站接纳战斗居民。在灰线仓库用 F2 指挥一名队友。主角失败时，存活队友带回未领取的借装。[联合验收清单](../acceptance/raid-single-fire-support-v1.md)

@@ -27,7 +27,8 @@ struct FireSupportView
     int health{};
     FireSupportMovementOrder movementOrder{FireSupportMovementOrder::Follow};
     FireSupportFireOrder fireOrder{FireSupportFireOrder::HoldFire};
-    bool outdoor{};
+    bool outdoor{}; // Player is outdoors (legacy display field).
+    bool sameSpace{};
     bool visible{};
     bool inInteractionRange{};
 
@@ -55,6 +56,7 @@ public:
     [[nodiscard]] FireSupportView view() const noexcept;
     void setOrders(FireSupportMovementOrder, FireSupportFireOrder) noexcept;
     void clearSpatialTransient() noexcept;
+    void leaveSpace() noexcept;
 
     // World owns the shared static geometry and resolves the requested sweep.
     [[nodiscard]] Vec2 prepareMovement(

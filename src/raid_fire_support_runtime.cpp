@@ -86,6 +86,12 @@ void RaidFireSupportRuntime::clearSpatialTransient() noexcept
     shotEvent_.reset();
 }
 
+void RaidFireSupportRuntime::leaveSpace() noexcept
+{
+    clearSpatialTransient();
+    attackLocks_.clear();
+}
+
 Vec2 RaidFireSupportRuntime::prepareMovement(
     Vec2 goal, const RaidSpaceNavigationField *field,
     const RaidSpaceBlockerIndex &blockers, float seconds)

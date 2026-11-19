@@ -321,62 +321,71 @@ TEST(SaveRepositoryTest, FireSupportMigratesSchema73AndRetainsFrozenNightRendezv
 
 TEST(SaveRepositoryTest, FireSupportRoundTripsLoansCasualtyAndIndependentLoss)
 {
-    const auto &content = publishedContentRegistry();
-    auto profile = makeNewAlphaProfile("fire-support-save", content);
-    auto &residents = profile.basePopulation.professionResidents;
-    --residents[baseProfessionIndex(BaseResidentProfession::General)];
-    ++residents[baseProfessionIndex(BaseResidentProfession::Combat)];
-    const auto add = [&](const ItemDefinitionId &id, unsigned quantity) {
-        const auto &item = content.item(id);
-        const auto stash = ProfileContainerId::stash();
-        const auto room = findFirstProfileFit(profile, content, stash, item, ItemOrientation::Degrees0);
-        return room ? profile.assets.create(item, StoredAssetLocation{stash, *room}, quantity) : 0U;
-    };
-    const auto rifle = add(kRaidFireSupportRifleId, 1U);
-    const auto loose = add(kRaidFireSupportAmmunitionId, 30U);
-    const auto magazine = add(ItemDefinitionId{"item.magazine.5_45x39_30"}, 1U);
-    ASSERT_NE(rifle, 0U);
-    ASSERT_NE(loose, 0U);
-    ASSERT_NE(magazine, 0U);
-    profile.assets.findMutable(magazine)->magazineRounds.assign(
-        8U, MagazineRoundRecord{kRaidFireSupportAmmunitionId, std::nullopt});
-    DeployCommand command{"support-save-raid", "support-save-settlement", 903U, kRaidFireSupportMapId};
-    command.fireSupport = RaidFireSupportLoadout{rifle, magazine};
-    const auto departure = executeDeploy(profile, content, command, {profile.revision, "depart"});
-    ASSERT_TRUE(departure.succeeded) << departure.message;
-    ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->fireSupport);
-    const auto container = profile.pendingRaid->fireSupport->containerAssetId;
-    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, kRaidNightRendezvousContentVersion)),
-        std::invalid_argument);
+    for (const auto &map : {kRaidFireSupportMapId, kHospitalFloorplanMapId, kRaidFireSupportReplacementMapId})
+    {
+        SCOPED_TRACE(map.value());
+        const auto &content = publishedContentRegistry();
+        auto profile = makeNewAlphaProfile("fire-support-save", content);
+        auto &residents = profile.basePopulation.professionResidents;
+        --residents[baseProfessionIndex(BaseResidentProfession::General)];
+        ++residents[baseProfessionIndex(BaseResidentProfession::Combat)];
+        const auto add = [&](const ItemDefinitionId &id, unsigned quantity) {
+            const auto &item = content.item(id);
+            const auto stash = ProfileContainerId::stash();
+            const auto room = findFirstProfileFit(profile, content, stash, item, ItemOrientation::Degrees0);
+            return room ? profile.assets.create(item, StoredAssetLocation{stash, *room}, quantity) : 0U;
+        };
+        const auto rifle = add(kRaidFireSupportRifleId, 1U);
+        const auto loose = add(kRaidFireSupportAmmunitionId, 30U);
+        const auto magazine = add(ItemDefinitionId{"item.magazine.5_45x39_30"}, 1U);
+        ASSERT_NE(rifle, 0U);
+        ASSERT_NE(loose, 0U);
+        ASSERT_NE(magazine, 0U);
+        profile.assets.findMutable(magazine)->magazineRounds.assign(
+            8U, MagazineRoundRecord{kRaidFireSupportAmmunitionId, std::nullopt});
+        DeployCommand command{"support-save-raid", "support-save-settlement", 903U, map};
+        command.fireSupport = RaidFireSupportLoadout{rifle, magazine};
+        const auto departure = executeDeploy(profile, content, command, {profile.revision, "depart"});
+        ASSERT_TRUE(departure.succeeded) << departure.message;
+        ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->fireSupport);
+        const auto container = profile.pendingRaid->fireSupport->containerAssetId;
+        EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, kRaidNightRendezvousContentVersion)),
+            std::invalid_argument);
 
-    ASSERT_TRUE(revealRaidFireSupportCorpseInSimulation(profile, content,
-        outdoorRaidSpaceId(), profile.pendingRaid->playerSpawn));
-    const auto frozen = serializeProfileEnvelope(profile, content.contentVersion());
-    const auto opened = deserializeProfileEnvelope(frozen, content);
-    ASSERT_TRUE(opened.profile && opened.profile->pendingRaid) << opened.message;
-    EXPECT_EQ(opened.profile->pendingRaid->fireSupport, profile.pendingRaid->fireSupport);
-    EXPECT_EQ(std::get<RaidCorpseContainerAssetLocation>(opened.profile->assets.find(container)->location).sourceKind,
-        RaidCorpseSourceKind::FireSupport);
-    EXPECT_EQ(profileStateFingerprint(*opened.profile), profileStateFingerprint(profile));
-    auto malformed = nlohmann::json::parse(frozen);
-    auto &payload = malformed["payload"];
-    payload["pending_raid"]["fire_support"]["rifle"]["asset_id"] = magazine;
-    malformed["payload_checksum"] = testSaveChecksum(payload.dump());
-    EXPECT_FALSE(deserializeProfileEnvelope(malformed.dump(), content).profile);
+        const auto &raid = *profile.pendingRaid;
+        const bool indoor = map != kRaidFireSupportMapId;
+        if (indoor)
+            ASSERT_FALSE(raid.interiors.empty());
+        const auto space = indoor ? raid.interiors.back().id : outdoorRaidSpaceId();
+        const Vec2 death = indoor ? raid.interiors.back().interiorSpawn : raid.playerSpawn;
+        ASSERT_TRUE(revealRaidFireSupportCorpseInSimulation(profile, content, space, death));
+        const auto frozen = serializeProfileEnvelope(profile, content.contentVersion());
+        const auto opened = deserializeProfileEnvelope(frozen, content);
+        ASSERT_TRUE(opened.profile && opened.profile->pendingRaid) << opened.message;
+        EXPECT_EQ(opened.profile->pendingRaid->fireSupport, profile.pendingRaid->fireSupport);
+        EXPECT_EQ(std::get<RaidCorpseContainerAssetLocation>(opened.profile->assets.find(container)->location).sourceKind,
+            RaidCorpseSourceKind::FireSupport);
+        EXPECT_EQ(profileStateFingerprint(*opened.profile), profileStateFingerprint(profile));
+        auto malformed = nlohmann::json::parse(frozen);
+        auto &payload = malformed["payload"];
+        payload["pending_raid"]["fire_support"]["rifle"]["asset_id"] = magazine;
+        malformed["payload_checksum"] = testSaveChecksum(payload.dump());
+        EXPECT_FALSE(deserializeProfileEnvelope(malformed.dump(), content).profile);
 
-    const auto settlement = settlePendingRaid(profile, content, command.settlementId, RaidResultOutcome::Extracted);
-    ASSERT_TRUE(settlement.succeeded) << settlement.message;
-    ASSERT_TRUE(profile.lastRaidResult && profile.lastRaidResult->fireSupport && profile.fireSupportReplacement);
-    const auto loss = raidFireSupportLostRecordId(command.settlementId);
-    ASSERT_TRUE(profile.lostRaidRecords.contains(loss));
-    const auto reopened = deserializeProfileEnvelope(
-        serializeProfileEnvelope(profile, content.contentVersion()), content);
-    ASSERT_TRUE(reopened.profile) << reopened.message;
-    EXPECT_EQ(reopened.profile->fireSupportReplacement, profile.fireSupportReplacement);
-    EXPECT_EQ(reopened.profile->lastRaidResult->fireSupport, profile.lastRaidResult->fireSupport);
-    EXPECT_EQ(reopened.profile->lostRaidRecords.at(loss).kind, LostRaidRecordKind::FireSupport);
-    EXPECT_EQ(reopened.profile->lostRaidRecords.at(loss).outcome, RaidResultOutcome::Extracted);
-    EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
+        const auto settlement = settlePendingRaid(profile, content, command.settlementId, RaidResultOutcome::Extracted);
+        ASSERT_TRUE(settlement.succeeded) << settlement.message;
+        ASSERT_TRUE(profile.lastRaidResult && profile.lastRaidResult->fireSupport && profile.fireSupportReplacement);
+        const auto loss = raidFireSupportLostRecordId(command.settlementId);
+        ASSERT_TRUE(profile.lostRaidRecords.contains(loss));
+        const auto reopened = deserializeProfileEnvelope(
+            serializeProfileEnvelope(profile, content.contentVersion()), content);
+        ASSERT_TRUE(reopened.profile) << reopened.message;
+        EXPECT_EQ(reopened.profile->fireSupportReplacement, profile.fireSupportReplacement);
+        EXPECT_EQ(reopened.profile->lastRaidResult->fireSupport, profile.lastRaidResult->fireSupport);
+        EXPECT_EQ(reopened.profile->lostRaidRecords.at(loss).kind, LostRaidRecordKind::FireSupport);
+        EXPECT_EQ(reopened.profile->lostRaidRecords.at(loss).outcome, RaidResultOutcome::Extracted);
+        EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
+    }
 }
 
 TEST(SaveRepositoryTest, EngineeringTrainingOrderRoundTripsAndRejectsTamperedReservations)

@@ -3,7 +3,10 @@
 #include "collision.h"
 #include "gameplay_world.h"
 
+#include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <iostream>
 
 namespace
 {
@@ -229,4 +232,338 @@ TEST(RaidFireSupportRuntimeTest, DeathKeepsOneReachableOutdoorPositionAcrossPort
     EXPECT_FALSE(world.canInteractWithFireSupport());
     ASSERT_TRUE(world.fireSupportDeathPosition());
     expectSamePosition(*world.fireSupportDeathPosition(), *death);
+}
+
+namespace
+{
+    RaidInteriorWorldConfig supportRoom(std::string id = "raid_space.test.east")
+    {
+        RaidInteriorWorldConfig room;
+        room.id = RaidSpaceDefinitionId{std::move(id)};
+        room.displayName = "Cross-space test room";
+        room.worldSize = {600, 400};
+        room.exteriorEntrance = {kPlayerStart, {48, 48}};
+        room.exteriorReturn = room.interiorSpawn = kPlayerStart;
+        room.interiorExit = room.exteriorEntrance;
+        return room;
+    }
+
+    GameplayInput useDoor()
+    {
+        GameplayInput input;
+        input.interactJustPressed = true;
+        return input;
+    }
+}
+
+TEST(RaidFireSupportCrossSpaceTest, AllThreePublishedInteriorsHaveLegalRoundTripLandings)
+{
+    std::size_t checked = 0;
+    for (const auto &id : {"map.raid.hospital_district", "map.raid.frontier_exchange"})
+    {
+        const auto &map = publishedContentRegistry().map(MapDefinitionId{id});
+        for (const auto &source : map.interiors)
+        {
+            SCOPED_TRACE(source.id.value());
+            auto config = supportWorld();
+            auto room = supportRoom();
+            room.id = source.id;
+            room.worldSize = source.worldSize;
+            room.exteriorEntrance = source.exteriorEntrance;
+            room.exteriorReturn = source.exteriorReturn;
+            room.interiorSpawn = source.interiorSpawn;
+            room.interiorExit = source.interiorExit;
+            for (const auto &blocker : source.ballisticBlockers)
+                room.ballisticBlockers.push_back({room.ballisticBlockers.size() + 1U,
+                    {blocker.bounds.position, blocker.bounds.size}});
+            config.interiors = {room};
+            config.worldSize = {std::max(1000.F, room.exteriorReturn.x + 512),
+                std::max(700.F, room.exteriorReturn.y + 512)};
+            config.playerSpawn = {room.exteriorEntrance.position.x + 16,
+                room.exteriorEntrance.position.y + 16};
+            GameplayWorld world{config};
+
+            world.update(useDoor(), 0);
+            ASSERT_EQ(world.activeRaidSpaceId(), room.id);
+            ASSERT_TRUE(world.fireSupport()->sameSpace);
+            const auto landing = world.fireSupport()->bounds;
+            for (const auto &wall : room.ballisticBlockers)
+                EXPECT_FALSE(isCollision(landing, wall.bounds));
+            EXPECT_FALSE(isCollision(landing, Rect{world.player().position(), {world.player().size(), world.player().size()}}));
+            EXPECT_TRUE(world.canInteractWithFireSupport());
+
+            placePlayer(world, {room.interiorExit.position.x + room.interiorExit.size.x * 0.5F - 16,
+                room.interiorExit.position.y + room.interiorExit.size.y * 0.5F - 16});
+            world.update(useDoor(), 0);
+            EXPECT_TRUE(world.inOutdoorRaidSpace());
+            EXPECT_TRUE(world.fireSupport()->sameSpace);
+            EXPECT_TRUE(world.canInteractWithFireSupport());
+            ++checked;
+        }
+    }
+    EXPECT_EQ(checked, 3U);
+}
+
+TEST(RaidFireSupportCrossSpaceTest, WaitingInOneRoomDoesNotExposeActorInIdenticalSiblingRoom)
+{
+    auto config = supportWorld();
+    auto first = supportRoom();
+    auto second = supportRoom("raid_space.test.west");
+    second.exteriorEntrance.position = {370, 220};
+    second.exteriorReturn = second.exteriorEntrance.position;
+    config.interiors = {first, second};
+    GameplayWorld world{config};
+
+    world.update(useDoor(), 0);
+    ASSERT_EQ(world.activeRaidSpaceId(), first.id);
+    ASSERT_TRUE(world.setFireSupportOrders(FireSupportMovementOrder::Hold, FireSupportFireOrder::FreeFire));
+    const auto held = *world.fireSupport();
+    world.update(useDoor(), 0);
+    ASSERT_TRUE(world.inOutdoorRaidSpace());
+    ASSERT_FALSE(world.fireSupport()->sameSpace);
+
+    placePlayer(world, second.exteriorEntrance.position);
+    world.update(useDoor(), 0);
+    ASSERT_EQ(world.activeRaidSpaceId(), second.id);
+    world.update({}, kFrame);
+    EXPECT_FALSE(world.fireSupport()->visible);
+    EXPECT_FALSE(world.canInteractWithFireSupport());
+    EXPECT_FALSE(world.fireSupportShotLastUpdate());
+    EXPECT_FALSE(world.setFireSupportOrders(FireSupportMovementOrder::Follow, FireSupportFireOrder::HoldFire));
+    world.update(useDoor(), 0);
+    placePlayer(world, kPlayerStart);
+    world.update(useDoor(), 0);
+    ASSERT_EQ(world.activeRaidSpaceId(), first.id);
+    ASSERT_TRUE(world.fireSupport()->sameSpace);
+    EXPECT_TRUE(world.canInteractWithFireSupport());
+    expectSamePosition(world.fireSupport()->bounds.position, held.bounds.position);
+    EXPECT_EQ(world.fireSupport()->health, held.health);
+    EXPECT_EQ(world.fireSupport()->movementOrder, held.movementOrder);
+    EXPECT_EQ(world.fireSupport()->fireOrder, held.fireOrder);
+}
+
+TEST(RaidFireSupportCrossSpaceTest, RejectedTransitionDistantEscortAndBlockedDestinationNeverWarpCompanion)
+{
+    auto config = supportWorld();
+    auto room = supportRoom();
+    config.interiors = {room};
+    GameplayWorld denied{config};
+    denied.update(useDoor(), 0, {}, [] { return false; });
+    EXPECT_FALSE(denied.spaceTransitionedLastUpdate());
+    ASSERT_TRUE(denied.inOutdoorRaidSpace());
+    expectSamePosition(center(denied.fireSupport()->bounds), kCompanionStart);
+
+    config.interiors[0].exteriorEntrance.position = {550, 220};
+    GameplayWorld distant{config};
+    placePlayer(distant, config.interiors[0].exteriorEntrance.position);
+    distant.update(useDoor(), 0);
+    ASSERT_EQ(distant.activeRaidSpaceId(), room.id);
+    EXPECT_FALSE(distant.fireSupport()->sameSpace);
+    expectSamePosition(center(distant.fireSupport()->bounds), kCompanionStart);
+
+    // The radius is measured to the portal edge, not its center or just the player.
+    for (const float separation : {96.F, 96.25F})
+    {
+        config.interiors[0].exteriorEntrance = {{kCompanionStart.x + separation, 200}, {48, 48}};
+        GameplayWorld edge{config};
+        placePlayer(edge, config.interiors[0].exteriorEntrance.position);
+        edge.update(useDoor(), 0);
+        ASSERT_EQ(edge.activeRaidSpaceId(), room.id);
+        EXPECT_EQ(edge.fireSupport()->sameSpace, separation <= 96.F);
+    }
+    config.interiors[0].exteriorEntrance.position = {220, 200};
+    config.ballisticBlockers = {{1, {{199, 160}, {6, 120}}}};
+    GameplayWorld walledOff{config};
+    placePlayer(walledOff, config.interiors[0].exteriorEntrance.position);
+    walledOff.update(useDoor(), 0);
+    ASSERT_EQ(walledOff.activeRaidSpaceId(), room.id);
+    EXPECT_FALSE(walledOff.fireSupport()->sameSpace);
+    config.ballisticBlockers.clear();
+    // A room with exactly one player-sized pocket leaves no legal second footprint.
+    room.interiorSpawn = {16, 16};
+    room.interiorExit = {{16, 16}, {32, 32}};
+    room.worldSize = {64, 64};
+    room.ballisticBlockers = {{1, {{0, 0}, {16, 64}}}, {2, {{48, 0}, {16, 64}}},
+        {3, {{16, 0}, {32, 16}}}, {4, {{16, 48}, {32, 16}}}};
+    config.interiors = {room};
+    GameplayWorld blocked{config};
+    blocked.update(useDoor(), 0);
+    ASSERT_EQ(blocked.activeRaidSpaceId(), room.id);
+    EXPECT_FALSE(blocked.fireSupport()->sameSpace);
+    EXPECT_FALSE(blocked.canInteractWithFireSupport());
+    blocked.update(useDoor(), 0);
+    ASSERT_TRUE(blocked.inOutdoorRaidSpace());
+    EXPECT_TRUE(blocked.fireSupport()->sameSpace);
+    expectSamePosition(center(blocked.fireSupport()->bounds), kCompanionStart);
+}
+
+TEST(RaidFireSupportCrossSpaceTest, PortalRetainsCadenceDropsOldFlightAndUsesInteriorOcclusion)
+{
+    auto config = supportWorld();
+    config.fireSupport->projectileSpeed = 250;
+    const EnemySpawn victim{{300, 204}, {20, 20}, 100};
+    config.initialEnemies = {victim};
+    auto room = supportRoom();
+    room.initialEnemies = {victim};
+    config.interiors = {room};
+    GameplayWorld world{config};
+    ASSERT_TRUE(world.setFireSupportOrders(FireSupportMovementOrder::Follow, FireSupportFireOrder::FreeFire));
+    world.update({}, kFrame);
+    ASSERT_TRUE(world.fireSupportShotLastUpdate());
+    world.update(useDoor(), 0);
+    ASSERT_TRUE(world.fireSupport()->sameSpace);
+    ASSERT_EQ(world.activeRaidSpaceId(), room.id);
+    ASSERT_TRUE(world.setFireSupportOrders(FireSupportMovementOrder::Hold, FireSupportFireOrder::FreeFire));
+    for (int i = 0; i < 62; ++i)
+    {
+        world.update({}, kFrame);
+        ASSERT_FALSE(world.fireSupportShotLastUpdate());
+        ASSERT_EQ(world.enemies().front().health(), victim.maxHealth);
+    }
+    bool resumed = false;
+    for (int i = 0; i < 30 && !resumed; ++i)
+    {
+        world.update({}, kFrame);
+        resumed = world.fireSupportShotLastUpdate().has_value();
+    }
+    EXPECT_TRUE(resumed);
+
+    config.initialEnemies.clear();
+    config.interiors[0].ballisticBlockers = {{1, {{240, 0}, {8, 400}}}};
+    GameplayWorld occluded{config};
+    occluded.update(useDoor(), 0);
+    ASSERT_TRUE(occluded.fireSupport()->sameSpace);
+    ASSERT_TRUE(occluded.setFireSupportOrders(FireSupportMovementOrder::Hold, FireSupportFireOrder::FreeFire));
+    for (int i = 0; i < 30; ++i)
+    {
+        occluded.update({}, kFrame);
+        EXPECT_FALSE(occluded.fireSupportShotLastUpdate());
+    }
+    EXPECT_EQ(occluded.enemies().front().health(), victim.maxHealth);
+}
+
+TEST(RaidFireSupportCrossSpaceTest, WoundedFollowerRetainsExistingHealthOnBothSidesOfDoor)
+{
+    auto config = supportWorld();
+    const auto room = supportRoom();
+    config.interiors = {room};
+    config.initialEnemies = {EnemySpawn{{215, 197}, {38, 38}, 100}};
+    GameplayWorld world{config};
+    ASSERT_TRUE(world.setFireSupportOrders(FireSupportMovementOrder::Hold, FireSupportFireOrder::HoldFire));
+    for (int tick = 0; tick < 180 && world.fireSupportHealth() == kFireSupportMaxHealth; ++tick)
+        world.update({}, kFrame);
+    ASSERT_GT(*world.fireSupportHealth(), 0);
+    ASSERT_LT(*world.fireSupportHealth(), kFireSupportMaxHealth);
+    const auto injured = world.fireSupportHealth();
+    ASSERT_TRUE(world.setFireSupportOrders(FireSupportMovementOrder::Follow, FireSupportFireOrder::HoldFire));
+    world.update(useDoor(), 0);
+    ASSERT_EQ(world.fireSupportSpaceId(), room.id);
+    EXPECT_EQ(world.fireSupportHealth(), injured);
+    world.update(useDoor(), 0);
+    ASSERT_EQ(world.fireSupportSpaceId(), outdoorRaidSpaceId());
+    EXPECT_EQ(world.fireSupportHealth(), injured);
+}
+TEST(RaidFireSupportCrossSpaceTest, IndoorDeathRemainsInItsOwnRoomAcrossExitAndReentry)
+{
+    auto config = supportWorld();
+    auto room = supportRoom();
+    room.initialEnemies = {EnemySpawn{{215, 197}, {38, 38}, 100}};
+    config.interiors = {room};
+    GameplayWorld world{config};
+    world.update(useDoor(), 0);
+    ASSERT_TRUE(world.fireSupport()->sameSpace);
+    ASSERT_TRUE(world.setFireSupportOrders(FireSupportMovementOrder::Hold, FireSupportFireOrder::HoldFire));
+    for (int i = 0; i < 4800 && !world.fireSupportDeathPosition(); ++i)
+        world.update({}, kFrame);
+    ASSERT_TRUE(world.fireSupportDeathPosition());
+    const auto death = *world.fireSupportDeathPosition();
+    EXPECT_EQ(world.fireSupportSpaceId(), room.id);
+    EXPECT_EQ(world.fireSupportHealth(), 0);
+    world.update(useDoor(), 0);
+    ASSERT_TRUE(world.inOutdoorRaidSpace());
+    EXPECT_EQ(world.fireSupportSpaceId(), room.id);
+    EXPECT_FALSE(world.fireSupport()->sameSpace);
+    EXPECT_FALSE(world.canInteractWithFireSupport());
+    world.update(useDoor(), 0);
+    ASSERT_EQ(world.activeRaidSpaceId(), room.id);
+    EXPECT_TRUE(world.canInteractWithFireSupport());
+    ASSERT_TRUE(world.fireSupportDeathPosition());
+    expectSamePosition(*world.fireSupportDeathPosition(), death);
+}
+
+TEST(RaidFireSupportCrossSpaceTest, MeasuresDenseIndoorSimulationAndPortalFramesWithEscortPresent)
+{
+    using Clock = std::chrono::steady_clock;
+    for (int count : {32, 100})
+    {
+        SCOPED_TRACE(count);
+        auto config = supportWorld();
+        config.lightConeObservationEnabled = true;
+        auto room = supportRoom();
+        room.worldSize = {1800, 1300};
+        room.interiorSpawn = {884, 634};
+        const Vec2 origin{900, 650};
+        room.interiorExit = {{840, 590}, {120, 120}};
+        for (int i = 0; i < count; ++i)
+        {
+            const float a = static_cast<float>(i) * 6.2831853F / count;
+            const float radius = 210.F + 30.F * (i % 3);
+            room.initialEnemies.push_back(EnemySpawn{{origin.x + radius * std::cos(a),
+                origin.y + radius * std::sin(a)}, {20, 20}, 100});
+        }
+        for (int i = 0; i < 2304 && room.ballisticBlockers.size() < 220; ++i)
+        {
+            // Cycle through the full local grid. Do not concentrate walls in one far row.
+            const int cell = (i * 491) % 2304;
+            const Rect wall{{origin.x - 336 + (cell % 48) * 14, origin.y - 336 + (cell / 48) * 14}, {6, 9}};
+            if (isCollision(wall, {{origin.x - 64, origin.y - 96}, {176, 192}}) ||
+                std::any_of(room.initialEnemies.begin(), room.initialEnemies.end(), [&](const EnemySpawn &enemy)
+                    { return isCollision(wall, {enemy.position, enemy.size}); }))
+                continue;
+            room.ballisticBlockers.push_back({static_cast<BallisticBlockerId>(i + 1), wall});
+        }
+        ASSERT_EQ(room.ballisticBlockers.size(), 220U);
+        config.interiors = {room};
+        std::vector<double> entryTimes, frameTimes;
+        std::size_t observed = 0;
+        for (int i = 0; i < 160; ++i)
+        {
+            GameplayWorld world{config};
+            ASSERT_TRUE(world.setFireSupportOrders(FireSupportMovementOrder::Follow, FireSupportFireOrder::FreeFire));
+            const auto entryStart = Clock::now();
+            world.update(useDoor(), 0);
+            const auto entryEnd = Clock::now();
+            ASSERT_TRUE(world.spaceTransitionedLastUpdate());
+            ASSERT_EQ(world.activeRaidSpaceId(), room.id);
+            ASSERT_TRUE(world.fireSupport()->sameSpace);
+
+            GameplayInput aim;
+            const float angle = i * 0.13F;
+            aim.aimWorldPosition = {origin.x + 200 * std::cos(angle), origin.y + 200 * std::sin(angle)};
+            aim.moveLeft = true;
+            const auto frameStart = Clock::now();
+            world.update(aim, kFrame);
+            const bool valid = world.raidObservation().validGeometry();
+            for (const auto &enemy : world.enemies())
+                observed += world.raidEnemyObservable(enemy.combatTargetId()) ? 1U : 0U;
+            const auto frameEnd = Clock::now();
+            ASSERT_TRUE(valid);
+            ASSERT_EQ(world.simulationWorkloadLastUpdate().activeBlockers, 220U);
+            ASSERT_EQ(world.simulationWorkloadLastUpdate().activeEnemies, static_cast<std::size_t>(count));
+            if (i >= 10)
+            {
+                entryTimes.push_back(std::chrono::duration<double, std::milli>(entryEnd - entryStart).count());
+                frameTimes.push_back(std::chrono::duration<double, std::milli>(frameEnd - frameStart).count());
+            }
+        }
+        ASSERT_GT(observed, 0U);
+        std::sort(entryTimes.begin(), entryTimes.end());
+        std::sort(frameTimes.begin(), frameTimes.end());
+        for (const auto &[key, ms] : {std::pair{"portal", entryTimes[142]}, std::pair{"indoor", frameTimes[142]}})
+        {
+            RecordProperty("support_" + std::to_string(count) + "_" + key + "_p95_ms", std::to_string(ms));
+            EXPECT_LE(ms, 3.0) << key << ": enemies=" << count << " blockers=220 samples=150";
+            std::cout << "Fire support " << key << ": enemies=" << count << " blockers=220 samples=150 p95_ms=" << ms << '\n';
+        }
+    }
 }

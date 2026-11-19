@@ -3123,7 +3123,7 @@ TEST_F(RaidFireSupportTest, QualificationAndAtomicDeploymentKeepLoansAndPreparat
     const auto balance = plan.preparationRoundCount;
     auto wrongMap = profile;
     const auto initial = profileStateFingerprint(wrongMap);
-    EXPECT_FALSE(deploySupport(wrongMap, kRaidFireSupportReplacementMapId).succeeded);
+    EXPECT_FALSE(deploySupport(wrongMap, kFieldIntelligenceSourceMapId).succeeded);
     EXPECT_EQ(profileStateFingerprint(wrongMap), initial);
 
     auto wounded = profile;
@@ -3158,6 +3158,75 @@ TEST_F(RaidFireSupportTest, QualificationAndAtomicDeploymentKeepLoansAndPreparat
     EXPECT_FALSE(queryInventory(profile, content, occupy).canCommit);
     EXPECT_FALSE(executeInventory(profile, content, occupy, {profile.revision, "use-reserved-cell"}).succeeded);
     EXPECT_EQ(profileStateFingerprint(profile), frozen);
+}
+
+TEST_F(RaidFireSupportTest, EachPublishedInteriorOwnsItsCasualtyAndRecoversTheOriginalUnclaimedLoan)
+{
+    for (const auto &map : {kHospitalFloorplanMapId, kRaidFireSupportReplacementMapId})
+    {
+        SCOPED_TRACE(map.value());
+        const auto &rooms = content.map(map).interiors;
+        ASSERT_FALSE(rooms.empty());
+        for (const auto &room : rooms)
+        {
+            SCOPED_TRACE(room.id.value());
+            auto run = profile;
+            const auto deploy = deploySupport(run, map);
+            ASSERT_TRUE(deploy.succeeded) << deploy.message;
+            const auto container = run.pendingRaid->fireSupport->containerAssetId;
+            const Vec2 point = room.interiorSpawn;
+            const auto original = profileStateFingerprint(run);
+            EXPECT_FALSE(revealRaidFireSupportCorpseInSimulation(run, content,
+                RaidSpaceDefinitionId{"raid_space.unpublished"}, point));
+            EXPECT_FALSE(revealRaidFireSupportCorpseInSimulation(run, content,
+                room.id, {room.worldSize.x + 1, point.y}));
+            EXPECT_EQ(profileStateFingerprint(run), original);
+            ASSERT_TRUE(revealRaidFireSupportCorpseInSimulation(run, content, room.id, point));
+            const auto revision = run.revision;
+            EXPECT_TRUE(revealRaidFireSupportCorpseInSimulation(run, content, room.id, point));
+            EXPECT_FALSE(revealRaidFireSupportCorpseInSimulation(run, content, outdoorRaidSpaceId(), point));
+            EXPECT_EQ(run.revision, revision);
+            const auto &corpse = std::get<RaidCorpseContainerAssetLocation>(run.assets.find(container)->location);
+            EXPECT_EQ(corpse.spaceId, room.id);
+            ASSERT_TRUE(corpse.deathPosition);
+            EXPECT_FLOAT_EQ(corpse.deathPosition->x, point.x);
+            EXPECT_FLOAT_EQ(corpse.deathPosition->y, point.y);
+            RaidSceneContainerAccess access{container, outdoorRaidSpaceId(), point};
+            access.observation = observeAssetContractPoint(run, access.spaceId, point);
+            access.currentObservation = access.observation->key();
+            EXPECT_FALSE(raidSceneContainerAccessible(run, access));
+            access.spaceId = room.id;
+            access.observation = observeAssetContractPoint(run, room.id, point);
+            access.currentObservation = access.observation->key();
+            ASSERT_TRUE(raidSceneContainerAccessible(run, access));
+            const auto take = executeInventory(run, content, InventoryEquipCommand{rifle, EquipmentSlotKind::SecondaryWeapon},
+                {run.revision, "interior-claim"}, &access);
+            ASSERT_TRUE(take.succeeded) << take.message;
+            const auto settled = settlePendingRaid(run, content, "support-settlement", RaidResultOutcome::Extracted);
+            ASSERT_TRUE(settled.succeeded) << settled.message;
+            EXPECT_TRUE(assetIsCarried(run, rifle));
+            const auto loss = lostRaidRecordForAsset(run, spare);
+            ASSERT_TRUE(loss);
+            EXPECT_EQ(run.lostRaidRecords.at(*loss).mapDefinitionId, map);
+
+            DeployCommand recover{"interior-recovery", "interior-return", 8214U, map};
+            recover.selfRecoveryRecordId = *loss;
+            recover.fireSupport = RaidFireSupportLoadout{rifle, spare};
+            const auto before = profileStateFingerprint(run);
+            const auto refused = executeDeploy(run, content, recover, {run.revision, "no-double-duty"});
+            EXPECT_FALSE(refused.succeeded);
+            EXPECT_EQ(refused.message, "FIRE SUPPORT REQUIRES AN ELIGIBLE ORDINARY RAID");
+            EXPECT_EQ(profileStateFingerprint(run), before);
+            recover.fireSupport.reset();
+            const auto departed = executeDeploy(run, content, recover, {run.revision, "recover-unclaimed-loan"});
+            ASSERT_TRUE(departed.succeeded) << departed.message;
+            const auto opened = openObservedRaidSelfRecovery(run, content, {run.revision, "open-recovery"});
+            ASSERT_TRUE(opened.succeeded) << opened.message;
+            EXPECT_TRUE(std::holds_alternative<RaidGroundAssetLocation>(run.assets.find(spare)->location));
+            EXPECT_EQ(run.assets.find(spare)->magazineRounds, profile.assets.find(spare)->magazineRounds);
+            EXPECT_FALSE(lostRaidRecordForAsset(run, spare));
+        }
+    }
 }
 
 TEST_F(RaidFireSupportTest, SurvivingTeammateReturnsUnclaimedLoansForEveryFormalOutcome)
