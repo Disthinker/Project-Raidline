@@ -330,6 +330,7 @@ add_library(raidline_domain STATIC
     src/raid_visibility.h
     src/raid_lifecycle.cpp
     src/raid_fire_support_domain.cpp
+    src/raid_armed_scavenger_domain.cpp
     src/regional_operations_domain.cpp
     src/regional_operations_domain.h
     src/self_recovery_domain.cpp
@@ -413,6 +414,7 @@ add_library(raidline_simulation STATIC
     src/gameplay_input.h
     src/gameplay_world.cpp
     src/raid_fire_support_runtime.cpp
+    src/gameplay_world_scavengers.cpp
     src/gameplay_world.h
     src/ground_item.cpp
     src/ground_item.h
@@ -1191,3 +1193,6 @@ raidline_add_test(BasePlayerSystemsTest tests/test_base_player_systems.cpp raidl
 raidline_add_test(WorldWeaponActivityRuntimeTest tests/test_world_weapon_activity_runtime.cpp raidline::services)
 raidline_add_test(ProfileUiCommandTest tests/test_profile_ui_command.cpp raidline::services)
 raidline_add_test(ProfileUiPersistenceTest tests/test_profile_ui_persistence.cpp raidline::services)
+
+raidline_add_test(RaidArmedScavengersRuntimeTest tests/test_raid_armed_scavengers_runtime.cpp raidline::simulation)
+raidline_add_test(RaidArmedScavengersDomainTest tests/raid_armed_scavenger_domain_test.cpp raidline::services)

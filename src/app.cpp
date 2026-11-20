@@ -2569,6 +2569,8 @@ void App::openRaidSceneContainer(AssetInstanceId id)
     const auto *corpse = root ? std::get_if<RaidCorpseContainerAssetLocation>(&root->location) : nullptr;
     if (gameSession_.isRaidFreightCrate(id))
         uiMessage_ = "FREIGHT CRATE OPENED | WORLD CONTINUES";
+    else if (corpse && corpse->sourceKind == RaidCorpseSourceKind::ArmedScavenger)
+        uiMessage_ = "SCAVENGER CORPSE OPENED | WORLD CONTINUES";
     else if (corpse && corpse->sourceKind == RaidCorpseSourceKind::FireSupport)
         uiMessage_ = "TEAMMATE CORPSE OPENED | WORLD CONTINUES";
     else
@@ -6393,6 +6395,15 @@ void App::update(float deltaTime)
         gameAudio_.play(SoundEventId::WeaponFireTailOutdoor,
                         acoustics.outdoorTailGain);
     }
+    for (const auto &shot : gameSession_.world().armedScavengerShotsLastUpdate())
+    {
+        const auto &player = gameSession_.world().player();
+        const Vec2 listener{player.position().x + player.size() * 0.5F,
+            player.position().y + player.size() * 0.5F};
+        const float distance = std::hypot(shot.origin.x - listener.x, shot.origin.y - listener.y);
+        const float gain = std::clamp(1.0F - distance / std::max(shot.noiseRadius, 1.0F), 0.0F, 0.85F);
+        if (gain > 0.0F) gameAudio_.play(SoundEventId::WeaponPistolFire, gain);
+    }
     if (const auto shot = gameSession_.world().fireSupportShotLastUpdate())
     {
         const auto &player = gameSession_.world().player();
@@ -9882,6 +9893,27 @@ void App::renderEnemies()
             spriteY,
             kEnemySpriteWidth,
             kEnemySpriteHeight};
+        if (enemy.isArmedScavenger())
+        {
+            const auto &scavengers = world.armedScavengers();
+            const auto found = std::ranges::find(scavengers, enemy.combatTargetId(), &RaidArmedScavengerView::id);
+            if (found == scavengers.end() || !found->alive) continue;
+
+            const Vec2 facing = found->aiming ? found->aimDirection : Vec2{-1.0F, 0.0F};
+            renderPlayerAvatar(bounds.position, bounds.size, facing, false, 0);
+            const float x = bounds.position.x + bounds.size.x * 0.5F;
+            const float y = bounds.position.y + bounds.size.y * 0.5F;
+            // The warning stays on the figure; its short stroke shows the raised pistol.
+            SDL_SetRenderDrawColor(renderer_, 255, 163, 94, 255);
+            if (found->aiming)
+            {
+                SDL_RenderLine(renderer_, x + facing.x * 10, y + facing.y * 10,
+                    x + facing.x * 28, y + facing.y * 28);
+            }
+            renderWorldLabel(enemyRect.x, enemyRect.y - 18.0F, found->aiming ? "SCAVENGER AIMING" :
+                found->reloading ? "SCAVENGER RELOADING" : "ARMED SCAVENGER");
+            continue;
+        }
         std::size_t frameIndex =
             enemy.currentAnimationFrameIndex();
         if (frameIndex >= kEnemyMoveFrameCount)
@@ -13032,6 +13064,7 @@ void App::renderProfileInventory(
             const auto *pursuit=lostWeaponPursuit(profile);
             const auto *corpse = owner ? std::get_if<RaidCorpseContainerAssetLocation>(&owner->location) : nullptr;
             if (freightCrate) title = "SEALED FREIGHT CRATE";
+            else if (corpse && corpse->sourceKind == RaidCorpseSourceKind::ArmedScavenger) title = "SCAVENGER CORPSE";
             else if (corpse && corpse->sourceKind == RaidCorpseSourceKind::FireSupport) title = "TEAMMATE CORPSE";
             else if (corpse || (pursuit && pursuit->corpseAssetId == *externalContainerId)) title = "CORPSE";
             else title = inRaid ? "SCENE STORAGE" : "BASE GROUND CONTAINER";
@@ -13198,9 +13231,11 @@ void App::renderAlphaRaidLoot()
         const bool empty = assetsInContainer(profile, ProfileContainerId::compartment(id, 0)).empty();
         const bool canSearch = !inventoryOverlayState_.isOpen() && gameSession_.canOpenRaidSceneContainer(id);
         SDL_SetRenderDrawColor(renderer_, 244, 230, 180, 255);
-        const char *label = corpse->sourceKind == RaidCorpseSourceKind::FireSupport
-            ? (canSearch ? "F: SEARCH TEAMMATE CORPSE" : empty ? "EMPTY TEAMMATE CORPSE" : "TEAMMATE CORPSE")
-            : (canSearch ? "F: SEARCH CORPSE" : empty ? "EMPTY CORPSE" : "SEARCHABLE CORPSE");
+        const char *label = canSearch ? "F: SEARCH CORPSE" : empty ? "EMPTY CORPSE" : "SEARCHABLE CORPSE";
+        if (corpse->sourceKind == RaidCorpseSourceKind::ArmedScavenger)
+            label = empty ? "EMPTY SCAVENGER CORPSE" : canSearch ? "F: SEARCH SCAVENGER CORPSE" : "SCAVENGER CORPSE";
+        else if (corpse->sourceKind == RaidCorpseSourceKind::FireSupport)
+            label = canSearch ? "F: SEARCH TEAMMATE CORPSE" : empty ? "EMPTY TEAMMATE CORPSE" : "TEAMMATE CORPSE";
         renderWorldLabel(body.x, body.y - 20, label);
     }
     for (const auto &[id, asset] : profile.assets.records())

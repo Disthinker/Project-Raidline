@@ -371,3 +371,60 @@ TEST(RaidFireSupportRuntimeTest, ReportsDensePursuitShotAndObservationAtBothEnem
             << " blockers=220 samples=150 p95_ms=" << samples[142] << '\n';
     }
 }
+
+TEST(RiversideArmedScavengerPerformanceTest, DenseMixedFireNoiseAndTargetQueriesStayWithinThreeMilliseconds)
+{
+    constexpr float frame = 1.0F / 60.0F;
+    for (int count : {32, 100})
+    {
+        SCOPED_TRACE(count);
+        auto config = mixedArena(count);
+        // Two guard posts in the near-player clear lane, replacing two infected.
+        for (int i{}; i < 2; ++i)
+        {
+            EnemySpawn guard{{center.x - 40.0F + 60.0F * i, center.y - 5.0F}, {10, 10}, 24};
+            guard.sourceEnemyId = "riverside-scavenger:" + std::to_string(i);
+            guard.armedScavenger = RaidArmedScavengerConfig{{8, 1400, 4, 360}, 6, 6, false};
+            config.initialEnemies[i] = std::move(guard);
+        }
+        std::vector<double> firingTimes, impactTimes;
+        for (int iteration{}; iteration < 160; ++iteration)
+        {
+            GameplayWorld world{config};
+            world.update({}, frame);
+            world.update({}, 0.79F);
+            ASSERT_TRUE(world.armedScavengers().front().aiming);
+            ASSERT_TRUE(world.armedScavengerShotsLastUpdate().empty());
+            GameplayInput input;
+            const float angle = iteration * 0.09F;
+            input.aimWorldPosition = {center.x + std::cos(angle) * 500, center.y + std::sin(angle) * 500};
+            input.aimWorldBounds = Rect{{}, config.worldSize};
+            for (int phase{}; phase < 2; ++phase)
+            {
+                const auto start = Clock::now();
+                world.update(input, frame);
+                const auto &view = world.raidObservation();
+                std::size_t visible{};
+                for (const auto &actor : world.enemies())
+                    visible += world.raidEnemyObservable(actor.combatTargetId());
+                const auto elapsed = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+                if (iteration >= 10) (phase == 0 ? firingTimes : impactTimes).push_back(elapsed);
+                ASSERT_TRUE(view.validGeometry());
+                EXPECT_GT(visible, 0U);
+                EXPECT_EQ(world.simulationWorkloadLastUpdate().activeEnemies, static_cast<std::size_t>(count));
+                EXPECT_EQ(world.simulationWorkloadLastUpdate().activeBlockers, 220U);
+                if (phase == 0) ASSERT_FALSE(world.armedScavengerShotsLastUpdate().empty());
+                else EXPECT_FALSE(world.takePlayerDamageObservations().empty());
+            }
+        }
+        for (auto *samples : {&firingTimes, &impactTimes})
+        {
+            ASSERT_EQ(samples->size(), 150U);
+            std::sort(samples->begin(), samples->end());
+            const auto label = std::string(samples == &firingTimes ? "shot_noise_" : "impact_") + std::to_string(count);
+            testing::Test::RecordProperty(label + "_p95_ms", std::to_string((*samples)[142]));
+            std::cout << label << "_p95_ms=" << (*samples)[142] << '\n';
+            EXPECT_LE((*samples)[142], 3.0) << label;
+        }
+    }
+}

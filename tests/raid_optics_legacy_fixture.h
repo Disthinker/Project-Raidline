@@ -4,6 +4,13 @@
 #include <algorithm>
 #include <nlohmann/json.hpp>
 
+inline ContentRegistry contentBeforeRiversideArmedScavengers()
+{
+    auto document = nlohmann::json::parse(publishedContentJson());
+    document["content_version"] = kRaidFireSupportContentVersion;
+    return ContentRegistry::fromJson(document.dump());
+}
+
 inline ContentRegistry contentBeforeFrontierRoadBlockade()
 {
     auto document = nlohmann::json::parse(publishedContentJson());

@@ -90,6 +90,10 @@ ProfileValidationResult validateRaidCorpseBindings(const ProfileState &profile, 
             }
         if (expected.size() != 3U) return {false, "corpse source count invalid"};
     }
+    const auto armed = validateRaidArmedScavengers(profile, content);
+    if (!armed.valid) return armed;
+    if (profile.pendingRaid)
+        for (const auto &actor : profile.pendingRaid->armedScavengers) expected.insert(actor.sourceEnemyId);
     std::set<std::string> observed;
     if (profile.pendingRaid)
         for (const auto &enemy : profile.pendingRaid->enemies)
@@ -106,7 +110,9 @@ ProfileValidationResult validateRaidCorpseBindings(const ProfileState &profile, 
                     return {false, "unexpected fire support corpse"};
                 continue;
             }
-            if (corpse->sourceKind != RaidCorpseSourceKind::Enemy)
+            const bool armedRoot = profile.pendingRaid && std::any_of(profile.pendingRaid->armedScavengers.begin(),
+                profile.pendingRaid->armedScavengers.end(), [&](const auto &actor) { return actor.corpseAssetId == id; });
+            if (corpse->sourceKind != (armedRoot ? RaidCorpseSourceKind::ArmedScavenger : RaidCorpseSourceKind::Enemy))
                 return {false, "unknown corpse source kind"};
             if (!profile.pendingRaid || !expected.contains(corpse->sourceEnemyId) || !roots.insert(corpse->sourceEnemyId).second ||
                 corpse->raidId != profile.pendingRaid->raidId || corpse->spaceId != outdoorRaidSpaceId() ||
@@ -128,6 +134,8 @@ ProfileValidationResult validateRaidCorpseBindings(const ProfileState &profile, 
             {
                 const auto *root = profile.assets.find(loot.corpseContainerAssetId);
                 const auto *corpse = root ? std::get_if<RaidCorpseContainerAssetLocation>(&root->location) : nullptr;
+                // Armed corpse origins and their budgeted pistol were checked above.
+                if (corpse && corpse->sourceKind == RaidCorpseSourceKind::ArmedScavenger) continue;
                 const auto point = std::find_if(profile.pendingRaid->spatialLayout.resourcePoints.begin(), profile.pendingRaid->spatialLayout.resourcePoints.end(),
                     [&](const auto &p) { return p.instanceId == loot.resourcePointInstanceId; });
                 if (!corpse || corpse->sourceKind != RaidCorpseSourceKind::Enemy || loot.sceneContainerAssetId ||
@@ -144,7 +152,7 @@ bool revealRaidCorpse(ProfileState &profile, const ContentRegistry &content, con
     if (!profile.pendingRaid || !finite(fact.position) || fact.spaceId != outdoorRaidSpaceId()) return false;
     for (const auto &[id, asset] : profile.assets.records())
         if (const auto *corpse = std::get_if<RaidCorpseContainerAssetLocation>(&asset.location);
-            corpse && corpse->sourceKind == RaidCorpseSourceKind::Enemy &&
+            corpse && (corpse->sourceKind == RaidCorpseSourceKind::Enemy || corpse->sourceKind == RaidCorpseSourceKind::ArmedScavenger) &&
             corpse->sourceEnemyId == fact.sourceEnemyId && corpse->spaceId == fact.spaceId)
         {
             if (corpse->deathPosition) return true; // Once exposed, never move or award again.
@@ -164,14 +172,14 @@ bool revealRaidCorpseInSimulation(ProfileState &profile, const ContentRegistry &
 {
     try
     {
-        if (!profile.pendingRaid || !trial(*profile.pendingRaid) || !finite(fact.position) ||
+        if (!profile.pendingRaid || (!trial(*profile.pendingRaid) && profile.pendingRaid->armedScavengers.empty()) || !finite(fact.position) ||
             fact.spaceId != outdoorRaidSpaceId() || fact.sourceEnemyId.empty() ||
             !validateRaidCorpseBindings(profile, content).valid) return false;
         const auto &raid = *profile.pendingRaid;
         for (const auto &[id, root] : profile.assets.records())
         {
             const auto *corpse = std::get_if<RaidCorpseContainerAssetLocation>(&root.location);
-            if (!corpse || corpse->sourceKind != RaidCorpseSourceKind::Enemy ||
+            if (!corpse || (corpse->sourceKind != RaidCorpseSourceKind::Enemy && corpse->sourceKind != RaidCorpseSourceKind::ArmedScavenger) ||
                 corpse->sourceEnemyId != fact.sourceEnemyId || corpse->spaceId != fact.spaceId) continue;
             if (!id || root.instanceId != id || id >= profile.assets.nextAssetId() || corpse->raidId != raid.raidId) return false;
             // Preserve the strict entry's once-only rule, including collected loot
@@ -181,6 +189,13 @@ bool revealRaidCorpseInSimulation(ProfileState &profile, const ContentRegistry &
             const auto size = content.map(raid.mapDefinitionId).worldSize;
             if (!finite(size) || size.x <= 0 || size.y <= 0 || fact.position.x < 0 || fact.position.y < 0 ||
                 fact.position.x > size.x || fact.position.y > size.y) return false;
+            if (corpse->sourceKind == RaidCorpseSourceKind::ArmedScavenger)
+            {
+                auto &location = std::get<RaidCorpseContainerAssetLocation>(profile.assets.findMutable(id)->location);
+                location.deathPosition = fact.position;
+                ++profile.revision;
+                return true;
+            }
             const auto loot = std::find_if(raid.loot.begin(), raid.loot.end(),
                 [id](const auto &entry) { return entry.corpseContainerAssetId == id; });
             if (loot == raid.loot.end() || loot->collected || !loot->assetId || loot->assetId == id ||

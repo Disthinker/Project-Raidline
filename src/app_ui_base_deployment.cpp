@@ -405,6 +405,8 @@ void App::renderBaseDeployment() {
         std::string briefing = tr(p.mapName);
         append(briefing, tr(fmt::format("DIFFICULTY {}", p.difficulty)));
         append(briefing, tr(p.warning));
+        if (p.armedScavengerEncounter)
+            append(briefing, tr("ARMED SCAVENGERS AT THE SOUTH BUS | PERIMETER OPEN"));
         if (p.fuelExit)
             append(briefing, tr("HIGH RISK FUEL EXIT | CARRY 1 CAN · 6s"));
         if (p.credentialUnlocked)

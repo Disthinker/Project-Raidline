@@ -5345,6 +5345,9 @@ ProfileValidationResult validateProfileState(
                     [&](const RaidEnemySnapshot &snapshot,
                         const EnemySpawnDefinition &definition)
                     {
+                        // The armed encounter validator checks the specific post, identity and health.
+                        if (!raid.armedScavengers.empty() && !snapshot.sourceEnemyId.empty())
+                            return snapshot.size.x == definition.size.x && snapshot.size.y == definition.size.y;
                         return districtLayoutRules
                             ? districtEnemyMatches(snapshot, definition)
                             : enemyMatches(snapshot, definition);
@@ -6085,6 +6088,7 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashBytes(hash, corpse->spaceId.value());
             hashBytes(hash, corpse->sourceEnemyId);
             if (corpse->sourceKind == RaidCorpseSourceKind::FireSupport) hashBytes(hash, "fire-support-corpse-v1");
+            if (corpse->sourceKind == RaidCorpseSourceKind::ArmedScavenger) hashBytes(hash, "armed-scavenger-corpse-v1");
             hashInteger(hash, corpse->deathPosition ? 1U : 0U);
             if (corpse->deathPosition) { hashFloat(hash, corpse->deathPosition->x); hashFloat(hash, corpse->deathPosition->y); }
         }
@@ -6331,6 +6335,14 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
                 hashFloat(hash, socket.x);
                 hashFloat(hash, socket.y);
             }
+        }
+        for (const auto &scavenger : raid.armedScavengers)
+        {
+            hashBytes(hash, scavenger.sourceEnemyId);
+            hashInteger(hash, scavenger.corpseAssetId);
+            hashInteger(hash, scavenger.pistolAssetId);
+            hashInteger(hash, scavenger.firstMagazineId);
+            hashInteger(hash, scavenger.secondMagazineId);
         }
         for (const RaidEnemySnapshot &enemy : raid.enemies)
         {

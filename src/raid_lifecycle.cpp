@@ -2330,6 +2330,12 @@ DeployReceipt executeDeploy(
         }
     }
     candidate.pendingRaid = std::move(snapshot);
+    if (regionalMissionCount == 0U && command.mapDefinitionId == kFieldIntelligenceSourceMapId &&
+        supportsRiversideArmedScavengersContent(content.contentVersion()))
+    {
+        const auto armed = freezeRaidArmedScavengersInCandidate(candidate, content);
+        if (!armed.valid) return deployFailure(RaidLifecycleError::InvalidProfile, armed.message, profile.revision);
+    }
     const auto corpseFreeze = freezeRaidCorpseLoot(candidate, content);
     if (!corpseFreeze.valid) return deployFailure(RaidLifecycleError::InvalidProfile, corpseFreeze.message, profile.revision);
     if (sealedFreightRules)

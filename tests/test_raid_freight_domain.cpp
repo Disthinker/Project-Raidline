@@ -72,16 +72,17 @@ struct FreightFixture
 TEST(RaidFreightDomainTest, RiversideFreightKeyStaysAtFirstSelectedCentralLootAcrossSpawnPairs)
 {
     const auto historical = contentBeforeCrossMapFreight();
-    const auto &slots = content.map(kFreightKeySourceMapId).raidLootSlots;
+    const auto freightAndTrade = contentBeforeRiversideArmedScavengers();
+    const auto &slots = freightAndTrade.map(kFreightKeySourceMapId).raidLootSlots;
     std::set<std::pair<std::string, std::string>> combinations;
     for (const auto seed : std::array{1U, 14U, 113U, 3U, 12U, 357U, 6U, 8U, 152U})
     {
         SCOPED_TRACE(seed);
         auto old = makeNewAlphaProfile("riverside-freight", historical);
-        auto current = makeNewAlphaProfile("riverside-freight", content);
+        auto current = makeNewAlphaProfile("riverside-freight", freightAndTrade);
         const auto oldResult = deploy(old, historical, kFreightKeySourceMapId, seed);
         ASSERT_TRUE(oldResult.succeeded) << oldResult.message;
-        const auto result = deploy(current, content, kFreightKeySourceMapId, seed);
+        const auto result = deploy(current, freightAndTrade, kFreightKeySourceMapId, seed);
         ASSERT_TRUE(result.succeeded) << result.message;
         ASSERT_TRUE(current.pendingRaid && old.pendingRaid);
         const auto &raid = *current.pendingRaid;

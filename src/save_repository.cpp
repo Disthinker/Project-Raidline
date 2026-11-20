@@ -1272,6 +1272,11 @@ Json assetRegistryValue(const AssetRegistry &registry, std::uint32_t schemaVersi
                 if (schemaVersion < 74) throw std::invalid_argument("fire-support corpse requires schema 74");
                 location["source_kind"] = "fire_support";
             }
+            else if (corpse->sourceKind == RaidCorpseSourceKind::ArmedScavenger)
+            {
+                if (schemaVersion < 75) throw std::invalid_argument("armed scavenger corpse requires schema 75");
+                location["source_kind"] = "armed_scavenger";
+            }
         }
         else if (const auto *scene = std::get_if<RaidSceneContainerAssetLocation>(&asset.location))
         {
@@ -1663,9 +1668,12 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
                 if (!location.at("death_position").is_null()) corpse.deathPosition = parseVector(location.at("death_position"));
                 if (location.contains("source_kind"))
                 {
-                    if (schemaVersion != 74 || location.at("source_kind") != "fire_support")
-                        throw std::invalid_argument("invalid fire-support corpse kind");
-                    corpse.sourceKind = RaidCorpseSourceKind::FireSupport;
+                    if (schemaVersion >= 74 && location.at("source_kind") == "fire_support")
+                        corpse.sourceKind = RaidCorpseSourceKind::FireSupport;
+                    else if (schemaVersion >= 75 && location.at("source_kind") == "armed_scavenger")
+                        corpse.sourceKind = RaidCorpseSourceKind::ArmedScavenger;
+                    else
+                        throw std::invalid_argument("invalid raid corpse source kind");
                 }
                 asset.location = std::move(corpse);
             }
@@ -1745,7 +1753,7 @@ void writeLostRecordKind(Json &value, const LostRaidRecord &record, std::uint32_
 LostRaidRecordKind parseLostRecordKind(const Json &value, std::uint32_t schemaVersion)
 {
     if (!value.contains("kind")) return LostRaidRecordKind::Player;
-    if (schemaVersion != 74 || value.at("kind") != "fire_support")
+    if (schemaVersion < 74 || value.at("kind") != "fire_support")
         throw std::invalid_argument("invalid fire-support loss kind");
     return LostRaidRecordKind::FireSupport;
 }
@@ -2963,6 +2971,14 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
         if (raid.travel.startingManufacturingPowerBonusMinutes)
             payload["pending_raid"]["travel"]["starting_manufacturing_power_bonus_minutes"] =
                 raid.travel.startingManufacturingPowerBonusMinutes;
+        if (schemaVersion >= 75)
+        {
+            auto &entries = payload["pending_raid"]["armed_scavengers"] = Json::array();
+            for (const auto &scavenger : raid.armedScavengers)
+                entries.push_back({{"source_enemy_id", scavenger.sourceEnemyId},
+                    {"corpse_asset_id", scavenger.corpseAssetId}, {"pistol_asset_id", scavenger.pistolAssetId},
+                    {"first_magazine_id", scavenger.firstMagazineId}, {"second_magazine_id", scavenger.secondMagazineId}});
+        }
         if (schemaVersion >= 74)
         {
             auto &pending = payload["pending_raid"];
@@ -3323,6 +3339,7 @@ bool isValidEnvelope(
 std::string serializeProfileEnvelope(const ProfileState &profile, std::string_view contentVersion)
 {
     return serializeProfileEnvelope(profile, contentVersion,
+        supportsRiversideArmedScavengersContent(contentVersion) ? 75U :
         supportsRaidFireSupportContent(contentVersion) ? 74U :
         supportsRaidNightRendezvousContent(contentVersion) ? 73U :
         supportsRaidFractureContent(contentVersion) ? 72U :
@@ -3367,7 +3384,12 @@ std::string serializeProfileEnvelope(
          (profile.baseManufacturing.activeOrder &&
           profile.baseManufacturing.activeOrder->recipeDefinitionId == kFreightBreachRecipeId)))
         throw std::invalid_argument{"freight breach requires schema 66 and compatible content"};
-    const bool fireSupportContract = schemaVersion == 74 && supportsRaidFireSupportContent(contentVersion);
+    const bool scavengerContract = schemaVersion == 75 && supportsRiversideArmedScavengersContent(contentVersion);
+    if ((schemaVersion == 75 && !scavengerContract) ||
+        (!scavengerContract && profile.pendingRaid && !profile.pendingRaid->armedScavengers.empty()))
+        throw std::invalid_argument("armed scavengers require schema 75 and content 93");
+    const bool fireSupportContract = scavengerContract ||
+        (schemaVersion == 74 && contentVersion == kRaidFireSupportContentVersion);
     if ((schemaVersion == 74 && !fireSupportContract) ||
         (!fireSupportContract && (profile.fireSupportReplacement ||
             (profile.pendingRaid && (profile.pendingRaid->fireSupport || profile.pendingRaid->fireSupportReplacementSource)) ||
@@ -3442,7 +3464,7 @@ std::string serializeProfileEnvelope(
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
         schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66 && schemaVersion != 67 && schemaVersion != 68 && schemaVersion != 69 &&
-        schemaVersion != 70 && schemaVersion != 71 && schemaVersion != 72 && schemaVersion != 73 && schemaVersion != 74)
+        schemaVersion != 70 && schemaVersion != 71 && schemaVersion != 72 && schemaVersion != 73 && schemaVersion != 74 && schemaVersion != 75)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
@@ -3639,7 +3661,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             (schemaVersion == 70 && contentVersion == kFrontierHighRiskBlockadeContentVersion) ||
             (schemaVersion == 71 && contentVersion == kRaidLostWeaponPursuitContentVersion) ||
             (schemaVersion == 72 && contentVersion == kRaidFractureContentVersion) ||
-            (schemaVersion == 73 && contentVersion == kRaidNightRendezvousContentVersion);
+            (schemaVersion == 73 && contentVersion == kRaidNightRendezvousContentVersion) ||
+            (schemaVersion == 74 && contentVersion == kRaidFireSupportContentVersion);
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -3662,7 +3685,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
                schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66 && schemaVersion != 67 && schemaVersion != 68 && schemaVersion != 69 &&
-               schemaVersion != 70 && schemaVersion != 71 && schemaVersion != 72 && schemaVersion != 73 && schemaVersion != 74) ||
+               schemaVersion != 70 && schemaVersion != 71 && schemaVersion != 72 && schemaVersion != 73 && schemaVersion != 74 && schemaVersion != 75) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
@@ -3681,7 +3704,11 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             schemaVersion >= 65 && supportsThrownIlluminationContent(contentVersion);
         const bool backpackContract =
             schemaVersion >= 66 && supportsRaidBackpackRecoveryContent(contentVersion);
-        const bool fireSupportContract = schemaVersion == 74 && supportsRaidFireSupportContent(contentVersion);
+        const bool scavengerContract = schemaVersion == 75 && supportsRiversideArmedScavengersContent(contentVersion);
+        if (schemaVersion == 75 && !scavengerContract)
+            return {SaveLoadStatus::Failed, std::nullopt, "unsupported armed scavenger content"};
+        const bool fireSupportContract = scavengerContract ||
+            (schemaVersion == 74 && contentVersion == kRaidFireSupportContentVersion);
         if (schemaVersion == 74 && !fireSupportContract)
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported fire-support content"};
         const bool rendezvousContract = fireSupportContract ||
@@ -5470,6 +5497,23 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                 raid.travel.startingBaseCommunityEvent =
                     startingState.baseCommunityEvent;
             }
+            if (scavengerContract)
+            {
+                const auto &entries = value.at("armed_scavengers");
+                if (!entries.is_array() || entries.size() > 2U)
+                    throw std::invalid_argument("invalid armed scavenger roster");
+                for (const auto &entry : entries)
+                {
+                    for (const char *id : {"corpse_asset_id", "pistol_asset_id", "first_magazine_id", "second_magazine_id"})
+                        if (!entry.at(id).is_number_unsigned())
+                            throw std::invalid_argument("invalid armed scavenger asset ID");
+                    raid.armedScavengers.push_back({entry.at("source_enemy_id").get<std::string>(),
+                        entry.at("corpse_asset_id").get<AssetInstanceId>(), entry.at("pistol_asset_id").get<AssetInstanceId>(),
+                        entry.at("first_magazine_id").get<AssetInstanceId>(), entry.at("second_magazine_id").get<AssetInstanceId>()});
+                }
+            }
+            else if (value.contains("armed_scavengers"))
+                throw std::invalid_argument("armed scavengers require schema 75");
             if (fireSupportContract)
             {
                 const auto &source = value.at("fire_support_replacement_source");
@@ -5963,7 +6007,8 @@ SaveWriteResult SaveRepository::save(
         const bool fieldTrade = supportsFieldIntelligenceTradeContent(contentVersion);
         const bool rendezvous = supportsRaidNightRendezvousContent(contentVersion);
         const bool fireSupport = supportsRaidFireSupportContent(contentVersion);
-        const auto schema = fireSupport ? 74U : rendezvous ? 73U : fracture ? 72U : pursuit ? 71U : blockade ? 70U : fieldTrade ? 69U : reserve ? 68U : power ? 67U : backpack ? 66U
+        const bool scavengers = supportsRiversideArmedScavengersContent(contentVersion);
+        const auto schema = scavengers ? 75U : fireSupport ? 74U : rendezvous ? 73U : fracture ? 72U : pursuit ? 71U : blockade ? 70U : fieldTrade ? 69U : reserve ? 68U : power ? 67U : backpack ? 66U
             : illumination ? 65U : armor ? 64U : fuel ? 63U : freight ? 62U : 61U;
         const auto isLegacy = [&](const std::optional<SaveEnvelopeMetadata> &source) {
             return source && (source->schemaVersion < schema || source->contentVersion != contentVersion);
@@ -5973,6 +6018,7 @@ SaveWriteResult SaveRepository::save(
         {
             // The former primary can remain in the rolling backup after upgrade.
             const std::string_view marker =
+                scavengers ? "raid-riverside-armed-scavengers-v1" :
                 fireSupport ? "raid-single-fire-support-v1" :
                 rendezvous ? "raid-night-rendezvous-and-engineering-training-v1"
                 : fracture ? "raid-fracture-and-field-stabilization-v1"

@@ -1077,6 +1077,11 @@ GameplayWorld::GameplayWorld(
             Vec2{},
             spawn.maxHealth,
             nextCombatTargetId_++, spawn.torsoArmor, spawn.variant});
+        if (spawn.armedScavenger)
+        {
+            enemies_.back().markArmedScavenger();
+            addArmedScavenger(spawn, enemies_.back().combatTargetId());
+        }
         if (!spawn.sourceEnemyId.empty())
             corpseSources_.emplace(enemies_.back().combatTargetId(), RaidCorpseDeathFact{spawn.sourceEnemyId, outdoorRaidSpaceId(), {spawn.size.x * 0.5F, spawn.size.y * 0.5F}});
         if (spawn.lostWeaponCarrier)
@@ -1101,7 +1106,7 @@ GameplayWorld::GameplayWorld(
             spawn.patrolPoints,
             0U,
             spawn.ambushActivationDistance};
-        enemies_.state(enemies_.back().combatTargetId()).noiseResponsive = true;
+        enemies_.state(enemies_.back().combatTargetId()).noiseResponsive = !spawn.armedScavenger;
     }
     initialOutdoorEnemyCount_ = enemies_.size();
     outdoorBlockerIndex_ = RaidSpaceBlockerIndex::build(
@@ -1278,6 +1283,8 @@ void GameplayWorld::update(
     if(grenadeFlashSeconds_<=0)lastGrenadeExplosion_.reset();
     enemyObservationCache_.clear(); // Bound to this simulation frame; never retain removed actors.
     enemyObservationIndexReady_ = false;
+    scavengerShotEvents_.clear();
+    for (auto &view : scavengerViews_) view.ammunitionChangedLastUpdate = false;
     shooting_.beginFrame(deltaTime);
     melee_.beginFrame(deltaTime);
     enemiesAlertedLastUpdate_ = 0U;
@@ -1466,7 +1473,10 @@ void GameplayWorld::update(
 
     RaidFireSupportRuntime *support = fireSupport_ && fireSupportInteriorIndex_ == activeInteriorIndex_
         ? &*fireSupport_ : nullptr;
-    const bool enemiesAdvanced = support
+    const bool activeScavengers = !scavengerViews_.empty() && !activeInteriorIndex_;
+    const bool enemiesAdvanced = activeScavengers
+        ? advanceRaidEnemies<false, true>(deltaTime, nullptr)
+        : support
         ? advanceRaidEnemies<true>(deltaTime, support)
         : advanceRaidEnemies<false>(deltaTime, nullptr);
     if (!enemiesAdvanced)
@@ -1509,6 +1519,11 @@ void GameplayWorld::update(
         if (const auto &shot = support->shotEvent())
             emitRaidNoise(shot->origin, shot->noiseRadius);
     }
+    if (activeScavengers)
+    {
+        updateScavengerWeapons(deltaTime);
+        if (!raidSession_.isActive()) return;
+    }
     melee_.prepare(input.meleeJustPressed,controlsSuppressed || input.inventoryOpen || !raidSession_.isActive(),
         playerCenter(player_),shooting_.aimDirection(),
         activeEnemySet,[&](Vec2 a,Vec2 b){return activeBlockerIndex().hasLineOfSight(a,b);});
@@ -1518,7 +1533,7 @@ void GameplayWorld::update(
         shooting_.cancelWeaponOptic();
 }
 
-template <bool FireSupportEnabled>
+template <bool FireSupportEnabled, bool ScavengersEnabled>
 bool GameplayWorld::advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *support)
 {
     // Bounded substeps keep attack phase transitions and one-shot hit
@@ -1560,6 +1575,20 @@ bool GameplayWorld::advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *
         std::optional<Vec2> reachableGoal;
     };
     const auto enemyCount = activeEnemySet.size();
+    // The roster stays in place until all substeps finish.
+    std::vector<Enemy *> guardActors;
+    std::vector<InfectedGuardTarget> infectedGuardTargets;
+    if constexpr (ScavengersEnabled)
+    {
+        guardActors.resize(scavengerViews_.size());
+        infectedGuardTargets.resize(enemyCount);
+        scavengerSightSamples_.resize(enemyCount * (guardActors.size() + 1));
+        for (auto &actor : activeEnemySet)
+            if (actor.isArmedScavenger())
+                for (std::size_t i{}; i < scavengerViews_.size(); ++i)
+                    if (actor.combatTargetId() == scavengerViews_[i].id)
+                        guardActors[i] = &actor;
+    }
     std::vector<EnemyNavigationIntent> navigationIntents(enemyCount);
     auto *const intents = navigationIntents.data();
     // The solo specialization allocates and queries no companion state.
@@ -1608,6 +1637,9 @@ bool GameplayWorld::advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *
         }
         std::vector<EnemySquadMemberSnapshot> enemySnapshots;
         enemySnapshots.reserve(enemyCount);
+        if constexpr (ScavengersEnabled)
+            for (auto &weapon : scavengerWeapons_)
+                weapon.contactProtection = std::max(0.0F, weapon.contactProtection - enemyStepTime);
         auto *nextIntent = intents;
         for (const Enemy &enemy : activeEnemySet)
         {
@@ -1645,10 +1677,17 @@ bool GameplayWorld::advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *
                 if (choice != EnemyTargetChoice::Player)
                     targetPosition = supportPosition;
             }
+            if constexpr (ScavengersEnabled)
+            {
+                auto &choice = infectedGuardTargets[enemySnapshots.size()];
+                auto *sight = scavengerSightSamples_.data() + enemySnapshots.size() * (guardActors.size() + 1);
+                choice = selectInfectedGuardTarget(enemy, position, playerPosition, guardActors, sight);
+                if (choice.guard >= 0) targetPosition = scavengerWeapons_[choice.guard].guardCenter;
+            }
             enemySnapshots.push_back(
                 EnemySquadMemberSnapshot{
                     position,
-                    !enemy.isDead(),
+                    !enemy.isDead() && (!ScavengersEnabled || !enemy.isArmedScavenger()),
                     enemy.awarenessState(),
                     attackPhase,
                     enemy.hasAttackOpportunity(targetPosition)});
@@ -1691,6 +1730,9 @@ bool GameplayWorld::advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *
                 if (targetChoices[enemyIndex] != EnemyTargetChoice::Player)
                     targetPosition = supportPosition;
             }
+            if constexpr (ScavengersEnabled)
+                if (const int choice = infectedGuardTargets[enemyIndex].guard; choice >= 0)
+                    targetPosition = scavengerWeapons_[choice].guardCenter;
             const bool hasNoiseInvestigation=noiseDecoy_.investigations().contains(targetId) ||
                 localNoiseInvestigations_.contains(targetId);
             const bool investigatingNoise=soundActionsEnabled && hasNoiseInvestigation;
@@ -1718,6 +1760,19 @@ bool GameplayWorld::advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *
                     intent.targetVisible = false;
                 else
                     intent.targetVisible = !skipNoiseSight && hasLineOfSight(enemyPosition,targetPosition);
+            }
+            else if constexpr (ScavengersEnabled)
+            {
+                const auto &choice = infectedGuardTargets[enemyIndex];
+                if (choice.guard >= 0 && snapshot.attackPhase == EnemyAttackPhase::Idle)
+                    intent.targetVisible = true; // Already verified in this substep.
+                else if (choice.guard < 0 && choice.playerVisible.has_value())
+                    intent.targetVisible = !skipNoiseSight && *choice.playerVisible;
+                else
+                {
+                    auto &sample = scavengerSightSamples_[enemyIndex * (guardActors.size() + 1) + (choice.guard + 1)];
+                    intent.targetVisible = !skipNoiseSight && scavengerSight(enemyPosition, targetPosition, sample);
+                }
             }
             else
             {
@@ -1826,6 +1881,8 @@ bool GameplayWorld::advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *
             Enemy &enemy = activeEnemySet[enemyIndex];
             const auto &snapshot = snapshots[enemyIndex];
             EnemyNavigationIntent &intent = intents[enemyIndex];
+            if constexpr (ScavengersEnabled)
+                if (enemy.isArmedScavenger()) continue;
             if (!snapshot.alive)
             {
                 static_cast<void>(enemy.updateTowardsTarget(
@@ -1884,6 +1941,9 @@ bool GameplayWorld::advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *
                 if (targetChoices[enemyIndex] != EnemyTargetChoice::Player)
                     targetPosition = supportPosition;
             }
+            if constexpr (ScavengersEnabled)
+                if (const int choice = infectedGuardTargets[enemyIndex].guard; choice >= 0)
+                    targetPosition = scavengerWeapons_[choice].guardCenter;
             static_cast<void>(
                 enemy.updateTowardsTarget(
                     targetPosition,
@@ -1941,6 +2001,38 @@ bool GameplayWorld::advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *
                 }
             }
 
+            if constexpr (ScavengersEnabled)
+            {
+                if (const int choice = infectedGuardTargets[enemyIndex].guard; choice >= 0)
+                {
+                    auto &weapon = scavengerWeapons_[choice];
+                    if (snapshot.attackPhase == EnemyAttackPhase::Idle &&
+                        enemy.attackPhase() != EnemyAttackPhase::Idle)
+                        weapon.attackLocks.push_back(enemy.combatTargetId());
+                    else if (enemy.attackPhase() == EnemyAttackPhase::Idle)
+                        std::erase(weapon.attackLocks, enemy.combatTargetId());
+                    if (!guardActors[choice]) continue;
+                    Enemy &guard = *guardActors[choice];
+                    const auto contact = resolveEnemyAttackContact(enemy, guard.bounds(), !guard.isDead(),
+                        weapon.contactProtection, [&] {
+                            if (enemy.attackType() == EnemyAttackType::LowLunge)
+                            {
+                                const auto corridor = lowLungeTelegraph(enemy);
+                                return corridor && corridor->overlaps(guard.bounds()) &&
+                                    hasLineOfSight(corridor->origin, targetPosition);
+                            }
+                            return hasLineOfSight(enemyCenter(enemy), targetPosition);
+                        });
+                    if (contact.damage)
+                    {
+                        const auto &hit = *contact.damage;
+                        const auto result = resolveCombatDamage({hit.baseDamage, hit.region, hit.penetration,
+                            hit.armorDamage, hit.weakPoint, std::nullopt});
+                        if (result.resolved()) static_cast<void>(guard.takeDamage(result.damageApplied));
+                    }
+                    continue;
+                }
+            }
             const auto contact = resolveEnemyAttackContact(
                 enemy, playerBounds(player_), !player_.isDead(),
                 enemyDamageProtectionRemainingSeconds_, [&] {
@@ -1975,6 +2067,7 @@ bool GameplayWorld::advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *
         }
     }
 
+    if constexpr (ScavengersEnabled) consumeEnemyRemovals(activeEnemySet.removeDead());
     return true;
 }
 
@@ -3744,6 +3837,7 @@ void GameplayWorld::emitRaidNoise(Vec2 source, float radius) noexcept
     for (std::size_t index{}; index < enemies.size(); ++index)
     {
         Enemy &enemy = enemies[index];
+        if (enemy.isArmedScavenger()) continue;
         const Vec2 center = enemyCenter(enemy);
         const float dx = center.x - source.x;
         const float dy = center.y - source.y;
@@ -3770,7 +3864,7 @@ void GameplayWorld::emitRaidNoise(Vec2 source, float radius) noexcept
             std::find(alertedGroups.begin(), alertedGroups.end(), group) !=
                 alertedGroups.end())
         {
-            enemies[index].hearTarget(source);
+            if (!enemies[index].isArmedScavenger()) enemies[index].hearTarget(source);
         }
     }
 }
@@ -4391,6 +4485,7 @@ void GameplayWorld::clearSpatialTransientPresentation() noexcept
 {
     shooting_.clearSpatialTransientPresentation();
     shooting_.cancelWeaponOptic();
+    clearScavengerAim();
     pendingPlayerDamageObservations_.clear();
 }
 
@@ -4761,6 +4856,17 @@ void GameplayWorld::consumeEnemyRemovals(std::span<const EnemyRemovalFact> death
     {
         if (fireSupport_)
             fireSupport_->forgetAttack(death.id);
+        for (std::size_t i{}; i < scavengerViews_.size(); ++i)
+        {
+            auto &weapon = scavengerWeapons_[i];
+            std::erase(weapon.attackLocks, death.id);
+            if (death.id == scavengerViews_[i].id)
+            {
+                scavengerViews_[i].alive = false;
+                scavengerViews_[i].aiming = scavengerViews_[i].reloading = false;
+                weapon.target.reset(); // Existing flight keeps its frozen identity and trajectory.
+            }
+        }
         noiseDecoy_.forget(death.id);
         localNoiseInvestigations_.erase(death.id);
         if (death.reason!=EnemyRemovalReason::Death) continue;

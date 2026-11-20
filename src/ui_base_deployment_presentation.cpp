@@ -44,6 +44,7 @@ std::string contextKey(const ProfileState &profile, const UiDeploymentProjection
     key.add(p.selectedMapId.value());
     key.number(p.mapValid);
     key.number(p.fuelExit);
+    key.number(p.armedScavengerEncounter);
     key.number(p.credentialUnlocked.has_value());
     if (p.credentialUnlocked) key.number(*p.credentialUnlocked);
     key.number(p.currency);
@@ -237,6 +238,9 @@ UiDeploymentProjection projectUiDeployment(
         result.difficulty = selectedMap->operationBriefing.difficulty;
         result.warning = selectedMap->operationBriefing.warning;
         result.routeProfile = selectedMap->routeProfile;
+        result.armedScavengerEncounter = !recoveryRecordId &&
+            selectedMap->id == MapDefinitionId{"map.raid.riverside"} &&
+            supportsRiversideArmedScavengersContent(content.contentVersion());
         result.fuelExit = !recoveryRecordId && selectedMap->id == kFreightCrateMapId &&
             supportsFuelExtractionContent(content.contentVersion());
         if (selectedMap->credentialExtraction && !recoveryRecordId)

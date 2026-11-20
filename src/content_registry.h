@@ -142,9 +142,17 @@ inline constexpr std::string_view kRaidFuelLootSlotId{"freight_manifest"};
 inline constexpr std::string_view kRaidFireSupportContentVersion{
     "raid-single-fire-support-content-92"};
 
+inline constexpr std::string_view kRiversideArmedScavengersContentVersion{
+    "raid-riverside-armed-scavengers-content-93"};
+
+[[nodiscard]] inline bool supportsRiversideArmedScavengersContent(std::string_view version) noexcept
+{
+    return version == kRiversideArmedScavengersContentVersion;
+}
+
 [[nodiscard]] inline bool supportsRaidFireSupportContent(std::string_view version) noexcept
 {
-    return version == kRaidFireSupportContentVersion;
+    return version == kRaidFireSupportContentVersion || supportsRiversideArmedScavengersContent(version);
 }
 
 [[nodiscard]] inline bool supportsRaidNightRendezvousContent(std::string_view version) noexcept

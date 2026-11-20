@@ -1,4 +1,5 @@
 #include "raid_visibility_fixture.h"
+#include "raid_optics_legacy_fixture.h"
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -88,6 +89,8 @@ DeployReceipt deployPursuit(ProfileState &profile, const ContentRegistry &conten
 
 TEST(SelfRecoveryDomainTest, LostWeaponPursuitSelectsOneOriginalGunAndPreservesOrdinaryRolls)
 {
+    // Recovery still uses the ordinary enemy and loot rolls from before the armed encounter.
+    const auto previous = contentBeforeRiversideArmedScavengers();
     const auto &content = publishedContentRegistry();
     auto profile = makeNewAlphaProfile("pursuit-stable", content);
     const std::string record = createLoss(profile, "pursuit-stable", kFieldIntelligenceSourceMapId);
@@ -124,7 +127,8 @@ TEST(SelfRecoveryDomainTest, LostWeaponPursuitSelectsOneOriginalGunAndPreservesO
         EXPECT_FALSE(recovery.pursuit->deathPosition);
         EXPECT_FALSE(recovery.pursuit->claimed);
         EXPECT_FALSE(queryOpenRaidSelfRecovery(branch, content).canCommit);
-        const auto original = executeDeploy(ordinary, content,
+        EXPECT_TRUE(raid.armedScavengers.empty());
+        const auto original = executeDeploy(ordinary, previous,
             {"comparison", "comparison-return", seed, kFieldIntelligenceSourceMapId},
             {ordinary.revision, "comparison-deploy"});
         ASSERT_TRUE(original.succeeded) << original.message;

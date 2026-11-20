@@ -15,6 +15,13 @@ using Translation = std::pair<std::string_view, std::string_view>;
 // domain receipts whose numeric values are only known at render time.
 constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
     {
+     {"SCAVENGER CORPSE OPENED | WORLD CONTINUES", "正在搜查枪手遗体 · 对局继续"},
+     {"F: SEARCH SCAVENGER CORPSE", "F：搜查枪手遗体"},
+     {"EMPTY SCAVENGER CORPSE", "枪手遗体 · 已搜空"},
+     {"SCAVENGER CORPSE", "枪手遗体"},
+     {"ARMED SCAVENGER", "持枪搜刮者"},
+     {"SCAVENGER AIMING", "枪手 · 举枪瞄准"},
+     {"SCAVENGER RELOADING", "枪手 · 换匣中"},
      {"TEAMMATE CORPSE OPENED | WORLD CONTINUES", "正在搜查队友遗体 · 对局继续"},
      {"FIRE SUPPORT IS UNAVAILABLE FOR THIS RAID", "此任务无法带火力队友"},
      {"NO HEALTHY COMBAT RESIDENT IS FREE", "没有健康且空闲的战斗居民"},
@@ -162,6 +169,7 @@ constexpr auto kSimplifiedChineseTranslations = std::to_array<Translation>(
      {"CREDENTIAL EXIT | 6s | NO WEIGHT LIMIT", "凭证出口 · 等待6秒 · 不限重"},
      {"CREDENTIAL EXIT | 6s", "凭证出口 · 等待6秒"},
      {"HIGH RISK FUEL EXIT | CARRY 1 CAN · 6s", "高危燃油撤离 · 随身带 1 桶 · 6 秒"},
+     {"ARMED SCAVENGERS AT THE SOUTH BUS | PERIMETER OPEN", "南侧巴士附近有武装搜刮者，可沿外围绕行"},
      {"FUEL EXIT | WAIT FOR HIGH RISK", "燃油撤离 · 等待高危"},
      {"FUEL EXIT | MISSING FUEL", "燃油撤离 · 缺少随身燃油"},
      {"FUEL EXIT | READY", "燃油撤离 · 就绪"},
