@@ -3134,6 +3134,52 @@ TEST(AlphaExtractionSessionTest, NightRendezvousSurvivesAbnormalExitAndCannotBeR
     EXPECT_TRUE(reopened.profile().pendingRaid->rescue);
 }
 
+TEST(AlphaExtractionSessionTest, RiversideGunfireAndCorpseKeepTheSamePistolUntilExit)
+{
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-riverside-session-", "gunfire-and-corpse");
+    GameSession session;
+    session.configurePersistence(directory.path());
+    ASSERT_TRUE(session.startNewProfile("armed-session")) << session.persistenceMessage();
+    ASSERT_TRUE(session.deployAlpha(9403U, kFieldIntelligenceSourceMapId)) << session.persistenceMessage();
+    const auto &views = session.world().armedScavengers();
+    ASSERT_EQ(views.size(), 2U);
+    const auto roster = session.profile().pendingRaid->armedScavengers;
+    ASSERT_EQ(roster.size(), 2U);
+    const auto &first = roster.front();
+    ASSERT_EQ(views.front().sourceEnemyId, first.sourceEnemyId);
+    const auto &enemies = session.world().enemies();
+    const auto gunner = std::find_if(enemies.begin(), enemies.end(),
+        [&](const auto &enemy) { return enemy.combatTargetId() == views.front().id; });
+    ASSERT_NE(gunner, enemies.end());
+    const Vec2 post = gunner->position();
+    for (const auto &enemy : enemies)
+        if (!enemy.isArmedScavenger()) ASSERT_TRUE(const_cast<Enemy &>(enemy).takeDamage(1000));
+    ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition({post.x - 90.0F, post.y}));
+    for (int frame = 0; frame < 75 && views.front().shotsFired == 0; ++frame)
+        session.update({}, 1.0F / 60.0F);
+    ASSERT_EQ(views.front().shotsFired, 1);
+    EXPECT_EQ(magazineRoundCount(session.profile(), first.firstMagazineId), 4U);
+    EXPECT_EQ(magazineRoundCount(session.profile(), first.secondMagazineId), 6U);
+    ASSERT_TRUE(session.profile().assets.find(first.pistolAssetId)->chamberedRound);
+
+    // World removals may compact the roster; resolve the stable ID after the shot.
+    for (const auto &enemy : session.world().enemies())
+        if (enemy.combatTargetId() == views.front().id)
+            ASSERT_TRUE(const_cast<Enemy &>(enemy).takeDamage(1000));
+    session.update({}, 1.0F / 60.0F);
+    ASSERT_FALSE(views.front().alive);
+    const auto *corpse = session.profile().assets.find(first.corpseAssetId);
+    ASSERT_NE(corpse, nullptr);
+    const auto *location = std::get_if<RaidCorpseContainerAssetLocation>(&corpse->location);
+    ASSERT_NE(location, nullptr);
+    EXPECT_TRUE(location->deathPosition);
+    EXPECT_EQ(location->sourceKind, RaidCorpseSourceKind::ArmedScavenger);
+    EXPECT_EQ(location->sourceEnemyId, first.sourceEnemyId);
+    EXPECT_EQ(installedMagazine(session.profile(), first.pistolAssetId), first.firstMagazineId);
+    EXPECT_EQ(magazineRoundCount(session.profile(), first.firstMagazineId), 4U);
+}
+
 TEST(AlphaExtractionSessionTest, FireSupportReplacementCommitSurvivesAbnormalExitOnce)
 {
     raidline::test::TemporaryDirectory directory;

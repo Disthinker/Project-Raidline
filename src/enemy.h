@@ -48,6 +48,8 @@ public:
 
     [[nodiscard]] const std::optional<EnemyVariantSnapshot> &variant() const noexcept { return variant_; }
 
+    void markArmedScavenger() noexcept { armedScavenger_ = true; }
+    [[nodiscard]] bool isArmedScavenger() const noexcept { return armedScavenger_; }
     [[nodiscard]] CombatTargetId combatTargetId() const noexcept;
     Vec2 position() const;
     [[nodiscard]] bool setPosition(Vec2 position) noexcept;
@@ -165,6 +167,7 @@ private:
     EnemyTacticalRole tacticalRole_{EnemyTacticalRole::Support};
     float impactSlowRemaining_{};
     bool visiblePursuitMove_{};
+    bool armedScavenger_{};
     Vec2 lowLungeOrigin_{};
 
     [[nodiscard]]

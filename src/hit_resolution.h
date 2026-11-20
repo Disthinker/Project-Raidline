@@ -38,6 +38,7 @@ struct HitResolutionResult
     std::vector<ShotId> consumedShotIds;
     std::vector<EnemyRemovalFact> removals;
     std::size_t enemiesKilled{0};
+    std::optional<HitRegion> playerImpact;
 };
 
 [[nodiscard]] std::optional<HitRegion> hitRegionAtPoint(
@@ -57,4 +58,6 @@ HitResolutionResult resolveShotEnemyHits(
 HitResolutionResult resolveShotHits(
     const std::vector<ShotCollisionCandidate> &shots,
     EnemyLifecycle &enemies,
-    const std::vector<BallisticBlocker> &blockers);
+    const std::vector<BallisticBlocker> &blockers,
+    // Hostile human shots also test the player and exclude human shooters.
+    std::optional<Rect> hostilePlayerTarget = std::nullopt);

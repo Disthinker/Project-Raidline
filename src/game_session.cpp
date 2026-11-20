@@ -4565,6 +4565,10 @@ void GameSession::updateAlphaRaid(
             state_ = GameSessionState::SettlementBlocked;
             return false;
         }, weaponActionPortal, selectFuel);
+    for (const auto &scavenger : world_->armedScavengers())
+        if (scavenger.ammunitionChangedLastUpdate)
+            static_cast<void>(syncRaidArmedScavengerAmmo(profile_, publishedContentRegistry(),
+                scavenger.sourceEnemyId, scavenger.shotsFired, scavenger.spareMagazineInstalled));
     if (profile_.pendingRaid && profile_.pendingRaid->fireSupport)
         static_cast<void>(recordFireSupportDeath(profile_));
     if(!world_->raidSession().isActive())world_->commitNoiseDecoy({});

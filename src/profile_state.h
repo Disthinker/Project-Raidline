@@ -111,7 +111,7 @@ struct RaidSceneContainerAssetLocation
 
 // One deploy-frozen, non-carryable root. No position means the source enemy
 // is still alive; the first accepted death exposes the same asset tree.
-enum class RaidCorpseSourceKind { Enemy, FireSupport };
+enum class RaidCorpseSourceKind { Enemy, FireSupport, ArmedScavenger };
 
 struct RaidCorpseContainerAssetLocation
 {
@@ -496,6 +496,17 @@ struct RaidEnemySnapshot
                 right.encounterGroupInstanceId && left.torsoArmor == right.torsoArmor &&
             left.sourceEnemyId == right.sourceEnemyId && left.variant == right.variant;
     }
+};
+
+struct RaidArmedScavengerSnapshot
+{
+    std::string sourceEnemyId;
+    AssetInstanceId corpseAssetId{};
+    AssetInstanceId pistolAssetId{};
+    AssetInstanceId firstMagazineId{};
+    AssetInstanceId secondMagazineId{};
+
+    friend bool operator==(const RaidArmedScavengerSnapshot &, const RaidArmedScavengerSnapshot &) = default;
 };
 
 struct RaidEncounterGroupSnapshot
@@ -1333,6 +1344,7 @@ struct PendingRaidSnapshot
     Vec2 playerSpawn{};
     ContentRect extractionPoint;
     std::vector<RaidEnemySnapshot> enemies;
+    std::vector<RaidArmedScavengerSnapshot> armedScavengers;
     std::vector<RaidEncounterGroupSnapshot> encounterGroups;
     std::vector<RaidLootSnapshot> loot;
     std::optional<AssetRegistry> startingAssets; // Exact pre-deploy assets for Raid rollback.

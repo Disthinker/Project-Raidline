@@ -1,3 +1,7 @@
+# 河畔武装搜刮者与掩体交火 v1 · 已验收
+
+用户已验收候选 3889e3b6d9c0，授权提交并推送至河畔功能分支。基线 main@7fdb5ef。Windows Debug 全量 3421/3421、河畔专项 23/23 通过。 [四步验收](../acceptance/raid-riverside-armed-scavengers-v1.md)。 [开发记录](../exec-plans/active/raid-riverside-armed-scavengers-v1.md)
+
 # 当前玩法 · 火力队友跨地图与室内协同 v1 已验收
 
 [四步验收](../acceptance/raid-fire-support-cross-space-v1.md) · [开发与验证记录](../exec-plans/active/raid-fire-support-cross-space-v1.md)。候选 7ed7c89189cb 在独立目录，保留工业郊区原固定入口和玩家原档。本地全量 3402/3402。用户已验收并授权提交和推送至功能分支，尚未合并。

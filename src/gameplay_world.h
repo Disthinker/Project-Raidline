@@ -65,6 +65,26 @@ struct GroundItemSpawn
     std::uint32_t quantity{1};
 };
 
+struct RaidArmedScavengerConfig
+{
+    FireSupportConfig pistol;
+    int loadedRounds{};
+    int spareRounds{};
+    bool spareMagazineInstalled{};
+};
+
+struct RaidArmedScavengerView
+{
+    std::string sourceEnemyId;
+    CombatTargetId id{};
+    int loadedRounds{}, spareRounds{};
+    bool spareMagazineInstalled{};
+    int shotsFired{};
+    bool alive{true}, aiming{}, reloading{};
+    Vec2 aimDirection{};
+    bool ammunitionChangedLastUpdate{};
+};
+
 struct EnemySpawn
 {
     Vec2 position{};
@@ -79,6 +99,7 @@ struct EnemySpawn
     std::string sourceEnemyId;
     std::optional<EnemyVariantSnapshot> variant;
     bool lostWeaponCarrier{};
+    std::optional<RaidArmedScavengerConfig> armedScavenger;
 };
 
 struct HighRiskWorldConfig
@@ -545,6 +566,8 @@ public:
     [[nodiscard]] const RaidSpaceDefinitionId &fireSupportSpaceId() const noexcept;
     [[nodiscard]] std::optional<Vec2> fireSupportDeathPosition() const noexcept;
     [[nodiscard]] bool canInteractWithFireSupport() const noexcept;
+    [[nodiscard]] const std::vector<RaidArmedScavengerView> &armedScavengers() const noexcept { return scavengerViews_; }
+    [[nodiscard]] const std::vector<FireSupportShotEvent> &armedScavengerShotsLastUpdate() const noexcept { return scavengerShotEvents_; }
     [[nodiscard]] std::optional<FireSupportShotEvent> fireSupportShotLastUpdate() const noexcept;
     [[nodiscard]] bool noiseDecoyEnabled() const noexcept { return noiseDecoyEnabled_; }
     [[nodiscard]] const RaidNoiseDecoyRuntime &noiseDecoy() const noexcept { return noiseDecoy_; }
@@ -720,7 +743,40 @@ private:
     std::optional<RaidFireSupportRuntime> fireSupport_;
     // Like activeInteriorIndex_: the interior table is fixed for the life of this world.
     std::optional<std::size_t> fireSupportInteriorIndex_;
-    template <bool FireSupportEnabled>
+    struct ScavengerWeaponRuntime
+    {
+        FireSupportConfig pistol;
+        Vec2 guardCenter;
+        float elapsed{}, contactProtection{};
+        std::optional<CombatTargetId> target; // Zero denotes the player.
+        std::optional<LogicalBallisticFlight> flight;
+        std::vector<CombatTargetId> attackLocks;
+    };
+    std::vector<RaidArmedScavengerView> scavengerViews_;
+    std::vector<ScavengerWeaponRuntime> scavengerWeapons_;
+    std::vector<FireSupportShotEvent> scavengerShotEvents_;
+    ShotId nextScavengerShotId_{1};
+    struct InfectedGuardTarget
+    {
+        int guard{-1};
+        std::optional<bool> playerVisible;
+    };
+    // Outdoor blockers are immutable. Both endpoints identify the exact ray,
+    // even when a retirement changes the actor occupying a roster slot.
+    struct ScavengerSightSample
+    {
+        Vec2 start{}, end{};
+        std::optional<bool> visible;
+    };
+    std::vector<ScavengerSightSample> scavengerSightSamples_;
+    [[nodiscard]] bool scavengerSight(Vec2 start, Vec2 end, ScavengerSightSample &sample);
+    [[nodiscard]] InfectedGuardTarget selectInfectedGuardTarget(
+        const Enemy &, Vec2 position, Vec2 player, std::span<Enemy *const> guards,
+        ScavengerSightSample *sight);
+    void addArmedScavenger(const EnemySpawn &, CombatTargetId);
+    void updateScavengerWeapons(float seconds);
+    void clearScavengerAim() noexcept;
+    template <bool FireSupportEnabled, bool ScavengersEnabled = false>
     bool advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *support);
     void emitRaidNoise(Vec2 source, float radius) noexcept;
     void consumeEnemyRemovals(std::span<const EnemyRemovalFact>);

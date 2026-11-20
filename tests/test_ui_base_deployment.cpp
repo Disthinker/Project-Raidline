@@ -433,6 +433,18 @@ TEST_F(UiBaseDeploymentTest, FuelBriefingIsLimitedToOrdinaryFrontierDeployments)
     EXPECT_EQ(profileStateFingerprint(profile()), fingerprint);
 }
 
+TEST_F(UiBaseDeploymentTest, ArmedScavengerBriefingAppearsOnlyForOrdinaryRiverside) {
+    for (const auto &map : content.maps()) {
+        SCOPED_TRACE(map.id.value());
+        const auto ordinary = projectUiDeployment(profile(), content, UiLanguage::SimplifiedChinese,
+            map.id, {}, std::nullopt, 0, {});
+        EXPECT_EQ(ordinary.armedScavengerEncounter, map.id == MapDefinitionId{"map.raid.riverside"});
+        const auto recovery = projectUiDeployment(profile(), content, UiLanguage::SimplifiedChinese,
+            map.id, {}, std::string{"recovery-preview"}, 0, {});
+        EXPECT_FALSE(recovery.armedScavengerEncounter);
+    }
+}
+
 TEST_F(UiBaseDeploymentTest, PublishedMapOrderAndEveryPageRemainReachable) {
     const auto &p = A::projection(*app); ASSERT_EQ(p.maps.size(), content.maps().size());
     for (std::size_t i = 0; i < p.maps.size(); ++i) EXPECT_EQ(p.maps[i].id, content.maps()[i].id);

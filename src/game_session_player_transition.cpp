@@ -2,11 +2,23 @@
 #include "base_world.h"
 #include "base_emergency_power_domain.h"
 #include "raid_fire_support_domain.h"
+#include "weapon_ammo_domain.h"
 #include <algorithm>
 #include <limits>
+#include <stdexcept>
 #include <utility>
 
 namespace {
+FireSupportConfig npcWeaponConfig(const ProfileState &profile, AssetInstanceId weaponId,
+                                  const ItemDefinitionId &ammunitionId)
+{
+    const auto &content = publishedContentRegistry();
+    const auto weapon = effectiveWeaponUse(profile, content, weaponId);
+    const auto &ammunition = content.item(ammunitionId).ammunitionUse.value();
+    return {weapon.baseDamage, weapon.logicalBallisticSpeed, ammunition.penetration,
+            900.0F * weapon.acoustics.noiseRadiusMultiplier};
+}
+
 bool hasCommittedRaidResult(const ProfileState &profile)
 {
     return !profile.pendingRaid && profile.lastRaidResult &&
@@ -183,6 +195,22 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
             spawn.torsoArmor = enemy.torsoArmor;
             spawn.variant = enemy.variant;
             spawn.sourceEnemyId = enemy.sourceEnemyId;
+            const auto scavenger = std::find_if(snapshot.armedScavengers.begin(), snapshot.armedScavengers.end(),
+                [&](const auto &entry) { return entry.sourceEnemyId == enemy.sourceEnemyId; });
+            if (scavenger != snapshot.armedScavengers.end())
+            {
+                const auto *pistol = candidate.assets.find(scavenger->pistolAssetId);
+                const auto installed = installedMagazine(candidate, scavenger->pistolAssetId);
+                if (!pistol || !installed || (*installed != scavenger->firstMagazineId && *installed != scavenger->secondMagazineId))
+                    throw std::invalid_argument("invalid armed scavenger loadout");
+                const bool reloaded = *installed == scavenger->secondMagazineId;
+                const int loaded = static_cast<int>(magazineRoundCount(candidate, *installed)) +
+                    (pistol->chamberedRound ? 1 : 0);
+                const int spare = reloaded ? 0 : static_cast<int>(magazineRoundCount(candidate, scavenger->secondMagazineId));
+                spawn.armedScavenger = RaidArmedScavengerConfig{
+                    npcWeaponConfig(candidate, scavenger->pistolAssetId, ItemDefinitionId{"item.ammunition.9mm_basic"}),
+                    loaded, spare, reloaded};
+            }
             if (group != snapshot.encounterGroups.end())
             {
                 spawn.encounterGroupInstanceId = group->instanceId;
@@ -259,13 +287,8 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
 
         RaidWorldConfig worldConfig;
         if (snapshot.fireSupport)
-        {
-            const auto &content = publishedContentRegistry();
-            const auto weapon = effectiveWeaponUse(candidate, content, snapshot.fireSupport->rifle.assetId);
-            const auto &ammunition = content.item(kRaidFireSupportAmmunitionId).ammunitionUse;
-            worldConfig.fireSupport = FireSupportConfig{weapon.baseDamage, weapon.logicalBallisticSpeed,
-                ammunition->penetration, 900.0F * weapon.acoustics.noiseRadiusMultiplier};
-        }
+            worldConfig.fireSupport = npcWeaponConfig(candidate, snapshot.fireSupport->rifle.assetId,
+                                                      kRaidFireSupportAmmunitionId);
         const bool ordinaryToolsEnabled = !snapshot.selfRecovery && !snapshot.outpostRestoration &&
             !snapshot.baseSiteClearance && !snapshot.basePerimeterSweep;
         worldConfig.noiseDecoyEnabled = pursuit || ordinaryToolsEnabled;

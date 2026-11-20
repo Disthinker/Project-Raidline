@@ -10,6 +10,12 @@ inline constexpr std::string_view kRaidRunnerRulesVersion{"content-frontier-runn
     return version == kRaidCorpseRulesVersion || version == kRaidRunnerRulesVersion;
 }
 
+// Called inside executeDeploy's isolated candidate; a failure discards the entire deployment.
+[[nodiscard]] ProfileValidationResult freezeRaidArmedScavengersInCandidate(ProfileState &, const ContentRegistry &);
+[[nodiscard]] ProfileValidationResult validateRaidArmedScavengers(const ProfileState &, const ContentRegistry &);
+[[nodiscard]] bool syncRaidArmedScavengerAmmo(ProfileState &, const ContentRegistry &, std::string_view sourceEnemyId,
+                                              int shotsFired, bool reloaded);
+
 struct RaidCorpseDeathFact
 {
     std::string sourceEnemyId;

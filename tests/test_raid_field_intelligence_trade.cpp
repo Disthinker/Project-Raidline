@@ -10,6 +10,7 @@
 #include "profile_ui_test_wait.h"
 #include "raid_intelligence_domain.h"
 #include "raid_lifecycle.h"
+#include "raid_optics_legacy_fixture.h"
 #include "raid_visibility_fixture.h"
 #include "save_repository.h"
 #include "test_temp_directory.h"
@@ -72,16 +73,17 @@ ContentRegistry legacyHospitalContent()
 TEST(RaidFieldIntelligenceTradeTest, DeployReplacesOneResourceAndKeepsOriginalDraws)
 {
     const auto legacy = legacyHospitalContent();
-    const auto &map = current.map(kFieldIntelligenceSourceMapId);
+    const auto tradeStage = contentBeforeRiversideArmedScavengers();
+    const auto &map = tradeStage.map(kFieldIntelligenceSourceMapId);
     std::set<RaidIntelligenceCategory> extraOffers;
     std::set<std::pair<float, float>> positions;
     for (std::uint64_t seed = 1U; seed <= 32U; ++seed)
     {
         SCOPED_TRACE(seed);
         auto before = makeNewAlphaProfile("trade-layout", legacy);
-        auto after = makeNewAlphaProfile("trade-layout", current);
+        auto after = makeNewAlphaProfile("trade-layout", tradeStage);
         ASSERT_TRUE(deploy(before, legacy, seed).succeeded);
-        ASSERT_TRUE(deploy(after, current, seed).succeeded);
+        ASSERT_TRUE(deploy(after, tradeStage, seed).succeeded);
         const auto &oldRaid = *before.pendingRaid;
         const auto &newRaid = *after.pendingRaid;
         ASSERT_TRUE(newRaid.fieldIntelligenceTrade);
@@ -200,16 +202,24 @@ TEST(RaidFieldIntelligenceTradeTest, PreRaidRecoveryAndCurrentAndLegacySaveRound
 {
     auto profile = preparedProfile("trade-restore");
     const auto preRaid = serializeProfileEnvelope(profile, current.contentVersion());
-    ASSERT_TRUE(deploy(profile, current, 42U).succeeded);
-    ASSERT_NO_FATAL_FAILURE(pickUpDocument(profile));
-    ASSERT_TRUE(executeRaidFieldDocumentSale(profile, documentId(profile)));
-    ASSERT_TRUE(executeRaidFieldIntelligencePurchase(profile, current, 1U));
+    auto prepareTrade = [](ProfileState &state, const ContentRegistry &registry)
+    {
+        ASSERT_TRUE(deploy(state, registry, 42U).succeeded);
+        ASSERT_NO_FATAL_FAILURE(pickUpDocument(state));
+        ASSERT_TRUE(executeRaidFieldDocumentSale(state, documentId(state)));
+        ASSERT_TRUE(executeRaidFieldIntelligencePurchase(state, registry, 1U));
+    };
+    auto previous = profile;
+    const auto tradeStage = contentBeforeRiversideArmedScavengers();
+    ASSERT_NO_FATAL_FAILURE(prepareTrade(previous, tradeStage));
+    ASSERT_NO_FATAL_FAILURE(prepareTrade(profile, current));
     const auto pending = serializeProfileEnvelope(profile, current.contentVersion());
-    const auto schema69Trade = serializeProfileEnvelope(profile, kFieldIntelligenceTradeContentVersion);
+    const auto schema69Trade = serializeProfileEnvelope(previous, kFieldIntelligenceTradeContentVersion);
     const auto migratedTrade = deserializeProfileEnvelope(schema69Trade, current);
     ASSERT_TRUE(migratedTrade.profile && migratedTrade.sourceEnvelope) << migratedTrade.message;
     EXPECT_EQ(migratedTrade.sourceEnvelope->schemaVersion, 69U);
-    EXPECT_EQ(serializeProfileEnvelope(*migratedTrade.profile, current.contentVersion()), pending);
+    EXPECT_EQ(serializeProfileEnvelope(*migratedTrade.profile, current.contentVersion()),
+              serializeProfileEnvelope(previous, current.contentVersion()));
     auto loaded = deserializeProfileEnvelope(pending, current);
     ASSERT_TRUE(loaded.profile) << loaded.message;
     ASSERT_TRUE(loaded.profile->pendingRaid);

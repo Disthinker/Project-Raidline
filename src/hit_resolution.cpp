@@ -105,7 +105,7 @@ HitResolutionResult resolveShotEnemyHits(
 HitResolutionResult resolveShotHits(
     const std::vector<ShotCollisionCandidate> &shots,
     EnemyLifecycle &enemies,
-    const std::vector<BallisticBlocker> &blockers)
+    const std::vector<BallisticBlocker> &blockers, std::optional<Rect> hostilePlayerTarget)
 {
     HitResolutionResult result{};
 
@@ -149,10 +149,22 @@ HitResolutionResult resolveShotHits(
             targetFraction = *fraction;
         }
 
+        bool hitsPlayer = false;
+        if (hostilePlayerTarget)
+        {
+            const auto fraction = firstIntersectionFraction(
+                shot.start, shot.end, *hostilePlayerTarget, shot.collisionExtent);
+            if (fraction && *fraction < targetFraction)
+            {
+                targetFraction = *fraction;
+                blockerIndex.reset();
+                hitsPlayer = true;
+            }
+        }
         for (std::size_t index = 0; index < enemies.size(); ++index)
         {
             const Enemy &enemy = enemies[index];
-            if (enemy.isDead())
+            if (enemy.isDead() || (hostilePlayerTarget && enemy.isArmedScavenger()))
             {
                 continue;
             }
@@ -167,12 +179,13 @@ HitResolutionResult resolveShotHits(
                 continue;
             }
 
+            hitsPlayer = false;
             enemyIndex = index;
             blockerIndex.reset();
             targetFraction = *fraction;
         }
 
-        if (!enemyIndex.has_value() && !blockerIndex.has_value())
+        if (!hitsPlayer && !enemyIndex.has_value() && !blockerIndex.has_value())
         {
             continue;
         }
@@ -185,6 +198,16 @@ HitResolutionResult resolveShotHits(
             shot.start.y + sweepDelta.y * targetFraction};
 
         result.consumedShotIds.push_back(shot.shotId);
+        if (hitsPlayer)
+        {
+            const auto &bounds = *hostilePlayerTarget;
+            const Vec2 point{
+                std::clamp(collisionCenter.x, bounds.position.x, bounds.position.x + bounds.size.x),
+                std::clamp(collisionCenter.y, bounds.position.y, bounds.position.y + bounds.size.y)};
+            const auto region = hitRegionAtPoint(bounds, point);
+            result.playerImpact = region == HitRegion::Legs ? HitRegion::Legs : HitRegion::Torso;
+            continue;
+        }
         if (blockerIndex.has_value())
         {
             result.hits.push_back(HitResult{
