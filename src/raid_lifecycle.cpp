@@ -796,6 +796,17 @@ DeployReceipt executeDeploy(
         return deployFailure(RaidLifecycleError::InvalidCommand,
             "FIRE SUPPORT REQUIRES AN ELIGIBLE ORDINARY RAID", profile.revision);
 
+    // Regional recovery and settlement missions retain their published outdoor geometry.
+    std::optional<MapDefinition> historicalHospital;
+    if (map->id == kHospitalFloorplanMapId &&
+        map->proceduralOutdoor.layoutVersion == kHospitalHybridOutdoorLayoutVersion &&
+        (regionalMissionCount != 0U || content.contentVersion() != kHospitalHybridOutdoorContentVersion))
+    {
+        historicalHospital.emplace(*map);
+        historicalHospital->proceduralOutdoor.layoutVersion = kHospitalLegacyOutdoorLayoutVersion;
+        map = &*historicalHospital;
+    }
+
     std::optional<RegionalOutpostRestorationSnapshot> outpostRestoration;
     if (command.outpostRestorationId.has_value())
     {

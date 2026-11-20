@@ -145,7 +145,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
 
     EXPECT_EQ(
         registry.contentVersion(),
-        kRiversideArmedScavengersContentVersion);
+        kHospitalHybridOutdoorContentVersion);
     const MapDefinition &frontierEnemyPopulation = registry.map(
         MapDefinitionId{"map.raid.frontier_exchange"});
     EXPECT_EQ(
@@ -874,6 +874,31 @@ TEST(ContentRegistryTest, RejectsUnsafeProceduralOutdoorBounds)
     EXPECT_THROW(
         static_cast<void>(ContentRegistry::fromJson(invalid)),
         ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, HospitalHybridLayoutIsExclusiveAndIndustrialVersionIsReserved)
+{
+    const auto &content = publishedContentRegistry();
+    EXPECT_EQ(content.map(kHospitalFloorplanMapId).proceduralOutdoor.layoutVersion,
+              kHospitalHybridOutdoorLayoutVersion);
+    for (const auto &id : {kHospitalFloorplanMapId, kFreightCrateMapId})
+    {
+        auto catalog = nlohmann::json::parse(publishedContentJson());
+        for (auto &map : catalog.at("maps"))
+            if (map.at("id") == std::string{id.value()})
+                map["procedural_outdoor"]["layout_version"] =
+                    id == kHospitalFloorplanMapId ? 5U : kHospitalHybridOutdoorLayoutVersion;
+        EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(catalog.dump())), ContentRegistryError);
+    }
+    for (const auto scenario : {0, 1, 2})
+    {
+        auto catalog = hospitalContentCandidateJson();
+        auto &hospital = catalog["maps"].back()["procedural_outdoor"];
+        if (scenario == 0) hospital["columns"] = 320;
+        if (scenario == 1) hospital["district_archetypes"][3]["id"] = "district.hospital.unknown";
+        if (scenario == 2) hospital["landmark_templates"][2]["id"] = "landmark.hospital.unknown";
+        EXPECT_THROW(static_cast<void>(ContentRegistry::fromJson(catalog.dump())), ContentRegistryError);
+    }
 }
 
 TEST(ContentRegistryTest, RejectsInvalidMapOperationBriefing)
@@ -2279,7 +2304,7 @@ TEST(ContentRegistryTest, OpticDefinitionsSeparateTheReceiverMountAndOpticModes)
 TEST(ContentRegistryTest, FieldMedicalContentRetainsMandatoryEnemyAndBarricadeDefinitions)
 {
     const auto original = hospitalContentCandidateJson();
-    ASSERT_EQ(original.at("content_version").get<std::string>(), kRiversideArmedScavengersContentVersion);
+    ASSERT_EQ(original.at("content_version").get<std::string>(), kHospitalHybridOutdoorContentVersion);
     for (const auto *required : {"fortifications", "enemy_combat_definitions"})
     {
         SCOPED_TRACE(required);

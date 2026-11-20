@@ -1,3 +1,7 @@
+# 医院片区混合室外 v1 · 已验收
+
+用户已验收阶段 II 候选 `8753af714a8d`，授权提交并推送至 `codex/proc-map-hospital-outdoor-v1`。开发基线为主线 `9ba5809`。Windows Debug 3428/3428；128 个种子双路线验证通过。[启动与四步验收](../acceptance/proc-map-hospital-outdoor-v1.md) · [开发及验证记录](../exec-plans/active/proc-map-hospital-outdoor-v1.md)
+
 # 河畔武装搜刮者与掩体交火 v1 · 已验收
 
 用户已验收候选 3889e3b6d9c0，授权提交并推送至河畔功能分支。基线 main@7fdb5ef。Windows Debug 全量 3421/3421、河畔专项 23/23 通过。 [四步验收](../acceptance/raid-riverside-armed-scavengers-v1.md)。 [开发记录](../exec-plans/active/raid-riverside-armed-scavengers-v1.md)

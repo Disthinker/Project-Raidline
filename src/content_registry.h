@@ -145,9 +145,14 @@ inline constexpr std::string_view kRaidFireSupportContentVersion{
 inline constexpr std::string_view kRiversideArmedScavengersContentVersion{
     "raid-riverside-armed-scavengers-content-93"};
 
+inline constexpr std::string_view kHospitalHybridOutdoorContentVersion{
+    "proc-map-hospital-outdoor-content-94"};
+inline constexpr std::uint32_t kHospitalLegacyOutdoorLayoutVersion = 4U;
+inline constexpr std::uint32_t kHospitalHybridOutdoorLayoutVersion = 6U;
+
 [[nodiscard]] inline bool supportsRiversideArmedScavengersContent(std::string_view version) noexcept
 {
-    return version == kRiversideArmedScavengersContentVersion;
+    return version == kRiversideArmedScavengersContentVersion || version == kHospitalHybridOutdoorContentVersion;
 }
 
 [[nodiscard]] inline bool supportsRaidFireSupportContent(std::string_view version) noexcept

@@ -18,6 +18,7 @@
 #include "base_fortification_build_ui.h"
 #include "base_operations_presentation.h"
 #include "game_flow.h"
+#include "raid_hospital_outdoor.h"
 #include "game_audio.h"
 #include "gameplay_input.h"
 #include "frame_pacing.h"
@@ -223,6 +224,12 @@ private:
 
     // 非拥有别名；gameFlow_ 先构造、后销毁，且 App 禁止复制/移动。
     GameSession &gameSession_;
+    struct HospitalFacade {
+        HospitalParcelFamily family;
+        bool mainBuilding;
+    };
+    std::optional<std::uint64_t> hospitalFacadeLayout_;
+    std::map<std::uint32_t, HospitalFacade> hospitalFacades_;
 
     bool pendingScreenConfirm_{false};
     std::optional<MainMenuCommand> pendingMainMenuCommand_;

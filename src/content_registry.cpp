@@ -3055,10 +3055,27 @@ ContentRegistry ContentRegistry::fromJson(
                         maximumCapacity < value.maximumInitialEnemies)
                         fail("encounter groups cannot support every configured enemy population");
                 }
+                if (value.layoutVersion == kHospitalHybridOutdoorLayoutVersion)
+                {
+                    // The authored street fronts and landmark footprints use this hospital grid.
+                    const std::set<std::string> requiredDistricts{
+                        "district.hospital.campus", "district.hospital.parking", "district.hospital.access",
+                        "district.hospital.shops", "district.hospital.residential", "district.hospital.park",
+                        "district.hospital.service_yard", "district.hospital.waste_ground"};
+                    const std::set<std::string> requiredLandmarks{
+                        "landmark.hospital.main_building", "landmark.hospital.service_clinic",
+                        "landmark.hospital.transport_depot"};
+                    if (definition.id != kHospitalFloorplanMapId || value.columns != 160U || value.rows != 90U ||
+                        value.districtColumns != 40U || value.districtRows != 18U ||
+                        districtIds != requiredDistricts || districtInstances != requiredDistricts.size() ||
+                        landmarkIds != requiredLandmarks)
+                        fail("hybrid hospital grid, districts or landmarks do not match the authored plan");
+                }
                 const std::uint64_t cells =
                     static_cast<std::uint64_t>(value.columns) * value.rows;
                 if ((value.layoutVersion != 3U &&
-                     value.layoutVersion != 4U) ||
+                     value.layoutVersion != 4U &&
+                     value.layoutVersion != kHospitalHybridOutdoorLayoutVersion) ||
                     value.columns < 8U || value.columns > 512U ||
                     value.rows < 6U || value.rows > 288U ||
                     value.districtColumns < 4U ||
@@ -3088,8 +3105,8 @@ ContentRegistry ContentRegistry::fromJson(
                      (value.maximumInitialEnemies == 0U)) ||
                     value.maximumAttempts > 32U ||
                     value.anchorClearanceCells > 4U ||
-                    districtInstances != 8U ||
-                    value.landmarkTemplates.size() != 3U ||
+                    (value.layoutVersion != kHospitalHybridOutdoorLayoutVersion &&
+                     (districtInstances != 8U || value.landmarkTemplates.size() != 3U)) ||
                     (value.layoutVersion >= 4U &&
                      (value.resourcePointArchetypes.empty() ||
                       value.minimumInitialEnemies == 0U ||

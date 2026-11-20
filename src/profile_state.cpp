@@ -3492,6 +3492,16 @@ ProfileValidationResult validateProfileState(
                                    procedural.minimumBlockers &&
                                raid.spatialLayout.ballisticBlockers.size() <=
                                    procedural.maximumBlockers);
+            const auto frozenVersion = raid.spatialLayout.layoutVersion;
+            bool districtVersionValid = frozenVersion == (legacyDistrictLayoutRules ? 3U : procedural.layoutVersion);
+            if (!legacyDistrictLayoutRules && raid.mapDefinitionId == kHospitalFloorplanMapId &&
+                (procedural.layoutVersion == kHospitalLegacyOutdoorLayoutVersion ||
+                 procedural.layoutVersion == kHospitalHybridOutdoorLayoutVersion))
+            {
+                districtVersionValid = frozenVersion == kHospitalLegacyOutdoorLayoutVersion ||
+                    (frozenVersion == kHospitalHybridOutdoorLayoutVersion && regionalMissionCount == 0U &&
+                     content.contentVersion() == kHospitalHybridOutdoorContentVersion);
+            }
             const bool layoutVersionValid = !playableOutdoorRules ||
                 (!procedural.enabled
                      ? raid.spatialLayout.layoutVersion == 0U &&
@@ -3499,10 +3509,7 @@ ProfileValidationResult validateProfileState(
                      : legacyPlayableOutdoorRules
                          ? raid.spatialLayout.layoutVersion == 2U &&
                                !raid.spatialLayout.roadCells.empty()
-                         : raid.spatialLayout.layoutVersion ==
-                                   (legacyDistrictLayoutRules
-                                        ? 3U
-                                        : procedural.layoutVersion) &&
+                         : districtVersionValid &&
                                !raid.spatialLayout.roadCells.empty());
             const bool fallbackStateValid =
                 raid.spatialLayout.usedFallback
@@ -3684,13 +3691,14 @@ ProfileValidationResult validateProfileState(
                         : placement->bounds.position;
                     return point.x == expected.x && point.y == expected.y;
                 };
+                const bool hybridHospital = frozenVersion == kHospitalHybridOutdoorLayoutVersion;
+                // Each authored hospital district occupies one connected region.
+                const auto expectedDistricts = hybridHospital ? procedural.districtArchetypes.size() : 8U;
+                const auto expectedLandmarks = hybridHospital ? procedural.landmarkTemplates.size() : 3U;
                 districtSnapshotValid = districtSnapshotValid &&
-                    raid.spatialLayout.layoutVersion ==
-                        (legacyDistrictLayoutRules
-                             ? 3U
-                             : raidMap->proceduralOutdoor.layoutVersion) &&
-                    raid.spatialLayout.districts.size() == 8U &&
-                    raid.spatialLayout.landmarks.size() == 3U &&
+                    districtVersionValid &&
+                    raid.spatialLayout.districts.size() == expectedDistricts &&
+                    raid.spatialLayout.landmarks.size() == expectedLandmarks &&
                     !raid.spatialLayout.terrainSpans.empty() &&
                     !raid.spatialLayout.props.empty() &&
                     matchesPoint(kRaidAnchorPlayerSpawn,

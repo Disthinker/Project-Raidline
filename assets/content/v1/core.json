@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "raid-riverside-armed-scavengers-content-93",
+  "content_version": "proc-map-hospital-outdoor-content-94",
   "fortifications": [
     {
       "id": "fortification.wood_barricade",
@@ -3068,7 +3068,7 @@
       "display_name": "Hospital District",
       "route_profile": "HOSPITAL CAMPUS | AMBULANCE ACCESS | SERVICE STREETS",
       "procedural_outdoor": {
-        "layout_version": 4,
+        "layout_version": 6,
         "columns": 160,
         "rows": 90,
         "district_columns": 40,

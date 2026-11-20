@@ -14,6 +14,7 @@
 
 #include "stable_random.h"
 #include "raid_district_fill.h"
+#include "raid_hospital_outdoor.h"
 
 namespace
 {
@@ -1197,6 +1198,8 @@ void connectPointToRoad(
 {
     const auto &definition = map.proceduralOutdoor;
     const Cell start = fineCellForPoint(map, point);
+    if (usesHospitalOutdoorPlan(map) && roads.ranks[cellIndex(definition, start.column, start.row)] != 0U)
+        return;
     Cell nearest = start;
     std::uint32_t nearestDistance =
         std::numeric_limits<std::uint32_t>::max();
@@ -1287,7 +1290,8 @@ std::vector<RaidAnchorPlacementSnapshot> placeAnchors(
     const RoadSkeleton &roads,
     const std::vector<RaidLandmarkPlacementSnapshot> &landmarks,
     const RaidMapGenerationAnchors &anchors,
-    Pcg32 &random)
+    Pcg32 &random,
+    std::optional<Vec2> playerApproach)
 {
     const auto &definition = map.proceduralOutdoor;
     const float cellWidth = map.walkableBounds.size.x /
@@ -1342,11 +1346,14 @@ std::vector<RaidAnchorPlacementSnapshot> placeAnchors(
             selected = fineCellForPoint(map, socket);
             ++interiorOrdinal;
         }
+        if (playerApproach && request.kind == RaidMapAnchorKind::PlayerSpawn)
+            selected = fineCellForPoint(map, *playerApproach);
         const std::size_t candidateOffset = roadCandidates.empty()
             ? 0U
             : random.bounded(static_cast<std::uint32_t>(
                   roadCandidates.size()));
-        for (std::size_t probe{}; probe < roadCandidates.size(); ++probe)
+        const bool fixedSocket = usesHospitalOutdoorPlan(map) && selected.has_value();
+        for (std::size_t probe{}; !fixedSocket && probe < roadCandidates.size(); ++probe)
         {
             const Cell candidate = roadCandidates[
                 (probe + candidateOffset) % roadCandidates.size()];
@@ -1401,7 +1408,7 @@ std::vector<RaidAnchorPlacementSnapshot> placeAnchors(
             // anchor placement. Unlike random props they do not pass through
             // the later occupied-cell check, so reserve them explicitly for
             // the new route without moving any preceding accepted anchor.
-            if (request.kind == RaidMapAnchorKind::CredentialExtraction &&
+            if ((request.kind == RaidMapAnchorKind::CredentialExtraction || usesHospitalOutdoorPlan(map)) &&
                 std::any_of(landmarks.begin(), landmarks.end(),
                     [&](const RaidLandmarkPlacementSnapshot &landmark)
                     {
@@ -1433,6 +1440,10 @@ std::vector<RaidAnchorPlacementSnapshot> placeAnchors(
                     continue;
                 }
             }
+            if (usesHospitalOutdoorPlan(map) && !landmarks.empty() &&
+                std::any_of(landmarks.front().roadSockets.begin(), landmarks.front().roadSockets.end(),
+                    [&](Vec2 point){ return overlaps(pointRegion(point, 155.0F), bounds); }))
+                continue;
             if (std::any_of(result.begin(), result.end(),
                 [&](const RaidAnchorPlacementSnapshot &existing)
                 { return overlaps(inflated(existing.bounds, 100.0F), bounds); }))
@@ -1487,7 +1498,8 @@ std::vector<RaidTerrainSpan> generateTerrain(
     const DistrictField &districtField,
     const std::vector<RaidDistrictArchetypeDefinition> &districtDefinitions,
     const RoadSkeleton &roads,
-    Pcg32 &random)
+    Pcg32 &random,
+    std::optional<std::uint64_t> hospitalSeed)
 {
     std::vector<std::uint8_t> puddles(
         static_cast<std::size_t>(definition.columns) * definition.rows, 0U);
@@ -1514,6 +1526,28 @@ std::vector<RaidTerrainSpan> generateTerrain(
         }
     }
 
+    // Sample once per cell so water, soil and vegetation form coherent patches.
+    // Roads always override the field and keep their authored cross-section.
+    std::vector<RaidTerrainKind> ground;
+    if (hospitalSeed)
+    {
+        ground.resize(roads.ranks.size());
+        for (std::uint32_t row = 0; row < definition.rows; ++row)
+            for (std::uint32_t column = 0; column < definition.columns; ++column)
+            {
+                auto index = cellIndex(definition, column, row);
+                auto theme = districtDefinitions[districtAtFineCell(definition, districtField, column, row)].kind;
+                int moisture = hospitalEnvironmentalField(*hospitalSeed, column, row);
+                auto material = baseTerrainForDistrict(theme);
+                if (theme == RaidDistrictKind::Greenbelt || theme == RaidDistrictKind::OpenGround)
+                    material = moisture > 109 ? RaidTerrainKind::Grass : RaidTerrainKind::Dirt;
+                else if (theme != RaidDistrictKind::Highway && moisture > 164)
+                    material = RaidTerrainKind::Dirt;
+                if (moisture > 193 || (moisture > 125 && puddles[index]))
+                    material = RaidTerrainKind::Puddle;
+                ground[index] = roads.ranks[index] ? RaidTerrainKind::Asphalt : material;
+            }
+    }
     std::vector<RaidTerrainSpan> result;
     for (std::uint32_t row{}; row < definition.rows; ++row)
     {
@@ -1528,6 +1562,8 @@ std::vector<RaidTerrainSpan> generateTerrain(
                 kind = RaidTerrainKind::Asphalt;
             else if (puddles[cellIndex(definition, column, row)] != 0U)
                 kind = RaidTerrainKind::Puddle;
+            if (hospitalSeed)
+                kind = ground[cellIndex(definition, column, row)];
             const std::uint32_t first = column;
             const std::uint32_t chunkEnd = std::min(
                 definition.columns,
@@ -1543,6 +1579,8 @@ std::vector<RaidTerrainSpan> generateTerrain(
                     nextKind = RaidTerrainKind::Asphalt;
                 else if (puddles[cellIndex(definition, column, row)] != 0U)
                     nextKind = RaidTerrainKind::Puddle;
+                if (hospitalSeed)
+                    nextKind = ground[cellIndex(definition, column, row)];
                 if (nextKind != kind)
                     break;
                 ++column;
@@ -1579,7 +1617,8 @@ void populateProps(
     const std::vector<RaidDistrictArchetypeDefinition> &districtDefinitions,
     const RoadSkeleton &roads,
     Pcg32 &random,
-    RaidGeneratedMapLayout &layout)
+    RaidGeneratedMapLayout &layout,
+    std::uint64_t environmentSeed)
 {
     const auto &definition = map.proceduralOutdoor;
     const float cellWidth = map.walkableBounds.size.x /
@@ -1675,6 +1714,28 @@ void populateProps(
                        structure, 0U, true);
     }
 
+    const bool hospital = usesHospitalOutdoorPlan(map);
+    if (hospital)
+    {
+        std::array<unsigned, 3> familyCounts{};
+        const auto plots = hospitalParcelCandidates(map, roads.ranks, environmentSeed);
+        for (const auto &plot : plots)
+        {
+            auto &count = familyCounts[static_cast<std::size_t>(plot.family)];
+            if (count >= 7 || !rectIsAvailable(plot.bounds, true, std::nullopt))
+                continue;
+            const Cell gate = fineCellForPoint(map, plot.gate);
+            const auto district = districtAtFineCell(definition, districtField, gate.column, gate.row);
+            if (districtDefinitions[district].kind == RaidDistrictKind::Greenbelt)
+                continue;
+            for (const auto &part : plot.parts)
+                appendProp(layout, part.kind, part.state, part.bounds, part.quarterTurns, part.collidable);
+            markRect(plot.bounds);
+            ++count;
+            if (familyCounts[0] == 7 && familyCounts[1] == 7 && familyCounts[2] == 7)
+                break;
+        }
+    }
     std::vector<Cell> roadCells;
     std::vector<Cell> openCells;
     for (std::uint32_t row{1U}; row + 1U < definition.rows; ++row)
@@ -1684,7 +1745,18 @@ void populateProps(
         {
             if (occupied[cellIndex(definition, column, row)] != 0U)
                 continue;
-            if (roads.ranks[cellIndex(definition, column, row)] >=
+            if (hospital && roads.ranks[cellIndex(definition, column, row)] == 0U)
+            {
+                // Park on the verge. The carriageway stays open across every crossing.
+                openCells.push_back({column, row});
+                if (column >= 2 && row >= 2 && column + 2 < definition.columns && row + 2 < definition.rows &&
+                    (roads.ranks[cellIndex(definition, column - 2, row)] >= 2 ||
+                     roads.ranks[cellIndex(definition, column + 2, row)] >= 2 ||
+                     roads.ranks[cellIndex(definition, column, row - 2)] >= 2 ||
+                     roads.ranks[cellIndex(definition, column, row + 2)] >= 2))
+                    roadCells.push_back({column, row});
+            }
+            else if (!hospital && roads.ranks[cellIndex(definition, column, row)] >=
                 roadRank(RaidOutdoorRoadKind::Secondary))
                 roadCells.push_back({column, row});
             else if (roads.ranks[cellIndex(
@@ -1749,7 +1821,7 @@ void populateProps(
             map.walkableBounds.position.y +
                 (static_cast<float>(cell.row) + 0.5F) * cellHeight};
         const ContentRect bounds = centeredBounds(center, size);
-        if (!rectIsAvailable(bounds, false, std::nullopt))
+        if (!rectIsAvailable(bounds, hospital, std::nullopt))
             continue;
         appendReservedProp(
             barrier ? RaidOutdoorPropKind::RoadBarrier
@@ -1764,7 +1836,7 @@ void populateProps(
 
     const std::uint32_t blockerTarget = randomBetween(
         random, definition.minimumBlockers, definition.maximumBlockers);
-    const std::uint32_t largeBuildingTarget = randomBetween(random, 18U, 28U);
+    const std::uint32_t largeBuildingTarget = hospital ? 0U : randomBetween(random, 18U, 28U);
     std::uint32_t largeBuildingCount = static_cast<std::uint32_t>(
         std::count_if(
             layout.props.begin(), layout.props.end(),
@@ -1880,6 +1952,9 @@ void populateProps(
     {
         const Cell cell = openCells[random.bounded(
             static_cast<std::uint32_t>(openCells.size()))];
+        if (hospital && hospitalEnvironmentalField(environmentSeed, cell.column, cell.row) < 95 &&
+            random.bounded(4U) != 0U)
+            continue;
         const Vec2 center{
             map.walkableBounds.position.x +
                 (static_cast<float>(cell.column) + 0.2F +
@@ -1968,19 +2043,31 @@ RaidGeneratedMapLayout generateV3Layout(
     Pcg32 propRandom{raidSeed, 0x70726f70732d7633ULL + attempt};
     const std::vector<RaidDistrictArchetypeDefinition> districts =
         expandedDistricts(definition);
-    const DistrictField districtField = generateDistrictField(
-        definition, districts, districtRandom);
-    RoadSkeleton roads = buildV3Roads(
-        definition, districtField, roadRandom);
-    std::vector<RaidLandmarkPlacementSnapshot> landmarks = placeLandmarks(
-        map, districtField, districts, roads, landmarkRandom);
+    DistrictField districtField;
+    RoadSkeleton roads;
+    std::vector<RaidLandmarkPlacementSnapshot> landmarks;
+    std::optional<Vec2> playerApproach;
+    if (usesHospitalOutdoorPlan(map))
+    {
+        auto plan = planHospitalOutdoor(map, definition.districtArchetypes, raidSeed, attempt);
+        playerApproach = plan.playerApproach;
+        districtField.owners = std::move(plan.owners);
+        roads.ranks = std::move(plan.roadRanks);
+        landmarks = std::move(plan.landmarks);
+    }
+    else
+    {
+        districtField = generateDistrictField(definition, districts, districtRandom);
+        roads = buildV3Roads(definition, districtField, roadRandom);
+        landmarks = placeLandmarks(map, districtField, districts, roads, landmarkRandom);
+    }
     if (landmarks.size() != definition.landmarkTemplates.size())
         return {};
     for (const RaidLandmarkPlacementSnapshot &landmark : landmarks)
         for (Vec2 socket : landmark.roadSockets)
             connectPointToRoad(map, roads, socket, RaidOutdoorRoadKind::Access);
     const std::vector<RaidAnchorPlacementSnapshot> placements = placeAnchors(
-        map, districtField, districts, roads, landmarks, anchors, anchorRandom);
+        map, districtField, districts, roads, landmarks, anchors, anchorRandom, playerApproach);
     if (placements.size() != effectiveAnchorRequests(anchors).size())
         return {};
     for (const RaidAnchorPlacementSnapshot &placement : placements)
@@ -2001,9 +2088,10 @@ RaidGeneratedMapLayout generateV3Layout(
     layout.anchorPlacements = placements;
     layout.landmarks = std::move(landmarks);
     layout.terrainSpans = generateTerrain(
-        definition, districtField, districts, roads, terrainRandom);
+        definition, districtField, districts, roads, terrainRandom,
+        usesHospitalOutdoorPlan(map) ? std::optional<std::uint64_t>(raidSeed ^ attempt) : std::nullopt);
     populateProps(
-        map, districtField, districts, roads, propRandom, layout);
+        map, districtField, districts, roads, propRandom, layout, raidSeed ^ attempt);
     layout.layoutHash = raidMapLayoutHash(layout);
     return layout;
 }
@@ -2214,8 +2302,10 @@ RaidGeneratedMapLayout generateRaidMapLayout(
             RaidGeneratedMapLayout layout = generateV3Layout(
                 map, raidSeed, anchors, attempt);
             if (layout.layoutVersion != definition.layoutVersion ||
-                layout.districts.size() != 8U ||
-                layout.landmarks.size() != 3U ||
+                layout.districts.size() != (usesHospitalOutdoorPlan(map) ?
+                    expandedDistricts(definition).size() : 8U) ||
+                layout.landmarks.size() != (usesHospitalOutdoorPlan(map) ?
+                    definition.landmarkTemplates.size() : 3U) ||
                 layout.anchorPlacements.size() !=
                     effectiveAnchorRequests(anchors).size() ||
                 layout.ballisticBlockers.size() <
@@ -2248,7 +2338,8 @@ RaidGeneratedMapLayout generateRaidMapLayout(
                     placement.bounds.position.y +
                         placement.bounds.size.y * 0.5F});
             }
-            if (layoutConnects(map, layout, frozenAnchors))
+            if (layoutConnects(map, layout, frozenAnchors) &&
+                (!usesHospitalOutdoorPlan(map) || inspectHospitalOutdoorRoutes(map, layout).passable()))
             {
                 layout.layoutHash = raidMapLayoutHash(layout);
                 return layout;
@@ -2275,6 +2366,14 @@ RaidGeneratedMapLayout generateRaidMapLayout(
             0x46524f4e54494552ULL,
             anchors,
             1U);
+        if (usesHospitalOutdoorPlan(map))
+        {
+            for (unsigned attempt = 2; attempt <= 8 &&
+                 (fallback.layoutVersion == 0U || !inspectHospitalOutdoorRoutes(map, fallback).passable()); ++attempt)
+                fallback = generateV3Layout(fallbackMap, 0x46524f4e54494552ULL, anchors, attempt);
+            if (fallback.layoutVersion == 0U || !inspectHospitalOutdoorRoutes(map, fallback).passable())
+                throw std::runtime_error{"No safe hospital approach layout satisfies these anchors"};
+        }
         if (fallback.layoutVersion == 0U)
         {
             throw std::runtime_error{
@@ -2349,7 +2448,9 @@ bool raidMapLayoutConnectsAnchors(
                 placement.bounds.position.y + placement.bounds.size.y * 0.5F});
         }
         return roadLayoutIsValid(map, layout, frozenAnchors) &&
-            layoutConnects(map, layout, frozenAnchors);
+            layoutConnects(map, layout, frozenAnchors) &&
+            (layout.layoutVersion != kHospitalHybridOutdoorLayoutVersion || !usesHospitalOutdoorPlan(map) ||
+             inspectHospitalOutdoorRoutes(map, layout).passable());
     }
     return (!map.proceduralOutdoor.enabled || layout.layoutVersion == 0U ||
             roadLayoutIsValid(map, layout, anchors)) &&
