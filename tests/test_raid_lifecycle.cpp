@@ -196,7 +196,7 @@ namespace
 {
 ContentRegistry contentBeforeHospitalFracture()
 {
-    auto document = nlohmann::json::parse(publishedContentJson());
+    auto document = contentBeforeHospitalHybridOutdoorJson();
     document["content_version"] = kRaidLostWeaponPursuitContentVersion;
     return ContentRegistry::fromJson(document.dump());
 }
@@ -204,7 +204,7 @@ ContentRegistry contentBeforeHospitalFracture()
 
 TEST(RaidLifecycleTest, HospitalFractureChangesOnlyTheEmergencyEncounterAndLoot)
 {
-    const auto &current = publishedContentRegistry();
+    const auto current = contentBeforeHospitalHybridOutdoor();
     const auto previous = contentBeforeHospitalFracture();
     const auto &interior = current.map(kHospitalFloorplanMapId).interiors.front();
     const auto emergency = std::find_if(interior.lootSlots.begin(), interior.lootSlots.end(),
@@ -223,6 +223,8 @@ TEST(RaidLifecycleTest, HospitalFractureChangesOnlyTheEmergencyEncounterAndLoot)
         ASSERT_TRUE(after.succeeded) << after.message;
         const auto &oldRaid = *legacy.pendingRaid;
         const auto &newRaid = *active.pendingRaid;
+        ASSERT_EQ(oldRaid.spatialLayout.layoutVersion, kHospitalLegacyOutdoorLayoutVersion);
+        ASSERT_EQ(newRaid.spatialLayout.layoutVersion, kHospitalLegacyOutdoorLayoutVersion);
         EXPECT_EQ(newRaid.spatialLayout, oldRaid.spatialLayout);
         EXPECT_EQ(newRaid.interiors, oldRaid.interiors);
         EXPECT_EQ(newRaid.rescue, oldRaid.rescue);

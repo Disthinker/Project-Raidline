@@ -9023,6 +9023,19 @@ void App::renderBallisticBlockers(bool terrainOnly, std::optional<Rect> worldVie
                     label.c_str());
             }
         }
+        const auto &pending = *gameSession_.profile().pendingRaid;
+        const bool hospitalStreets = pending.spatialLayout.layoutVersion == 6U &&
+            pending.mapDefinitionId == kHospitalFloorplanMapId;
+        if (hospitalStreets && hospitalFacadeLayout_ != pending.spatialLayout.layoutHash)
+        {
+            hospitalFacades_.clear();
+            const auto &map = publishedContentRegistry().map(pending.mapDefinitionId);
+            for (const auto &parcel : inspectHospitalParcels(map, pending.spatialLayout))
+                for (const auto &part : parcel.parts)
+                    hospitalFacades_.emplace(part.instanceId,
+                        HospitalFacade{parcel.family, part.instanceId == parcel.parts.front().instanceId});
+            hospitalFacadeLayout_ = pending.spatialLayout.layoutHash;
+        }
         for (const RaidOutdoorPropSnapshot &prop : projection.props)
         {
             if (!visible(prop.bounds))
@@ -9064,6 +9077,37 @@ void App::renderBallisticBlockers(bool terrainOnly, std::optional<Rect> worldVie
             {
                 SDL_SetRenderDrawColor(renderer_, 151, 134, 92, 230);
                 SDL_RenderRect(renderer_, &bounds);
+            }
+            const auto facade = hospitalStreets ? hospitalFacades_.find(prop.instanceId) : hospitalFacades_.end();
+            if (facade != hospitalFacades_.end())
+            {
+                if (facade->second.mainBuilding)
+                {
+                    // The coloured edge faces the parcel's street entrance after rotation.
+                    SDL_FRect edge = bounds;
+                    const float depth = std::min(12.0F, std::min(bounds.w, bounds.h) / 5.0F);
+                    switch (prop.quarterTurns)
+                    {
+                    case 0: edge.h = depth; break;
+                    case 1: edge.x += edge.w - depth; edge.w = depth; break;
+                    case 2: edge.y += edge.h - depth; edge.h = depth; break;
+                    default: edge.w = depth; break;
+                    }
+                    const char *name = nullptr;
+                    switch (facade->second.family)
+                    {
+                    case HospitalParcelFamily::Shopfront:
+                        SDL_SetRenderDrawColor(renderer_, 119, 151, 140, 245); name = "STREET SHOP"; break;
+                    case HospitalParcelFamily::Courtyard:
+                        SDL_SetRenderDrawColor(renderer_, 157, 125, 101, 245); name = "COURTYARD"; break;
+                    case HospitalParcelFamily::ServiceShed:
+                        SDL_SetRenderDrawColor(renderer_, 148, 144, 107, 245); name = "SERVICE SHED"; break;
+                    }
+                    SDL_RenderFillRect(renderer_, &edge);
+                    if (!terrainOnly && name)
+                        uiTextRenderer_.render(renderer_, bounds.x + 15.0F, bounds.y + 15.0F, name);
+                }
+                continue;
             }
             if (!terrainOnly)
             {

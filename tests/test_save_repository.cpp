@@ -189,7 +189,7 @@ TEST(SaveRepositoryTest, FrontierRoadBlockadeUpgradePreservesSchema69FrozenRaidA
         std::ifstream file(path, std::ios::binary);
         return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
     };
-    const auto marker = std::string{".pre-raid-riverside-armed-scavengers-v1."};
+    const auto marker = std::string{".pre-proc-map-hospital-outdoor-v1."};
     EXPECT_EQ(read(directory.path() / ("profile" + marker + testSaveChecksum(frozen) + ".json")), frozen);
     EXPECT_EQ(read(directory.path() / ("profile.backup" + marker + testSaveChecksum(backup) + ".json")), backup);
     const auto reopened = repository.load(content);
@@ -234,7 +234,7 @@ TEST(SaveRepositoryTest, LostWeaponPursuitUpgradeKeepsExactContent88BlockadeAndA
         std::ifstream file(path, std::ios::binary);
         return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
     };
-    const auto marker = std::string{".pre-raid-riverside-armed-scavengers-v1."};
+    const auto marker = std::string{".pre-proc-map-hospital-outdoor-v1."};
     EXPECT_EQ(read(directory.path() / ("profile" + marker + testSaveChecksum(frozen) + ".json")), frozen);
     EXPECT_EQ(read(directory.path() / ("profile.backup" + marker + testSaveChecksum(backup) + ".json")), backup);
     const auto reopened = repository.load(content);
@@ -291,6 +291,109 @@ TEST(SaveRepositoryTest, NightRendezvousRoundTripsAlongsideOrdinaryRescue)
     EXPECT_FALSE(deserializeProfileEnvelope(malformed.dump(), content).profile);
 }
 
+TEST(SaveRepositoryTest, HospitalContent93PreservesBothFrozenSlotsAndContent94RoundTrips)
+{
+    const auto previous = contentBeforeHospitalHybridOutdoor();
+    const auto &current = publishedContentRegistry();
+    auto frozen = makeNewAlphaProfile("hospital-pending", previous);
+    const DeployCommand command{"hospital-raid", "hospital-return", 9403U, kHospitalFloorplanMapId};
+    const auto backup = serializeProfileEnvelope(frozen, previous.contentVersion());
+    const auto departure = executeDeploy(frozen, previous, command, {frozen.revision, "deploy"});
+    ASSERT_TRUE(departure.succeeded) << departure.message;
+    ASSERT_EQ(frozen.pendingRaid->spatialLayout.layoutVersion, kHospitalLegacyOutdoorLayoutVersion);
+    const auto primary = serializeProfileEnvelope(frozen, previous.contentVersion());
+
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-hospital-save-", "content93");
+    SaveRepository repository{directory.path()};
+    std::ofstream(repository.primaryPath(), std::ios::binary) << primary;
+    std::ofstream(repository.backupPath(), std::ios::binary) << backup;
+
+    auto migrated = repository.load(current);
+    ASSERT_TRUE(migrated.profile && migrated.profile->pendingRaid && migrated.sourceEnvelope) << migrated.message;
+    EXPECT_EQ(migrated.sourceEnvelope->schemaVersion, 75U);
+    EXPECT_EQ(migrated.sourceEnvelope->contentVersion, previous.contentVersion());
+    EXPECT_EQ(serializeProfileEnvelope(*migrated.profile, previous.contentVersion()), primary);
+    const auto write = repository.save(*migrated.profile, current.contentVersion());
+    ASSERT_TRUE(write.succeeded) << write.message;
+    migrated = repository.load(current);
+    ASSERT_TRUE(migrated.profile && migrated.sourceEnvelope) << migrated.message;
+    EXPECT_EQ(migrated.sourceEnvelope->schemaVersion, 75U);
+    EXPECT_EQ(migrated.sourceEnvelope->contentVersion, current.contentVersion());
+    EXPECT_EQ(serializeProfileEnvelope(*migrated.profile, previous.contentVersion()), primary);
+
+    const auto readArchive = [&](std::string name, const std::string &source) {
+        const auto archive = name + ".pre-proc-map-hospital-outdoor-v1." + testSaveChecksum(source) + ".json";
+        std::ifstream file(directory.path() / archive, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>{file}, {});
+    };
+    EXPECT_EQ(readArchive("profile", primary), primary);
+    EXPECT_EQ(readArchive("profile.backup", backup), backup);
+
+    auto fresh = makeNewAlphaProfile("hospital-pending", current);
+    const auto freshDeparture = executeDeploy(fresh, current, command, {fresh.revision, "deploy"});
+    ASSERT_TRUE(freshDeparture.succeeded) << freshDeparture.message;
+    ASSERT_EQ(fresh.pendingRaid->spatialLayout.layoutVersion, kHospitalHybridOutdoorLayoutVersion);
+    EXPECT_NE(fresh.pendingRaid->spatialLayout.roadCells, frozen.pendingRaid->spatialLayout.roadCells);
+    const auto envelope = serializeProfileEnvelope(fresh, current.contentVersion());
+    const auto roundTrip = deserializeProfileEnvelope(envelope, current);
+    ASSERT_TRUE(roundTrip.profile) << roundTrip.message;
+    EXPECT_EQ(serializeProfileEnvelope(*roundTrip.profile, current.contentVersion()), envelope);
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(fresh, previous.contentVersion())), std::invalid_argument);
+    auto mislabelled = nlohmann::json::parse(envelope);
+    mislabelled["content_version"] = previous.contentVersion();
+    EXPECT_FALSE(deserializeProfileEnvelope(mislabelled.dump(), current).profile);
+
+    // Switching future deployments back to v4 cannot invalidate a saved v6 session.
+    auto rolledBackDocument = contentBeforeHospitalHybridOutdoorJson();
+    rolledBackDocument["content_version"] = current.contentVersion();
+    const auto rolledBack = ContentRegistry::fromJson(rolledBackDocument.dump());
+    const auto retained = deserializeProfileEnvelope(envelope, rolledBack);
+    ASSERT_TRUE(retained.profile) << retained.message;
+    EXPECT_EQ(serializeProfileEnvelope(*retained.profile, current.contentVersion()), envelope);
+}
+
+TEST(SaveRepositoryTest, HospitalRecoveryRetainsCompleteContent93Deployment)
+{
+    const auto previous = contentBeforeHospitalHybridOutdoor();
+    const auto &current = publishedContentRegistry();
+    auto old = makeNewAlphaProfile("hospital-recovery", previous);
+    old.committedSettlements.insert("hospital-loss");
+    old.lostRaidRecords.emplace("hospital-loss", LostRaidRecord{
+        "hospital-loss", "prior-hospital", "hospital-loss", kHospitalFloorplanMapId,
+        "HIGH", RaidResultOutcome::PlayerDead, 0U, 2U});
+    static_cast<void>(old.assets.create(previous.item(alpha_content::rifle),
+        LostRaidAssetLocation{"hospital-loss", EquipmentSlotKind::PrimaryWeapon}));
+    auto now = old;
+    const DeployCommand recovery{"hospital-recover", "hospital-home", 9403U, kHospitalFloorplanMapId, {}, "hospital-loss"};
+    const auto before = executeDeploy(old, previous, recovery, {old.revision, "recover"});
+    const auto after = executeDeploy(now, current, recovery, {now.revision, "recover"});
+    ASSERT_TRUE(before.succeeded) << before.message;
+    ASSERT_TRUE(after.succeeded) << after.message;
+    ASSERT_TRUE(now.pendingRaid->selfRecovery);
+    EXPECT_EQ(now.pendingRaid->spatialLayout.layoutVersion, kHospitalLegacyOutdoorLayoutVersion);
+    EXPECT_EQ(serializeProfileEnvelope(now, previous.contentVersion()), serializeProfileEnvelope(old, previous.contentVersion()));
+}
+
+TEST(SaveRepositoryTest, HospitalUpdateKeepsEveryOtherMapDeploymentIdentical)
+{
+    const auto previous = contentBeforeHospitalHybridOutdoor();
+    const auto &current = publishedContentRegistry();
+    for (const auto &id : {MapDefinitionId{"map.v0.test"}, MapDefinitionId{"map.raid.industrial"},
+                           kFreightCrateMapId, kFieldIntelligenceSourceMapId})
+    {
+        SCOPED_TRACE(std::string{id.value()});
+        auto old = makeNewAlphaProfile("off-hospital", previous);
+        auto now = makeNewAlphaProfile("off-hospital", current);
+        const DeployCommand command{"unchanged", "home", 9403U, id};
+        const auto before = executeDeploy(old, previous, command, {old.revision, "start"});
+        ASSERT_TRUE(before.succeeded) << before.message;
+        const auto after = executeDeploy(now, current, command, {now.revision, "start"});
+        ASSERT_TRUE(after.succeeded) << after.message;
+        EXPECT_EQ(serializeProfileEnvelope(now, previous.contentVersion()), serializeProfileEnvelope(old, previous.contentVersion()));
+    }
+}
+
 TEST(SaveRepositoryTest, RiversideSchema74FrozenEnemiesAndBothOriginalSlotsSurviveUpgrade)
 {
     const auto &content = publishedContentRegistry();
@@ -333,7 +436,7 @@ TEST(SaveRepositoryTest, RiversideSchema74FrozenEnemiesAndBothOriginalSlotsSurvi
     EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
     const auto archiveMatches = [&](std::string name, const std::string &original)
     {
-        const auto archive = name + ".pre-raid-riverside-armed-scavengers-v1." + testSaveChecksum(original) + ".json";
+        const auto archive = name + ".pre-proc-map-hospital-outdoor-v1." + testSaveChecksum(original) + ".json";
         std::ifstream file(directory.path() / archive, std::ios::binary);
         return std::string(std::istreambuf_iterator<char>{file}, {}) == original;
     };
@@ -555,14 +658,17 @@ TEST(SaveRepositoryTest, LostWeaponPursuitSnapshotRoundTripRejectsDowngradeAndIn
 TEST(SaveRepositoryTest, FractureRollsBackStartingStateAndFreezesHospitalEncounterInSchema72)
 {
     const auto &content = publishedContentRegistry();
-    auto profile = makeNewAlphaProfile("fracture-save-current", content);
+    auto historicalCatalog = contentBeforeHospitalHybridOutdoorJson();
+    historicalCatalog["content_version"] = kRaidFractureContentVersion;
+    const auto fractureStage = ContentRegistry::fromJson(historicalCatalog.dump());
+    auto profile = makeNewAlphaProfile("fracture-save-current", fractureStage);
     profile.medicalStatus.legFractured = true;
     const auto unfrozen = profileStateFingerprint(profile);
     profile.medicalStatus.legFractured = false;
     EXPECT_NE(profileStateFingerprint(profile), unfrozen);
     profile.medicalStatus.legFractured = true;
 
-    const auto deployed = executeDeploy(profile, content,
+    const auto deployed = executeDeploy(profile, fractureStage,
         {"fracture-save-raid", "fracture-save-result", 9403U, kHospitalFloorplanMapId},
         {profile.revision, "fracture-save-deploy"});
     ASSERT_TRUE(deployed.succeeded) << deployed.message;
@@ -648,7 +754,7 @@ TEST(SaveRepositoryTest, FractureUpgradePreservesOldHospitalSnapshotAndBothSaveS
         std::ifstream file(path, std::ios::binary);
         return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
     };
-    const auto marker = std::string{".pre-raid-riverside-armed-scavengers-v1."};
+    const auto marker = std::string{".pre-proc-map-hospital-outdoor-v1."};
     EXPECT_EQ(read(directory.path() / ("profile" + marker + testSaveChecksum(frozen) + ".json")), frozen);
     EXPECT_EQ(read(directory.path() / ("profile.backup" + marker + testSaveChecksum(backup) + ".json")), backup);
     const auto reopened = repository.load(content);
@@ -677,7 +783,7 @@ TEST(SaveRepositoryTest, LegacyHospitalPopulationRemainsFrozenAfterPolicyRepair)
 {
     // Reconstruct the previously shipped hospital population policy without
     // asking the tightened content loader to approve it for new deployments.
-    auto legacyContent = publishedContentRegistry();
+    auto legacyContent = contentBeforeHospitalHybridOutdoor();
     auto &oldMap = const_cast<MapDefinition &>(legacyContent.map(MapDefinitionId{"map.raid.hospital_district"}));
     oldMap.proceduralOutdoor.encounterArchetypes.front().minimumMembers = 3;
     bool checked{};

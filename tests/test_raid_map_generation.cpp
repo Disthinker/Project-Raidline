@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <limits>
 #include <queue>
 #include <set>
@@ -11,6 +12,9 @@
 #include "raid_map_generation.h"
 #include "raid_district_fill.h"
 #include "hospital_content_candidate.h"
+#include "raid_optics_legacy_fixture.h"
+#include "raid_hospital_outdoor.h"
+#include "raid_lifecycle.h"
 
 namespace
 {
@@ -320,7 +324,7 @@ TEST(RaidMapGenerationTest, FrontierBlockadeFreezesPlayerClearanceDetour)
 
 TEST(RaidMapGenerationTest, HospitalCandidateHasDistinctExteriorAndFixedInterior)
 {
-    const auto content = hospitalContentCandidate();
+    const auto content = contentBeforeHospitalHybridOutdoor();
     const auto &map = content.map(MapDefinitionId{"map.raid.hospital_district"});
     EXPECT_FLOAT_EQ(map.worldSize.x, 12800.0F);
     EXPECT_FLOAT_EQ(map.worldSize.y, 7200.0F);
@@ -360,6 +364,216 @@ TEST(RaidMapGenerationTest, HospitalCandidateHasDistinctExteriorAndFixedInterior
     EXPECT_EQ(fallback, generateRaidMapLayout(bad, 88U, anchors));
     EXPECT_TRUE(raidMapLayoutConnectsAnchors(bad, fallback, anchors));
     EXPECT_EQ(publishedContentRegistry().maps().size(), 5U);
+}
+
+namespace
+{
+double hospitalRouteLength(const std::vector<Vec2> &path)
+{
+    double length{};
+    for (std::size_t i = 1; i < path.size(); ++i)
+        length += std::hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y);
+    return length;
+}
+
+// Sweep the actual 32-square footprint through every cardinal move. This
+// check does not use the generator's cell occupancy or pathfinding code.
+bool hospitalRouteHasPlayerClearance(const std::vector<Vec2> &path,
+                                     const MapDefinition &map,
+                                     const RaidGeneratedMapLayout &layout)
+{
+    const auto bounds = map.walkableBounds;
+    for (std::size_t i = 1; i < path.size(); ++i)
+    {
+        const auto a = path[i - 1], b = path[i];
+        if (a.x != b.x && a.y != b.y) return false;
+        const ContentRect swept{{std::min(a.x, b.x) - 16, std::min(a.y, b.y) - 16},
+            {std::abs(b.x - a.x) + 32, std::abs(b.y - a.y) + 32}};
+        if (swept.position.x < bounds.position.x || swept.position.y < bounds.position.y ||
+            swept.position.x + swept.size.x > bounds.position.x + bounds.size.x ||
+            swept.position.y + swept.size.y > bounds.position.y + bounds.size.y)
+            return false;
+        if (std::any_of(layout.ballisticBlockers.begin(), layout.ballisticBlockers.end(),
+                        [&](ContentRect blocker) { return overlapsStrict(swept, blocker); }))
+            return false;
+    }
+    return true;
+}
+}
+
+TEST(RaidMapGenerationTest, HospitalHybridNormalDeploymentsKeepTwoPlayerRoutesAcross128Seeds)
+{
+    const auto &content = publishedContentRegistry();
+    const auto &map = content.map(kHospitalFloorplanMapId);
+    ASSERT_EQ(map.proceduralOutdoor.layoutVersion, 6U);
+    std::set<long> extraDistances;
+    std::set<HospitalParcelFamily> families;
+    std::set<unsigned> orientations;
+    unsigned long waterCells{}, joinedWaterCells{};
+    for (std::uint64_t seed = 1; seed <= 128; ++seed)
+    {
+        SCOPED_TRACE(seed);
+        auto profile = makeNewAlphaProfile("hospital-quality", content);
+        const auto receipt = executeDeploy(profile, content,
+            {"hospital-inspection", "hospital-return", seed, kHospitalFloorplanMapId},
+            {profile.revision, "inspect-deploy"});
+        ASSERT_TRUE(receipt.succeeded) << receipt.message;
+        ASSERT_TRUE(profile.pendingRaid);
+        const auto &layout = profile.pendingRaid->spatialLayout;
+        ASSERT_FALSE(layout.usedFallback);
+        EXPECT_LE(layout.generationAttempt, map.proceduralOutdoor.maximumAttempts);
+        EXPECT_EQ(layout.layoutHash, raidMapLayoutHash(layout));
+        ASSERT_EQ(layout.districts.size(), 8U);
+        for (const auto &district : layout.districts)
+            EXPECT_TRUE(districtIsContinuous(district, map.proceduralOutdoor.districtColumns,
+                                              map.proceduralOutdoor.districtRows)) << district.definitionId;
+        EXPECT_TRUE(std::any_of(layout.districts.begin(), layout.districts.end(), [](const auto &district) {
+            return districtRectangularFillRatio(district) < 0.85F;
+        }));
+        const auto columns = map.proceduralOutdoor.columns;
+        const auto rows = map.proceduralOutdoor.rows;
+        std::vector<RaidTerrainKind> terrain(columns * rows);
+        std::size_t covered{};
+        for (const auto &span : layout.terrainSpans)
+        {
+            ASSERT_LT(span.row, rows);
+            ASSERT_LE(span.firstColumn + span.length, columns);
+            ASSERT_EQ(std::size_t(span.row) * columns + span.firstColumn, covered);
+            std::fill_n(terrain.begin() + covered, span.length, span.kind);
+            covered += span.length;
+        }
+        ASSERT_EQ(covered, terrain.size());
+        EXPECT_TRUE(std::all_of(layout.roadCells.begin(), layout.roadCells.end(), [&](auto road) {
+            return road.row < rows && road.column < columns &&
+                   terrain[road.row * columns + road.column] == RaidTerrainKind::Asphalt;
+        }));
+        for (std::size_t i = 0; i < terrain.size(); ++i)
+        {
+            if (terrain[i] != RaidTerrainKind::Puddle) continue;
+            ++waterCells;
+            if ((i % columns > 0 && terrain[i - 1] == terrain[i]) ||
+                (i % columns + 1 < columns && terrain[i + 1] == terrain[i]) ||
+                (i >= columns && terrain[i - columns] == terrain[i]) ||
+                (i + columns < terrain.size() && terrain[i + columns] == terrain[i]))
+                ++joinedWaterCells;
+        }
+        ASSERT_EQ(layout.landmarks.size(), 3U);
+        ASSERT_FALSE(layout.landmarks.front().roadSockets.empty());
+        const auto area = map.walkableBounds;
+        const Vec2 roadCellSize{area.size.x / columns, area.size.y / rows};
+        for (const auto &landmark : layout.landmarks)
+            for (const auto &building : landmark.structures)
+                EXPECT_FALSE(std::any_of(layout.roadCells.begin(), layout.roadCells.end(), [&](auto cell) {
+                    const ContentRect road{{area.position.x + cell.column * roadCellSize.x,
+                                            area.position.y + cell.row * roadCellSize.y}, roadCellSize};
+                    return overlapsStrict(road, building);
+                })) << landmark.definitionId;
+        const auto routes = inspectHospitalOutdoorRoutes(map, layout);
+        ASSERT_TRUE(routes.passable());
+        ASSERT_GE(routes.mainRoute.size(), 2U);
+        ASSERT_GE(routes.bypassRoute.size(), 2U);
+        EXPECT_FLOAT_EQ(routes.mainRoute.front().x, routes.bypassRoute.front().x);
+        EXPECT_FLOAT_EQ(routes.mainRoute.front().y, routes.bypassRoute.front().y);
+        const auto *spawn = findRaidAnchorPlacement(layout, kRaidAnchorPlayerSpawn);
+        ASSERT_NE(spawn, nullptr);
+        EXPECT_FLOAT_EQ(spawn->bounds.position.x, profile.pendingRaid->playerSpawn.x);
+        EXPECT_FLOAT_EQ(spawn->bounds.position.y, profile.pendingRaid->playerSpawn.y);
+        EXPECT_FLOAT_EQ(routes.mainRoute.front().x, center(spawn->bounds).x);
+        EXPECT_FLOAT_EQ(routes.mainRoute.front().y, center(spawn->bounds).y);
+        ASSERT_EQ(profile.pendingRaid->interiors.size(), 1U);
+        const auto entrance = center(profile.pendingRaid->interiors.front().exteriorEntrance);
+        EXPECT_FLOAT_EQ(routes.mainRoute.back().x, entrance.x);
+        EXPECT_FLOAT_EQ(routes.mainRoute.back().y, entrance.y);
+        EXPECT_FLOAT_EQ(routes.mainRoute.back().x, routes.bypassRoute.back().x);
+        EXPECT_FLOAT_EQ(routes.mainRoute.back().y, routes.bypassRoute.back().y);
+        EXPECT_FLOAT_EQ(routes.mainRoute.back().x, layout.landmarks.front().roadSockets.front().x);
+        EXPECT_FLOAT_EQ(routes.mainRoute.back().y, layout.landmarks.front().roadSockets.front().y);
+        EXPECT_TRUE(hospitalRouteHasPlayerClearance(routes.mainRoute, map, layout));
+        EXPECT_TRUE(hospitalRouteHasPlayerClearance(routes.bypassRoute, map, layout));
+        const auto extra = std::lround(hospitalRouteLength(routes.bypassRoute) - hospitalRouteLength(routes.mainRoute));
+        EXPECT_GT(extra, 0);
+        extraDistances.insert(extra);
+
+        const auto plots = inspectHospitalParcels(map, layout);
+        ASSERT_FALSE(plots.empty());
+        for (std::size_t index = 0; index < plots.size(); ++index)
+        {
+            const auto &plot = plots[index];
+            families.insert(plot.family);
+            orientations.insert(plot.quarterTurns);
+            for (std::size_t previous = 0; previous < index; ++previous)
+                EXPECT_FALSE(overlapsStrict(plot.bounds, plots[previous].bounds));
+            const ContentRect gate{{plot.gate.x - 16, plot.gate.y - 16}, {32, 32}};
+            EXPECT_FALSE(std::any_of(layout.ballisticBlockers.begin(), layout.ballisticBlockers.end(),
+                                     [&](ContentRect blocker) { return overlapsStrict(gate, blocker); }));
+        }
+    }
+    EXPECT_GE(extraDistances.size(), 3U); // Rotation and mirroring preserve path length.
+    EXPECT_EQ(families.size(), 3U);
+    EXPECT_GE(orientations.size(), 2U);
+    EXPECT_GT(waterCells, 0UL);
+    EXPECT_GT(joinedWaterCells, waterCells / 2); // Patches dominate isolated pixels.
+}
+
+TEST(RaidMapGenerationTest, HospitalHybridRefusesInvalidTemplateAndChecksFallbackAtAttemptLimit)
+{
+    const auto &map = publishedContentRegistry().map(kHospitalFloorplanMapId);
+    const auto anchors = publishedAnchors(map);
+    auto malformed = map;
+    malformed.proceduralOutdoor.landmarkTemplates.front().structures.clear();
+    EXPECT_THROW(static_cast<void>(generateRaidMapLayout(malformed, 42, anchors)), std::invalid_argument);
+
+    auto constrained = map;
+    constrained.proceduralOutdoor.maximumAttempts = 1;
+    constrained.proceduralOutdoor.minimumBlockers = 1;
+    constrained.proceduralOutdoor.maximumBlockers = 1;
+    const auto a = generateRaidMapLayout(constrained, 1, anchors);
+    const auto b = generateRaidMapLayout(constrained, 42, anchors);
+    ASSERT_TRUE(a.usedFallback);
+    EXPECT_EQ(a.generationAttempt, 1U);
+    EXPECT_EQ(a.fallbackReason, RaidMapFallbackReason::AttemptsExhausted);
+    EXPECT_EQ(a, b);
+    const auto routes = inspectHospitalOutdoorRoutes(constrained, a);
+    ASSERT_TRUE(routes.passable());
+    EXPECT_TRUE(hospitalRouteHasPlayerClearance(routes.mainRoute, constrained, a));
+    EXPECT_TRUE(hospitalRouteHasPlayerClearance(routes.bypassRoute, constrained, a));
+
+    auto sealed = a;
+    const auto door = sealed.landmarks.front().roadSockets.front();
+    sealed.ballisticBlockers.push_back({{door.x - 16, door.y - 16}, {32, 32}});
+    EXPECT_FALSE(inspectHospitalOutdoorRoutes(constrained, sealed).passable());
+}
+
+TEST(RaidMapGenerationTest, HospitalHybridPublishedSeedsReplayFrozenGeometry)
+{
+    const auto &content = publishedContentRegistry();
+    const auto &map = content.map(kHospitalFloorplanMapId);
+    struct Expected
+    {
+        std::uint64_t seed, hash;
+        long mainLength, bypassLength;
+    };
+    for (const auto expected : std::array{
+             Expected{1, 12284713511449745002ULL, 1920, 8000},
+             Expected{42, 4251823121744383302ULL, 1840, 8400},
+             Expected{910223, 16716575597676622975ULL, 1520, 7440}})
+    {
+        SCOPED_TRACE(expected.seed);
+        for (unsigned replay = 0; replay < 2; ++replay)
+        {
+            auto profile = makeNewAlphaProfile("hospital-inspection", content);
+            const auto receipt = executeDeploy(profile, content,
+                {"hospital-inspection", "hospital-return", expected.seed, kHospitalFloorplanMapId},
+                {profile.revision, "inspect-deploy"});
+            ASSERT_TRUE(receipt.succeeded) << receipt.message;
+            const auto &layout = profile.pendingRaid->spatialLayout;
+            EXPECT_EQ(layout.layoutHash, expected.hash);
+            const auto paths = inspectHospitalOutdoorRoutes(map, layout);
+            ASSERT_TRUE(paths.passable());
+            EXPECT_EQ(std::lround(hospitalRouteLength(paths.mainRoute)), expected.mainLength);
+            EXPECT_EQ(std::lround(hospitalRouteLength(paths.bypassRoute)), expected.bypassLength);
+        }
+    }
 }
 
 TEST(RaidMapGenerationTest, DistrictFillSeparatesTerrainBuildingsAndEquipment)

@@ -4,23 +4,38 @@
 #include <algorithm>
 #include <nlohmann/json.hpp>
 
-inline ContentRegistry contentBeforeRiversideArmedScavengers()
+inline nlohmann::json contentBeforeHospitalHybridOutdoorJson()
 {
     auto document = nlohmann::json::parse(publishedContentJson());
+    document["content_version"] = kRiversideArmedScavengersContentVersion;
+    for (auto &map : document.at("maps"))
+        if (map.at("id") == std::string{kHospitalFloorplanMapId.value()})
+            map.at("procedural_outdoor").at("layout_version") = kHospitalLegacyOutdoorLayoutVersion;
+    return document;
+}
+
+inline ContentRegistry contentBeforeHospitalHybridOutdoor()
+{
+    return ContentRegistry::fromJson(contentBeforeHospitalHybridOutdoorJson().dump());
+}
+
+inline ContentRegistry contentBeforeRiversideArmedScavengers()
+{
+    auto document = contentBeforeHospitalHybridOutdoorJson();
     document["content_version"] = kRaidFireSupportContentVersion;
     return ContentRegistry::fromJson(document.dump());
 }
 
 inline ContentRegistry contentBeforeFrontierRoadBlockade()
 {
-    auto document = nlohmann::json::parse(publishedContentJson());
+    auto document = contentBeforeHospitalHybridOutdoorJson();
     document["content_version"] = kFieldIntelligenceTradeContentVersion;
     return ContentRegistry::fromJson(document.dump());
 }
 
 inline nlohmann::json contentBeforeHospitalMedicalReserveJson()
 {
-    auto document = nlohmann::json::parse(publishedContentJson());
+    auto document = contentBeforeHospitalHybridOutdoorJson();
     document["content_version"] = kEmergencyPowerContentVersion;
     for (auto &map : document.at("maps"))
         if (map.at("id") == std::string{kHospitalFloorplanMapId.value()})

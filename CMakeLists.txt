@@ -336,6 +336,8 @@ add_library(raidline_domain STATIC
     src/self_recovery_domain.cpp
     src/raid_lifecycle.h
     src/raid_map_generation.cpp
+    src/raid_hospital_outdoor.cpp
+    src/raid_hospital_outdoor.h
     src/raid_road_blockade.cpp
     src/raid_map_generation.h
     src/raid_intelligence_domain.cpp
@@ -627,6 +629,10 @@ raidline_assert_no_sdl_includes(raidline_simulation)
 add_executable(Project_Raidline src/main.cpp)
 raidline_configure_executable(Project_Raidline)
 target_link_libraries(Project_Raidline PRIVATE raidline::sdl_client)
+
+add_executable(HospitalOutdoorInspect tools/hospital_outdoor_inspect.cpp)
+raidline_configure_executable(HospitalOutdoorInspect)
+target_link_libraries(HospitalOutdoorInspect PRIVATE raidline::services nlohmann_json::nlohmann_json)
 
 add_custom_command(
     TARGET Project_Raidline

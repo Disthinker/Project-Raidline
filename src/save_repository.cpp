@@ -3387,7 +3387,10 @@ std::string serializeProfileEnvelope(
     const bool scavengerContract = schemaVersion == 75 && supportsRiversideArmedScavengersContent(contentVersion);
     if ((schemaVersion == 75 && !scavengerContract) ||
         (!scavengerContract && profile.pendingRaid && !profile.pendingRaid->armedScavengers.empty()))
-        throw std::invalid_argument("armed scavengers require schema 75 and content 93");
+        throw std::invalid_argument("armed scavengers require schema 75 and compatible content");
+    if (profile.pendingRaid && profile.pendingRaid->spatialLayout.layoutVersion == kHospitalHybridOutdoorLayoutVersion &&
+        (schemaVersion != 75 || contentVersion != kHospitalHybridOutdoorContentVersion))
+        throw std::invalid_argument("hybrid hospital geometry requires schema 75 and compatible content");
     const bool fireSupportContract = scavengerContract ||
         (schemaVersion == 74 && contentVersion == kRaidFireSupportContentVersion);
     if ((schemaVersion == 74 && !fireSupportContract) ||
@@ -3662,7 +3665,9 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             (schemaVersion == 71 && contentVersion == kRaidLostWeaponPursuitContentVersion) ||
             (schemaVersion == 72 && contentVersion == kRaidFractureContentVersion) ||
             (schemaVersion == 73 && contentVersion == kRaidNightRendezvousContentVersion) ||
-            (schemaVersion == 74 && contentVersion == kRaidFireSupportContentVersion);
+            (schemaVersion == 74 && contentVersion == kRaidFireSupportContentVersion) ||
+            (schemaVersion == 75 && contentVersion == kRiversideArmedScavengersContentVersion &&
+             content.contentVersion() == kHospitalHybridOutdoorContentVersion);
         if ((schemaVersion != 1 && schemaVersion != 2 &&
              schemaVersion != 3 && schemaVersion != 4 &&
              schemaVersion != 5 && schemaVersion != 6 &&
@@ -5102,8 +5107,10 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             }
             else
             {
-                const MapDefinition &legacyMap = content.map(
-                    raid.mapDefinitionId);
+                MapDefinition legacyMap = content.map(raid.mapDefinitionId);
+                if (legacyMap.id == kHospitalFloorplanMapId &&
+                    legacyMap.proceduralOutdoor.layoutVersion == kHospitalHybridOutdoorLayoutVersion)
+                    legacyMap.proceduralOutdoor.layoutVersion = kHospitalLegacyOutdoorLayoutVersion;
                 raid.spatialLayout = generateRaidMapLayout(
                     legacyMap,
                     raid.seed,
@@ -5113,6 +5120,9 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                         {},
                         {}});
             }
+            if (raid.spatialLayout.layoutVersion == kHospitalHybridOutdoorLayoutVersion &&
+                (schemaVersion != 75 || contentVersion != kHospitalHybridOutdoorContentVersion))
+                return {SaveLoadStatus::Failed, std::nullopt, "incompatible hybrid hospital layout version"};
             if (schemaVersion >= 22)
             {
                 for (const Json &interior : value.at("interiors"))
@@ -6018,6 +6028,7 @@ SaveWriteResult SaveRepository::save(
         {
             // The former primary can remain in the rolling backup after upgrade.
             const std::string_view marker =
+                contentVersion == kHospitalHybridOutdoorContentVersion ? "proc-map-hospital-outdoor-v1" :
                 scavengers ? "raid-riverside-armed-scavengers-v1" :
                 fireSupport ? "raid-single-fire-support-v1" :
                 rendezvous ? "raid-night-rendezvous-and-engineering-training-v1"

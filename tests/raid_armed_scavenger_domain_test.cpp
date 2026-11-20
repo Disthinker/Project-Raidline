@@ -223,16 +223,17 @@ TEST(RiversideArmedScavengerDomainTest, EmptyMagazinesDuplicateDeathsAndFailureN
 TEST(RiversideArmedScavengerDomainTest, OtherMapsKeepTheirCompletePreviousDeployment)
 {
     const auto previous = contentBeforeRiversideArmedScavengers();
+    const auto riversideStage = contentBeforeHospitalHybridOutdoor();
     for (const auto &id : {MapDefinitionId{"map.v0.test"}, MapDefinitionId{"map.raid.industrial"},
                            kFreightCrateMapId, kHospitalFloorplanMapId})
     {
         SCOPED_TRACE(std::string{id.value()});
         auto old = makeNewAlphaProfile("off-map", previous);
-        auto now = makeNewAlphaProfile("off-map", content);
+        auto now = makeNewAlphaProfile("off-map", riversideStage);
         const DeployCommand command{"unchanged", "home", 15U, id};
         const auto before = executeDeploy(old, previous, command, {old.revision, "start"});
         ASSERT_TRUE(before.succeeded) << before.message;
-        const auto after = executeDeploy(now, content, command, {now.revision, "start"});
+        const auto after = executeDeploy(now, riversideStage, command, {now.revision, "start"});
         ASSERT_TRUE(after.succeeded) << after.message;
         EXPECT_TRUE(now.pendingRaid->armedScavengers.empty());
         EXPECT_EQ(profileStateFingerprint(now), profileStateFingerprint(old));
