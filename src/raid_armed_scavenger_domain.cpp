@@ -1,8 +1,10 @@
 #include "raid_corpse_search.h"
+#include "raid_lifecycle.h"
 #include "inventory_domain.h"
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <limits>
 #include <set>
 
@@ -135,6 +137,10 @@ ProfileValidationResult validateRaidArmedScavengers(const ProfileState &profile,
         const auto &actor = raid.armedScavengers[i];
         const auto &enemy = raid.enemies[i];
         const auto position = post(map, raid, i, enemy.size);
+        if (actor.retreatPoint.has_value() != raid.armedScavengers.front().retreatPoint.has_value() ||
+            (actor.retreatPoint && (!supportsRaidScavengerRetreatContent(content.contentVersion()) ||
+                !validRaidScavengerRetreatPoint(map, raid, actor, *actor.retreatPoint))))
+            return {false, "invalid armed scavenger retreat point"};
         if (actor.sourceEnemyId != kSources[i] || enemy.sourceEnemyId != actor.sourceEnemyId ||
             enemy.spaceId != outdoorRaidSpaceId() || enemy.maximumHealth != 24 || enemy.variant ||
             enemy.torsoArmor || !enemy.encounterGroupInstanceId.empty() || !position ||
@@ -147,6 +153,8 @@ ProfileValidationResult validateRaidArmedScavengers(const ProfileState &profile,
         if (!corpse || corpse->sourceKind != RaidCorpseSourceKind::ArmedScavenger ||
             root->definitionId != kContainer || corpse->sourceEnemyId != actor.sourceEnemyId ||
             corpse->raidId != raid.raidId || corpse->spaceId != outdoorRaidSpaceId()) return {false, "invalid armed corpse"};
+        if (actor.escaped && (!actor.retreatPoint || corpse->deathPosition))
+            return {false, "an escaped scavenger must retain an unopened loadout"};
         for (const auto id : {actor.firstMagazineId, actor.secondMagazineId})
             if (const auto *magazine = profile.assets.find(id); magazine && magazine->definitionId != kMagazine)
                 return {false, "armed magazine identity changed"};
@@ -169,6 +177,41 @@ ProfileValidationResult validateRaidArmedScavengers(const ProfileState &profile,
     return {true, {}};
 }
 
+bool raidArmedScavengerEscaped(const PendingRaidSnapshot &raid, std::string_view sourceEnemyId) noexcept
+{
+    return std::any_of(raid.armedScavengers.begin(), raid.armedScavengers.end(), [&](const auto &actor) {
+        return actor.escaped && actor.sourceEnemyId == sourceEnemyId;
+    });
+}
+
+bool sealRaidArmedScavengerEscape(ProfileState &profile, const ContentRegistry &content,
+                                  std::string_view sourceEnemyId, Vec2 actorCenter)
+{
+    if (!profile.pendingRaid)
+        return false;
+    auto &roster = profile.pendingRaid->armedScavengers;
+    const auto actor = std::find_if(roster.begin(), roster.end(), [&](const auto &entry) {
+        return entry.sourceEnemyId == sourceEnemyId;
+    });
+    if (actor == roster.end() || !actor->retreatPoint || !validateRaidArmedScavengers(profile, content).valid)
+        return false;
+    const float dx = actorCenter.x - actor->retreatPoint->x;
+    const float dy = actorCenter.y - actor->retreatPoint->y;
+    if (!std::isfinite(dx) || !std::isfinite(dy) || dx * dx + dy * dy >
+        kRaidScavengerRetreatExitRadius * kRaidScavengerRetreatExitRadius)
+        return false;
+    if (actor->escaped)
+        return true;
+    const auto &root = std::get<RaidCorpseContainerAssetLocation>(profile.assets.find(actor->corpseAssetId)->location);
+    if (root.deathPosition || profile.revision == std::numeric_limits<ProfileRevision>::max())
+        return false;
+    // Keep the frozen budget and its actual firearm together. Settlement already
+    // removes an unclaimed corpse tree, including its installed magazine and rounds.
+    actor->escaped = true;
+    ++profile.revision;
+    return true;
+}
+
 bool syncRaidArmedScavengerAmmo(ProfileState &profile, const ContentRegistry &, std::string_view sourceEnemyId,
                                 int shotsFired, bool reloaded)
 {
@@ -177,6 +220,7 @@ bool syncRaidArmedScavengerAmmo(ProfileState &profile, const ContentRegistry &, 
     for (const auto &actor : profile.pendingRaid->armedScavengers)
     {
         if (actor.sourceEnemyId != sourceEnemyId) continue;
+        if (actor.escaped) return false;
         const auto *root = profile.assets.find(actor.corpseAssetId);
         const auto *corpse = root ? std::get_if<RaidCorpseContainerAssetLocation>(&root->location) : nullptr;
         if (!corpse || corpse->deathPosition || !validHeldEquipment(profile.assets, actor)) return false;

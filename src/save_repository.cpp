@@ -76,6 +76,40 @@ bool hasGeneratorConstruction(const BaseConstructionState &construction)
         (construction.activeProject && construction.activeProject->definitionId == kBaseGeneratorProjectId);
 }
 
+bool usesRationPolicy(const ProfileState &profile)
+{
+    return profile.rationPolicy != BaseRationPolicy::Standard || profile.baseMorale.lastLedger.rationPolicyLimited ||
+        (profile.pendingRaid && profile.pendingRaid->travel.startingBaseMorale.lastLedger.rationPolicyLimited);
+}
+
+bool containsRaidTacticalSupplies(const ProfileState &profile)
+{
+    if (profile.baseManufacturing.activeOrder &&
+        (profile.baseManufacturing.activeOrder->recipeDefinitionId == kRaidFireBottleRecipeId ||
+         profile.baseManufacturing.activeOrder->recipeDefinitionId == kRaidAlarmRecipeId)) return true;
+    const auto tactical = [](const ItemDefinitionId &item) {
+        return item == kRaidSmokeItemId || item == kRaidFireBottleItemId || item == kRaidAlarmItemId;
+    };
+    const auto containsItems = [&](const AssetRegistry &assets) {
+        const auto &records = assets.records();
+        return std::any_of(records.begin(), records.end(), [&](const auto &entry) {
+            return tactical(entry.second.definitionId);
+        });
+    };
+    if (containsItems(profile.assets)) return true;
+    if (profile.pendingRaid)
+    {
+        const auto &raid = *profile.pendingRaid;
+        if ((raid.startingAssets && containsItems(*raid.startingAssets)) ||
+            std::any_of(raid.loot.begin(), raid.loot.end(), [&](const auto &slot) {
+                return tactical(slot.definitionId);
+            })) return true;
+    }
+    if (!profile.lastRaidResult) return false;
+    const auto &returned = profile.lastRaidResult->returnedItemDefinitionIds;
+    return std::any_of(returned.begin(), returned.end(), tactical);
+}
+
 bool requiresEmergencyPowerContract(const ProfileState &profile)
 {
     const auto &treatment = profile.residentMedical.activeTreatment;
@@ -873,7 +907,7 @@ std::optional<BaseMoraleTrend> parseBaseMoraleTrend(std::string_view value)
 
 Json baseMoraleValue(const BaseMoraleState &state)
 {
-    return {
+    Json value{
         {"tier", baseMoraleTierValue(state.tier)},
         {"trend", baseMoraleTrendValue(state.trend)},
         {"resolved_day_count", state.resolvedDayCount},
@@ -902,6 +936,8 @@ Json baseMoraleValue(const BaseMoraleState &state)
             {"negative_event_count",
              state.lastLedger.negativeEventCount},
             {"net_score", state.lastLedger.netScore}}}};
+    if (state.lastLedger.rationPolicyLimited) value["last_ledger"]["ration_policy_limited"] = true;
+    return value;
 }
 
 BaseMoraleState parseBaseMorale(const Json &value)
@@ -937,7 +973,7 @@ BaseMoraleState parseBaseMorale(const Json &value)
             ledger.at("missed_wish_count").get<std::uint64_t>(),
             ledger.at("positive_event_count").get<std::uint64_t>(),
             ledger.at("negative_event_count").get<std::uint64_t>(),
-            ledger.at("net_score").get<std::int32_t>()}};
+            ledger.at("net_score").get<std::int32_t>(), ledger.value("ration_policy_limited", false)}};
 }
 
 Json baseCommunityEventValue(const BaseCommunityEventState &state)
@@ -1879,6 +1915,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
             {"ordinary_residents",
              profile.basePopulation.ordinaryResidents},
             {"bed_capacity", profile.basePopulation.bedCapacity}};
+        if (profile.rationPolicy == BaseRationPolicy::Conserve)
+            payload["base_population"]["ration_policy"] = "conserve";
         if (schemaVersion >= 16)
         {
             payload["base_population"]["injured_residents"] =
@@ -2032,6 +2070,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
             if (order.emergencyPowerBonusMinutes)
                 payload["base_manufacturing"]["active_order"]["emergency_power_bonus_minutes"] =
                     order.emergencyPowerBonusMinutes;
+            if (order.expediteMinutesSaved)
+                payload["base_manufacturing"]["active_order"]["expedite_minutes_saved"] = order.expediteMinutesSaved;
         }
         else
         {
@@ -2466,6 +2506,13 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
             payload["pending_raid"]["freight_breach_enabled"] = true;
         if (raid.hospitalMedicalReserveEnabled)
             payload["pending_raid"]["hospital_medical_reserve_enabled"] = true;
+        if (raid.fieldClueCache)
+        {
+            auto &cache = payload["pending_raid"]["field_clue_cache"];
+            cache["reward_asset_id"] = raid.fieldClueCache->rewardAssetId;
+            if (raid.fieldClueCache->decodedDocumentId)
+                cache["decoded_document_id"] = *raid.fieldClueCache->decodedDocumentId;
+        }
         if (raid.fieldIntelligenceTrade)
         {
             const auto &trade = *raid.fieldIntelligenceTrade;
@@ -2477,6 +2524,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
                 {"frontier_transport_purchased", trade.frontierTransportPurchased},
                 {"transport_purchased", trade.transportPurchased},
                 {"extra_purchased", trade.extraPurchased}};
+            if (trade.hasBarteredOffer())
+                payload["pending_raid"]["field_intelligence_trade"]["bartered"] = trade.bartered;
         }
         if (raid.hospitalNightVisionLoot)
         {
@@ -2973,11 +3022,22 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
                 raid.travel.startingManufacturingPowerBonusMinutes;
         if (schemaVersion >= 75)
         {
+            if (!raid.volatileBarrels.empty())
+            {
+                auto &barrels = payload["pending_raid"]["volatile_barrels"] = Json::array();
+                for (const auto &barrel : raid.volatileBarrels)
+                    barrels.push_back({{"id", barrel.id}, {"center", vectorValue(barrel.center)}});
+            }
             auto &entries = payload["pending_raid"]["armed_scavengers"] = Json::array();
             for (const auto &scavenger : raid.armedScavengers)
-                entries.push_back({{"source_enemy_id", scavenger.sourceEnemyId},
+            {
+                Json entry{{"source_enemy_id", scavenger.sourceEnemyId},
                     {"corpse_asset_id", scavenger.corpseAssetId}, {"pistol_asset_id", scavenger.pistolAssetId},
-                    {"first_magazine_id", scavenger.firstMagazineId}, {"second_magazine_id", scavenger.secondMagazineId}});
+                    {"first_magazine_id", scavenger.firstMagazineId}, {"second_magazine_id", scavenger.secondMagazineId}};
+                if (scavenger.retreatPoint) entry["retreat_point"] = vectorValue(*scavenger.retreatPoint);
+                if (scavenger.escaped) entry["escaped"] = true;
+                entries.push_back(std::move(entry));
+            }
         }
         if (schemaVersion >= 74)
         {
@@ -3029,6 +3089,8 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
                     {"ordinary_resident_count",
                      raid.rescue->ordinaryResidentCount},
                     {"secured", raid.rescue->secured}};
+                if (raid.rescue->escortStart)
+                    payload["pending_raid"]["rescue"]["escort_start"] = vectorValue(*raid.rescue->escortStart);
                 if (schemaVersion >= 16)
                 {
                     payload["pending_raid"]["rescue"]
@@ -3362,9 +3424,29 @@ std::string serializeProfileEnvelope(
         !hospitalNightCompatibleContent(contentVersion))
         throw std::invalid_argument{"hospital night vision Loot requires compatible content 77 or later"};
     const bool freightContract = schemaVersion >= 62 && crossMapFreightCompatibleContent(contentVersion);
+    if (profile.baseManufacturing.activeOrder && profile.baseManufacturing.activeOrder->expediteMinutesSaved &&
+        (schemaVersion < 75 || !supportsWorkshopExpediteContent(contentVersion)))
+        throw std::invalid_argument{"expedited workshop order requires schema 75 and compatible content"};
     if (profile.pendingRaid && (profile.pendingRaid->freightKeyLootSlotId || profile.pendingRaid->sealedFreightCrate) &&
         !freightContract)
         throw std::invalid_argument{"freight Loot requires schema 62 and compatible content"};
+    if (profile.pendingRaid && (schemaVersion != 75 || !supportsRaidScavengerRetreatContent(contentVersion)) &&
+        std::any_of(profile.pendingRaid->armedScavengers.begin(), profile.pendingRaid->armedScavengers.end(),
+            [](const auto &actor) { return actor.retreatPoint.has_value() || actor.escaped; }))
+        throw std::invalid_argument{"scavenger retreat requires current hospital outdoor content"};
+    if (profile.pendingRaid && profile.pendingRaid->fieldClueCache &&
+        (schemaVersion != 75 || !supportsFieldClueCacheContent(contentVersion)))
+        throw std::invalid_argument{"field clue cache requires current hospital outdoor content"};
+    if (profile.pendingRaid && !profile.pendingRaid->volatileBarrels.empty() &&
+        (schemaVersion != 75 || !supportsRaidVolatileBarrelsContent(contentVersion)))
+        throw std::invalid_argument{"volatile barrels require current hospital outdoor content"};
+    if (profile.pendingRaid && profile.pendingRaid->rescue && profile.pendingRaid->rescue->escortStart &&
+        (schemaVersion < 75 || contentVersion != kHospitalHybridOutdoorContentVersion))
+        throw std::invalid_argument{"hospital survivor escort requires schema 75 and compatible content"};
+    if (profile.pendingRaid && profile.pendingRaid->fieldIntelligenceTrade &&
+        profile.pendingRaid->fieldIntelligenceTrade->hasBarteredOffer() &&
+        (schemaVersion < 75 || !supportsFieldBarterContent(contentVersion)))
+        throw std::invalid_argument{"field barter requires current Raid content and schema"};
     const bool fuelContract = schemaVersion >= 63 && supportsFuelExtractionContent(contentVersion);
     if (profile.pendingRaid && profile.pendingRaid->fuelExtractionLootAssetId && !fuelContract)
         throw std::invalid_argument{"fuel extraction requires schema 63 and compatible content"};
@@ -3388,7 +3470,7 @@ std::string serializeProfileEnvelope(
     if ((schemaVersion == 75 && !scavengerContract) ||
         (!scavengerContract && profile.pendingRaid && !profile.pendingRaid->armedScavengers.empty()))
         throw std::invalid_argument("armed scavengers require schema 75 and compatible content");
-    if (profile.pendingRaid && profile.pendingRaid->spatialLayout.layoutVersion == kHospitalHybridOutdoorLayoutVersion &&
+    if (profile.pendingRaid && isHospitalHybridLayoutVersion(profile.pendingRaid->spatialLayout.layoutVersion) &&
         (schemaVersion != 75 || contentVersion != kHospitalHybridOutdoorContentVersion))
         throw std::invalid_argument("hybrid hospital geometry requires schema 75 and compatible content");
     const bool fireSupportContract = scavengerContract ||
@@ -3471,6 +3553,12 @@ std::string serializeProfileEnvelope(
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
+    if ((schemaVersion != 75 || contentVersion != kHospitalHybridOutdoorContentVersion) &&
+        containsRaidTacticalSupplies(profile))
+        throw std::invalid_argument{"tactical supplies require current hospital outdoor content"};
+    if ((usesRationPolicy(profile) && (schemaVersion != 75 || !supportsBaseRationPolicyContent(contentVersion))) ||
+        (profile.rationPolicy != BaseRationPolicy::Standard && profile.rationPolicy != BaseRationPolicy::Conserve))
+        throw std::invalid_argument{"base ration policy requires current hospital outdoor content"};
     const auto legacy = schemaVersion < 56 ? std::optional<ProfileState>{legacyChestRigSnapshot(profile)} : std::nullopt;
     Json payload = profilePayload(legacy ? *legacy : profile, schemaVersion, freightContract,
         fuelContract, armorContract, illuminationContract, backpackContract);
@@ -3885,6 +3973,13 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
         if (schemaVersion >= 12)
         {
             const Json &population = payload.at("base_population");
+            if (population.contains("ration_policy"))
+            {
+                const auto policy = population.at("ration_policy").get<std::string>();
+                if (schemaVersion != 75 || !supportsBaseRationPolicyContent(contentVersion) ||
+                    (policy != "standard" && policy != "conserve")) throw std::invalid_argument{"invalid base ration policy"};
+                profile.rationPolicy = policy == "conserve" ? BaseRationPolicy::Conserve : BaseRationPolicy::Standard;
+            }
             profile.basePopulation.ordinaryResidents = population.at(
                 "ordinary_residents").get<std::uint32_t>();
             profile.basePopulation.bedCapacity = population.at(
@@ -4129,6 +4224,16 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                 active.outputAssetId = order.at(
                     "output_asset_id").get<AssetInstanceId>();
                 active.outputReady = order.at("output_ready").get<bool>();
+                if (order.contains("expedite_minutes_saved"))
+                {
+                    if (schemaVersion < 75 || !supportsWorkshopExpediteContent(contentVersion))
+                        throw std::invalid_argument{"expedited workshop order requires schema 75 and compatible content"};
+                    const auto &saved = order.at("expedite_minutes_saved");
+                    if (!saved.is_number_unsigned() || saved.get<std::uint64_t>() == 0 ||
+                        saved.get<std::uint64_t>() > std::numeric_limits<std::uint32_t>::max())
+                        throw std::invalid_argument{"invalid workshop expedite saving"};
+                    active.expediteMinutesSaved = saved.get<std::uint32_t>();
+                }
                 if (order.contains("emergency_power_bonus_minutes"))
                     active.emergencyPowerBonusMinutes = powerInteger<std::uint32_t>(
                         order.at("emergency_power_bonus_minutes"));
@@ -4622,6 +4727,15 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                     trade.at("frontier_transport_purchased").get<bool>(),
                     trade.at("transport_purchased").get<bool>(),
                     trade.at("extra_purchased").get<bool>()};
+                if (trade.contains("bartered"))
+                {
+                    const auto &claimed = trade.at("bartered");
+                    if (schemaVersion < 75 || !supportsFieldBarterContent(contentVersion) ||
+                        !claimed.is_array() || claimed.size() != 2U ||
+                        !claimed.at(0).is_boolean() || !claimed.at(1).is_boolean())
+                        throw std::invalid_argument{"invalid field barter snapshot"};
+                    raid.fieldIntelligenceTrade->bartered = claimed.get<std::array<bool, 2>>();
+                }
             }
             if (value.contains("hospital_night_vision_loot"))
             {
@@ -5109,7 +5223,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             {
                 MapDefinition legacyMap = content.map(raid.mapDefinitionId);
                 if (legacyMap.id == kHospitalFloorplanMapId &&
-                    legacyMap.proceduralOutdoor.layoutVersion == kHospitalHybridOutdoorLayoutVersion)
+                    isHospitalHybridLayoutVersion(legacyMap.proceduralOutdoor.layoutVersion))
                     legacyMap.proceduralOutdoor.layoutVersion = kHospitalLegacyOutdoorLayoutVersion;
                 raid.spatialLayout = generateRaidMapLayout(
                     legacyMap,
@@ -5120,7 +5234,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                         {},
                         {}});
             }
-            if (raid.spatialLayout.layoutVersion == kHospitalHybridOutdoorLayoutVersion &&
+            if (isHospitalHybridLayoutVersion(raid.spatialLayout.layoutVersion) &&
                 (schemaVersion != 75 || contentVersion != kHospitalHybridOutdoorContentVersion))
                 return {SaveLoadStatus::Failed, std::nullopt, "incompatible hybrid hospital layout version"};
             if (schemaVersion >= 22)
@@ -5507,6 +5621,26 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                 raid.travel.startingBaseCommunityEvent =
                     startingState.baseCommunityEvent;
             }
+            if (value.contains("field_clue_cache"))
+            {
+                if (schemaVersion != 75 || !supportsFieldClueCacheContent(contentVersion))
+                    throw std::invalid_argument{"field clue cache is unavailable in this content"};
+                const auto &record = value.at("field_clue_cache");
+                RaidFieldCacheSnapshot cache{parseNonzeroAssetId(record.at("reward_asset_id")), {}};
+                if (record.contains("decoded_document_id"))
+                    cache.decodedDocumentId = parseNonzeroAssetId(record.at("decoded_document_id"));
+                raid.fieldClueCache = cache;
+            }
+            if (value.contains("volatile_barrels"))
+            {
+                const auto &entries = value.at("volatile_barrels");
+                if (schemaVersion != 75 || !supportsRaidVolatileBarrelsContent(contentVersion) ||
+                    !entries.is_array() || entries.size() != 2)
+                    throw std::invalid_argument{"invalid frozen volatile barrel list"};
+                for (const auto &entry : entries)
+                    raid.volatileBarrels.push_back({powerInteger<std::uint32_t>(entry.at("id")),
+                        parseVector(entry.at("center"))});
+            }
             if (scavengerContract)
             {
                 const auto &entries = value.at("armed_scavengers");
@@ -5520,6 +5654,14 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                     raid.armedScavengers.push_back({entry.at("source_enemy_id").get<std::string>(),
                         entry.at("corpse_asset_id").get<AssetInstanceId>(), entry.at("pistol_asset_id").get<AssetInstanceId>(),
                         entry.at("first_magazine_id").get<AssetInstanceId>(), entry.at("second_magazine_id").get<AssetInstanceId>()});
+                    if (entry.contains("retreat_point") || entry.contains("escaped"))
+                    {
+                        if (!supportsRaidScavengerRetreatContent(contentVersion) || !entry.contains("retreat_point"))
+                            throw std::invalid_argument{"invalid saved scavenger retreat"};
+                        auto &actor = raid.armedScavengers.back();
+                        actor.retreatPoint = parseVector(entry.at("retreat_point"));
+                        actor.escaped = entry.value("escaped", false);
+                    }
                 }
             }
             else if (value.contains("armed_scavengers"))
@@ -5550,6 +5692,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                     if (!profession)
                         throw std::invalid_argument("night rendezvous profession is invalid");
                     const auto &point = rescue.at("transfer_point");
+                    if (rescue.contains("escort_start"))
+                        return {SaveLoadStatus::Failed, std::nullopt, "night rendezvous cannot use a hospital escort"};
                     raid.nightRendezvous = RaidRescueSnapshot{
                         RescueDefinitionId{rescue.at("definition_id").get<std::string>()},
                         RaidRescueSubjectKind::OrdinaryResidents,
@@ -5615,6 +5759,12 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                          : 0U,
                     rescueProfession,
                     rescue.at("secured").get<bool>()};
+                if (rescue.contains("escort_start"))
+                {
+                    if (schemaVersion < 75 || contentVersion != kHospitalHybridOutdoorContentVersion)
+                        return {SaveLoadStatus::Failed, std::nullopt, "unsupported hospital survivor escort snapshot"};
+                    raid.rescue->escortStart = parseVector(rescue.at("escort_start"));
+                }
             }
             if (schemaVersion >= 26 &&
                 !value.at("self_recovery").is_null())
@@ -5846,6 +5996,11 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             if (!raidPursuitGeometryValid(content.map(raid.mapDefinitionId), raid, *raid.selfRecovery->pursuit))
                 return {SaveLoadStatus::Failed, std::nullopt, "invalid frozen lost weapon pursuit geometry"};
         }
+        if ((schemaVersion != 75 || contentVersion != kHospitalHybridOutdoorContentVersion) &&
+            containsRaidTacticalSupplies(profile))
+            return {SaveLoadStatus::Failed, std::nullopt, "tactical supplies require current hospital outdoor content"};
+        if (usesRationPolicy(profile) && (schemaVersion != 75 || !supportsBaseRationPolicyContent(contentVersion)))
+            return {SaveLoadStatus::Failed, std::nullopt, "base ration policy requires current hospital outdoor content"};
         const bool migratedChestRig = profile.chestRigLayoutVersion == 0;
         const auto migration = migrateLegacyChestRigLayout(profile, content);
         if (!migration.valid) return {SaveLoadStatus::Failed, std::nullopt, migration.message};

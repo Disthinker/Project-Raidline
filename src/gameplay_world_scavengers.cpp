@@ -1,4 +1,5 @@
 #include "gameplay_world.h"
+#include "content_registry.h"
 
 #include <algorithm>
 #include <cmath>
@@ -24,6 +25,7 @@ void GameplayWorld::addArmedScavenger(const EnemySpawn &spawn, CombatTargetId id
         config.loadedRounds < 0 || config.loadedRounds > 6 ||
         config.spareRounds < 0 || config.spareRounds > 6 ||
         (config.spareMagazineInstalled && config.spareRounds != 0) ||
+        (config.retreatPoint && (!std::isfinite(config.retreatPoint->x) || !std::isfinite(config.retreatPoint->y))) ||
         config.pistol.damage <= 0 || config.pistol.penetration < 0 ||
         !std::isfinite(config.pistol.projectileSpeed) || config.pistol.projectileSpeed <= 0 ||
         !std::isfinite(config.pistol.noiseRadius) || config.pistol.noiseRadius < 0 ||
@@ -35,6 +37,44 @@ void GameplayWorld::addArmedScavenger(const EnemySpawn &spawn, CombatTargetId id
     scavengerViews_.push_back({spawn.sourceEnemyId, id, config.loadedRounds, config.spareRounds,
         config.spareMagazineInstalled, 12 - config.loadedRounds - config.spareRounds});
     scavengerWeapons_.push_back({config.pistol, centerOf({spawn.position, spawn.size})});
+    scavengerWeapons_.back().retreatPoint = config.retreatPoint;
+}
+
+void GameplayWorld::checkScavengerRetreat(std::size_t index, const Enemy &actor)
+{
+    auto &view = scavengerViews_[index];
+    auto &weapon = scavengerWeapons_[index];
+    if (!weapon.retreatPoint || view.retreating || actor.isDead() ||
+        (actor.health() > actor.maxHealth() / 3 && (view.loadedRounds > 0 || view.spareRounds > 0)))
+        return;
+    view.retreating = true;
+    view.aiming = view.reloading = false;
+    view.aimDirection = {};
+    weapon.target.reset();
+    weapon.elapsed = 0;
+}
+
+bool GameplayWorld::confirmArmedScavengerEscape(std::string_view sourceId)
+{
+    if (activeInteriorIndex_) return false;
+    for (std::size_t i = 0; i < scavengerViews_.size(); ++i)
+    {
+        auto &view = scavengerViews_[i];
+        if (view.sourceEnemyId != sourceId || !view.alive || !view.escapeReady) continue;
+        const auto *actor = enemies_.find(view.id);
+        if (!actor) return false;
+        const auto &goal = scavengerWeapons_[i].retreatPoint;
+        const Vec2 center = centerOf(actor->bounds());
+        if (!goal || std::hypot(goal->x - center.x, goal->y - center.y) > kRaidScavengerRetreatExitRadius)
+            return false;
+        const auto removed = enemies_.removeForObjective(std::span<const CombatTargetId>{&view.id, 1});
+        if (removed.empty()) return false;
+        consumeEnemyRemovals(removed);
+        enemyObservationCache_.clear();
+        enemyObservationIndexReady_ = false;
+        return true;
+    }
+    return false;
 }
 
 bool GameplayWorld::scavengerSight(Vec2 start, Vec2 end, ScavengerSightSample &sample)
@@ -43,7 +83,7 @@ bool GameplayWorld::scavengerSight(Vec2 start, Vec2 end, ScavengerSightSample &s
         sample.end.x == end.x && sample.end.y == end.y)
         return *sample.visible;
     std::size_t checks{};
-    const bool visible = outdoorBlockerIndex_->hasLineOfSight(start, end, &checks);
+    const bool visible = !activeSmokeSight_.blocks(start, end) && outdoorBlockerIndex_->hasLineOfSight(start, end, &checks);
     simulationWorkloadLastUpdate_.lineOfSightBlockersExamined += checks;
     sample = {start, end, visible};
     return visible;
@@ -135,6 +175,13 @@ void GameplayWorld::updateScavengerWeapons(float seconds)
             consumeEnemyRemovals(result.removals);
         }
         if (!view.alive) continue;
+        if (weapon.retreatPoint)
+        {
+            // Player fire and infected contact can wound a guard after the last movement substep.
+            if (!view.retreating)
+                if (const auto *actor = enemies_.find(view.id)) checkScavengerRetreat(i, *actor);
+            if (view.retreating) continue;
+        }
 
         if (view.loadedRounds == 0)
         {
@@ -164,7 +211,7 @@ void GameplayWorld::updateScavengerWeapons(float seconds)
             const float distance = delta.x * delta.x + delta.y * delta.y;
             if (distance < 1e-6F || distance > bestDistance ||
                 (distance == bestDistance && target && *target < id) ||
-                !outdoorBlockerIndex_->hasLineOfSight(origin, destination))
+                activeSmokeSight_.blocks(origin, destination) || !outdoorBlockerIndex_->hasLineOfSight(origin, destination))
                 return;
             bestDistance = distance;
             target = id;

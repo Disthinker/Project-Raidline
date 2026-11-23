@@ -1,4 +1,8 @@
-# 医院片区混合室外 v1 · 已验收
+# 十六项玩法联合候选 · 已通过人工验收
+
+本轮基于 `main@ad3268c`。第 15、16 项为河畔拾荒者撤退与工坊有偿加急，已和前十四项合入本地试玩包，程序指纹 `a4a3c9b57a3f`。Windows 全量 3549/3549，14 项 3 ms 性能检查通过，千件资产存档 P95 为 4.6679 ms。用户已完成联合验收，授权提交、推送和创建 PR，Windows 与 Ubuntu CI 都通过后合并。[启动联合试玩](<E:/RaidlineBuild/candidates/local-multistage-v3/开始联合试玩.cmd>) · [联合试玩清单](../acceptance/local-multistage-v3.md) · [验证记录](../exec-plans/active/local-multistage-v3.md)
+
+## 医院片区混合室外 v1 · 已验收
 
 用户已验收阶段 II 候选 `8753af714a8d`，授权提交并推送至 `codex/proc-map-hospital-outdoor-v1`。开发基线为主线 `9ba5809`。Windows Debug 3428/3428；128 个种子双路线验证通过。[启动与四步验收](../acceptance/proc-map-hospital-outdoor-v1.md) · [开发及验证记录](../exec-plans/active/proc-map-hospital-outdoor-v1.md)
 

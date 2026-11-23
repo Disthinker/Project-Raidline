@@ -93,6 +93,11 @@ inline const BaseManufacturingRecipeDefinitionId kArmorRepairResearchId{
 inline const BaseManufacturingRecipeDefinitionId kArmorRepairRecipeId{
     "base_manufacturing.armor_repair_tool"};
 inline const ItemDefinitionId kThrownIlluminationItemId{"item.throwable.field_flare"};
+inline const ItemDefinitionId kRaidAlarmItemId{"item.utility.proximity_alarm"};
+inline const BaseManufacturingRecipeDefinitionId kRaidAlarmRecipeId{"base_manufacturing.proximity_alarm"};
+inline const ItemDefinitionId kRaidFireBottleItemId{"item.throwable.fire_bottle"};
+inline const BaseManufacturingRecipeDefinitionId kRaidFireBottleRecipeId{"base_manufacturing.fire_bottle"};
+inline const ItemDefinitionId kRaidSmokeItemId{"item.throwable.smoke_canister"};
 inline const BaseManufacturingRecipeDefinitionId kThrownIlluminationRecipeId{
     "base_manufacturing.field_flare"};
 inline constexpr std::uint32_t kArmorRepairResearchDurationMinutes{360U};
@@ -144,15 +149,53 @@ inline constexpr std::string_view kRaidFireSupportContentVersion{
 
 inline constexpr std::string_view kRiversideArmedScavengersContentVersion{
     "raid-riverside-armed-scavengers-content-93"};
+inline constexpr float kRaidScavengerRetreatExitRadius = 8.0F;
 
 inline constexpr std::string_view kHospitalHybridOutdoorContentVersion{
     "proc-map-hospital-outdoor-content-94"};
 inline constexpr std::uint32_t kHospitalLegacyOutdoorLayoutVersion = 4U;
 inline constexpr std::uint32_t kHospitalHybridOutdoorLayoutVersion = 6U;
+inline constexpr std::uint32_t kHospitalLandmarkInteriorLayoutVersion = 7U;
+inline const RaidSpaceDefinitionId kHospitalDepotSpaceId{"raid_space.hospital_district.transport_depot"};
+
+[[nodiscard]] constexpr bool isHospitalHybridLayoutVersion(std::uint32_t version) noexcept
+{
+    return version == kHospitalHybridOutdoorLayoutVersion || version == kHospitalLandmarkInteriorLayoutVersion;
+}
 
 [[nodiscard]] inline bool supportsRiversideArmedScavengersContent(std::string_view version) noexcept
 {
     return version == kRiversideArmedScavengersContentVersion || version == kHospitalHybridOutdoorContentVersion;
+}
+
+[[nodiscard]] inline bool supportsRaidScavengerRetreatContent(std::string_view version) noexcept
+{
+    return version == kHospitalHybridOutdoorContentVersion;
+}
+
+[[nodiscard]] inline bool supportsFieldClueCacheContent(std::string_view version) noexcept
+{
+    return version == kHospitalHybridOutdoorContentVersion;
+}
+
+[[nodiscard]] inline bool supportsBaseRationPolicyContent(std::string_view version) noexcept
+{
+    return version == kHospitalHybridOutdoorContentVersion;
+}
+
+[[nodiscard]] inline bool supportsWorkshopExpediteContent(std::string_view version) noexcept
+{
+    return version == kHospitalHybridOutdoorContentVersion;
+}
+
+[[nodiscard]] inline bool supportsRaidVolatileBarrelsContent(std::string_view version) noexcept
+{
+    return version == kHospitalHybridOutdoorContentVersion;
+}
+
+[[nodiscard]] inline bool supportsFieldBarterContent(std::string_view version) noexcept
+{
+    return version == kHospitalHybridOutdoorContentVersion;
 }
 
 [[nodiscard]] inline bool supportsRaidFireSupportContent(std::string_view version) noexcept
@@ -472,6 +515,7 @@ struct RaidInteriorDefinition
     // Decorative signs only: not collision, discovery, loot or navigation.
     // Geometry changes require a new space identity, not reinterpretation of a saved room.
     std::vector<RaidRoomLabelDefinition> roomLabels;
+    std::string landmarkDefinitionId;
 
     friend bool operator==(
         const RaidInteriorDefinition &,
@@ -874,6 +918,16 @@ struct RaidResourcePointArchetypeDefinition
         const RaidResourcePointArchetypeDefinition &,
         const RaidResourcePointArchetypeDefinition &) = default;
 };
+
+// Move one street supply indoors without removing a whole outdoor search point.
+[[nodiscard]] inline std::uint32_t raidResourcePointCapacity(std::uint32_t layoutVersion,
+    const RaidResourcePointArchetypeDefinition &archetype, std::string_view instanceId) noexcept
+{
+    if (layoutVersion == kHospitalLandmarkInteriorLayoutVersion &&
+        instanceId == "resource_point.hospital.street_supplies:0" && archetype.capacity > 1U)
+        return archetype.capacity - 1U;
+    return archetype.capacity;
+}
 
 // Content owns the theme grammar while every accepted per-Raid result is
 // frozen in PendingRaidSnapshot. Layout v3 uses a fine outdoor grid plus a

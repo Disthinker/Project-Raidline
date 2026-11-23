@@ -411,6 +411,7 @@ buildRaidSpaceConeVisibility(const RaidSpaceBlockerIndex &index,
     const auto o = key.observer;
     result.lightAssetId = key.lightAssetId; result.lightBatteryId = key.lightBatteryId;
     result.lightAngleDegrees = key.lightAngleDegrees; result.lightDistance = key.lightDistance;
+    result.smoke = key.smoke;
     const float radius = std::max(key.maximumDistance, key.lightDistance);
     if (!finite(o) || !finite(key.direction) || !std::isfinite(radius) ||
         radius <= 0 || !std::isfinite(key.maximumDistance) || key.maximumDistance <= 0 || !std::isfinite(key.angleDegrees) ||

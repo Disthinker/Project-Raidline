@@ -5,8 +5,17 @@
 #include <string>
 
 #include "inventory_domain.h"
+#include "raid_volatile_barrel.h"
 
 struct RaidReloadWorldAccess;
+
+[[nodiscard]] std::vector<RaidVolatileBarrelSpawn> selectRaidVolatileBarrels(
+    const MapDefinition &map, const PendingRaidSnapshot &raid);
+[[nodiscard]] bool validRaidVolatileBarrelPlacement(
+    const MapDefinition &map, const PendingRaidSnapshot &raid, Vec2 center) noexcept;
+[[nodiscard]] bool validRaidFieldClueCache(const MapDefinition &map, const PendingRaidSnapshot &raid);
+[[nodiscard]] bool validRaidScavengerRetreatPoint(const MapDefinition &map, const PendingRaidSnapshot &raid,
+    const RaidArmedScavengerSnapshot &actor, Vec2 point) noexcept;
 
 [[nodiscard]] bool hasFixedRaidResourceOptic(
     const ContentRegistry &content,
@@ -224,3 +233,7 @@ inline constexpr float kRaidBackpackInteractionRange = 72.0F;
     const RaidVisibilityProjection *observation = nullptr,
     const RaidObservationKey *currentObservation = nullptr,
     const RaidReloadWorldAccess *reloadAccess = nullptr);
+
+[[nodiscard]] InventoryReceipt collectRaidFieldCache(
+    ProfileState &, const ContentRegistry &, const CommandContext &,
+    const RaidVisibilityProjection &, const RaidObservationKey &);

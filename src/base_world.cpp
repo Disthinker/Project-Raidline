@@ -342,6 +342,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
     if (wasControlled) {
         input.moveUp = input.moveDown = input.moveLeft = input.moveRight = false;
         input.firePressed = input.fireJustPressed = input.meleeJustPressed = input.interactJustPressed = false;
+        input.meleeHeavyJustPressed = input.meleeHeavyHeld = false;
         input.allowWeaponOptics = false;
     }
     perimeterDamageObservation_.reset();
@@ -577,7 +578,8 @@ std::optional<BaseFacilityKind> BaseWorld::update(
     appendBaseEnemyDeaths(baseEnemyDeaths_, shotRemovals, shotSizes);
     melee_.prepare(input.meleeJustPressed,input.inventoryOpen || wasControlled || playerControlled(),
         playerCenter,shooting_.aimDirection(),
-        perimeterEnemies_,[&](Vec2 a,Vec2 b){return movementBlockerIndex_->hasLineOfSight(a,b) && dailyFortifications_.lineOfSight(a,b);});
+        perimeterEnemies_,[&](Vec2 a,Vec2 b){return movementBlockerIndex_->hasLineOfSight(a,b) && dailyFortifications_.lineOfSight(a,b);},
+        HeavyMeleeInput::from(input));
     // Only accepted shots alert survivors. Awareness changes now; movement
     // consumes it on the next update, never by replaying the current frame.
     if (shooting_.shotFiredLastUpdate() &&

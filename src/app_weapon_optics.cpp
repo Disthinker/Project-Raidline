@@ -186,6 +186,8 @@ void App::renderRaidOpticScene(Rect visible, bool terrainOnly, bool drawAvatar)
     renderBallisticBlockers(terrainOnly, visible);
     if (terrainOnly)
         return;
+    renderRaidFireZones();
+    renderRaidAlarmDevices();
     renderExtractionPoint();
     renderNightRendezvousWorld();
     renderRaidSpacePortal();
@@ -205,6 +207,10 @@ void App::renderRaidOpticScene(Rect visible, bool terrainOnly, bool drawAvatar)
     renderShotFeedbackPresentations();
     renderParticles();
     renderNoiseDecoyWorld();
+    if (activeRaidSmoke()) {
+        renderRaidSmokeCover(visible);
+        if (drawAvatar) renderPlayer();
+    }
 }
 
 void App::clearUnavailableOpticView()

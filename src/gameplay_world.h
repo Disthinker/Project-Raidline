@@ -40,6 +40,11 @@
 #include "raid_noise_decoy_runtime.h"
 #include "raid_grenade_runtime.h"
 #include "thrown_illumination_runtime.h"
+#include "raid_smoke_runtime.h"
+#include "raid_fire_zone_runtime.h"
+#include "raid_proximity_alarm.h"
+#include <deque>
+#include "raid_volatile_barrel.h"
 
 struct RaidSimulationWorkload
 {
@@ -71,6 +76,7 @@ struct RaidArmedScavengerConfig
     int loadedRounds{};
     int spareRounds{};
     bool spareMagazineInstalled{};
+    std::optional<Vec2> retreatPoint;
 };
 
 struct RaidArmedScavengerView
@@ -83,6 +89,8 @@ struct RaidArmedScavengerView
     bool alive{true}, aiming{}, reloading{};
     Vec2 aimDirection{};
     bool ammunitionChangedLastUpdate{};
+    bool retreating{}, escapeReady{}, escaped{};
+    Vec2 retreatDirection{};
 };
 
 struct EnemySpawn
@@ -168,6 +176,17 @@ enum class RaidFieldTradeAccess
     Available
 };
 
+enum class HospitalEscortState { AwaitingContact, Following, Waiting, Down, Delivered };
+
+struct HospitalEscortView
+{
+    Vec2 position;
+    ContentRect handoff;
+    int health{};
+    HospitalEscortState state{HospitalEscortState::AwaitingContact};
+    bool outdoor{}, visible{}, inInteractionRange{}, threatened{}, atHandoff{};
+};
+
 struct RaidWorldConfig
 {
     Vec2 worldSize{1280.0F, 720.0F};
@@ -189,6 +208,7 @@ struct RaidWorldConfig
     {
         ContentRect transferPoint;
         float interactionDurationSeconds{};
+        std::optional<Vec2> escortStart;
     };
     std::optional<OrdinarySurvivorRescue> rescue;
     RaidIntelligenceLoadout intelligence;
@@ -205,6 +225,7 @@ struct RaidWorldConfig
     std::optional<ContentRect> nightRendezvous;
     bool nightRendezvousUnavailable{};
     std::optional<FireSupportConfig> fireSupport;
+    std::vector<RaidVolatileBarrelSpawn> volatileBarrels;
 };
 
 struct RaidNightRendezvousView
@@ -490,6 +511,7 @@ public:
     [[nodiscard]] float ordinarySurvivorRescueTimeRemaining() const noexcept;
     [[nodiscard]] bool ordinarySurvivorRescueInteractionInRange() const noexcept;
     [[nodiscard]] bool ordinarySurvivorRescueReady() const noexcept;
+    [[nodiscard]] std::optional<HospitalEscortView> hospitalEscort() const;
     void confirmOrdinarySurvivorRescue() noexcept;
     void cancelOrdinarySurvivorRescueInteraction() noexcept;
 
@@ -544,6 +566,7 @@ public:
     [[nodiscard]] const WorldMeleeRuntime &melee() const noexcept {return melee_;}
     [[nodiscard]] bool commitPreparedMelee();
     void cancelPreparedMelee() noexcept {melee_.cancelPrepared();}
+    void cancelHeavyMelee() noexcept {melee_.cancelHeavyCharge();}
     [[nodiscard]] bool isAlphaRaidWorld() const noexcept;
     [[nodiscard]] bool restorePlayerHealth(int amount);
 
@@ -562,11 +585,14 @@ public:
     bool setFireSupportOrders(FireSupportMovementOrder, FireSupportFireOrder) noexcept;
     [[nodiscard]] std::optional<FireSupportView> fireSupport() const;
     [[nodiscard]] std::optional<int> fireSupportHealth() const noexcept;
+    [[nodiscard]] bool fireSupportTreatmentBlocked() const noexcept;
+    void restoreFireSupportHealth(int amount);
     // Death does not move the companion out of its actual Raid space.
     [[nodiscard]] const RaidSpaceDefinitionId &fireSupportSpaceId() const noexcept;
     [[nodiscard]] std::optional<Vec2> fireSupportDeathPosition() const noexcept;
     [[nodiscard]] bool canInteractWithFireSupport() const noexcept;
     [[nodiscard]] const std::vector<RaidArmedScavengerView> &armedScavengers() const noexcept { return scavengerViews_; }
+    [[nodiscard]] bool confirmArmedScavengerEscape(std::string_view sourceId);
     [[nodiscard]] const std::vector<FireSupportShotEvent> &armedScavengerShotsLastUpdate() const noexcept { return scavengerShotEvents_; }
     [[nodiscard]] std::optional<FireSupportShotEvent> fireSupportShotLastUpdate() const noexcept;
     [[nodiscard]] bool noiseDecoyEnabled() const noexcept { return noiseDecoyEnabled_; }
@@ -574,6 +600,24 @@ public:
     [[nodiscard]] std::optional<NoiseDecoyLanding> previewNoiseDecoy(Vec2 aim, const NoiseDecoyUseDefinition &) const;
     void commitNoiseDecoy(RaidNoiseDecoyRuntime prepared) noexcept { noiseDecoy_ = std::move(prepared); }
     [[nodiscard]] bool grenadeEnabled() const noexcept { return grenadeEnabled_; }
+    [[nodiscard]] const RaidSmokeRuntime &smoke() const noexcept { return smoke_; }
+    [[nodiscard]] const RaidFireZoneRuntime &fireZones() const noexcept { return fireZones_; }
+    [[nodiscard]] const RaidProximityAlarmRuntime &proximityAlarms() const noexcept { return proximityAlarms_; }
+    [[nodiscard]] std::optional<RaidAlarmPlacement> previewProximityAlarm(Vec2 aim, const ProximityAlarmUseDefinition &) const;
+    void commitProximityAlarms(RaidProximityAlarmRuntime prepared) noexcept { proximityAlarms_ = std::move(prepared); }
+    [[nodiscard]] bool proximityAlarmTriggeredLastUpdate() const noexcept { return alarmTriggeredLastUpdate_; }
+    [[nodiscard]] float proximityAlarmAlertSeconds() const noexcept { return alarmAlertSeconds_; }
+    [[nodiscard]] std::optional<FireZoneLanding> previewFireZone(Vec2 aim, const FireZoneUseDefinition &) const;
+    void commitFireZone(RaidFireZoneRuntime prepared) noexcept { fireZones_ = std::move(prepared); }
+    [[nodiscard]] bool fireZoneReaches(const RaidFireZone &, Vec2) const noexcept;
+    [[nodiscard]] std::shared_ptr<const RaidIlluminationCoverage> fireZoneCoverage(const RaidFireZone &) const;
+    [[nodiscard]] bool hasPendingFireDamage() const noexcept { return !pendingFireTicks_.empty(); }
+    [[nodiscard]] std::optional<RaidFireDamageTick> prepareFireDamageTick() const;
+    [[nodiscard]] bool validatePreparedFireDamageTick(const RaidFireDamageTick &) const;
+    bool commitPreparedFireDamageTick(const RaidFireDamageTick &);
+    [[nodiscard]] std::optional<SmokeLanding> previewSmoke(Vec2 aim, const SmokeUseDefinition &) const;
+    void commitSmoke(RaidSmokeRuntime prepared) noexcept { smoke_ = std::move(prepared); refreshSmokeSight(); }
+    [[nodiscard]] bool smokeBlocksSight(Vec2 from, Vec2 to) const noexcept { return activeSmokeSight_.blocks(from, to); }
     [[nodiscard]] const RaidGrenadeRuntime &grenade() const noexcept { return grenade_; }
     [[nodiscard]] const ThrownIlluminationRuntime &thrownIllumination() const noexcept { return thrownIllumination_; }
     [[nodiscard]] std::optional<ThrownIlluminationLanding> previewThrownIllumination(
@@ -581,6 +625,10 @@ public:
     void commitThrownIllumination(ThrownIlluminationRuntime prepared) noexcept { thrownIllumination_ = std::move(prepared); }
     [[nodiscard]] std::optional<GrenadeLanding> previewGrenade(Vec2, const GrenadeUseDefinition &) const;
     void commitGrenade(RaidGrenadeRuntime prepared) noexcept;
+    [[nodiscard]] std::span<const RaidVolatileBarrelView> volatileBarrels() const noexcept
+    { return inOutdoorRaidSpace() ? std::span<const RaidVolatileBarrelView>{volatileBarrels_} : std::span<const RaidVolatileBarrelView>{}; }
+    [[nodiscard]] bool hasPendingRaidExplosion() const noexcept
+    { return grenade_.pendingExplosion().has_value() || (!pendingBarrelIds_.empty() && inOutdoorRaidSpace()); }
     [[nodiscard]] std::optional<GrenadeExplosionPlan> prepareGrenadeExplosion() const;
     [[nodiscard]] bool validatePreparedGrenadeExplosion(const GrenadeExplosionPlan &) const;
     [[nodiscard]] bool commitPreparedGrenadeExplosion(const GrenadeExplosionPlan &);
@@ -668,6 +716,8 @@ private:
         EnemyNavigationRuntime navigation;
         EnemyEncounterRuntime encounter;
         bool noiseResponsive{};
+        double fireExposure{};
+        std::uint64_t fireExposureGeneration{};
     };
 
     struct InteriorRuntime
@@ -751,6 +801,8 @@ private:
         std::optional<CombatTargetId> target; // Zero denotes the player.
         std::optional<LogicalBallisticFlight> flight;
         std::vector<CombatTargetId> attackLocks;
+        std::optional<Vec2> retreatPoint, nextRetreatWaypoint;
+        float retreatRetrySeconds{};
     };
     std::vector<RaidArmedScavengerView> scavengerViews_;
     std::vector<ScavengerWeaponRuntime> scavengerWeapons_;
@@ -774,10 +826,12 @@ private:
         const Enemy &, Vec2 position, Vec2 player, std::span<Enemy *const> guards,
         ScavengerSightSample *sight);
     void addArmedScavenger(const EnemySpawn &, CombatTargetId);
+    void checkScavengerRetreat(std::size_t index, const Enemy &actor);
+    void advanceScavengerRetreats(std::span<Enemy *const> actors, float seconds);
     void updateScavengerWeapons(float seconds);
     void clearScavengerAim() noexcept;
-    template <bool FireSupportEnabled, bool ScavengersEnabled = false>
-    bool advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *support);
+    template <bool CompanionsEnabled, bool ScavengersEnabled = false>
+    bool advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *support, RaidCompanionRuntime *escort = nullptr);
     void emitRaidNoise(Vec2 source, float radius) noexcept;
     void consumeEnemyRemovals(std::span<const EnemyRemovalFact>);
     [[nodiscard]] Vec2 lostWeaponCorpseSearchPoint(Vec2 deathCenter) const noexcept;
@@ -897,6 +951,12 @@ private:
     float ordinarySurvivorRescueDurationSeconds_{};
     float ordinarySurvivorRescueElapsedSeconds_{};
     bool ordinarySurvivorRescueSecured_{};
+    std::optional<RaidCompanionRuntime> hospitalEscortActor_;
+    HospitalEscortState hospitalEscortOrder_{HospitalEscortState::AwaitingContact};
+    bool hospitalEscortCommandHeld_{};
+    [[nodiscard]] bool nearHospitalEscort() const noexcept;
+    [[nodiscard]] bool hospitalEscortAtHandoff() const noexcept;
+    [[nodiscard]] bool hospitalEscortThreatened() const noexcept;
     std::optional<RaidNightRendezvousView> nightRendezvous_;
     bool nightRendezvousUnavailable_{};
     bool nightRendezvousConsumedInteraction_{};
@@ -921,6 +981,36 @@ private:
     bool grenadeEnabled_{};
     RaidGrenadeRuntime grenade_;
     ThrownIlluminationRuntime thrownIllumination_;
+    RaidSmokeRuntime smoke_;
+    RaidFireZoneRuntime fireZones_;
+    RaidProximityAlarmRuntime proximityAlarms_;
+    bool alarmTriggeredLastUpdate_{};
+    float alarmAlertSeconds_{};
+    struct FireInterval { Vec2 center; float radius{}; double from{}, until{}; int damage{}; };
+    std::array<FireInterval, RaidFireZoneRuntime::kCapacity> frameFireIntervals_{};
+    std::size_t frameFireIntervalCount_{};
+    Vec2 firePlayerFrameStart_{}, firePlayerFrameEnd_{};
+    double playerFireExposure_{};
+    std::uint64_t fireExposureGeneration_{1};
+    struct FirePulse
+    {
+        std::uint64_t sequence{};
+        RaidSpaceDefinitionId space;
+        int playerDamage{};
+        std::vector<std::pair<CombatTargetId, int>> enemies;
+    };
+    std::deque<FirePulse> pendingFireTicks_;
+    std::uint64_t nextFireTick_{1};
+    mutable std::array<std::shared_ptr<const RaidIlluminationCoverage>, RaidFireZoneRuntime::kCapacity> fireCoverage_;
+    void advanceFireZones(float seconds, Vec2 before, Vec2 after, bool transitioned);
+    void collectFireDamage(Vec2 point, CombatTargetId, double &credit, double from, double until, std::size_t firstPulse);
+    [[nodiscard]] bool validateAreaDamageTargets(std::span<const GrenadeEnemyDamage>) const;
+    void applyAreaDamageTargets(std::span<const GrenadeEnemyDamage>);
+    std::vector<RaidVolatileBarrelView> volatileBarrels_;
+    std::vector<BallisticBlocker> intactBarrelTargets_;
+    std::vector<std::uint32_t> pendingBarrelIds_;
+    RaidSmokeSight activeSmokeSight_;
+    void refreshSmokeSight() noexcept;
     std::optional<GrenadeExplosion> lastGrenadeExplosion_;
     bool grenadeExplodedLastUpdate_{};
     float grenadeFlashSeconds_{};

@@ -187,6 +187,8 @@ ProfileUiPrepared prepareProfileUiCommand(ProfileState &candidate, const Content
                 return resultOf(executeMoveMedicalReserveAsset(candidate, content, typed, context));
             else if constexpr (std::is_same_v<Command, SetResidentMedicalReservePolicyCommand>)
                 return resultOf(executeSetResidentMedicalReservePolicy(candidate, content, typed, context));
+            else if constexpr (std::is_same_v<Command, SetBaseRationPolicyCommand>)
+                return resultOf(executeBaseRationPolicy(candidate, content, typed, context));
             else if constexpr (std::is_same_v<Command, StartGunsmithMaintenanceCommand>)
             {
                 auto receipt = executeGunsmithMaintenance(candidate, content, typed, context);
@@ -221,6 +223,13 @@ ProfileUiPrepared prepareProfileUiCommand(ProfileState &candidate, const Content
                 return resultOf(executeCancelBaseEngineeringTraining(candidate, content, context));
             else if constexpr (std::is_same_v<Command, ProfileUiCancelManufacturingCommand>)
                 return resultOf(executeCancelBaseManufacturing(candidate, content, context));
+            else if constexpr (std::is_same_v<Command, ProfileUiExpediteManufacturingCommand>)
+            {
+                if (context.expectedRevision != typed.previewRevision && !candidate.committedTransactions.contains(context.transactionId))
+                    return resultOf(reject<BaseManufacturingReceipt>(candidate.revision, DomainErrorCode::StaleRevision,
+                        "profile revision is stale"));
+                return resultOf(executeExpediteBaseManufacturing(candidate, content, {typed.jobId, typed.materialId}, context));
+            }
             else if constexpr (std::is_same_v<Command, ProfileUiCollectManufacturingCommand>)
             {
                 auto receipt = executeCollectBaseManufacturing(candidate, content, context);
@@ -334,6 +343,8 @@ ProfileUiPrepared prepareProfileUiCommand(ProfileState &candidate, const Content
                     DomainErrorCode::IllegalDestination, "Fortification installation needs the current Base world"));
                 return resultOf(executeFortificationPlacement(candidate, content, *world, typed, context));
             }
+            else if constexpr (std::is_same_v<Command, MedicalConsolidationCommand>)
+                return resultOf(executeMedicalConsolidation(candidate, content, typed, context), {}, typed.targetId);
             else if constexpr (std::is_same_v<Command, ProfileUiBaseMedicalCommand>)
             {
                 auto receipt = executeMedicalUse(candidate, content, typed.assetId, MedicalAccess::AnyOwned, context);

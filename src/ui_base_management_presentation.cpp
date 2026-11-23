@@ -330,7 +330,7 @@ UiBaseKitchenFacts projectUiBaseKitchenFacts(const ProfileState &p,const Content
     UiBaseKitchenFacts result;
     result.installed=baseFacilityInstalled(p,BaseFacilityDefinitionId{"base_facility.kitchen_water"});
     result.level=p.baseConstruction.kitchenWaterLevel;result.pool=p.baseResources.pool;
-    result.demand=populationAdjustedDailyDemand(p.basePopulation);result.lastShortfall=p.baseResources.lastShortfall;
+    result.demand=previewBaseRationPolicy(p).dailyDemand;result.lastShortfall=p.baseResources.lastShortfall;
     result.operations=projectBaseOperations(p.baseResources,c.baseOperations(),result.demand);
     result.clock=projectWorldClock(p.worldClock);result.dailyCycles=p.baseResources.resolvedDemandCycleCount;
     return result;

@@ -42,26 +42,27 @@ struct FireSupportShotEvent
     float noiseRadius{};
 };
 
-class RaidFireSupportRuntime
+// Shared spatial and contact state for an escortee and an armed teammate.
+class RaidCompanionRuntime
 {
 public:
     static constexpr Vec2 kSize{32.0F, 32.0F};
     static constexpr float kInteractionReach = 72.0F;
-
-    RaidFireSupportRuntime(FireSupportConfig config, Vec2 spawnPosition);
+    explicit RaidCompanionRuntime(Vec2 spawnPosition, float followSpeed = 285.0F, float catchUpSpeed = 375.0F)
+        : position_{spawnPosition}, followSpeed_{followSpeed}, catchUpSpeed_{catchUpSpeed} {}
 
     [[nodiscard]] Rect bounds() const noexcept { return {position_, kSize}; }
     [[nodiscard]] Vec2 center() const noexcept;
     [[nodiscard]] bool alive() const noexcept { return !health_.isDead(); }
-    [[nodiscard]] FireSupportView view() const noexcept;
-    void setOrders(FireSupportMovementOrder, FireSupportFireOrder) noexcept;
-    void clearSpatialTransient() noexcept;
-    void leaveSpace() noexcept;
+    [[nodiscard]] int health() const noexcept { return health_.current(); }
+    [[nodiscard]] bool treatmentBlocked() const noexcept { return controlRemaining_ > 0.0F || treatmentInterrupted_; }
+    void restoreHealth(int amount) { if (alive() && amount > 0) static_cast<void>(health_.restore(amount)); }
+    void setMovementOrder(FireSupportMovementOrder order) noexcept;
 
     // World owns the shared static geometry and resolves the requested sweep.
     [[nodiscard]] Vec2 prepareMovement(
         Vec2 goal, const RaidSpaceNavigationField *field,
-        const RaidSpaceBlockerIndex &blockers, float seconds);
+        const RaidSpaceBlockerIndex &blockers, float seconds, float stopDistance = 57.0F);
     void setPosition(Vec2 position) noexcept { position_ = position; }
 
     [[nodiscard]] bool hasAttackLock(CombatTargetId id) const noexcept;
@@ -70,7 +71,38 @@ public:
     [[nodiscard]] float &contactProtection() noexcept { return contactProtection_; }
     void applyContact(const PlayerDamageObservation &, float controlDuration);
 
-    void beginFrame() noexcept { shotEvent_.reset(); }
+protected:
+    FireSupportMovementOrder movementOrder_{FireSupportMovementOrder::Follow};
+    float controlRemaining_{};
+    bool receivingTreatment_{};
+    bool treatmentInterrupted_{};
+    void clearNavigation() noexcept;
+    void clearAttackLocks() noexcept { attackLocks_.clear(); }
+
+private:
+    Vec2 position_;
+    Health health_{kFireSupportMaxHealth};
+    float followSpeed_, catchUpSpeed_;
+    std::optional<Vec2> waypoint_;
+    float navigationRefresh_{};
+    std::vector<CombatTargetId> attackLocks_;
+    float contactProtection_{};
+};
+
+class RaidFireSupportRuntime : public RaidCompanionRuntime
+{
+public:
+    RaidFireSupportRuntime(FireSupportConfig config, Vec2 spawnPosition);
+    [[nodiscard]] FireSupportView view() const noexcept;
+    void setOrders(FireSupportMovementOrder, FireSupportFireOrder) noexcept;
+    void clearSpatialTransient() noexcept;
+    void leaveSpace() noexcept;
+    void beginFrame(bool receivingTreatment = false) noexcept
+    {
+        shotEvent_.reset();
+        receivingTreatment_ = receivingTreatment;
+        treatmentInterrupted_ = false;
+    }
     [[nodiscard]] const std::optional<FireSupportShotEvent> &shotEvent() const noexcept
     {
         return shotEvent_;
@@ -78,25 +110,16 @@ public:
     [[nodiscard]] HitResolutionResult updateWeapon(
         float seconds, Rect protectedPlayer, EnemyLifecycle &targets,
         const RaidSpaceBlockerIndex &blockerIndex,
-        const std::vector<BallisticBlocker> &blockers);
+        const std::vector<BallisticBlocker> &blockers, const RaidSmokeSight &smoke = {});
 
 private:
     FireSupportConfig config_;
-    Vec2 position_;
-    Health health_{kFireSupportMaxHealth};
-    FireSupportMovementOrder movementOrder_{FireSupportMovementOrder::Follow};
     FireSupportFireOrder fireOrder_{FireSupportFireOrder::HoldFire};
-    std::optional<Vec2> waypoint_;
-    float navigationRefresh_{};
-    std::vector<CombatTargetId> attackLocks_;
-    float contactProtection_{};
-    float controlRemaining_{};
     float shotCooldown_{};
     ShotId nextShotId_{1};
     std::optional<LogicalBallisticFlight> flight_;
     std::optional<FireSupportShotEvent> shotEvent_;
 
-    void clearNavigation() noexcept;
     void tryFire(Rect protectedPlayer, const EnemyLifecycle &targets,
-                 const RaidSpaceBlockerIndex &blockerIndex);
+                 const RaidSpaceBlockerIndex &blockerIndex, const RaidSmokeSight &smoke);
 };

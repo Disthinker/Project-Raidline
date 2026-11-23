@@ -4698,6 +4698,607 @@ TEST(GameplayWorldRaidTest, SignalCallRespectsInventoryEligibilityAndRescue)
     EXPECT_FALSE(rescue.raidSession().signalCalledLastUpdate());
 }
 
+TEST(GameplayWorldRaidTest, HospitalEscortWalksAroundCoverAndRequiresBothPeopleAtHandoff)
+{
+    RaidWorldConfig config;
+    config.worldSize = {1100, 720};
+    config.playerSpawn = {126, 165};
+    config.extractionPoint = {{1000, 600}, {64, 64}};
+    const Rect wall{{365, 75}, {34, 265}};
+    config.ballisticBlockers = {{1, wall}};
+    config.rescue = RaidWorldConfig::OrdinarySurvivorRescue{
+        {{735, 175}, {160, 120}}, 2.0F, Vec2{160, 180}};
+    GameplayWorld world{config};
+    ASSERT_TRUE(world.hospitalEscort());
+    ASSERT_EQ(world.hospitalEscort()->state, HospitalEscortState::AwaitingContact);
+    GameplayInput tap;
+    tap.interactPressed = tap.interactJustPressed = true;
+    GameplayInput held;
+    held.interactPressed = true;
+
+    world.update(tap, 0);
+    ASSERT_EQ(world.hospitalEscort()->state, HospitalEscortState::Following);
+    world.update(held, 0.1F);
+    ASSERT_EQ(world.hospitalEscort()->state, HospitalEscortState::Following);
+    world.update({}, 0);
+    world.update(tap, 0);
+    ASSERT_EQ(world.hospitalEscort()->state, HospitalEscortState::Waiting);
+    const auto waiting = world.hospitalEscort()->position;
+    RoadBlockadeWorldTestAccess::place(world, {815, 235});
+    world.update(held, 2.1F);
+    EXPECT_FLOAT_EQ(world.hospitalEscort()->position.x, waiting.x);
+    EXPECT_FLOAT_EQ(world.hospitalEscort()->position.y, waiting.y);
+    EXPECT_FALSE(world.hospitalEscort()->atHandoff);
+    EXPECT_FALSE(world.ordinarySurvivorRescueReady());
+    RoadBlockadeWorldTestAccess::place(world, waiting);
+    world.update({}, 0);
+    world.update(tap, 0);
+    ASSERT_EQ(world.hospitalEscort()->state, HospitalEscortState::Following);
+    RoadBlockadeWorldTestAccess::place(world, {815, 235});
+    Vec2 previous = waiting;
+    constexpr Vec2 size = RaidCompanionRuntime::kSize;
+    for (int frame = 0; frame < 900 && !world.hospitalEscort()->atHandoff; ++frame)
+    {
+        world.update({}, 1.0F / 60.0F);
+        const Vec2 current = world.hospitalEscort()->position;
+        ASSERT_LT(std::hypot(current.x - previous.x, current.y - previous.y), 5.0F);
+        ASSERT_FALSE(isCollision({{current.x - size.x * 0.5F, current.y - size.y * 0.5F}, size}, wall));
+        previous = current;
+    }
+    ASSERT_TRUE(world.hospitalEscort()->atHandoff);
+    world.update(held, 1.05F);
+    EXPECT_FALSE(world.ordinarySurvivorRescueReady());
+    world.update({}, 0);
+    EXPECT_FLOAT_EQ(world.ordinarySurvivorRescueProgress(), 0.0F);
+    world.update(held, 2.05F);
+    ASSERT_TRUE(world.ordinarySurvivorRescueReady());
+    world.confirmOrdinarySurvivorRescue();
+    ASSERT_EQ(world.hospitalEscort()->state, HospitalEscortState::Delivered);
+    EXPECT_FALSE(world.ordinarySurvivorRescueReady());
+}
+
+TEST(GameplayWorldRaidTest, HospitalEscortCanBeWoundedAndKilledByActualContactAlongsideArmedTeammate)
+{
+    RaidWorldConfig config;
+    config.worldSize = {1000, 720};
+    config.playerSpawn = {100, 560};
+    config.extractionPoint = {{900, 580}, {64, 64}};
+    config.fireSupport = FireSupportConfig{20, 7000.0F, 12, 115.0F};
+    config.initialEnemies = {EnemySpawn{{405, 200}, {38, 38}, 100}};
+    config.rescue = RaidWorldConfig::OrdinarySurvivorRescue{
+        {{700, 200}, {160, 100}}, 2.0F, Vec2{400, 216}};
+    GameplayWorld world{config};
+    ASSERT_TRUE(world.setFireSupportOrders(FireSupportMovementOrder::Hold, FireSupportFireOrder::HoldFire));
+    const int startingHealth = world.hospitalEscort()->health;
+    for (int i = 0; i < 120; ++i) world.update({}, 1.0F / 60.0F);
+    ASSERT_EQ(world.hospitalEscort()->health, startingHealth);
+    RoadBlockadeWorldTestAccess::place(world, {350, 216});
+    GameplayInput tap;
+    tap.interactPressed = tap.interactJustPressed = true;
+    world.update(tap, 0);
+    world.update({}, 0);
+    world.update(tap, 0);
+    ASSERT_EQ(world.hospitalEscort()->state, HospitalEscortState::Waiting);
+    ASSERT_TRUE(world.hospitalEscort()->threatened);
+    RoadBlockadeWorldTestAccess::place(world, {100, 560});
+    bool wounded = false;
+    for (int i = 0; i < 4800 && world.hospitalEscort()->health > 0; ++i)
+    {
+        world.update({}, 1.0F / 60.0F);
+        const int health = world.hospitalEscort()->health;
+        wounded = wounded || (health > 0 && health < startingHealth);
+    }
+    EXPECT_TRUE(wounded);
+    ASSERT_EQ(world.hospitalEscort()->state, HospitalEscortState::Down);
+    EXPECT_EQ(world.hospitalEscort()->health, 0);
+    EXPECT_EQ(world.fireSupportHealth(), kFireSupportMaxHealth);
+    RoadBlockadeWorldTestAccess::place(world, {775, 240});
+    world.update(tap, 2.1F);
+    world.confirmOrdinarySurvivorRescue();
+    EXPECT_FALSE(world.ordinarySurvivorRescueReady());
+    EXPECT_EQ(world.hospitalEscort()->state, HospitalEscortState::Down);
+}
+
+TEST(GameplayWorldRaidTest, ProximityAlarmPlacesAtActualPointWithRangeDoorWallAndSpacingChecks)
+{
+    auto config = makeFreightBreachWorldConfig(false);
+    config.playerSpawn = {100, 200};
+    config.interiors[0].exteriorEntrance = {{144, 196}, {6, 36}};
+    config.ballisticBlockers = {{1, {{92, 153}, {50, 6}}}};
+    GameplayWorld world{config};
+    const ProximityAlarmUseDefinition use;
+    const Vec2 center = freightBreachPlayerCenter(world);
+    EXPECT_TRUE(world.previewProximityAlarm(center, use));
+    EXPECT_TRUE(world.previewProximityAlarm({center.x, center.y + 80}, use));
+    EXPECT_FALSE(world.previewProximityAlarm({center.x, center.y + 81}, use));
+    EXPECT_FALSE(world.previewProximityAlarm({116, 142}, use)); // beyond a wall
+    EXPECT_FALSE(world.previewProximityAlarm({116, 161}, use)); // case would overlap the wall
+    EXPECT_FALSE(world.previewProximityAlarm({147, 212}, use)); // in the door
+    EXPECT_FALSE(world.previewProximityAlarm({168, 212}, use)); // through the door
+    auto first = world.previewProximityAlarm(center, use);
+    ASSERT_TRUE(first);
+    auto set = world.proximityAlarms();
+    ASSERT_TRUE(set.place(*first));
+    world.commitProximityAlarms(std::move(set));
+    EXPECT_FALSE(world.previewProximityAlarm({center.x - 23, center.y}, use));
+    const auto second = world.previewProximityAlarm({center.x - 24, center.y}, use);
+    ASSERT_TRUE(second);
+    set = world.proximityAlarms();
+    ASSERT_TRUE(set.place(*second));
+    world.commitProximityAlarms(std::move(set));
+    EXPECT_EQ(world.proximityAlarms().entries().size(), 2U);
+    EXPECT_FALSE(world.previewProximityAlarm({center.x, center.y + 45}, use));
+}
+
+TEST(GameplayWorldRaidTest, ProximityAlarmIgnoresFriendliesAndBlockedEnemiesThenTriggersOnceAndFreesItsSlot)
+{
+    RaidWorldConfig config;
+    config.playerSpawn = {100, 200};
+    config.extractionPoint = {{1100, 600}, {64, 64}};
+    config.grenadeEnabled = true;
+    config.fireSupport = FireSupportConfig{20, 7000, 12, 115};
+    config.rescue = RaidWorldConfig::OrdinarySurvivorRescue{
+        {{700, 160}, {100, 80}}, 2.0F, Vec2{130, 224}};
+    config.ballisticBlockers = {{1, {{195, 100}, {12, 290}}}};
+    EnemySpawn guard{{210, 200}, {32, 32}, 24};
+    guard.sourceEnemyId = "riverside-scavenger:0";
+    guard.armedScavenger = RaidArmedScavengerConfig{{8, 1400, 4, 360}, 6, 6, false};
+    config.initialEnemies = {guard};
+    GameplayWorld world{config};
+    const ProximityAlarmUseDefinition use;
+    const auto place = [&](Vec2 point) {
+        auto placement = world.previewProximityAlarm(point, use);
+        ASSERT_TRUE(placement);
+        auto set = world.proximityAlarms();
+        ASSERT_TRUE(set.place(*placement));
+        world.commitProximityAlarms(std::move(set));
+    };
+    ASSERT_NO_FATAL_FAILURE(place({145, 216}));
+    ASSERT_NO_FATAL_FAILURE(place({66, 237}));
+    ASSERT_FALSE(world.proximityAlarms().canPlace());
+    world.update({}, 0.1F);
+    EXPECT_FALSE(world.proximityAlarmTriggeredLastUpdate());
+    EXPECT_FALSE(world.proximityAlarms().entries()[0].triggered);
+    EXPECT_FALSE(world.proximityAlarms().entries()[1].triggered);
+    auto &enemy = const_cast<Enemy &>(world.enemies().front());
+    ASSERT_TRUE(enemy.setPosition({172, 185}));
+    world.update({}, 0.02F);
+    ASSERT_TRUE(world.proximityAlarmTriggeredLastUpdate());
+    EXPECT_GT(world.proximityAlarmAlertSeconds(), 0.0F);
+    ASSERT_TRUE(world.proximityAlarms().entries()[0].triggered);
+    EXPECT_FALSE(world.proximityAlarms().entries()[1].triggered);
+    ASSERT_TRUE(world.proximityAlarms().canPlace());
+    world.update({}, 0.02F);
+    EXPECT_FALSE(world.proximityAlarmTriggeredLastUpdate());
+    ASSERT_NO_FATAL_FAILURE(place({120, 280}));
+    ASSERT_EQ(world.proximityAlarms().entries().size(), 2U);
+    EXPECT_FALSE(world.proximityAlarms().canPlace());
+    ASSERT_TRUE(world.damagePlayer(1000));
+    EXPECT_TRUE(world.proximityAlarms().entries().empty());
+    EXPECT_FLOAT_EQ(world.proximityAlarmAlertSeconds(), 0.0F);
+}
+
+TEST(GameplayWorldRaidTest, ProximityAlarmWaitsInItsOwnSpaceAndRemainsArmedAcrossDoorTrips)
+{
+    auto config = makeFreightBreachWorldConfig(false);
+    config.interiors[0].initialEnemies = {EnemySpawn{{195, 82}, {28, 28}, 100}};
+    config.initialEnemies = {EnemySpawn{{845, 480}, {28, 28}, 100}};
+    GameplayWorld world{config};
+    RoadBlockadeWorldTestAccess::place(world, {180, 90});
+    auto placement = world.previewProximityAlarm({205, 90}, {});
+    ASSERT_TRUE(placement);
+    auto set = world.proximityAlarms();
+    ASSERT_TRUE(set.place(*placement));
+    world.commitProximityAlarms(std::move(set));
+    RoadBlockadeWorldTestAccess::place(world, {96, 80});
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    world.update({}, 2.0F);
+    EXPECT_FALSE(world.proximityAlarmTriggeredLastUpdate());
+    EXPECT_FALSE(world.proximityAlarms().entries().front().triggered);
+    const auto &door = config.interiors[0].interiorExit;
+    RoadBlockadeWorldTestAccess::place(world, {door.position.x + door.size.x / 2, door.position.y + door.size.y / 2});
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    ASSERT_TRUE(world.inOutdoorRaidSpace());
+    auto &enemy = const_cast<Enemy &>(world.enemies().front());
+    ASSERT_TRUE(enemy.setPosition({292, 76})); // center 101 from device
+    world.update({}, 1.0F / 120.0F);
+    EXPECT_FALSE(world.proximityAlarmTriggeredLastUpdate());
+    ASSERT_TRUE(enemy.setPosition({291, 76})); // exactly 100
+    world.update({}, 1.0F / 60.0F);
+    EXPECT_TRUE(world.proximityAlarmTriggeredLastUpdate());
+    EXPECT_TRUE(world.proximityAlarms().entries().front().triggered);
+}
+
+TEST(GameplayWorldRaidTest, FireZoneOverlapsHaveOneDamageClockAndRequireAFullSecondOfExposure)
+{
+    auto config = makeFreightBreachWorldConfig(false);
+    config.playerSpawn = {200, 200};
+    GameplayWorld world{config};
+    FireZoneUseDefinition use;
+    const auto ignite = [&](Vec2 point) {
+        auto landing = world.previewFireZone(point, use);
+        ASSERT_TRUE(landing);
+        auto prepared = world.fireZones();
+        ASSERT_TRUE(prepared.start(*landing));
+        world.commitFireZone(std::move(prepared));
+    };
+    ASSERT_NO_FATAL_FAILURE(ignite({230, 216}));
+    world.update({}, use.flightSeconds);
+    ASSERT_NO_FATAL_FAILURE(ignite({245, 216}));
+    world.update({}, 0.99F);
+    ASSERT_EQ(world.fireZones().zones().size(), 2U);
+    EXPECT_FALSE(world.hasPendingFireDamage());
+    EXPECT_FALSE(world.previewFireZone({249, 216}, use));
+    world.update({}, 0.01F);
+    const auto first = world.prepareFireDamageTick();
+    ASSERT_TRUE(first);
+    ASSERT_TRUE(first->playerDamage);
+    EXPECT_EQ(first->playerDamage->baseDamage, 6);
+    ASSERT_TRUE(world.commitPreparedFireDamageTick(*first));
+    EXPECT_FALSE(world.commitPreparedFireDamageTick(*first));
+    EXPECT_FALSE(world.hasPendingFireDamage());
+    world.update({}, 5.0F);
+    int count{};
+    while (const auto tick = world.prepareFireDamageTick())
+    {
+        ASSERT_TRUE(tick->playerDamage);
+        EXPECT_EQ(tick->playerDamage->baseDamage, 6);
+        ASSERT_TRUE(world.commitPreparedFireDamageTick(*tick));
+        ++count;
+    }
+    EXPECT_EQ(count, 5);
+    world.update({}, 1.0F);
+    EXPECT_FALSE(world.hasPendingFireDamage());
+    EXPECT_TRUE(world.fireZones().zones().empty());
+}
+
+TEST(GameplayWorldRaidTest, FireZoneUsesSolidWallsForDamageAndRenderingAndRetiresActualEnemies)
+{
+    RaidWorldConfig config;
+    config.playerSpawn = {50, 150};
+    config.extractionPoint = {{1100, 620}, {70, 70}};
+    config.grenadeEnabled = true;
+    config.ballisticBlockers = {{3, {{482, 100}, {10, 170}}}};
+    EnemySpawn exposed{{450, 152}, {28, 28}, 12}, protectedEnemy{{500, 152}, {28, 28}, 12};
+    exposed.sourceEnemyId = "fire-exposed";
+    protectedEnemy.sourceEnemyId = "fire-protected";
+    config.initialEnemies = {exposed, protectedEnemy};
+    GameplayWorld world{config};
+    FireZoneUseDefinition use;
+    auto landing = world.previewFireZone({440, 166}, use);
+    ASSERT_TRUE(landing);
+    auto prepared = world.fireZones();
+    ASSERT_TRUE(prepared.start(*landing));
+    world.commitFireZone(std::move(prepared));
+    world.update({}, use.flightSeconds);
+    ASSERT_EQ(world.fireZones().zones().size(), 1U);
+    const auto &zone = world.fireZones().zones().front();
+    EXPECT_TRUE(world.fireZoneReaches(zone, {464, 166}));
+    EXPECT_FALSE(world.fireZoneReaches(zone, {514, 166}));
+    const auto shape = world.fireZoneCoverage(zone);
+    ASSERT_TRUE(shape);
+    EXPECT_TRUE(shape->queries[0].pointVisible({464,166}) || shape->queries[1].pointVisible({464,166}));
+    EXPECT_FALSE(shape->queries[0].pointVisible({514,166}) || shape->queries[1].pointVisible({514,166}));
+    world.update({}, 2.0F);
+    for (int i = 0; i < 2; ++i)
+    {
+        const auto tick = world.prepareFireDamageTick();
+        ASSERT_TRUE(tick);
+        EXPECT_FALSE(tick->playerDamage);
+        ASSERT_EQ(tick->enemies.size(), 1U);
+        EXPECT_EQ(tick->enemies.front().damage.damageApplied, 6);
+        ASSERT_TRUE(world.commitPreparedFireDamageTick(*tick));
+    }
+    EXPECT_FALSE(world.hasPendingFireDamage());
+    ASSERT_EQ(world.pendingCorpseDeaths().size(), 1U);
+    EXPECT_EQ(world.pendingCorpseDeaths()[0].sourceEnemyId, exposed.sourceEnemyId);
+    ASSERT_EQ(world.enemies().size(), 1U);
+    EXPECT_EQ(world.enemies()[0].health(), 12);
+}
+
+TEST(GameplayWorldRaidTest, FireZoneLosesPartialExposureAcrossDoorsAndExpiresWhileAway)
+{
+    const auto config = makeFreightBreachWorldConfig(false);
+    GameplayWorld world{config};
+    FireZoneUseDefinition use;
+    const Vec2 spawn = freightBreachPlayerCenter(world);
+    auto landing = world.previewFireZone({spawn.x + 15, spawn.y}, use);
+    ASSERT_TRUE(landing);
+    auto prepared = world.fireZones();
+    ASSERT_TRUE(prepared.start(*landing));
+    world.commitFireZone(std::move(prepared));
+    world.update({}, use.flightSeconds + 0.75F);
+    EXPECT_FALSE(world.hasPendingFireDamage());
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    world.update({}, 1.0F);
+    ASSERT_EQ(world.fireZones().zones().size(), 1U);
+    EXPECT_FALSE(world.fireZoneCoverage(world.fireZones().zones().front()));
+    EXPECT_FALSE(world.hasPendingFireDamage());
+    const auto &exit = config.interiors.front().interiorExit;
+    placeFreightBreachPlayer(world, {exit.position.x + exit.size.x / 2, exit.position.y + exit.size.y / 2});
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    world.update({}, 0.30F);
+    EXPECT_FALSE(world.hasPendingFireDamage());
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    world.update({}, 6.0F);
+    EXPECT_FALSE(world.hasPendingFireDamage());
+    EXPECT_TRUE(world.fireZones().zones().empty());
+}
+
+TEST(GameplayWorldRaidTest, VolatileBarrelCompetesWithEnemiesAndWallsForTheActualProjectile)
+{
+    const ShotCollisionCandidate shot{7, {20, 100}, {600, 100}, 2, 8};
+    const auto resolve = [&](float enemyX, float wallX, float barrelX) {
+        EnemyRoster<> enemies;
+        enemies.spawn(Enemy{{enemyX, 90}, {24, 24}, {}, 100, 1});
+        const std::vector<BallisticBlocker> wall{{51, {{wallX, 80}, {20, 40}}}};
+        const std::array<BallisticBlocker, 1> barrels{{{17, {{barrelX, 80}, {32, 40}}}}};
+        return resolveShotHits({shot}, enemies, wall, std::nullopt, barrels);
+    };
+    const auto first = resolve(300, 420, 180);
+    ASSERT_EQ(first.hits.size(), 1U);
+    EXPECT_EQ(first.hits.front().environmentObjectId, 17U);
+    EXPECT_EQ(first.hits.front().targetKind, HitTargetKind::Obstacle);
+    const auto nearer = resolve(100, 420, 180);
+    ASSERT_EQ(nearer.hits.size(), 1U);
+    EXPECT_EQ(nearer.hits.front().targetKind, HitTargetKind::Enemy);
+    EXPECT_EQ(nearer.hits.front().environmentObjectId, 0U);
+    for (float wallX : {100.0F, 180.0F})
+    {
+        const auto stopped = resolve(300, wallX, 180);
+        ASSERT_EQ(stopped.hits.size(), 1U);
+        EXPECT_EQ(stopped.hits.front().targetKind, HitTargetKind::Obstacle);
+        EXPECT_EQ(stopped.hits.front().environmentObjectId, 0U);
+    }
+}
+
+TEST(GameplayWorldRaidTest, VolatileBarrelCommitsOneOccludedBlastAndDoesNotChain)
+{
+    RaidWorldConfig config;
+    config.playerSpawn = {100, 200};
+    config.extractionPoint = {{1100, 600}, {70, 70}};
+    config.volatileBarrels = {{1, {246, 216}}, {2, {338, 216}}};
+    config.ballisticBlockers = {{3, {{200, 312}, {260, 14}}}};
+    EnemySpawn exposed{{254, 268}, {28, 28}, 5}, protectedEnemy{{235, 348}, {28, 28}, 5};
+    exposed.sourceEnemyId = "exposed-infected";
+    protectedEnemy.sourceEnemyId = "protected-infected";
+    config.initialEnemies = {exposed, protectedEnemy};
+    GameplayWorld world{config};
+    auto fire = makeFireInput();
+    fire.aimWorldPosition = Vec2{480, 216};
+    world.update(fire, 0);
+    ASSERT_TRUE(world.shotFiredLastUpdate());
+    for (int i = 0; i < 50 && !world.hasPendingRaidExplosion(); ++i)
+        world.update({}, 1.0F / 60.0F);
+    ASSERT_TRUE(world.hasPendingRaidExplosion());
+    ASSERT_EQ(world.volatileBarrels().size(), 2U);
+    EXPECT_FALSE(world.volatileBarrels()[0].spent);
+    const auto plan = world.prepareGrenadeExplosion();
+    ASSERT_TRUE(plan);
+    EXPECT_EQ(plan->barrelId, 1U);
+    ASSERT_TRUE(plan->playerDamage);
+    EXPECT_GT(plan->playerDamage->baseDamage, 0);
+    EXPECT_LT(plan->playerDamage->baseDamage, GrenadeUseDefinition{}.coreDamage);
+    ASSERT_EQ(plan->enemies.size(), 1U);
+    auto stale = *plan;
+    stale.barrelId = 2;
+    EXPECT_FALSE(world.commitPreparedGrenadeExplosion(stale));
+    EXPECT_FALSE(world.volatileBarrels()[1].spent);
+    ASSERT_TRUE(world.commitPreparedGrenadeExplosion(*plan));
+    EXPECT_FALSE(world.hasPendingRaidExplosion());
+    EXPECT_TRUE(world.volatileBarrels()[0].spent);
+    EXPECT_FALSE(world.volatileBarrels()[1].spent);
+    EXPECT_FALSE(world.commitPreparedGrenadeExplosion(*plan));
+    ASSERT_EQ(world.pendingCorpseDeaths().size(), 1U);
+    EXPECT_EQ(world.pendingCorpseDeaths().front().sourceEnemyId, exposed.sourceEnemyId);
+    ASSERT_EQ(world.enemies().size(), 1U);
+    EXPECT_EQ(world.enemies().front().health(), 5);
+}
+
+TEST(GameplayWorldRaidTest, VolatileBarrelIgnoresFriendlyFireAndOtherExplosionSources)
+{
+    RaidWorldConfig config;
+    config.playerSpawn = {100, 200};
+    config.extractionPoint = {{1100, 600}, {70, 70}};
+    config.grenadeEnabled = true;
+    config.fireSupport = FireSupportConfig{20, 7000, 12, 115};
+    config.initialEnemies = {EnemySpawn{{332, 200}, {32, 32}, 100}};
+    config.volatileBarrels = {{8, {256, 216}}};
+    GameplayWorld world{config};
+    ASSERT_TRUE(world.setFireSupportOrders(FireSupportMovementOrder::Hold, FireSupportFireOrder::FreeFire));
+    world.update({}, 1.0F / 60.0F);
+    ASSERT_TRUE(world.fireSupportShotLastUpdate());
+    EXPECT_FALSE(world.hasPendingRaidExplosion());
+    auto landing = world.previewGrenade(config.volatileBarrels.front().center, GrenadeUseDefinition{});
+    ASSERT_TRUE(landing);
+    landing->effectIdentity = "barrel-test-grenade";
+    RaidGrenadeRuntime grenade;
+    ASSERT_TRUE(grenade.start(*landing));
+    world.commitGrenade(std::move(grenade));
+    world.update({}, landing->use.flightSeconds + landing->use.fuseSeconds + 0.05F);
+    const auto blast = world.prepareGrenadeExplosion();
+    ASSERT_TRUE(blast);
+    ASSERT_EQ(blast->barrelId, 0U);
+    ASSERT_TRUE(world.commitPreparedGrenadeExplosion(*blast));
+    EXPECT_FALSE(world.volatileBarrels().front().spent);
+    EXPECT_FALSE(world.hasPendingRaidExplosion());
+}
+
+TEST(GameplayWorldRaidTest, VolatileBarrelWreckDoesNotInterceptTheNextShotOrResetAtADoor)
+{
+    auto config = makeFreightBreachWorldConfig(false);
+    config.volatileBarrels = {{7, {210, 64}}, {9, {335, 64}}};
+    GameplayWorld world{config};
+    const auto shoot = [&](std::uint32_t expected) {
+        auto fire = makeFireInput();
+        fire.aimWorldPosition = Vec2{480, 64};
+        world.update(fire, 0.01F);
+        ASSERT_TRUE(world.shotFiredLastUpdate());
+        for (int i = 0; i < 70 && !world.hasPendingRaidExplosion(); ++i) world.update({}, 1.0F / 60.0F);
+        auto blast = world.prepareGrenadeExplosion();
+        ASSERT_TRUE(blast);
+        ASSERT_EQ(blast->barrelId, expected);
+        ASSERT_TRUE(world.commitPreparedGrenadeExplosion(*blast));
+    };
+    ASSERT_NO_FATAL_FAILURE(shoot(7));
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    EXPECT_TRUE(world.volatileBarrels().empty());
+    const auto &exit = config.interiors.front().interiorExit;
+    placeFreightBreachPlayer(world, {exit.position.x + exit.size.x / 2, exit.position.y + exit.size.y / 2});
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    ASSERT_TRUE(world.volatileBarrels()[0].spent);
+    world.update({}, 0.75F);
+    ASSERT_NO_FATAL_FAILURE(shoot(9));
+    EXPECT_TRUE(world.volatileBarrels()[1].spent);
+}
+
+TEST(GameplayWorldRaidTest, SmokeReservesOnlyTwoCloudsAndExpiresByWorldTimeInItsOwnSpace)
+{
+    SmokeUseDefinition use;
+    const auto outdoor = outdoorRaidSpaceId();
+    const auto indoor = kFreightCrateSpaceId;
+    const auto landing = [&](RaidSpaceDefinitionId space, Vec2 point)
+    { return SmokeLanding{{100, 200}, point, std::move(space), use}; };
+    RaidSmokeRuntime smoke;
+    ASSERT_TRUE(smoke.start(landing(outdoor, {275, 200})));
+    EXPECT_FALSE(smoke.canStart());
+    smoke.advance(use.flightSeconds * 0.5F);
+    EXPECT_TRUE(smoke.clouds().empty());
+    smoke.advance(use.flightSeconds * 0.5F);
+    ASSERT_EQ(smoke.clouds().size(), 1U);
+    ASSERT_TRUE(smoke.start(landing(indoor, {275, 200})));
+    smoke.advance(use.flightSeconds);
+    ASSERT_EQ(smoke.clouds().size(), 2U);
+    EXPECT_FALSE(smoke.start(landing(outdoor, {400, 200})));
+    EXPECT_TRUE(smoke.sight(outdoor).blocks({100, 200}, {500, 200}));
+    EXPECT_TRUE(smoke.sight(outdoor).blocks({500, 200}, {100, 200}));
+    EXPECT_FALSE(smoke.sight(outdoor).blocks({265, 200}, {287, 200}));
+    EXPECT_FALSE(smoke.sight(outdoor).blocks({100, 320}, {500, 320})); // tangent only
+    smoke.advance(use.durationSeconds - use.flightSeconds);
+    ASSERT_EQ(smoke.clouds().size(), 1U);
+    EXPECT_FALSE(smoke.sight(outdoor).blocks({100, 200}, {500, 200}));
+    EXPECT_TRUE(smoke.sight(indoor).blocks({100, 200}, {500, 200}));
+    smoke.advance(use.flightSeconds);
+    EXPECT_TRUE(smoke.clouds().empty());
+}
+
+TEST(GameplayWorldRaidTest, SmokeLandsInOriginalSpaceAfterEnteringBuildingAndExpiresWhileInside)
+{
+    const auto config = makeFreightBreachWorldConfig(false);
+    const auto &exit = config.interiors.front().interiorExit;
+    GameplayWorld world{config};
+    const Vec2 from = freightBreachPlayerCenter(world);
+    const Vec2 target{from.x + 290, from.y};
+    auto landing = world.previewSmoke({from.x + 145, from.y}, SmokeUseDefinition{});
+    ASSERT_TRUE(landing);
+    auto prepared = world.smoke();
+    ASSERT_TRUE(prepared.start(*landing));
+    world.commitSmoke(std::move(prepared));
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    world.update({}, 1.0F);
+    ASSERT_EQ(world.smoke().clouds().size(), 1U);
+    EXPECT_EQ(world.smoke().clouds().front().space, outdoorRaidSpaceId());
+    EXPECT_FALSE(world.smokeBlocksSight(from, target));
+    placeFreightBreachPlayer(world, {exit.position.x + exit.size.x * 0.5F, exit.position.y + exit.size.y * 0.5F});
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    ASSERT_TRUE(world.inOutdoorRaidSpace());
+    EXPECT_TRUE(world.smokeBlocksSight(from, target));
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    world.update({}, 8.0F);
+    EXPECT_TRUE(world.smoke().clouds().empty());
+    placeFreightBreachPlayer(world, {exit.position.x + exit.size.x * 0.5F, exit.position.y + exit.size.y * 0.5F});
+    ASSERT_NO_FATAL_FAILURE(crossFreightBreachPortal(world));
+    EXPECT_FALSE(world.smokeBlocksSight(from, target));
+}
+
+TEST(GameplayWorldRaidTest, SmokeHidesPlayerEnemyAndNightVisionButPreservesNavigationAndPhysicalRay)
+{
+    RaidWorldConfig config;
+    config.playerSpawn = {100, 200};
+    config.extractionPoint = {{1100, 580}, {70, 70}};
+    config.grenadeEnabled = config.lightConeObservationEnabled = true;
+    config.initialEnemies = {EnemySpawn{{390, 200}, {32, 32}, 100}};
+    config.fireSupport = FireSupportConfig{20, 7000, 12, 115};
+    GameplayWorld world{config};
+    const Vec2 target{406, 216}, origin{116, 216};
+    GameplayInput aim;
+    aim.aimWorldPosition = target;
+    RoadBlockadeWorldTestAccess::aim(world, target);
+    world.setRaidDaylight(true);
+    ASSERT_TRUE(world.raidObservation().pointVisible(target));
+    const auto before = world.raidObservation();
+    auto landing = world.previewSmoke({268, 216}, SmokeUseDefinition{});
+    ASSERT_TRUE(landing);
+    auto prepared = world.smoke();
+    ASSERT_TRUE(prepared.start(*landing));
+    prepared.advance(landing->use.flightSeconds);
+    world.commitSmoke(std::move(prepared));
+    ASSERT_TRUE(world.smokeBlocksSight(origin, target));
+    EXPECT_FALSE(before.matches(world.raidObservationKey()));
+    ASSERT_TRUE(world.setFireSupportOrders(FireSupportMovementOrder::Hold, FireSupportFireOrder::FreeFire));
+    const auto id = world.enemies().front().combatTargetId();
+    for (int i = 0; i < 30; ++i)
+    {
+        world.update(aim, 1.0F / 60.0F);
+        EXPECT_FALSE(world.fireSupportShotLastUpdate());
+    }
+    EXPECT_EQ(world.enemies().front().awarenessState(), EnemyAwarenessState::Unaware);
+    EXPECT_FALSE(world.raidEnemyObservable(id));
+    EXPECT_FALSE(world.raidObservation().pointVisible(target));
+    EXPECT_FALSE(world.raidBoundsObservable(world.enemies().front().bounds()));
+    world.setRaidDaylight(false);
+    world.setNightVision({150, 800}, {110, 650});
+    EXPECT_FALSE(world.raidObservation().pointVisible(target));
+    EXPECT_TRUE(FreightBreachWorldTestAccess::lineOfSight(world, origin, target));
+    auto *nav = FreightBreachWorldTestAccess::navigation(world, {32, 32});
+    ASSERT_TRUE(nav);
+    const auto waypoint = nav->nextWaypoint(origin, target, 0);
+    ASSERT_TRUE(waypoint);
+    EXPECT_FLOAT_EQ(waypoint->x, target.x);
+    EXPECT_FLOAT_EQ(waypoint->y, target.y);
+    bool sawShot = false;
+    for (int i = 0; i < 500 && !sawShot; ++i)
+    {
+        world.update(aim, 1.0F / 60.0F);
+        sawShot = world.fireSupportShotLastUpdate().has_value();
+    }
+    EXPECT_TRUE(sawShot);
+    EXPECT_TRUE(world.smoke().clouds().empty());
+    EXPECT_TRUE(world.raidObservation().pointVisible(target));
+}
+
+TEST(GameplayWorldRaidTest, SmokeStopsNewScavengerShotsWhileExistingProjectileTravelsThrough)
+{
+    RaidWorldConfig config;
+    config.playerSpawn = {445, 200};
+    config.extractionPoint = {{1100, 580}, {70, 70}};
+    config.grenadeEnabled = config.deferPlayerDamageResolution = true;
+    EnemySpawn guard{{200, 200}, {32, 32}, 24};
+    guard.sourceEnemyId = "riverside-scavenger:0";
+    guard.armedScavenger = RaidArmedScavengerConfig{{8, 300, 4, 360}, 6, 6, false};
+    config.initialEnemies = {guard};
+    GameplayWorld world{config};
+    for (int i = 0; i < 120 && !world.armedScavengers().front().shotsFired; ++i)
+        world.update({}, 1.0F / 60.0F);
+    ASSERT_EQ(world.armedScavengers().front().shotsFired, 1U);
+    ASSERT_TRUE(world.takePlayerDamageObservations().empty());
+    auto landing = world.previewSmoke({330, 216}, SmokeUseDefinition{});
+    ASSERT_TRUE(landing);
+    auto prepared = world.smoke();
+    ASSERT_TRUE(prepared.start(*landing));
+    world.commitSmoke(std::move(prepared));
+    for (int i = 0; i < 155; ++i) world.update({}, 1.0F / 60.0F);
+    ASSERT_EQ(world.smoke().clouds().size(), 1U);
+    EXPECT_FALSE(world.armedScavengers().front().aiming);
+    EXPECT_EQ(world.armedScavengers().front().shotsFired, 1U);
+    const auto hits = world.takePlayerDamageObservations();
+    ASSERT_EQ(hits.size(), 1U);
+    EXPECT_EQ(hits.front().sourceEnemyId, world.armedScavengers().front().id);
+    for (int i = 0; i < 490 && world.armedScavengers().front().shotsFired == 1U; ++i)
+        world.update({}, 1.0F / 60.0F);
+    EXPECT_GT(world.armedScavengers().front().shotsFired, 1U);
+}
+
 TEST(GameplayWorldRaidTest, SignalStimulusIsLocalAndDoesNotTrackOrSpawnEnemies)
 {
     auto config = makeHighRiskWorldConfig();

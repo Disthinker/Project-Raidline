@@ -1,13 +1,43 @@
 #include "ui_base_workshop_presentation.h"
+#include "alpha_content_ids.h"
 #include <algorithm>
 #include <fmt/format.h>
 
 UiWorkshopProjection projectUiWorkshop(const ProfileState &p, const ContentRegistry &c, UiLanguage language,
-    std::optional<BaseManufacturingRecipeDefinitionId> selected, bool trainingSelected) {
+    std::optional<BaseManufacturingRecipeDefinitionId> selected, bool trainingSelected,
+    bool salvageOpen, std::optional<AssetInstanceId> selectedGun, bool expediteOpen,
+    std::optional<AssetInstanceId> selectedMaterial) {
     UiWorkshopProjection r;
     r.profileId=p.profileId; r.revision=p.revision; r.worldMinute=p.worldClock.elapsedWorldMinutes;
     r.installed=baseFacilityInstalled(p,BaseFacilityDefinitionId{"base_facility.workshop"});
+    r.salvageOpen = salvageOpen;
+    if (salvageOpen) {
+        r.selection = selected;
+        r.trainingSelected = trainingSelected;
+        for (const auto *asset : assetsInContainer(p, ProfileContainerId::stash())) {
+            const auto &def = c.item(asset->definitionId);
+            if (def.category != ItemCategory::Weapon) continue;
+            r.guns.push_back({asset->instanceId, def.definitionId, compactUiItemName(def, language),
+                              asset->currentDurability, asset->currentMaximumDurability});
+            if (selectedGun == asset->instanceId) {
+                r.selectedGun = selectedGun;
+                r.salvage = queryWeaponSalvage(p, c, asset->instanceId);
+            }
+        }
+        return r;
+    }
     r.level=p.baseConstruction.workshopLevel; r.order=p.baseManufacturing.activeOrder;
+    r.expediteOpen = expediteOpen;
+    if (expediteOpen) {
+        r.selection = r.order ? std::optional{r.order->recipeDefinitionId} : selected;
+        for (const auto *asset : assetsInContainer(p, ProfileContainerId::stash())) {
+            if (asset->definitionId != alpha_content::lootElectronics || asset->reliefBatchId) continue;
+            r.materials.push_back({asset->instanceId, asset->quantity});
+            if (asset->instanceId == selectedMaterial) r.selectedMaterial = selectedMaterial;
+        }
+        r.expedite = queryExpediteBaseManufacturing(p, c, {r.order ? r.order->jobId : 0, r.selectedMaterial.value_or(0)});
+        return r;
+    }
     r.production=projectBaseManufacturing(p); r.workforce=projectBaseWorkforce(p);
     r.training = projectBaseEngineeringTraining(p);
     r.trainingSelected = trainingSelected || r.training.orderPresent;
@@ -55,6 +85,15 @@ UiWorkshopProjection projectUiWorkshop(const ProfileState &p, const ContentRegis
 }
 std::string uiWorkshopActionKey(const UiWorkshopHit &hit,const UiWorkshopProjection &p) {
     std::string key=fmt::format("{}:{}:{}:{}",p.profileId,p.installed,static_cast<int>(hit.control),hit.recipe?hit.recipe->value():"");
+    if (p.expediteOpen || hit.control == UiWorkshopControl::Expedite)
+        return fmt::format("{}:{}:{}:{}:{}:{}:{}",key,p.order?p.order->jobId:0,p.revision,hit.material.value_or(0),
+            p.selectedMaterial.value_or(0),p.expedite.canCommit,p.expedite.newCompletionWorldMinute);
+    if (p.salvageOpen) {
+        const auto position = p.salvage.outputPosition.value_or(GridPosition{-1,-1});
+        return fmt::format("{}:salvage:{}:{}:{}:{}:{}:{}:{}:{}", key, p.revision, hit.gun.value_or(0),
+                           p.selectedGun.value_or(0), p.salvage.canCommit, p.salvage.message,
+                           static_cast<int>(p.salvage.outputOrientation), position.x, position.y);
+    }
     if(hit.recipe) return key+fmt::format(":{}:{}",p.order?p.order->jobId:0,p.training.orderPresent);
     if (hit.control == UiWorkshopControl::Training)
         return key + fmt::format(":{}:{}", p.trainingSelected, p.training.jobId);
@@ -87,6 +126,16 @@ std::string uiWorkshopActionKey(const UiWorkshopHit &hit,const UiWorkshopProject
     return key;
 }
 bool uiWorkshopEnabled(UiWorkshopControl c,const UiWorkshopProjection &p) {
+    if (c == UiWorkshopControl::Expedite)
+        return p.expediteOpen || (p.order && !p.trainingSelected && !p.order->outputReady && p.installed &&
+            p.order->recipeDefinitionId != kArmorRepairResearchId && !p.order->expediteMinutesSaved);
+    if (c == UiWorkshopControl::ConfirmExpedite) return p.expediteOpen && p.expedite.canCommit;
+    if (c == UiWorkshopControl::Salvage) return true;
+    if (p.salvageOpen) {
+        if (c == UiWorkshopControl::PreviewSalvage || c == UiWorkshopControl::ConfirmSalvage)
+            return p.selectedGun.has_value() && p.salvage.canCommit;
+        return true;
+    }
     if(c==UiWorkshopControl::Close || c==UiWorkshopControl::Facilities || c==UiWorkshopControl::Previous || c==UiWorkshopControl::Next)return true;
     if (c == UiWorkshopControl::Training) return !p.training.orderPresent;
     if (p.trainingSelected && c == UiWorkshopControl::Main) return !p.training.orderPresent && p.trainingStart.canCommit;
@@ -110,6 +159,13 @@ SDL_FRect uiWorkshopControlRect(UiWorkshopControl c) noexcept {
     case UiWorkshopControl::Upgrade:return {464,346,728,34};
     case UiWorkshopControl::Close:return {1084,80,132,34};
     case UiWorkshopControl::Training:return {812,80,248,34};
+    case UiWorkshopControl::Salvage:return {622,80,170,34};
+    case UiWorkshopControl::PreviewSalvage:return uiWorkshopControlRect(UiWorkshopControl::Cancel);
+    case UiWorkshopControl::ConfirmSalvage:return uiWorkshopControlRect(UiWorkshopControl::Main);
+    case UiWorkshopControl::SelectGun:return {};
+    case UiWorkshopControl::SelectMaterial:return {};
+    case UiWorkshopControl::Expedite:return {444,80,158,34};
+    case UiWorkshopControl::ConfirmExpedite:return uiWorkshopControlRect(UiWorkshopControl::Main);
     case UiWorkshopControl::Previous:return {80,494,144,32};
     case UiWorkshopControl::Next:return {264,494,144,32};
     }
@@ -119,6 +175,36 @@ SDL_FRect uiWorkshopRecipeRect(std::size_t i) noexcept {return {80,158+54.0F*i,3
 SDL_FRect uiWorkshopDetailsRect() noexcept {return {464,342,728,156};}
 SDL_FRect uiWorkshopFeedbackRect() noexcept {return {76,616,1128,44};}
 std::optional<UiWorkshopHit> hitUiWorkshop(Vec2 point,const UiWorkshopState &s,const UiWorkshopProjection &p) {
+    using C = UiWorkshopControl;
+    if ((p.expediteOpen || (p.order && !p.trainingSelected && !p.salvageOpen && p.order->recipeDefinitionId != kArmorRepairResearchId)) &&
+        uiContains(uiWorkshopControlRect(C::Expedite),point)) return UiWorkshopHit{{},C::Expedite};
+    if (p.expediteOpen) {
+        for (auto c : {C::Close, C::Previous, C::Next, C::ConfirmExpedite}) {
+            if ((c == C::Previous || c == C::Next) && uiWorkshopPageCount(p.materials.size()) == 1) continue;
+            if (uiContains(uiWorkshopControlRect(c),point)) return UiWorkshopHit{{},c};
+        }
+        for (std::size_t i = 0; i < kUiWorkshopPageSize; ++i) {
+            const auto index = s.expeditePage*kUiWorkshopPageSize+i;
+            if (index < p.materials.size() && uiContains(uiWorkshopRecipeRect(i),point))
+                return UiWorkshopHit{{},C::SelectMaterial,{},p.materials[index].id};
+        }
+        return {};
+    }
+    if (uiContains(uiWorkshopControlRect(C::Salvage), point)) return UiWorkshopHit{{}, C::Salvage};
+    if (p.salvageOpen) {
+        for (auto c : {C::Close, C::Previous, C::Next, C::PreviewSalvage, C::ConfirmSalvage, C::Cancel}) {
+            if ((c == C::Previous || c == C::Next) && uiWorkshopPageCount(p.guns.size()) == 1) continue;
+            if (c == C::PreviewSalvage && (!p.selectedGun || s.salvageConfirmation)) continue;
+            if ((c == C::ConfirmSalvage || c == C::Cancel) && !s.salvageConfirmation) continue;
+            if (uiContains(uiWorkshopControlRect(c), point)) return UiWorkshopHit{{}, c};
+        }
+        for (std::size_t i = 0; i < kUiWorkshopPageSize; ++i) {
+            const auto index = s.salvagePage * kUiWorkshopPageSize + i;
+            if (index < p.guns.size() && uiContains(uiWorkshopRecipeRect(i), point))
+                return UiWorkshopHit{{}, C::SelectGun, p.guns[index].id};
+        }
+        return {};
+    }
     for(auto c:{UiWorkshopControl::Close,UiWorkshopControl::Training,UiWorkshopControl::Main,UiWorkshopControl::Facilities,UiWorkshopControl::Cancel,UiWorkshopControl::Staffing,UiWorkshopControl::Upgrade,UiWorkshopControl::Previous,UiWorkshopControl::Next}) {
         if (c == UiWorkshopControl::Cancel && (p.trainingSelected ? !p.training.orderPresent : (!p.order || p.order->outputReady))) continue;
         if((c==UiWorkshopControl::Staffing || c==UiWorkshopControl::Upgrade) && !s.facilities)continue;
@@ -130,4 +216,26 @@ std::optional<UiWorkshopHit> hitUiWorkshop(Vec2 point,const UiWorkshopState &s,c
         if(index<p.recipes.size() && uiContains(uiWorkshopRecipeRect(i),point))return UiWorkshopHit{p.recipes[index].id};
     }
     return {};
+}
+
+std::optional<UiWorkshopEvent> uiWorkshopExpediteShortcut(const SDL_Event &event, const UiWorkshopState &state)
+{
+    if ((event.type != SDL_EVENT_KEY_DOWN && event.type != SDL_EVENT_KEY_UP) || event.key.repeat || state.salvageOpen)
+        return {};
+    const auto key = event.key.scancode;
+    using C = UiWorkshopControl;
+    C c;
+    SDL_FRect box{};
+    if (key == SDL_SCANCODE_X) c = C::Expedite;
+    else if (!state.expediteOpen) return {};
+    else if (key >= SDL_SCANCODE_1 && key <= SDL_SCANCODE_6) {
+        c = C::SelectMaterial;
+        box = uiWorkshopRecipeRect(static_cast<std::size_t>(key - SDL_SCANCODE_1));
+    } else if (key == SDL_SCANCODE_RETURN || key == SDL_SCANCODE_KP_ENTER) c = C::ConfirmExpedite;
+    else if (key == SDL_SCANCODE_PAGEUP) c = C::Previous;
+    else if (key == SDL_SCANCODE_PAGEDOWN) c = C::Next;
+    else return {};
+    if (c != C::SelectMaterial) box = uiWorkshopControlRect(c);
+    return UiWorkshopEvent{event.type == SDL_EVENT_KEY_DOWN ? UiWorkshopEventKind::Down : UiWorkshopEventKind::Up,
+        {box.x + box.w/2, box.y + box.h/2}, 0, c};
 }

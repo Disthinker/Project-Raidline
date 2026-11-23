@@ -27,6 +27,7 @@
 #include "base_service_domain.h"
 #include "economy_domain.h"
 #include "raid_lifecycle.h"
+#include "raid_intelligence_domain.h"
 #include "raid_fire_support_domain.h"
 #include "raid_corpse_search.h"
 #include "raid_corpse_legacy_fixture.h"
@@ -111,6 +112,335 @@ std::string serializeLegacyProfileEnvelope(
 {
     profile.stashLayoutVersion = 0;
     return serializeProfileEnvelope(profile, contentVersion, schema);
+}
+
+TEST(SaveRepositoryTest, FrozenYardBarrelsSurviveRoundTripAndEarlierRaidsRemainEmpty)
+{
+    const auto &content = publishedContentRegistry();
+    const MapDefinitionId map{"map.raid.frontier_exchange"};
+    auto profile = makeNewAlphaProfile("barrel-save", content);
+    const auto deployment = executeDeploy(profile, content, {"barrel-run", "barrel-return", 42, map},
+        {profile.revision, "barrel-deploy"});
+    ASSERT_TRUE(deployment.succeeded) << deployment.message;
+    ASSERT_EQ(profile.pendingRaid->volatileBarrels.size(), 2U);
+    const auto bytes = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto loaded = deserializeProfileEnvelope(bytes, content);
+    ASSERT_TRUE(loaded.profile) << loaded.message;
+    EXPECT_EQ(loaded.profile->pendingRaid->volatileBarrels, profile.pendingRaid->volatileBarrels);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(profile));
+    auto old = profile;
+    old.pendingRaid->volatileBarrels.clear();
+    EXPECT_NE(profileStateFingerprint(old), profileStateFingerprint(profile));
+    const auto priorBytes = serializeProfileEnvelope(old, content.contentVersion());
+    EXPECT_EQ(priorBytes.find("volatile_barrels"), std::string::npos);
+    const auto prior = deserializeProfileEnvelope(priorBytes, content);
+    ASSERT_TRUE(prior.profile) << prior.message;
+    EXPECT_TRUE(prior.profile->pendingRaid->volatileBarrels.empty());
+    EXPECT_EQ(serializeProfileEnvelope(*prior.profile, content.contentVersion()), priorBytes);
+    EXPECT_THROW(serializeProfileEnvelope(profile, kRiversideArmedScavengersContentVersion, 75),
+        std::invalid_argument);
+    for (int corruption = 0; corruption < 4; ++corruption)
+    {
+        auto bad = nlohmann::json::parse(bytes);
+        auto &entries = bad["payload"]["pending_raid"]["volatile_barrels"];
+        if (corruption == 0) entries[1]["id"] = entries[0]["id"];
+        if (corruption == 1) entries[1]["center"] = entries[0]["center"];
+        if (corruption == 2) entries.erase(entries.begin());
+        if (corruption == 3) entries[0]["center"] = nlohmann::json{{"x", -500.0}, {"y", 22.0}};
+        bad["payload_checksum"] = testSaveChecksum(bad["payload"].dump());
+        EXPECT_FALSE(deserializeProfileEnvelope(bad.dump(), content).profile) << corruption;
+    }
+}
+
+TEST(SaveRepositoryTest, HospitalEscortFreezesOnlyInNewRaidsAndOldSinglePointRescueStillLoads)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("hospital-escort-save", content);
+    ASSERT_TRUE(executeDeploy(profile, content,
+        {"escort-run", "escort-return", 42, kHospitalFloorplanMapId}, {profile.revision, "escort-deploy"}).succeeded);
+    ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->rescue && profile.pendingRaid->rescue->escortStart);
+    const auto saved = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto read = deserializeProfileEnvelope(saved, content);
+    ASSERT_TRUE(read.profile) << read.message;
+    EXPECT_EQ(read.profile->pendingRaid->rescue, profile.pendingRaid->rescue);
+    EXPECT_EQ(profileStateFingerprint(*read.profile), profileStateFingerprint(profile));
+    EXPECT_THROW(serializeProfileEnvelope(profile, content.contentVersion(), 74U), std::invalid_argument);
+
+    auto old = profile;
+    old.pendingRaid->rescue->escortStart.reset();
+    EXPECT_NE(profileStateFingerprint(old), profileStateFingerprint(profile));
+    const auto serializedOld = serializeProfileEnvelope(old, content.contentVersion());
+    auto oldPayload = nlohmann::json::parse(serializedOld);
+    EXPECT_FALSE(oldPayload["payload"]["pending_raid"]["rescue"].contains("escort_start"));
+    const auto migrated = deserializeProfileEnvelope(serializedOld, content);
+    ASSERT_TRUE(migrated.profile) << migrated.message;
+    EXPECT_EQ(migrated.profile->pendingRaid->rescue, old.pendingRaid->rescue);
+    EXPECT_EQ(profileStateFingerprint(*migrated.profile), profileStateFingerprint(old));
+
+    auto bad = nlohmann::json::parse(saved);
+    bad["payload"]["pending_raid"]["rescue"]["escort_start"] = {{"x", -30.0}, {"y", -30.0}};
+    bad["payload_checksum"] = testSaveChecksum(bad["payload"].dump());
+    EXPECT_FALSE(deserializeProfileEnvelope(bad.dump(), content).profile);
+}
+
+TEST(SaveRepositoryTest, FieldBarterReadsUnclaimedLegacyOffersAndPreservesEachClaimInTheRaid)
+{
+    const auto legacy = contentBeforeHospitalHybridOutdoor();
+    const auto &content = publishedContentRegistry();
+    auto old = makeNewAlphaProfile("barter-legacy", legacy);
+    const auto kit = old.assets.create(legacy.item(alpha_content::backpack),
+        EquippedAssetLocation{EquipmentSlotKind::Backpack});
+    const auto carried = ProfileContainerId::compartment(kit, 0U);
+    const auto scrap = old.assets.create(legacy.item(alpha_content::lootScrap),
+        StoredAssetLocation{carried, {0, 0}});
+    const auto electronics = old.assets.create(legacy.item(ItemDefinitionId{"item.loot.electronics"}),
+        StoredAssetLocation{carried, {0, 1}});
+    const auto departure = executeDeploy(old, legacy,
+        {"barter-raid", "barter-return", 927U, kFieldIntelligenceSourceMapId},
+        {old.revision, "deploy-before-barter"});
+    ASSERT_TRUE(departure.succeeded) << departure.message;
+    ASSERT_TRUE(old.pendingRaid && old.pendingRaid->fieldIntelligenceTrade);
+    const auto oldEnvelope = serializeProfileEnvelope(old, legacy.contentVersion());
+    EXPECT_FALSE(nlohmann::json::parse(oldEnvelope).at("payload").at("pending_raid")
+        .at("field_intelligence_trade").contains("bartered"));
+    auto migrated = deserializeProfileEnvelope(oldEnvelope, content);
+    ASSERT_TRUE(migrated.profile) << migrated.message;
+    auto &profile = *migrated.profile;
+    ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->fieldIntelligenceTrade);
+    EXPECT_FALSE(profile.pendingRaid->fieldIntelligenceTrade->hasBarteredOffer());
+    EXPECT_EQ(profileStateFingerprint(profile), profileStateFingerprint(old));
+    ASSERT_TRUE(executeRaidFieldBarter(profile, content, 1U, scrap, profile.revision));
+    const auto first = serializeProfileEnvelope(profile, content.contentVersion());
+    auto one = deserializeProfileEnvelope(first, content);
+    ASSERT_TRUE(one.profile) << one.message;
+    EXPECT_EQ(profileStateFingerprint(*one.profile), profileStateFingerprint(profile));
+    EXPECT_EQ(one.profile->pendingRaid->fieldIntelligenceTrade->bartered, (std::array{false, true}));
+    EXPECT_FALSE(queryRaidFieldBarter(*one.profile, content, 1U).canCommit);
+    EXPECT_TRUE(queryRaidFieldBarter(*one.profile, content, 0U).canCommit);
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(*one.profile, legacy.contentVersion())),
+        std::invalid_argument);
+    auto malformed = nlohmann::json::parse(first);
+    for (const auto &value : {nlohmann::json::array({true}), nlohmann::json::array({true, 0}),
+             nlohmann::json::array({true, false, true})})
+    {
+        auto &payload = malformed.at("payload");
+        payload.at("pending_raid").at("field_intelligence_trade").at("bartered") = value;
+        malformed["payload_checksum"] = testSaveChecksum(payload.dump());
+        EXPECT_FALSE(deserializeProfileEnvelope(malformed.dump(), content).profile);
+    }
+    ASSERT_TRUE(executeRaidFieldBarter(*one.profile, content, 0U, electronics, one.profile->revision));
+    const auto two = deserializeProfileEnvelope(
+        serializeProfileEnvelope(*one.profile, content.contentVersion()), content);
+    ASSERT_TRUE(two.profile) << two.message;
+    EXPECT_EQ(two.profile->pendingRaid->fieldIntelligenceTrade->bartered, (std::array{true, true}));
+    auto distinct = *two.profile;
+    distinct.pendingRaid->fieldIntelligenceTrade->bartered[0] = false;
+    EXPECT_NE(profileStateFingerprint(distinct), profileStateFingerprint(*two.profile));
+}
+
+TEST(SaveRepositoryTest, RiversideFieldClueFreezesOneExistingAssetAndOldSavesDoNotAcquireIt)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("riverside-cache-save", content);
+    const auto receipt = executeDeploy(profile, content, {"river-cache", "river-return", 42, kFieldIntelligenceSourceMapId},
+        {profile.revision, "ordinary-cache"});
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    ASSERT_TRUE(profile.pendingRaid && profile.pendingRaid->fieldClueCache);
+    const auto &raid = *profile.pendingRaid;
+    const auto &cache = *raid.fieldClueCache;
+    EXPECT_FALSE(cache.decodedDocumentId);
+    EXPECT_NE(profile.assets.find(cache.rewardAssetId), nullptr);
+    const auto doc = std::find_if(raid.loot.begin(), raid.loot.end(), [](const auto &slot) {
+        return slot.definitionId == kFieldIntelligenceDocumentId;
+    });
+    ASSERT_NE(doc, raid.loot.end());
+    EXPECT_NE(cache.rewardAssetId, doc->assetId);
+    const auto bytes = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto reopened = deserializeProfileEnvelope(bytes, content);
+    ASSERT_TRUE(reopened.profile) << reopened.message;
+    EXPECT_EQ(reopened.profile->pendingRaid->fieldClueCache, raid.fieldClueCache);
+    EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
+    auto old = profile;
+    old.pendingRaid->fieldClueCache.reset();
+    const auto previousBytes = serializeProfileEnvelope(old, content.contentVersion());
+    EXPECT_EQ(previousBytes.find("field_clue_cache"), std::string::npos);
+    const auto oldLoaded = deserializeProfileEnvelope(previousBytes, content);
+    ASSERT_TRUE(oldLoaded.profile) << oldLoaded.message;
+    EXPECT_FALSE(oldLoaded.profile->pendingRaid->fieldClueCache);
+    EXPECT_EQ(serializeProfileEnvelope(*oldLoaded.profile, content.contentVersion()), previousBytes);
+    EXPECT_NE(profileStateFingerprint(old), profileStateFingerprint(profile));
+    EXPECT_THROW(serializeProfileEnvelope(profile, kRiversideArmedScavengersContentVersion, 75), std::invalid_argument);
+    for (int corrupt = 0; corrupt < 4; ++corrupt)
+    {
+        auto bad = nlohmann::json::parse(bytes);
+        auto &record = bad["payload"]["pending_raid"]["field_clue_cache"];
+        if (corrupt == 0) record["reward_asset_id"] = doc->assetId;
+        if (corrupt == 1) record["reward_asset_id"] = 0;
+        if (corrupt == 2) record["decoded_document_id"] = doc->assetId;
+        if (corrupt == 3) record["decoded_document_id"] = cache.rewardAssetId;
+        bad["payload_checksum"] = testSaveChecksum(bad["payload"].dump());
+        EXPECT_FALSE(deserializeProfileEnvelope(bad.dump(), content).profile) << corrupt;
+    }
+}
+
+TEST(SaveRepositoryTest, RationPolicyRoundTripsAndOlderProfilesKeepTheirOriginalDefaultBytes)
+{
+    const auto &content = publishedContentRegistry();
+    auto p = makeNewAlphaProfile("base-ration-compatibility", content);
+    const auto standard = serializeProfileEnvelope(p, content.contentVersion());
+    const auto fingerprint = profileStateFingerprint(p);
+    EXPECT_EQ(standard.find("ration_policy"), std::string::npos);
+    const auto prior = deserializeProfileEnvelope(standard, content);
+    ASSERT_TRUE(prior.profile) << prior.message;
+    EXPECT_EQ(prior.profile->rationPolicy, BaseRationPolicy::Standard);
+    EXPECT_EQ(serializeProfileEnvelope(*prior.profile, content.contentVersion()), standard);
+    p.rationPolicy = BaseRationPolicy::Conserve;
+    EXPECT_NE(profileStateFingerprint(p), fingerprint);
+    const auto saving = serializeProfileEnvelope(p, content.contentVersion());
+    auto loaded = deserializeProfileEnvelope(saving, content);
+    ASSERT_TRUE(loaded.profile) << loaded.message;
+    EXPECT_EQ(loaded.profile->rationPolicy, BaseRationPolicy::Conserve);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), profileStateFingerprint(p));
+    EXPECT_THROW(serializeProfileEnvelope(p, kRiversideArmedScavengersContentVersion, 75), std::invalid_argument);
+    p.rationPolicy = BaseRationPolicy::Standard;
+    EXPECT_EQ(serializeProfileEnvelope(p, content.contentVersion()), standard);
+    auto bad = nlohmann::json::parse(saving);
+    bad["payload"]["base_population"]["ration_policy"] = "unknown";
+    bad["payload_checksum"] = testSaveChecksum(bad["payload"].dump());
+    EXPECT_FALSE(deserializeProfileEnvelope(bad.dump(), content).profile);
+    p.rationPolicy = static_cast<BaseRationPolicy>(77);
+    EXPECT_FALSE(validateProfileState(p, content).valid);
+    EXPECT_THROW(serializeProfileEnvelope(p, content.contentVersion()), std::invalid_argument);
+}
+
+TEST(SaveRepositoryTest, FireZoneAndProximityAlarmOrdersAndFinishedItemsEachSurviveReopening)
+{
+    struct Contract {
+        BaseManufacturingRecipeDefinitionId id;
+        ItemDefinitionId input, output;
+        std::uint32_t minutes;
+    };
+    const Contract contracts[]{
+        {kRaidFireBottleRecipeId, kRaidFuelCanId, kRaidFireBottleItemId, 120},
+        {kRaidAlarmRecipeId, ItemDefinitionId{"item.loot.copper_wire_spool"}, kRaidAlarmItemId, 90}};
+    for (const auto &recipe : contracts)
+    {
+        SCOPED_TRACE(recipe.id.value());
+        const auto &content = publishedContentRegistry();
+        auto profile = makeNewAlphaProfile("area-control-order", content);
+        for (const auto &id : {recipe.input, alpha_content::lootScrap})
+        {
+            const auto &item = content.item(id);
+            const auto cell = findFirstProfileFit(profile, content, ProfileContainerId::stash(), item, ItemOrientation::Degrees0);
+            ASSERT_TRUE(cell);
+            ASSERT_NE(profile.assets.create(item, StoredAssetLocation{ProfileContainerId::stash(), *cell}), 0U);
+        }
+        const auto accepted = executeStartBaseManufacturing(profile, content, {recipe.id},
+            {profile.revision, "order-one-zone"});
+        ASSERT_TRUE(accepted.succeeded && accepted.outputAssetId) << accepted.message;
+        auto reopened = deserializeProfileEnvelope(serializeProfileEnvelope(profile, content.contentVersion()), content);
+        ASSERT_TRUE(reopened.profile) << reopened.message;
+        EXPECT_EQ(reopened.profile->baseManufacturing, profile.baseManufacturing);
+        EXPECT_THROW(serializeProfileEnvelope(profile, kRiversideArmedScavengersContentVersion, 75), std::invalid_argument);
+        profile = std::move(*reopened.profile);
+        ASSERT_EQ(advanceWorldClock(profile.worldClock, recipe.minutes).minutesApplied, recipe.minutes);
+        ASSERT_TRUE(applyBaseManufacturingThrough(profile, content).completed);
+        auto finished = deserializeProfileEnvelope(serializeProfileEnvelope(profile, content.contentVersion()), content);
+        ASSERT_TRUE(finished.profile) << finished.message;
+        ASSERT_FALSE(finished.profile->baseManufacturing.activeOrder);
+        const auto *output = finished.profile->assets.find(*accepted.outputAssetId);
+        ASSERT_NE(output, nullptr);
+        EXPECT_EQ(output->definitionId, recipe.output);
+        EXPECT_EQ(output->quantity, 1U);
+        EXPECT_EQ(profileStateFingerprint(*finished.profile), profileStateFingerprint(profile));
+    }
+}
+
+TEST(SaveRepositoryTest, OlderWorkshopOrderKeepsItsIdentityAndTimingWhenNoiseDecoyRecipeIsAdded)
+{
+    const auto legacy = contentBeforeHospitalLandmarkInteriors();
+    const auto &current = publishedContentRegistry();
+    auto original = makeNewAlphaProfile("legacy-workshop-order", legacy);
+    const auto stash = ProfileContainerId::stash();
+    const StartBaseManufacturingCommand decoys{
+        BaseManufacturingRecipeDefinitionId{"base_manufacturing.noise_decoy"}};
+    EXPECT_FALSE(queryStartBaseManufacturing(original, legacy, decoys).canCommit);
+    for (const auto &material : {alpha_content::lootScrap, ItemDefinitionId{"item.loot.electronics"}})
+    {
+        const auto &item = legacy.item(material);
+        const auto fit = findFirstProfileFit(original, legacy, stash, item, ItemOrientation::Degrees0);
+        ASSERT_TRUE(fit);
+        static_cast<void>(original.assets.create(item, StoredAssetLocation{stash, *fit}));
+    }
+    const StartBaseManufacturingCommand kits{
+        BaseManufacturingRecipeDefinitionId{"base_manufacturing.weapon_maintenance_kit"}};
+    const auto started = executeStartBaseManufacturing(original, legacy, kits,
+        {original.revision, "start-before-update"});
+    ASSERT_TRUE(started.succeeded && started.outputAssetId) << started.message;
+    ASSERT_TRUE(original.baseManufacturing.activeOrder);
+    ASSERT_EQ(advanceWorldClock(original.worldClock, 30U).minutesApplied, 30U);
+    const auto envelope = serializeProfileEnvelope(original, legacy.contentVersion());
+    auto restored = deserializeProfileEnvelope(envelope, current);
+    ASSERT_TRUE(restored.profile) << restored.message;
+    auto &profile = *restored.profile;
+    EXPECT_EQ(profile.baseManufacturing.activeOrder, original.baseManufacturing.activeOrder);
+    EXPECT_EQ(profileStateFingerprint(profile), profileStateFingerprint(original));
+    EXPECT_FALSE(queryStartBaseManufacturing(profile, current, decoys).canCommit);
+    profile.worldClock.elapsedWorldMinutes = original.baseManufacturing.activeOrder->completionWorldMinute;
+    ASSERT_TRUE(applyBaseManufacturingThrough(profile, current).completed);
+    ASSERT_NE(profile.assets.find(*started.outputAssetId), nullptr);
+    EXPECT_EQ(profile.assets.find(*started.outputAssetId)->definitionId,
+        ItemDefinitionId{"item.maintenance.weapon_kit_basic"});
+    for (const auto &[id, asset] : profile.assets.records())
+        EXPECT_NE(asset.definitionId, alpha_content::noiseDecoy) << id;
+    EXPECT_TRUE(validateProfileState(profile, current).valid);
+}
+
+TEST(SaveRepositoryTest, NoiseDecoyProductionResumesBothInProgressAndAwaitingCollection)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("save-decoy-order", content);
+    const auto stash = ProfileContainerId::stash();
+    const StartBaseManufacturingCommand command{
+        BaseManufacturingRecipeDefinitionId{"base_manufacturing.noise_decoy"}};
+    for (const auto &input : content.baseManufacturingRecipe(command.recipeDefinitionId).inputs)
+    {
+        const auto &item = content.item(input.itemDefinitionId);
+        const auto fit = findFirstProfileFit(profile, content, stash, item, ItemOrientation::Degrees0);
+        ASSERT_TRUE(fit);
+        static_cast<void>(profile.assets.create(item, StoredAssetLocation{stash, *fit}));
+    }
+    const auto started = executeStartBaseManufacturing(profile, content, command,
+        {profile.revision, "start-decoy-order"});
+    ASSERT_TRUE(started.succeeded && started.outputAssetId) << started.message;
+    ASSERT_EQ(advanceWorldClock(profile.worldClock, 40U).minutesApplied, 40U);
+    auto active = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()), content);
+    ASSERT_TRUE(active.profile) << active.message;
+    EXPECT_EQ(active.profile->baseManufacturing.activeOrder, profile.baseManufacturing.activeOrder);
+    profile = std::move(*active.profile);
+    const auto &filler = content.item(alpha_content::lootCola);
+    std::optional<AssetInstanceId> lastFiller;
+    while (const auto fit = findFirstProfileFit(profile, content, stash, filler, ItemOrientation::Degrees0))
+        lastFiller = profile.assets.create(filler, StoredAssetLocation{stash, *fit});
+    ASSERT_TRUE(lastFiller);
+    ASSERT_EQ(advanceWorldClock(profile.worldClock, 50U).minutesApplied, 50U);
+    ASSERT_TRUE(applyBaseManufacturingThrough(profile, content).outputBlocked);
+    auto ready = deserializeProfileEnvelope(
+        serializeProfileEnvelope(profile, content.contentVersion()), content);
+    ASSERT_TRUE(ready.profile) << ready.message;
+    EXPECT_EQ(ready.profile->baseManufacturing.activeOrder, profile.baseManufacturing.activeOrder);
+    auto &restored = *ready.profile;
+    ASSERT_TRUE(restored.assets.erase(*lastFiller));
+    const CommandContext collect{restored.revision, "collect-decoy-order"};
+    const auto collected = executeCollectBaseManufacturing(restored, content, collect);
+    ASSERT_TRUE(collected.succeeded) << collected.message;
+    EXPECT_EQ(collected.outputAssetId, started.outputAssetId);
+    const auto *stack = restored.assets.find(*started.outputAssetId);
+    ASSERT_NE(stack, nullptr);
+    EXPECT_EQ(stack->definitionId, alpha_content::noiseDecoy);
+    EXPECT_EQ(stack->quantity, 2U);
+    EXPECT_TRUE(executeCollectBaseManufacturing(restored, content, collect).alreadyCommitted);
 }
 
 TEST(SaveRepositoryTest, FrontierRoadBlockadeFrozenGeometryRoundTripsAndCannotDowngrade)
@@ -201,13 +531,17 @@ TEST(SaveRepositoryTest, FrontierRoadBlockadeUpgradePreservesSchema69FrozenRaidA
 TEST(SaveRepositoryTest, LostWeaponPursuitUpgradeKeepsExactContent88BlockadeAndArchivesBothSources)
 {
     const auto &content = publishedContentRegistry();
-    auto profile = makeNewAlphaProfile("pursuit-v70-blockade", content);
+    auto historicalDocument = contentBeforeHospitalHybridOutdoorJson();
+    historicalDocument["content_version"] = kFrontierHighRiskBlockadeContentVersion;
+    const auto historical = ContentRegistry::fromJson(historicalDocument.dump());
+    auto profile = makeNewAlphaProfile("pursuit-v70-blockade", historical);
     auto base = profile;
-    const auto deployed = executeDeploy(profile, content,
+    const auto deployed = executeDeploy(profile, historical,
         {"pursuit-v70-blockade-raid", "pursuit-v70-blockade-return", 2U, kFreightCrateMapId},
         {profile.revision, "deploy"});
     ASSERT_TRUE(deployed.succeeded) << deployed.message;
     ASSERT_TRUE(profile.pendingRaid->highRiskCrisis->roadBlockade);
+    ASSERT_TRUE(profile.pendingRaid->volatileBarrels.empty());
     const auto frozen = serializeProfileEnvelope(profile, kFrontierHighRiskBlockadeContentVersion);
     const auto backup = serializeProfileEnvelope(base, kFrontierHighRiskBlockadeContentVersion);
     const auto loaded = deserializeProfileEnvelope(frozen, content);
@@ -294,7 +628,7 @@ TEST(SaveRepositoryTest, NightRendezvousRoundTripsAlongsideOrdinaryRescue)
 TEST(SaveRepositoryTest, HospitalContent93PreservesBothFrozenSlotsAndContent94RoundTrips)
 {
     const auto previous = contentBeforeHospitalHybridOutdoor();
-    const auto &current = publishedContentRegistry();
+    const auto current = contentBeforeHospitalLandmarkInteriors();
     auto frozen = makeNewAlphaProfile("hospital-pending", previous);
     const DeployCommand command{"hospital-raid", "hospital-return", 9403U, kHospitalFloorplanMapId};
     const auto backup = serializeProfileEnvelope(frozen, previous.contentVersion());
@@ -353,6 +687,63 @@ TEST(SaveRepositoryTest, HospitalContent93PreservesBothFrozenSlotsAndContent94Ro
     EXPECT_EQ(serializeProfileEnvelope(*retained.profile, current.contentVersion()), envelope);
 }
 
+TEST(SaveRepositoryTest, HospitalLandmarkInteriorsPreservePreviousSingleRoomAndRoundTripTwoRooms)
+{
+    const auto previous = contentBeforeHospitalLandmarkInteriors();
+    const auto &current = publishedContentRegistry();
+    const DeployCommand command{"hospital-landmarks", "hospital-return", 9403U, kHospitalFloorplanMapId};
+    auto old = makeNewAlphaProfile("hospital-landmarks", previous);
+    old.raidInteriorIntelligence.knownLayouts.insert(kHospitalFloorplanSpaceId);
+    const auto departure = executeDeploy(old, previous, command, {old.revision, "deploy"});
+    ASSERT_TRUE(departure.succeeded) << departure.message;
+    ASSERT_EQ(old.pendingRaid->interiors.size(), 1U);
+    ASSERT_EQ(old.pendingRaid->spatialLayout.layoutVersion, kHospitalHybridOutdoorLayoutVersion);
+    const auto original = serializeProfileEnvelope(old, previous.contentVersion());
+    const auto restored = deserializeProfileEnvelope(original, current);
+    ASSERT_TRUE(restored.profile) << restored.message;
+    EXPECT_EQ(serializeProfileEnvelope(*restored.profile, current.contentVersion()), original);
+    EXPECT_FALSE(restored.profile->raidInteriorIntelligence.knows(kHospitalDepotSpaceId));
+
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-hospital-save-", "landmarks");
+    SaveRepository repository{directory.path()};
+    ASSERT_TRUE(repository.save(old, current.contentVersion()).succeeded);
+    const auto readBackup = [&] {
+        std::ifstream file(repository.backupPath(), std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>{file}, {});
+    };
+    EXPECT_TRUE(readBackup() == original);
+    auto fresh = makeNewAlphaProfile("hospital-landmarks", current);
+    fresh.raidInteriorIntelligence.knownLayouts.insert(kHospitalDepotSpaceId);
+    const auto newDeparture = executeDeploy(fresh, current, command, {fresh.revision, "deploy"});
+    ASSERT_TRUE(newDeparture.succeeded) << newDeparture.message;
+    ASSERT_EQ(fresh.pendingRaid->spatialLayout.layoutVersion, kHospitalLandmarkInteriorLayoutVersion);
+    ASSERT_EQ(fresh.pendingRaid->interiors.size(), 2U);
+    ASSERT_FALSE(fresh.pendingRaid->interiors.front().layoutKnown);
+    ASSERT_EQ(fresh.pendingRaid->interiors.back().id, kHospitalDepotSpaceId);
+    ASSERT_TRUE(fresh.pendingRaid->interiors.back().layoutKnown);
+    ASSERT_TRUE(repository.save(fresh, current.contentVersion()).succeeded);
+    const auto reopened = repository.load(current);
+    ASSERT_TRUE(reopened.profile) << reopened.message;
+    EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(fresh));
+    // Pending raids intentionally mirror the committed checkpoint in both slots.
+    EXPECT_TRUE(readBackup() == serializeProfileEnvelope(fresh, current.contentVersion()));
+    std::ofstream(repository.primaryPath(), std::ios::binary | std::ios::trunc) << "{";
+    const auto recoveredBackup = repository.load(current);
+    ASSERT_EQ(recoveredBackup.status, SaveLoadStatus::RecoveredBackup);
+    ASSERT_TRUE(recoveredBackup.profile) << recoveredBackup.message;
+    EXPECT_EQ(profileStateFingerprint(*recoveredBackup.profile), profileStateFingerprint(fresh));
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(fresh, kRiversideArmedScavengersContentVersion)),
+                 std::invalid_argument);
+
+    auto wrongDoor = fresh;
+    std::swap(wrongDoor.pendingRaid->interiors.front().exteriorReturn,
+              wrongDoor.pendingRaid->interiors.back().exteriorReturn);
+    EXPECT_FALSE(validateProfileState(wrongDoor, current).valid);
+    fresh.pendingRaid->interiors.pop_back();
+    EXPECT_FALSE(validateProfileState(fresh, current).valid);
+}
+
 TEST(SaveRepositoryTest, HospitalRecoveryRetainsCompleteContent93Deployment)
 {
     const auto previous = contentBeforeHospitalHybridOutdoor();
@@ -378,19 +769,52 @@ TEST(SaveRepositoryTest, HospitalRecoveryRetainsCompleteContent93Deployment)
 TEST(SaveRepositoryTest, HospitalUpdateKeepsEveryOtherMapDeploymentIdentical)
 {
     const auto previous = contentBeforeHospitalHybridOutdoor();
+    const auto hospitalUpdate = contentBeforeHospitalLandmarkInteriors();
     const auto &current = publishedContentRegistry();
     for (const auto &id : {MapDefinitionId{"map.v0.test"}, MapDefinitionId{"map.raid.industrial"},
                            kFreightCrateMapId, kFieldIntelligenceSourceMapId})
     {
         SCOPED_TRACE(std::string{id.value()});
         auto old = makeNewAlphaProfile("off-hospital", previous);
+        auto originalUpdate = makeNewAlphaProfile("off-hospital", hospitalUpdate);
         auto now = makeNewAlphaProfile("off-hospital", current);
         const DeployCommand command{"unchanged", "home", 9403U, id};
         const auto before = executeDeploy(old, previous, command, {old.revision, "start"});
         ASSERT_TRUE(before.succeeded) << before.message;
+        const auto updated = executeDeploy(originalUpdate, hospitalUpdate, command, {originalUpdate.revision, "start"});
+        ASSERT_TRUE(updated.succeeded) << updated.message;
+        EXPECT_EQ(serializeProfileEnvelope(originalUpdate, previous.contentVersion()),
+                  serializeProfileEnvelope(old, previous.contentVersion()));
         const auto after = executeDeploy(now, current, command, {now.revision, "start"});
         ASSERT_TRUE(after.succeeded) << after.message;
-        EXPECT_EQ(serializeProfileEnvelope(now, previous.contentVersion()), serializeProfileEnvelope(old, previous.contentVersion()));
+        ASSERT_TRUE(originalUpdate.pendingRaid->volatileBarrels.empty());
+        if (id == kFreightCrateMapId)
+        {
+            ASSERT_EQ(now.pendingRaid->volatileBarrels.size(), 2U);
+            EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(now, previous.contentVersion())), std::invalid_argument);
+            now.pendingRaid->volatileBarrels.clear();
+        }
+        else EXPECT_TRUE(now.pendingRaid->volatileBarrels.empty());
+        if (id == kFieldIntelligenceSourceMapId)
+        {
+            ASSERT_TRUE(now.pendingRaid->fieldClueCache);
+            EXPECT_FALSE(originalUpdate.pendingRaid->fieldClueCache);
+            EXPECT_THROW(serializeProfileEnvelope(now, previous.contentVersion()), std::invalid_argument);
+            now.pendingRaid->fieldClueCache.reset();
+            ASSERT_EQ(now.pendingRaid->armedScavengers.size(), 2U);
+            ASSERT_EQ(originalUpdate.pendingRaid->armedScavengers.size(), 2U);
+            for (std::size_t index = 0; index < 2; ++index)
+            {
+                auto &actor = now.pendingRaid->armedScavengers[index];
+                ASSERT_TRUE(actor.retreatPoint);
+                EXPECT_FALSE(actor.escaped);
+                EXPECT_FALSE(originalUpdate.pendingRaid->armedScavengers[index].retreatPoint);
+                actor.retreatPoint.reset();
+            }
+        }
+        else EXPECT_FALSE(now.pendingRaid->fieldClueCache);
+        EXPECT_EQ(serializeProfileEnvelope(now, current.contentVersion()),
+                  serializeProfileEnvelope(originalUpdate, hospitalUpdate.contentVersion()));
     }
 }
 
@@ -481,6 +905,42 @@ TEST(SaveRepositoryTest, RiversidePreservesOriginalPistolMagazinesResidualRounds
     entries[1]["pistol_asset_id"] = static_cast<double>(roster[1].pistolAssetId) + 0.5;
     tampered["payload_checksum"] = testSaveChecksum(payload.dump());
     EXPECT_FALSE(deserializeProfileEnvelope(tampered.dump(), content).profile);
+}
+
+TEST(SaveRepositoryTest, RiversideScavengerRetreatRoundTripsAndLegacyRosterKeepsItsBytes)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("retreat-save", content);
+    const auto deployed = executeDeploy(profile, content,
+        {"retreat", "retreat-return", 9403U, kFieldIntelligenceSourceMapId},
+        {profile.revision, "retreat-departure"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    ASSERT_TRUE(profile.pendingRaid);
+    auto &actors = profile.pendingRaid->armedScavengers;
+    ASSERT_EQ(actors.size(), 2U);
+    for (const auto &actor : actors) ASSERT_TRUE(actor.retreatPoint);
+    const auto bytes = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto restored = deserializeProfileEnvelope(bytes, content);
+    ASSERT_TRUE(restored.profile && restored.profile->pendingRaid) << restored.message;
+    EXPECT_EQ(restored.profile->pendingRaid->armedScavengers, actors);
+    EXPECT_EQ(serializeProfileEnvelope(*restored.profile, content.contentVersion()), bytes);
+    for (int corrupt = 0; corrupt < 3; ++corrupt)
+    {
+        auto document = nlohmann::json::parse(bytes);
+        auto &actor = document["payload"]["pending_raid"]["armed_scavengers"][0];
+        if (corrupt == 0) actor["retreat_point"]["x"] = -1000;
+        if (corrupt == 1) actor.erase("retreat_point");
+        if (corrupt == 2) { actor.erase("retreat_point"); actor["escaped"] = true; }
+        document["payload_checksum"] = testSaveChecksum(document["payload"].dump());
+        EXPECT_FALSE(deserializeProfileEnvelope(document.dump(), content).profile);
+    }
+    for (auto &actor : actors) actor.retreatPoint.reset();
+    const auto legacy = serializeProfileEnvelope(profile, content.contentVersion());
+    EXPECT_EQ(legacy.find("retreat_point"), std::string::npos);
+    EXPECT_EQ(legacy.find("\"escaped\""), std::string::npos);
+    const auto legacyRestored = deserializeProfileEnvelope(legacy, content);
+    ASSERT_TRUE(legacyRestored.profile) << legacyRestored.message;
+    EXPECT_EQ(serializeProfileEnvelope(*legacyRestored.profile, content.contentVersion()), legacy);
 }
 
 TEST(SaveRepositoryTest, FireSupportMigratesSchema73AndRetainsFrozenNightRendezvous)
@@ -2384,6 +2844,58 @@ TEST(SaveRepositoryTest, SchemaV17RoundTripsActiveManufacturingOwnership)
     EXPECT_EQ(
         loaded.profile->baseManufacturing.activeOrder->outputAssetId,
         started.outputAssetId);
+}
+
+TEST(SaveRepositoryTest, WorkshopExpediteKeepsLegacyBytesAndRestoresOnlyThePaidDeadline)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("expedite-save", content);
+    const auto stock = [&](const char *name) -> AssetInstanceId {
+        const auto &definition = content.item(ItemDefinitionId{name});
+        const auto fit = findFirstProfileFit(profile, content, ProfileContainerId::stash(),
+            definition, ItemOrientation::Degrees0);
+        if (!fit) return 0;
+        return profile.assets.create(definition, StoredAssetLocation{ProfileContainerId::stash(), *fit});
+    };
+    ASSERT_NE(stock("item.loot.scrap_parts"), 0U);
+    ASSERT_NE(stock("item.loot.copper_wire_spool"), 0U);
+    const auto payment = stock("item.loot.electronics");
+    ASSERT_NE(payment, 0U);
+    const auto started = executeStartBaseManufacturing(profile, content,
+        {BaseManufacturingRecipeDefinitionId{"base_manufacturing.noise_decoy"}}, {profile.revision, "start-decoys"});
+    ASSERT_TRUE(started.succeeded) << started.message;
+    const auto previous = serializeProfileEnvelope(profile, content.contentVersion());
+    EXPECT_EQ(previous.find("expedite_minutes_saved"), std::string::npos);
+    const auto legacy = deserializeProfileEnvelope(previous, content);
+    ASSERT_TRUE(legacy.profile) << legacy.message;
+    EXPECT_EQ(serializeProfileEnvelope(*legacy.profile, content.contentVersion()), previous);
+
+    const auto original = *profile.baseManufacturing.activeOrder;
+    const auto receipt = executeExpediteBaseManufacturing(profile, content,
+        {original.jobId, payment}, {profile.revision, "expedite-decoys"});
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    const auto bytes = serializeProfileEnvelope(profile, content.contentVersion());
+    const auto reopened = deserializeProfileEnvelope(bytes, content);
+    ASSERT_TRUE(reopened.profile && reopened.profile->baseManufacturing.activeOrder) << reopened.message;
+    const auto &restored = *reopened.profile->baseManufacturing.activeOrder;
+    EXPECT_EQ(restored, *profile.baseManufacturing.activeOrder);
+    EXPECT_EQ(restored.completionWorldMinute + restored.expediteMinutesSaved, original.completionWorldMinute);
+    EXPECT_EQ(restored.outputAssetId, original.outputAssetId);
+    EXPECT_EQ(restored.inputAssetIds, original.inputAssetIds);
+    EXPECT_FALSE(reopened.profile->assets.find(payment));
+    EXPECT_EQ(profileStateFingerprint(*reopened.profile), profileStateFingerprint(profile));
+    EXPECT_EQ(serializeProfileEnvelope(*reopened.profile, content.contentVersion()), bytes);
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, kRiversideArmedScavengersContentVersion, 75)),
+        std::invalid_argument);
+    EXPECT_THROW(static_cast<void>(serializeProfileEnvelope(profile, content.contentVersion(), 74)), std::invalid_argument);
+    for (const auto &invalid : nlohmann::json::array({0, -1, 0.5, "10", 4294967296ULL, 9999}))
+    {
+        auto document = nlohmann::json::parse(bytes);
+        auto &payload = document.at("payload");
+        payload.at("base_manufacturing").at("active_order")["expedite_minutes_saved"] = invalid;
+        document["payload_checksum"] = testSaveChecksum(payload.dump());
+        EXPECT_FALSE(deserializeProfileEnvelope(document.dump(), content).profile);
+    }
 }
 
 TEST(SaveRepositoryTest, SchemaV18RoundTripsMoraleEventAndRaidRollback)

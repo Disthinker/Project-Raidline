@@ -1,10 +1,12 @@
 #include "app.h"
 
+#include <algorithm>
+#include <iterator>
 #include <fmt/format.h>
 
 namespace
 {
-constexpr SDL_FRect kOrderPanel{926, 20, 338, 168};
+constexpr SDL_FRect kOrderPanel{926, 20, 338, 200};
 constexpr SDL_FRect kTeammateStatus{926, 20, 338, 32};
 constexpr std::array<std::string_view, 4> kOrderLabelsEnglish{
     "Follow", "Hold position", "Hold fire", "Free fire"};
@@ -17,12 +19,42 @@ SDL_FRect fireSupportOrderRect(std::size_t index)
             kOrderPanel.y + 53.0F + 40.0F * static_cast<float>(index / 2U), 152.0F, 34.0F};
 }
 
-int fireSupportOrderAction(Vec2 position)
+enum FireSupportTreatmentControl { OpenTreatment = 5, PreviousKit, NextKit, BackToOrders, ConfirmTreatment };
+
+SDL_FRect treatmentControlRect(int control)
 {
-    for (std::size_t index = 0; index < kOrderLabelsEnglish.size(); ++index)
-        if (uiContains(fireSupportOrderRect(index), position))
-            return static_cast<int>(index) + 1;
+    switch (control) {
+    case OpenTreatment: return {938, 153, 314, 34};
+    case PreviousKit: return {938, 94, 152, 32};
+    case NextKit: return {1100, 94, 152, 32};
+    case BackToOrders: return {938, 173, 152, 34};
+    case ConfirmTreatment: return {1100, 173, 152, 34};
+    default: return {};
+    }
+}
+
+int fireSupportOrderAction(Vec2 position, bool treatment)
+{
+    if (!treatment) {
+        for (std::size_t index = 0; index < kOrderLabelsEnglish.size(); ++index)
+            if (uiContains(fireSupportOrderRect(index), position))
+                return static_cast<int>(index) + 1;
+    }
+    const int first = treatment ? PreviousKit : OpenTreatment;
+    const int last = treatment ? ConfirmTreatment : OpenTreatment;
+    for (int control = first; control <= last; ++control)
+        if (uiContains(treatmentControlRect(control), position)) return control;
     return 0;
+}
+
+std::optional<AssetInstanceId> cycleTreatmentKit(const std::vector<AssetInstanceId> &kits,
+    std::optional<AssetInstanceId> selected, bool forward)
+{
+    if (kits.empty()) return std::nullopt;
+    auto at = selected ? std::find(kits.begin(), kits.end(), *selected) : kits.end();
+    if (at == kits.end()) return kits.front();
+    if (forward) return std::next(at) == kits.end() ? kits.front() : *std::next(at);
+    return at == kits.begin() ? kits.back() : *std::prev(at);
 }
 }
 
@@ -57,7 +89,7 @@ bool App::routeFireSupportInput(const SDL_Event &event)
     }
 
     if (keyPress && (event.key.scancode == SDL_SCANCODE_F2 ||
-                     event.key.scancode == SDL_SCANCODE_ESCAPE))
+        (event.key.scancode == SDL_SCANCODE_ESCAPE && !fireSupportTreatmentOpen_)))
     {
         closeFireSupportOrders();
         return true;
@@ -68,26 +100,64 @@ bool App::routeFireSupportInput(const SDL_Event &event)
     {
         if (event.button.button == SDL_BUTTON_LEFT)
         {
-            const int action = fireSupportOrderAction({event.button.x, event.button.y});
+            int action = fireSupportOrderAction({event.button.x, event.button.y}, fireSupportTreatmentOpen_);
+            std::string context;
+            if (action == ConfirmTreatment) {
+                if (!fireSupportTreatmentKit_ || !gameSession_.queryFireSupportTreatment(*fireSupportTreatmentKit_).canCommit)
+                    action = 0;
+                else {
+                    const auto *asset = gameSession_.profile().assets.find(*fireSupportTreatmentKit_);
+                    context = fmt::format("{}:{}:{}", *fireSupportTreatmentKit_, asset->remainingCharges,
+                        gameSession_.world().fireSupportHealth().value_or(0));
+                }
+            }
             if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
-                fireSupportPress_.begin(action, {});
-            else if (fireSupportPress_.release(action, {}))
+                fireSupportPress_.begin(action, context);
+            else if (fireSupportPress_.release(action, context))
                 chosenOrder = action;
             input_.suppressPrimaryPointerUntilRelease();
         }
+        else if (event.button.button == SDL_BUTTON_RIGHT && event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                 fireSupportTreatmentOpen_) chosenOrder = BackToOrders;
     }
     else if (event.type == SDL_EVENT_MOUSE_MOTION && fireSupportPress_.action !=
-        fireSupportOrderAction({event.motion.x, event.motion.y}))
+        fireSupportOrderAction({event.motion.x, event.motion.y}, fireSupportTreatmentOpen_))
         fireSupportPress_.cancel();
-    else if (keyPress && event.key.scancode >= SDL_SCANCODE_1 && event.key.scancode <= SDL_SCANCODE_4)
+    else if (keyPress && !fireSupportTreatmentOpen_ &&
+             event.key.scancode >= SDL_SCANCODE_1 && event.key.scancode <= SDL_SCANCODE_5)
         chosenOrder = static_cast<int>(event.key.scancode - SDL_SCANCODE_1) + 1;
-    else if (keyPress && event.key.scancode == SDL_SCANCODE_F9)
+    else if (keyPress && fireSupportTreatmentOpen_) {
+        switch (event.key.scancode) {
+        case SDL_SCANCODE_LEFT: chosenOrder = PreviousKit; break;
+        case SDL_SCANCODE_RIGHT: chosenOrder = NextKit; break;
+        case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER: chosenOrder = ConfirmTreatment; break;
+        case SDL_SCANCODE_ESCAPE: chosenOrder = BackToOrders; break;
+        default: break;
+        }
+    }
+    if (keyPress && event.key.scancode == SDL_SCANCODE_F9)
     {
         closeFireSupportOrders();
         return false;
     }
 
-    if (chosenOrder != 0)
+    if (chosenOrder >= OpenTreatment) {
+        fireSupportPress_.cancel();
+        if (chosenOrder == BackToOrders) {
+            fireSupportTreatmentOpen_ = false;
+            fireSupportTreatmentKit_.reset();
+        } else if (chosenOrder == ConfirmTreatment) {
+            if (fireSupportTreatmentKit_ && gameSession_.startFireSupportTreatment(*fireSupportTreatmentKit_)) {
+                fireSupportTreatmentStartedThisFrame_ = true;
+                closeFireSupportOrders();
+            }
+        } else {
+            const auto kits = gameSession_.fireSupportTreatmentKits();
+            fireSupportTreatmentKit_ = cycleTreatmentKit(kits,
+                chosenOrder == OpenTreatment ? std::nullopt : fireSupportTreatmentKit_, chosenOrder != PreviousKit);
+            fireSupportTreatmentOpen_ = true;
+        }
+    } else if (chosenOrder != 0)
         if (const auto teammate = gameSession_.world().fireSupport(); teammate && teammate->alive())
         {
             auto movement = teammate->movementOrder;
@@ -109,6 +179,8 @@ void App::closeFireSupportOrders()
 {
     if (!fireSupportOrdersOpen_) return;
     fireSupportOrdersOpen_ = false;
+    fireSupportTreatmentOpen_ = false;
+    fireSupportTreatmentKit_.reset();
     fireSupportUiBlocksGameplayThisFrame_ = true;
     fireSupportPress_.cancel();
     input_.suppressPrimaryPointerUntilRelease();
@@ -173,6 +245,35 @@ void App::renderFireSupportOrders()
     uiFinalText(renderer_, uiTextRenderer_, {slot.x + 12, slot.y + 6, slot.w - 24, 24}, summary, 13);
     if (!fireSupportOrdersOpen_ || !teammate->alive()) return;
 
+    if (fireSupportTreatmentOpen_) {
+        const auto kits = gameSession_.fireSupportTreatmentKits();
+        const auto selected = fireSupportTreatmentKit_
+            ? std::find(kits.begin(), kits.end(), *fireSupportTreatmentKit_) : kits.end();
+        const auto id = selected == kits.end() ? AssetInstanceId{} : *selected;
+        const auto *asset = gameSession_.profile().assets.find(id);
+        const auto plan = gameSession_.queryFireSupportTreatment(id);
+        const auto kitName = asset
+            ? tr(publishedContentRegistry().item(asset->definitionId).displayName) : tr("No medical kit");
+        const auto itemLine = asset
+            ? fmt::format("{}   {} / {}   ·   {} {}", kitName, selected-kits.begin()+1,
+                kits.size(), asset->remainingCharges, chinese ? "次可用" : "uses left") : kitName;
+        uiFinalText(renderer_, uiTextRenderer_, {938, 58, 314, 27}, itemLine, 14);
+        const auto controls = [&](int action, const std::string &label, bool enabled) {
+            renderFoundationButton(8950 + action, treatmentControlRect(action), label, enabled, false, false, {}, 13);
+        };
+        const bool canCycle = kits.size() > 1 || (!asset && !kits.empty());
+        controls(PreviousKit, "←  " + tr("Previous kit"), canCycle);
+        controls(NextKit, tr("Next kit") + "  →", canCycle);
+        const auto detail = plan.canCommit
+            ? fmt::format("{} · {:.1f} {}", chinese ? "用 1 次" : "Uses 1 charge",
+                plan.durationMs / 1000.0F, chinese ? "秒" : "s")
+            : tr(plan.message);
+        uiFinalText(renderer_, uiTextRenderer_, {938, 134, 314, 32}, detail, 13);
+        controls(BackToOrders, "Esc  " + tr("Return to orders"), true);
+        controls(ConfirmTreatment, "Enter  " + tr("Start treatment"), plan.canCommit);
+        return;
+    }
+
     const std::array selected{teammate->movementOrder == FireSupportMovementOrder::Follow,
         teammate->movementOrder == FireSupportMovementOrder::Hold,
         teammate->fireOrder == FireSupportFireOrder::HoldFire,
@@ -180,6 +281,8 @@ void App::renderFireSupportOrders()
     for (std::size_t index = 0; index < labels.size(); ++index)
         renderFoundationButton(8950 + static_cast<int>(index), fireSupportOrderRect(index),
             fmt::format("{}  {}", index + 1U, labels[index]), true, false, selected[index], {}, 13);
+    renderFoundationButton(8950 + OpenTreatment, treatmentControlRect(OpenTreatment),
+        "5  " + tr("Treat teammate"), true, false, false, {}, 13);
     uiFinalText(renderer_, uiTextRenderer_,
-        {slot.x + 12, slot.y + 138, slot.w - 24, 23}, "F2 / ESC CLOSE TEAMMATE ORDERS", 12);
+        {slot.x + 12, slot.y + 171, slot.w - 24, 23}, "F2 / ESC CLOSE TEAMMATE ORDERS", 12);
 }

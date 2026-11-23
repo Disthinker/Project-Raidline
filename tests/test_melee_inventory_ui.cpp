@@ -23,6 +23,8 @@ struct MeleeUiTestAccess {
   const auto supplies=developerRangeSupplies();const auto it=std::find(supplies.begin(),supplies.end(),alpha_content::utilityKnife);ASSERT_NE(it,supplies.end());
   a.developerRangeSelection_[3]=static_cast<std::size_t>(it-supplies.begin());a.renderDeveloperRangePanel();}
  static void map(App &a,bool open){a.tacticalMapOpen_=open;}
+ static void paintRaid(App &a) { a.renderRaidScreen(); }
+ static std::string meleeLabel(const App &a) { return a.meleeStatusLabel(); }
  static void storeKnife(App &a,AssetInstanceId id){auto &s=a.gameSession_;const auto &c=publishedContentRegistry();
   const auto fit=findFirstProfileFit(s.profile(),c,ProfileContainerId::stash(),c.item(alpha_content::utilityKnife),ItemOrientation::Degrees0);ASSERT_TRUE(fit);
   ASSERT_TRUE(s.executeProfileInventory(InventoryMoveCommand{id,0,{ProfileContainerId::stash(),*fit}},"ui-store-knife").succeeded);}
@@ -44,6 +46,13 @@ namespace {
 using A=MeleeUiTestAccess;
 class MeleeInventoryUiTest:public testing::Test {
 protected:
+ void key(SDL_Scancode code, bool down) {
+     SDL_Event event{};
+     event.type = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+     event.key.scancode = code;
+     event.key.down = down;
+     ASSERT_TRUE(SDL_PushEvent(&event));
+ }
  std::unique_ptr<App> app;SDL_Surface *surface{};SDL_Renderer *renderer{};AssetInstanceId id{};
  std::filesystem::path path=std::filesystem::temp_directory_path()/("raidline-melee-ui-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
  void SetUp()override{
@@ -93,4 +102,105 @@ TEST(MeleeInventoryUiTextTest, VUsesExistingEdgeAndReleaseInputRules){
  EXPECT_TRUE(input.wasActionJustPressed(GameAction::QuickMelee));EXPECT_TRUE(input.isActionPressed(GameAction::QuickMelee));input.endFrame();
  e.key.repeat=true;input.handleEvent(e);EXPECT_FALSE(input.wasActionJustPressed(GameAction::QuickMelee));
  e.type=SDL_EVENT_KEY_UP;e.key.down=false;input.handleEvent(e);EXPECT_TRUE(input.wasActionJustReleased(GameAction::QuickMelee));
+}
+
+TEST(MeleeInventoryUiTextTest, HeavyChordUsesTheModifiersAtTheMeleeEdge) {
+    InputSystem input;
+    auto key = [&](SDL_Scancode code, bool down, bool repeat = false) {
+        SDL_Event event{};
+        event.type = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+        event.key.scancode = code;
+        event.key.down = down;
+        event.key.repeat = repeat;
+        input.handleEvent(event);
+    };
+    key(SDL_SCANCODE_V, true);
+    key(SDL_SCANCODE_LALT, true);
+    EXPECT_FALSE(input.heavyMeleeJustPressed());
+    EXPECT_FALSE(input.heavyMeleeHeld());
+    key(SDL_SCANCODE_V, false);
+    input.endFrame();
+    key(SDL_SCANCODE_V, true);
+    EXPECT_TRUE(input.heavyMeleeJustPressed());
+    EXPECT_TRUE(input.heavyMeleeHeld());
+    input.endFrame();
+    key(SDL_SCANCODE_V, true, true);
+    EXPECT_FALSE(input.heavyMeleeJustPressed());
+    key(SDL_SCANCODE_RALT, true);
+    key(SDL_SCANCODE_LALT, false);
+    EXPECT_TRUE(input.heavyMeleeHeld());
+    key(SDL_SCANCODE_RALT, false);
+    key(SDL_SCANCODE_RALT, true);
+    EXPECT_FALSE(input.heavyMeleeHeld());
+    key(SDL_SCANCODE_V, false);
+    key(SDL_SCANCODE_V, true);
+    EXPECT_TRUE(input.heavyMeleeHeld());
+    SDL_Event lost{};
+    lost.type = SDL_EVENT_WINDOW_FOCUS_LOST;
+    input.handleEvent(lost);
+    EXPECT_FALSE(input.heavyMeleeHeld());
+    EXPECT_FALSE(input.heavyMeleeJustPressed());
+    EXPECT_FALSE(input.isActionPressed(GameAction::QuickMelee));
+}
+
+TEST_F(MeleeInventoryUiTest, RaidHeavyWindupCancelsOnReleaseWithoutAFallbackQuickStrike) {
+    ASSERT_TRUE(A::flow(*app).deploy(kHospitalFloorplanMapId));
+    auto &world = A::flow(*app).gameSession().world();
+    key(SDL_SCANCODE_LALT, true);
+    key(SDL_SCANCODE_V, true);
+    A::frame(*app, .05F);
+    A::frame(*app, .10F);
+    ASSERT_GT(world.melee().heavyChargeProgress(), 0.0F);
+    EXPECT_FALSE(world.melee().result().attempted);
+    EXPECT_EQ(A::meleeLabel(*app), "重击蓄力");
+    A::paintRaid(*app);
+    save("heavy-melee-windup-zh.bmp");
+    key(SDL_SCANCODE_LALT, false);
+    A::frame(*app, .05F);
+    EXPECT_FLOAT_EQ(world.melee().heavyChargeProgress(), 0.0F);
+    EXPECT_FALSE(world.melee().result().attempted);
+    key(SDL_SCANCODE_LALT, true);
+    for (int tick = 0; tick < 8; ++tick) {
+        A::frame(*app, .1F);
+        EXPECT_FALSE(world.melee().result().attempted);
+    }
+    key(SDL_SCANCODE_V, false);
+    key(SDL_SCANCODE_LALT, false);
+    A::frame(*app);
+    key(SDL_SCANCODE_V, true);
+    A::frame(*app);
+    EXPECT_TRUE(world.melee().result().attempted);
+}
+
+TEST_F(MeleeInventoryUiTest, HoldingAltVStrikesOnceAndOpeningTheMapCancelsANewWindup) {
+    ASSERT_TRUE(A::flow(*app).deploy(kHospitalFloorplanMapId));
+    const auto &world = A::flow(*app).gameSession().world();
+    key(SDL_SCANCODE_RALT, true);
+    key(SDL_SCANCODE_V, true);
+    int attempts = 0;
+    for (int tick = 0; tick < 35; ++tick) {
+        A::frame(*app, .05F);
+        if (world.melee().result().attempted) {
+            ++attempts;
+            EXPECT_TRUE(world.melee().heavySwing());
+        }
+    }
+    EXPECT_EQ(attempts, 1);
+    key(SDL_SCANCODE_V, false);
+    A::frame(*app);
+    key(SDL_SCANCODE_V, true);
+    A::frame(*app, .1F);
+    A::frame(*app, .1F);
+    ASSERT_GT(world.melee().heavyChargeProgress(), 0.0F);
+    key(SDL_SCANCODE_M, true);
+    key(SDL_SCANCODE_M, false);
+    A::frame(*app);
+    EXPECT_FLOAT_EQ(world.melee().heavyChargeProgress(), 0.0F);
+    key(SDL_SCANCODE_M, true);
+    key(SDL_SCANCODE_M, false);
+    A::frame(*app);
+    for (int tick = 0; tick < 12; ++tick) {
+        A::frame(*app, .05F);
+        EXPECT_FALSE(world.melee().result().attempted);
+    }
 }

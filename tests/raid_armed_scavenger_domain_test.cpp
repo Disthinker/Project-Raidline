@@ -1,10 +1,13 @@
 #include "alpha_content_ids.h"
 #include "inventory_domain.h"
+#include "game_session.h"
+#include "profile_ui_test_wait.h"
 #include "raid_corpse_search.h"
 #include "raid_lifecycle.h"
 #include "raid_optics_legacy_fixture.h"
 #include "raid_visibility_fixture.h"
 #include "save_repository.h"
+#include "test_temp_directory.h"
 
 #include <gtest/gtest.h>
 #include <algorithm>
@@ -117,6 +120,56 @@ TEST(RiversideArmedScavengerDomainTest, AllPairsHaveContinuousBypassAndTradeCove
     }
     EXPECT_EQ(pairs.size(), 3U);
     EXPECT_EQ(deployments.size(), 3U);
+}
+
+TEST(RiversideArmedScavengerDomainTest, RetreatExitsAreFrozenDistinctAndReachableOnEverySpawnPair)
+{
+    const auto &map = content.map(riverside);
+    std::set<std::string> pairs;
+    std::set<float> exitRows;
+    for (std::uint64_t seed = 1; seed <= 36; ++seed)
+    {
+        SCOPED_TRACE(seed);
+        auto profile = makeNewAlphaProfile("retreat-geometry", content);
+        const auto deployed = deploy(profile, content, seed);
+        ASSERT_TRUE(deployed.succeeded) << deployed.message;
+        auto &raid = *profile.pendingRaid;
+        pairs.insert(raid.spawnExtractionPairId);
+        ASSERT_EQ(raid.armedScavengers.size(), 2U);
+        // A previously opened raid can independently lack the field-document marker.
+        raid.fieldClueCache.reset();
+        for (std::size_t i = 0; i < raid.armedScavengers.size(); ++i)
+        {
+            const auto &actor = raid.armedScavengers[i];
+            const auto &enemy = raid.enemies[i];
+            ASSERT_TRUE(actor.retreatPoint);
+            const auto point = *actor.retreatPoint;
+            exitRows.insert(point.y);
+            EXPECT_FALSE(actor.escaped);
+            EXPECT_TRUE(validRaidScavengerRetreatPoint(map, raid, actor, point));
+            EXPECT_FALSE(validRaidScavengerRetreatPoint(map, raid, actor, {point.x - 2, point.y}));
+            const auto start = center({enemy.position, enemy.size});
+            const Vec2 corner{point.x, start.y};
+            EXPECT_GT(std::abs(start.x - point.x), 450.0F);
+            for (const auto &wall : raid.spatialLayout.ballisticBlockers)
+            {
+                const Rect expanded{{wall.position.x - enemy.size.x * 0.5F, wall.position.y - enemy.size.y * 0.5F},
+                    {wall.size.x + enemy.size.x, wall.size.y + enemy.size.y}};
+                EXPECT_FALSE(raidSpaceSegmentIntersectsBlockerInterior(start, corner, expanded));
+                EXPECT_FALSE(raidSpaceSegmentIntersectsBlockerInterior(corner, point, expanded));
+            }
+        }
+        const auto &first = raid.armedScavengers.front();
+        const auto &second = raid.armedScavengers.back();
+        EXPECT_GT(second.retreatPoint->x - first.retreatPoint->x, map.worldSize.x * 0.8F);
+        EXPECT_FALSE(validRaidScavengerRetreatPoint(map, raid, first, *second.retreatPoint));
+        raid.armedScavengers.front().retreatPoint.reset();
+        EXPECT_FALSE(validateRaidArmedScavengers(profile, content).valid);
+        raid.armedScavengers.back().retreatPoint.reset();
+        EXPECT_TRUE(validateRaidArmedScavengers(profile, content).valid);
+    }
+    EXPECT_EQ(pairs.size(), 3U);
+    EXPECT_GT(exitRows.size(), 1U);
 }
 
 TEST(RiversideArmedScavengerDomainTest, AbsoluteFireAndReloadCarryOriginalMagazinesThroughSaveRevealAndExtraction)
@@ -238,6 +291,141 @@ TEST(RiversideArmedScavengerDomainTest, OtherMapsKeepTheirCompletePreviousDeploy
         EXPECT_TRUE(now.pendingRaid->armedScavengers.empty());
         EXPECT_EQ(profileStateFingerprint(now), profileStateFingerprint(old));
     }
+}
+
+TEST(RiversideArmedScavengerDomainTest, EscapedAndKilledLoadoutsHaveMutuallyExclusiveDurableOwnership)
+{
+    auto profile = makeNewAlphaProfile("river-escape-seal", content);
+    ASSERT_TRUE(deploy(profile, content, 43).succeeded);
+    const auto first = profile.pendingRaid->armedScavengers.front();
+    const auto second = profile.pendingRaid->armedScavengers.back();
+    ASSERT_TRUE(first.retreatPoint && second.retreatPoint);
+    const RaidCorpseDeathFact firstDeath{first.sourceEnemyId, outdoorRaidSpaceId(), *first.retreatPoint};
+    const RaidCorpseDeathFact secondDeath{second.sourceEnemyId, outdoorRaidSpaceId(), *second.retreatPoint};
+    ASSERT_TRUE(syncRaidArmedScavengerAmmo(profile, content, first.sourceEnemyId, 12, true));
+    const auto atPost = profileStateFingerprint(profile);
+    EXPECT_FALSE(sealRaidArmedScavengerEscape(profile, content, first.sourceEnemyId, *second.retreatPoint));
+    EXPECT_EQ(profileStateFingerprint(profile), atPost);
+    ASSERT_TRUE(sealRaidArmedScavengerEscape(profile, content, first.sourceEnemyId, *first.retreatPoint));
+    const auto sealed = profileStateFingerprint(profile);
+    EXPECT_TRUE(sealRaidArmedScavengerEscape(profile, content, first.sourceEnemyId, *first.retreatPoint));
+    EXPECT_FALSE(revealRaidCorpseInSimulation(profile, content, firstDeath));
+    EXPECT_FALSE(revealRaidCorpse(profile, content, firstDeath));
+    EXPECT_FALSE(syncRaidArmedScavengerAmmo(profile, content, first.sourceEnemyId, 12, true));
+    EXPECT_FALSE(raidCorpseAccessible(profile, first.corpseAssetId, outdoorRaidSpaceId(), *first.retreatPoint));
+    EXPECT_EQ(profileStateFingerprint(profile), sealed);
+    ASSERT_TRUE(revealRaidCorpseInSimulation(profile, content, secondDeath));
+    EXPECT_FALSE(sealRaidArmedScavengerEscape(profile, content, second.sourceEnemyId, *second.retreatPoint));
+    ASSERT_TRUE(raidCorpseAccessible(profile, second.corpseAssetId, outdoorRaidSpaceId(), *second.retreatPoint));
+
+    auto forged = profile;
+    std::get<RaidCorpseContainerAssetLocation>(forged.assets.findMutable(first.corpseAssetId)->location).deathPosition = *first.retreatPoint;
+    EXPECT_FALSE(validateProfileState(forged, content).valid);
+    forged = profile;
+    for (auto &loot : forged.pendingRaid->loot)
+        if (loot.assetId == first.pistolAssetId)
+            loot.collected = true;
+    EXPECT_FALSE(validateProfileState(forged, content).valid);
+    ASSERT_TRUE(validateProfileState(profile, content).valid);
+    const auto envelope = serializeProfileEnvelope(profile, content.contentVersion());
+    auto restored = deserializeProfileEnvelope(envelope, content);
+    ASSERT_TRUE(restored.profile) << restored.message;
+    EXPECT_EQ(profileStateFingerprint(*restored.profile), profileStateFingerprint(profile));
+    const auto originalNext = profile.pendingRaid->startingAssets->nextAssetId();
+    ASSERT_TRUE(rollbackPendingRaidToBase(*restored.profile, content).succeeded);
+    EXPECT_EQ(restored.profile->assets.nextAssetId(), originalNext);
+    EXPECT_FALSE(restored.profile->assets.find(first.pistolAssetId));
+    for (const auto outcome : {RaidResultOutcome::Extracted, RaidResultOutcome::PlayerDead, RaidResultOutcome::ActiveQuit})
+    {
+        auto final = profile;
+        ASSERT_TRUE(settlePendingRaid(final, content, "home", outcome).succeeded);
+        for (const auto id : {first.corpseAssetId, first.pistolAssetId, first.firstMagazineId, first.secondMagazineId})
+            EXPECT_FALSE(final.assets.find(id));
+    }
+}
+
+TEST(RiversideArmedScavengerDomainTest, OldPendingRaidHasNoEscapeAndStillRevealsTheEmptiedLoadout)
+{
+    const auto old = contentBeforeHospitalHybridOutdoor();
+    auto profile = makeNewAlphaProfile("legacy-riverside-guard", old);
+    ASSERT_TRUE(deploy(profile, old, 43).succeeded);
+    const auto envelope = serializeProfileEnvelope(profile, old.contentVersion());
+    auto restored = deserializeProfileEnvelope(envelope, content);
+    ASSERT_TRUE(restored.profile && restored.profile->pendingRaid) << restored.message;
+    auto &live = *restored.profile;
+    ASSERT_EQ(live.pendingRaid->armedScavengers.size(), 2U);
+    const auto guard = live.pendingRaid->armedScavengers.front();
+    ASSERT_FALSE(guard.retreatPoint);
+    EXPECT_FALSE(guard.escaped);
+    ASSERT_TRUE(syncRaidArmedScavengerAmmo(live, content, guard.sourceEnemyId, 12, true));
+    const auto noAmmo = profileStateFingerprint(live);
+    EXPECT_FALSE(sealRaidArmedScavengerEscape(live, content, guard.sourceEnemyId, {35, 35}));
+    EXPECT_EQ(profileStateFingerprint(live), noAmmo);
+    ASSERT_TRUE(revealRaidCorpseInSimulation(live, content, {guard.sourceEnemyId, outdoorRaidSpaceId(), {400, 350}}));
+    EXPECT_TRUE(raidCorpseAccessible(live, guard.corpseAssetId, outdoorRaidSpaceId(), {400, 350}));
+    EXPECT_EQ(magazineRoundCount(live, guard.firstMagazineId), 0U);
+    EXPECT_EQ(magazineRoundCount(live, guard.secondMagazineId), 0U);
+    EXPECT_FALSE(live.assets.find(guard.pistolAssetId)->chamberedRound);
+}
+
+TEST(RiversideArmedScavengerSessionTest, WoundedPairRetreatsOneEscapesAndTheInterceptedGuardKeepsHisOriginalCorpse)
+{
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-scavenger-escape-", "two-guards");
+    GameSession session;
+    session.configurePersistence(directory.path());
+    ASSERT_TRUE(session.startNewProfile("scavenger-escape-session")) << session.persistenceMessage();
+    ASSERT_TRUE(session.deployAlpha(9403, riverside)) << session.persistenceMessage();
+    const auto roster = session.profile().pendingRaid->armedScavengers;
+    const auto &views = session.world().armedScavengers();
+    ASSERT_EQ(views.size(), 2U);
+    ASSERT_EQ(roster.size(), 2U);
+    ASSERT_TRUE(roster[0].retreatPoint && roster[1].retreatPoint);
+    for (const auto &enemy : session.world().enemies())
+    {
+        auto &target = const_cast<Enemy &>(enemy);
+        if (enemy.isArmedScavenger())
+        {
+            EXPECT_FALSE(target.takeDamage(enemy.maxHealth() - enemy.maxHealth() / 3));
+            EXPECT_EQ(enemy.health(), enemy.maxHealth() / 3);
+        }
+        else ASSERT_TRUE(target.takeDamage(1000));
+    }
+    session.update({}, 1.0F / 30.0F);
+    ASSERT_TRUE(views[0].retreating && views[1].retreating);
+    for (const auto &enemy : session.world().enemies())
+        if (enemy.combatTargetId() == views[1].id)
+            ASSERT_TRUE(const_cast<Enemy &>(enemy).takeDamage(1000));
+
+    for (int frame = 0; frame < 450 && !session.profile().pendingRaid->armedScavengers[0].escaped; ++frame)
+        session.update({}, 1.0F / 30.0F);
+    const auto &raid = *session.profile().pendingRaid;
+    ASSERT_TRUE(raid.armedScavengers[0].escaped);
+    ASSERT_FALSE(raid.armedScavengers[1].escaped);
+    EXPECT_TRUE(views[0].escaped);
+    EXPECT_FALSE(views[0].alive);
+    EXPECT_FALSE(views[1].alive);
+    EXPECT_FALSE(views[1].escaped);
+    const auto &hidden = std::get<RaidCorpseContainerAssetLocation>(session.profile().assets.find(roster[0].corpseAssetId)->location);
+    EXPECT_FALSE(hidden.deathPosition);
+    const auto &killed = std::get<RaidCorpseContainerAssetLocation>(session.profile().assets.find(roster[1].corpseAssetId)->location);
+    ASSERT_TRUE(killed.deathPosition);
+    EXPECT_TRUE(raidCorpseAccessible(session.profile(), roster[1].corpseAssetId, outdoorRaidSpaceId(), *killed.deathPosition));
+    EXPECT_EQ(installedMagazine(session.profile(), roster[1].pistolAssetId), roster[1].firstMagazineId);
+    EXPECT_EQ(magazineRoundCount(session.profile(), roster[1].firstMagazineId), 5U);
+    EXPECT_EQ(magazineRoundCount(session.profile(), roster[1].secondMagazineId), 6U);
+
+    ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(session.world().extractionPoint().bounds().position));
+    for (int frame = 0; frame < 60 && session.profile().pendingRaid; ++frame)
+        session.update({}, 0.1F);
+    ASSERT_TRUE(waitForProfileUiDurability(session));
+    const auto disk = SaveRepository(directory.path()).load(content);
+    ASSERT_TRUE(disk.profile && !disk.profile->pendingRaid) << disk.message;
+    ASSERT_TRUE(disk.profile->lastRaidResult);
+    EXPECT_EQ(disk.profile->lastRaidResult->outcome, RaidResultOutcome::Extracted);
+    for (const auto &actor : roster)
+        for (const auto id : {actor.corpseAssetId, actor.pistolAssetId, actor.firstMagazineId, actor.secondMagazineId})
+            EXPECT_FALSE(disk.profile->assets.find(id));
 }
 
 TEST(RiversideArmedScavengerDomainTest, RecoveryDeployAndCrashRollbackPreserveOriginalAssets)

@@ -497,7 +497,7 @@ WorldShootingAdvance WorldShootingRuntime::advanceShots(
     bool controlsSuppressed,
     Vec2 worldSize,
     EnemyLifecycle &targets,
-    const std::vector<BallisticBlocker> &blockers)
+    const std::vector<BallisticBlocker> &blockers, std::span<const BallisticBlocker> environmentTargets)
 {
     const float opticMultiplier = weaponOptic_ == WeaponOpticMode::None ? 1.0F :
         std::lerp(1.0F, weaponOptic_ == WeaponOpticMode::Low ? 0.75F : 0.60F,
@@ -627,7 +627,7 @@ WorldShootingAdvance WorldShootingRuntime::advanceShots(
     }
 
     HitResolutionResult resolved = resolveShotHits(
-        candidates, targets, blockers);
+        candidates, targets, blockers, std::nullopt, environmentTargets);
     for (const HitResult &hit : resolved.hits)
     {
         const auto flight = std::find_if(

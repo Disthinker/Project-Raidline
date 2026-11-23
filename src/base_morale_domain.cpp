@@ -227,6 +227,8 @@ BaseMoraleAdvanceResult applyBaseMoraleThrough(
         state.supportedRecoveryDays = 0U;
     }
 
+    const bool rationLimited = profile.rationPolicy == BaseRationPolicy::Conserve && ordinal > 1U;
+    if (rationLimited) ordinal = 1U;
     state.tier = tierFromOrdinal(ordinal);
     state.trend = ordinal > tierOrdinal(previous)
         ? BaseMoraleTrend::Rising
@@ -252,7 +254,8 @@ BaseMoraleAdvanceResult applyBaseMoraleThrough(
         state.pendingMissedWishCount,
         state.pendingPositiveEventCount,
         state.pendingNegativeEventCount,
-        boundedScore(positiveReasons, ledgerNegative)};
+        boundedScore(positiveReasons, ledgerNegative),
+        rationLimited};
     state.resolvedDayCount = completedDays;
     state.pendingFulfilledWishCount = 0U;
     state.pendingMissedWishCount = 0U;
@@ -272,8 +275,7 @@ BaseDailySystemsResult synchronizeBaseDailySystemsThrough(
     result.demand = applyBaseDailyDemandWithSupplyThrough(
         profile,
         content,
-        completedDays,
-        populationAdjustedDailyDemand(profile.basePopulation));
+        completedDays);
     result.morale = applyBaseMoraleThrough(profile, content, result.demand);
     result.priority = synchronizeBasePriorityThrough(profile, content);
     result.event = synchronizeBaseCommunityEventThrough(profile, content);

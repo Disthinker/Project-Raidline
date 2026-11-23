@@ -46,7 +46,7 @@ OrdinarySurvivorAdmissionPlan failurePlan(
             ? profile.basePopulation.ordinaryResidents -
                   profile.basePopulation.bedCapacity
             : 0U,
-        profile.basePopulation.ordinaryResidents};
+        dailyRationsForResidents(profile.basePopulation.ordinaryResidents, profile.rationPolicy)};
 }
 }
 
@@ -120,7 +120,7 @@ OrdinarySurvivorAdmissionPlan queryOrdinarySurvivorAdmission(
         after > profile.basePopulation.bedCapacity
             ? after - profile.basePopulation.bedCapacity
             : 0U,
-        after};
+        dailyRationsForResidents(after, profile.rationPolicy)};
 }
 
 OrdinarySurvivorAdmissionReceipt executeOrdinarySurvivorAdmission(

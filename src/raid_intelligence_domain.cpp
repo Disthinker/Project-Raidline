@@ -1,4 +1,5 @@
 #include "raid_intelligence_domain.h"
+#include "alpha_content_ids.h"
 
 #include <algorithm>
 #include <limits>
@@ -39,6 +40,126 @@ const RaidFieldIntelligenceTrade *fieldTrade(const ProfileState &profile)
         return nullptr;
     return &*profile.pendingRaid->fieldIntelligenceTrade;
 }
+
+struct FieldBarterOffer
+{
+    ItemDefinitionId input;
+    ItemDefinitionId output;
+    std::uint32_t quantity;
+};
+
+const std::array<FieldBarterOffer, 2> kFieldBarterOffers{{
+    {alpha_content::lootElectronics, ItemDefinitionId{"item.ammunition.5_45x39_enhanced"}, 12U},
+    {alpha_content::lootScrap, alpha_content::noiseDecoy, 1U}
+}};
+}
+
+RaidFieldCacheReadPlan queryRaidFieldCacheClue(const ProfileState &profile, AssetInstanceId documentId)
+{
+    RaidFieldCacheReadPlan plan{false, "FIELD CACHE CLUE UNAVAILABLE", profile.revision};
+    if (!fieldTrade(profile) || !profile.pendingRaid->fieldClueCache ||
+        profile.revision == std::numeric_limits<ProfileRevision>::max() ||
+        !isCarriedFieldDocument(profile, documentId))
+        return plan;
+    const auto &raid = *profile.pendingRaid;
+    const auto &cache = *raid.fieldClueCache;
+    if (cache.decodedDocumentId)
+        return plan;
+    const bool pickedUpHere = std::any_of(raid.loot.begin(), raid.loot.end(), [&](const RaidLootSnapshot &loot) {
+        return loot.assetId == documentId && loot.definitionId == kFieldIntelligenceDocumentId &&
+            !loot.sceneContainerAssetId && !loot.corpseContainerAssetId && loot.collected;
+    });
+    const bool cacheUnopened = std::any_of(raid.loot.begin(), raid.loot.end(), [&](const RaidLootSnapshot &loot) {
+        return loot.assetId == cache.rewardAssetId && !loot.collected;
+    });
+    if (!pickedUpHere || !cacheUnopened)
+        return plan;
+    return {true, {}, profile.revision};
+}
+
+bool executeRaidFieldCacheClue(ProfileState &profile, AssetInstanceId documentId, ProfileRevision expectedRevision)
+{
+    if (expectedRevision != profile.revision || !queryRaidFieldCacheClue(profile, documentId).canCommit)
+        return false;
+    if (!profile.assets.erase(documentId))
+        return false;
+    profile.pendingRaid->fieldClueCache->decodedDocumentId = documentId;
+    ++profile.revision;
+    return true;
+}
+
+RaidFieldBarterPlan queryRaidFieldBarter(
+    const ProfileState &profile, const ContentRegistry &content, std::size_t index,
+    std::optional<AssetInstanceId> selected)
+{
+    RaidFieldBarterPlan plan;
+    plan.revision = profile.revision;
+    if (index >= kFieldBarterOffers.size())
+    {
+        plan.message = "field trader is unavailable";
+        return plan;
+    }
+    const auto &offer = kFieldBarterOffers[index];
+    plan.inputDefinitionId = offer.input;
+    plan.outputDefinitionId = offer.output;
+    plan.outputQuantity = offer.quantity;
+    const auto *trade = fieldTrade(profile);
+    if (!trade || !supportsFieldBarterContent(content.contentVersion()) ||
+        profile.revision == std::numeric_limits<ProfileRevision>::max() ||
+        profile.assets.nextAssetId() == std::numeric_limits<AssetInstanceId>::max())
+    {
+        plan.message = "field trader is unavailable";
+        return plan;
+    }
+    plan.exchanged = trade->bartered[index];
+    if (plan.exchanged)
+    {
+        plan.message = "barter already claimed this Raid";
+        return plan;
+    }
+    const auto &output = content.item(offer.output);
+    // Both published outputs occupy one cell. Check the released material's own
+    // carried grid, including its pocket rules, before taking anything.
+    for (const auto &[id, asset] : profile.assets.records())
+    {
+        if ((selected && id != *selected) || asset.definitionId != offer.input ||
+            asset.quantity != 1U || asset.reliefBatchId || !assetIsCarried(profile, id))
+            continue;
+        const auto *source = std::get_if<StoredAssetLocation>(&asset.location);
+        if (!source) continue;
+        plan.inputAssetId = id;
+        if (profilePlacementFits(profile, content, source->container, source->origin,
+                output, ItemOrientation::Degrees0, id))
+        {
+            plan.destination = *source;
+            plan.canCommit = true;
+            return plan;
+        }
+    }
+    plan.message = plan.inputAssetId ? "no carried space for barter output" : "carry the required barter material";
+    return plan;
+}
+
+bool executeRaidFieldBarter(
+    ProfileState &profile, const ContentRegistry &content, std::size_t index,
+    AssetInstanceId input, ProfileRevision expectedRevision)
+{
+    if (expectedRevision != profile.revision)
+        return false;
+    const auto plan = queryRaidFieldBarter(profile, content, index, input);
+    if (!plan.canCommit)
+        return false;
+    ProfileState candidate = profile;
+    if (!candidate.assets.erase(input))
+        return false;
+    static_cast<void>(candidate.assets.create(content.item(plan.outputDefinitionId),
+        *plan.destination, plan.outputQuantity));
+    candidate.pendingRaid->fieldIntelligenceTrade->bartered[index] = true;
+    ++candidate.revision;
+    if (!validateProfileState(candidate, content).valid)
+        return false;
+    profile = std::move(candidate);
+    return true;
 }
 
 std::optional<RaidFieldTradeView> queryRaidFieldTrade(

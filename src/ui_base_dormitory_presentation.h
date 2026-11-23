@@ -7,13 +7,14 @@
 enum class UiDormitoryTab { Residents, Rest };
 enum class UiDormitoryControl {
     Residents, Rest, Rations, AutoFill, StartExpansion, CancelExpansion,
-    Hour1, Hour6, Hour12, StartRest, Close
+    Hour1, Hour6, Hour12, StartRest, Close, StandardRations, ConserveRations, ApplyRations
 };
 enum class UiDormitoryEventKind { Down, Up, Move, Wheel };
 struct UiDormitoryEvent {
     UiDormitoryEventKind kind{};
     Vec2 position{};
     int delta{};
+    std::optional<UiDormitoryControl> shortcut;
 };
 struct UiDormitoryProjection {
     std::string profileId;
@@ -22,6 +23,9 @@ struct UiDormitoryProjection {
     WorldClockProjection clock;
     BasePopulationProjection population;
     BaseResourceBundle dailyDemand;
+    BaseRationPolicy activePolicy{};
+    std::array<BaseRationPolicyPreview, 2> policies;
+    bool moraleLimitedLastDay{};
     std::uint32_t foodStock{};
     BaseWorkforceProjection workforce;
     BaseWorkforcePlan autoFill;
@@ -37,10 +41,13 @@ struct UiDormitoryPress {
     UiDormitoryControl control{};
     UiLanguage language{};
     std::string action;
+    bool fromKeyboard{};
 };
 struct UiDormitoryState {
     UiDormitoryTab tab{UiDormitoryTab::Residents};
     bool rations{};
+    std::optional<BaseRationPolicy> selectedPolicy;
+    ProfileRevision policyRevision{};
     std::optional<std::uint32_t> restHours;
     std::optional<UiDormitoryPress> press;
     int detailsScroll{}, detailsMaximum{}, feedbackScroll{}, feedbackMaximum{};
@@ -48,6 +55,7 @@ struct UiDormitoryState {
 [[nodiscard]] UiDormitoryProjection projectUiDormitory(
     const ProfileState &, const ContentRegistry &, std::optional<std::uint32_t>);
 [[nodiscard]] SDL_FRect uiDormitoryControlRect(UiDormitoryControl) noexcept;
+[[nodiscard]] std::optional<UiDormitoryEvent> uiDormitoryShortcut(const SDL_Event &);
 [[nodiscard]] SDL_FRect uiDormitoryDetailsRect() noexcept;
 [[nodiscard]] SDL_FRect uiDormitoryFeedbackRect() noexcept;
 [[nodiscard]] std::optional<UiDormitoryControl> hitUiDormitory(Vec2, const UiDormitoryState &,

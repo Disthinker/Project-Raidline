@@ -10,7 +10,8 @@ bool GameSession::playerThrowFlightActive() const noexcept
 {
     if (alphaRaidActive_ && world_)
         return world_->noiseDecoy().flight().has_value() || world_->grenade().flight().has_value() ||
-            world_->thrownIllumination().flight().has_value();
+            world_->thrownIllumination().flight().has_value() || world_->smoke().flight().has_value() ||
+            world_->fireZones().flight().has_value();
     return basePlayerWorld_ && (basePlayerWorld_->noiseDecoy().flight().has_value() ||
         basePlayerWorld_->grenade().flight().has_value() ||
         basePlayerWorld_->thrownIllumination().flight().has_value());
@@ -58,6 +59,16 @@ PlayerGameplayContext GameSession::playerGameplayContext() const noexcept
 }
 
 void GameSession::cancelPlayerControlIntent() noexcept
+{
+    const auto *medical = raidActionState_.active()
+        ? std::get_if<MedicalRaidAction>(&*raidActionState_.active()) : nullptr;
+    if (medical && medical->fireSupportSpace) raidActionState_.cancel();
+    if (world_) world_->cancelHeavyMelee();
+    if (basePlayerWorld_) basePlayerWorld_->cancelHeavyMelee();
+    cancelWeaponControlIntent();
+}
+
+void GameSession::cancelWeaponControlIntent() noexcept
 {
     weaponTriggerGate_.cancelUntilRelease();
     sprintFireIntentPending_ = false;

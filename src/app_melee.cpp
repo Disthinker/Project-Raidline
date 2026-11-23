@@ -1,5 +1,6 @@
 #include "app.h"
 #include <fmt/format.h>
+#include <algorithm>
 #include <cmath>
 
 void App::renderProfileMeleeDetails(const AssetRecord &asset, const ItemDefinition &definition)
@@ -32,7 +33,11 @@ void App::renderMeleeSwing(const WorldMeleeRuntime &melee)
     const auto origin=melee.swingOrigin(),direction=melee.swingDirection();
     const float heading=std::atan2(direction.y,direction.x);
     SDL_BlendMode previous;SDL_GetRenderDrawBlendMode(renderer_,&previous);SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer_,223,216,188,static_cast<Uint8>(180*melee.swingSeconds()/0.15F));
+    const auto alpha = static_cast<Uint8>(180 * std::clamp(melee.swingSeconds() / 0.15F, 0.0F, 1.0F));
+    if (melee.heavySwing())
+        SDL_SetRenderDrawColor(renderer_, 248, 172, 91, alpha);
+    else
+        SDL_SetRenderDrawColor(renderer_, 223, 216, 188, alpha);
     Vec2 last{};
     for(int n=0;n<=12;++n){const float angle=heading-0.785398163F+n*1.570796327F/12;
         const Vec2 p{origin.x+std::cos(angle)*72,origin.y+std::sin(angle)*72};
@@ -47,6 +52,10 @@ std::string App::meleeStatusLabel() const
     const auto id=equippedAsset(gameSession_.profile(),EquipmentSlotKind::QuickMelee);
     const auto *a=id?gameSession_.profile().assets.find(*id):nullptr;
     const bool zh=uiTextRenderer_.language()==UiLanguage::SimplifiedChinese;
+    const auto &melee = gameFlow_.state() == GameFlowState::Base
+        ? gameFlow_.baseWorld().melee() : gameSession_.world().melee();
+    if (melee.heavyChargeProgress() > 0.0F)
+        return zh ? "重击蓄力" : "HEAVY WINDUP";
     std::string label;
     if(a)label=a->currentDurability?fmt::format("V {} {:.1f}",zh?"近战":"MELEE",a->currentDurability/100.0F):(zh?"近战损坏 · 回营维修":"MELEE BROKEN · BASE REPAIR");
     else if(gameSession_.persistenceMessage()=="EQUIP A UTILITY KNIFE")label="EQUIP A UTILITY KNIFE";
@@ -61,4 +70,16 @@ void App::renderMeleeStatus()
         ? baseBottomHudLayout().melee
         : layoutUiGameplayBottomHud(renderer_,uiTextRenderer_,{}).melee;
     if(!label.empty())uiFinalText(renderer_,uiTextRenderer_,bounds,label,12,1);
+    const auto &melee = gameFlow_.state() == GameFlowState::Base
+        ? gameFlow_.baseWorld().melee() : gameSession_.world().melee();
+    const float progress = melee.heavyChargeProgress();
+    if (progress > 0.0F)
+    {
+        SDL_FRect bar{bounds.x, bounds.y + bounds.h - 2.0F, std::min(bounds.w, 80.0F), 2.0F};
+        SDL_SetRenderDrawColor(renderer_, 78, 82, 76, 255);
+        SDL_RenderFillRect(renderer_, &bar);
+        bar.w *= progress;
+        SDL_SetRenderDrawColor(renderer_, 248, 172, 91, 255);
+        SDL_RenderFillRect(renderer_, &bar);
+    }
 }

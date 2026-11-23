@@ -49,6 +49,36 @@ struct RaidFieldTradeView
     std::array<RaidFieldTradeOffer, 3> offers;
 };
 
+struct RaidFieldBarterPlan
+{
+    bool canCommit{};
+    bool exchanged{};
+    std::string message;
+    ProfileRevision revision{};
+    ItemDefinitionId inputDefinitionId;
+    ItemDefinitionId outputDefinitionId;
+    std::uint32_t outputQuantity{};
+    std::optional<AssetInstanceId> inputAssetId;
+    std::optional<StoredAssetLocation> destination;
+};
+
+struct RaidFieldCacheReadPlan
+{
+    bool canCommit{};
+    std::string message;
+    ProfileRevision revision{};
+};
+
+[[nodiscard]] RaidFieldCacheReadPlan queryRaidFieldCacheClue(const ProfileState &, AssetInstanceId documentId);
+[[nodiscard]] bool executeRaidFieldCacheClue(ProfileState &, AssetInstanceId documentId, ProfileRevision expectedRevision);
+
+[[nodiscard]] RaidFieldBarterPlan queryRaidFieldBarter(
+    const ProfileState &, const ContentRegistry &, std::size_t offerIndex,
+    std::optional<AssetInstanceId> input = std::nullopt);
+[[nodiscard]] bool executeRaidFieldBarter(
+    ProfileState &, const ContentRegistry &, std::size_t offerIndex,
+    AssetInstanceId input, ProfileRevision expectedRevision);
+
 [[nodiscard]] std::optional<RaidFieldTradeView> queryRaidFieldTrade(
     const ProfileState &, const ContentRegistry &);
 [[nodiscard]] bool executeRaidFieldDocumentSale(ProfileState &, AssetInstanceId);

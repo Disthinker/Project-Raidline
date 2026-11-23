@@ -84,30 +84,30 @@ TEST(RaidTacticalMapPresentationTest, EnemyIntelRemainsIndependent)
 TEST(RaidTacticalMapPresentationTest, ChalkStrokesShareLengthButEditOnlyCurrentSpace)
 {
     RaidChalkRoutes routes;
-    routes.setSpace(RaidChalkSpace::Outdoor);
+    routes.setSpace(outdoorRaidSpaceId());
     routes.beginStroke({0, 40});
     routes.extendStroke({4, 40});
-    EXPECT_TRUE(routes.strokes(RaidChalkSpace::Outdoor).empty());
+    EXPECT_TRUE(routes.strokes(outdoorRaidSpaceId()).empty());
     routes.extendStroke({3000, 40});
-    routes.setSpace(RaidChalkSpace::HospitalInterior);
+    routes.setSpace(kHospitalFloorplanSpaceId);
     routes.extendStroke({1000, 40});
     EXPECT_FALSE(routes.drawing());
-    EXPECT_TRUE(routes.strokes(RaidChalkSpace::HospitalInterior).empty());
+    EXPECT_TRUE(routes.strokes(kHospitalFloorplanSpaceId).empty());
 
     routes.beginStroke({100, 100});
     routes.extendStroke({1400, 100});
-    ASSERT_EQ(routes.strokes(RaidChalkSpace::HospitalInterior).size(), 1U);
-    EXPECT_FLOAT_EQ(routes.strokes(RaidChalkSpace::HospitalInterior).front().points.back().x, 1100.0F);
+    ASSERT_EQ(routes.strokes(kHospitalFloorplanSpaceId).size(), 1U);
+    EXPECT_FLOAT_EQ(routes.strokes(kHospitalFloorplanSpaceId).front().points.back().x, 1100.0F);
     EXPECT_DOUBLE_EQ(routes.remainingLength(), 0.0);
     EXPECT_FALSE(routes.drawing());
 
-    routes.undo(RaidChalkSpace::HospitalInterior);
+    routes.undo(kHospitalFloorplanSpaceId);
     EXPECT_DOUBLE_EQ(routes.remainingLength(), 1000.0);
-    EXPECT_TRUE(routes.strokes(RaidChalkSpace::HospitalInterior).empty());
-    EXPECT_EQ(routes.strokes(RaidChalkSpace::Outdoor).size(), 1U);
-    routes.clear(RaidChalkSpace::Outdoor);
+    EXPECT_TRUE(routes.strokes(kHospitalFloorplanSpaceId).empty());
+    EXPECT_EQ(routes.strokes(outdoorRaidSpaceId()).size(), 1U);
+    routes.clear(outdoorRaidSpaceId());
     EXPECT_DOUBLE_EQ(routes.remainingLength(), RaidChalkRoutes::kLengthLimit);
-    EXPECT_TRUE(routes.strokes(RaidChalkSpace::Outdoor).empty());
+    EXPECT_TRUE(routes.strokes(outdoorRaidSpaceId()).empty());
 }
 
 TEST(RaidTacticalMapPresentationTest, ChalkAcrossFogDoesNotRevealChartData)
@@ -123,11 +123,11 @@ TEST(RaidTacticalMapPresentationTest, ChalkAcrossFogDoesNotRevealChartData)
     EXPECT_FALSE(chart.worldPoint({144, 618}));
 
     RaidChalkRoutes routes;
-    routes.setSpace(RaidChalkSpace::Outdoor);
+    routes.setSpace(outdoorRaidSpaceId());
     routes.beginStroke({0, 100});
     routes.extendStroke(*roundTrip);
     routes.endStroke();
-    ASSERT_EQ(routes.strokes(RaidChalkSpace::Outdoor).size(), 1U);
+    ASSERT_EQ(routes.strokes(outdoorRaidSpaceId()).size(), 1U);
     EXPECT_FALSE(tacticalMapPointVisible(map, hidden, RaidTacticalMapPresentationMode::FogOfWar));
     EXPECT_FALSE(tacticalMapExtractionVisible(
         map, RaidMapExtractionKind::Normal, RaidTacticalMapPresentationMode::FogOfWar));

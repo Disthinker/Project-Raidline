@@ -132,6 +132,10 @@ void App::executeBaseSupplyAction() {
 
 void App::renderBaseSupplyImage(const ItemDefinitionId &id, const SDL_FRect &bounds) {
     const auto &d = publishedContentRegistry().item(id);
+    if (d.smokeUse || d.fireZoneUse || d.alarmUse) {
+        renderAreaThrowableIcon(d, bounds, 255);
+        return;
+    }
     const Texture *texture = nullptr;
     if (const auto legacy = legacyItemId(id)) texture = &inventoryItemTextures_[static_cast<std::size_t>(*legacy)];
     else if (d.category == ItemCategory::Medical && d.visualAssetsPublished) texture = &inventoryItemTextures_[static_cast<std::size_t>(ItemId::Medkit)];
@@ -166,7 +170,7 @@ void App::renderBaseSupply() {
     text({64,88,520,34},"SUPPLY & RECOVERY",22);
     text({760,92,310,26},fmt::format("CURRENCY {}",p.currency),16,UiTextAlign::Right);
     button(Control::Close,"CLOSE SUPPLY");
-    const auto operations = projectBaseOperations(p.baseResources,c.baseOperations(),populationAdjustedDailyDemand(p.basePopulation));
+    const auto operations = projectBaseOperations(p.baseResources,c.baseOperations(),previewBaseRationPolicy(p).dailyDemand);
     const char *tier = operations.tier == BaseOperationalTier::Supported ? "SUPPORTED" : operations.tier == BaseOperationalTier::Stable ? "STABLE" : operations.tier == BaseOperationalTier::Strained ? "STRAINED" : "CRITICAL";
     constexpr const char *resources[]{"FOOD","HYGIENE","MORALE","SECURITY"};
     text({648,148,568,22},fmt::format("BASE OPERATIONS {} | LIMITING {}",tier,resources[static_cast<std::size_t>(operations.limitingResource)]),12,UiTextAlign::Right);

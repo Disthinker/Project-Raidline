@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <limits>
 #include <set>
+#include <stdexcept>
 
 #include "alpha_content_ids.h"
 #include "economy_domain.h"
@@ -343,4 +344,332 @@ TEST(RaidFieldIntelligenceTradeTest, SettlementSaveFailureCanRetryExactlyOnce)
     ASSERT_TRUE(disk.profile) << disk.message;
     EXPECT_EQ(disk.profile->currency, initialFunds + 14U);
     EXPECT_EQ(disk.profile->raidIntelligence.count(kFieldIntelligenceTargetMapId, transport), 1U);
+}
+
+namespace
+{
+const ItemDefinitionId enhancedRounds{"item.ammunition.5_45x39_enhanced"};
+const ItemDefinitionId rifleMagazine{"item.magazine.5_45x39_30"};
+
+class RiversideBarterSessionTest : public testing::Test
+{
+protected:
+    raidline::test::TemporaryDirectory directory;
+    GameSession session;
+    AssetInstanceId magazine{}, rig{}, stashScrap{};
+    Vec2 contact{};
+
+    static AssetInstanceId add(ProfileState &profile, const ItemDefinitionId &definitionId, ProfileContainerId container)
+    {
+        const auto &definition = current.item(definitionId);
+        const auto fit = findFirstProfileFit(profile, current, container, definition, ItemOrientation::Degrees0);
+        if (!fit)
+            throw std::runtime_error("no room for barter fixture material");
+        return profile.assets.create(definition, StoredAssetLocation{container, *fit});
+    }
+
+    void deployRiverside(bool carryMaterials = true)
+    {
+        auto profile = preparedProfile("riverside-material-trade");
+        profile.tutorial = TutorialProgress::Complete;
+        const auto bag = ProfileContainerId::compartment(*equippedAsset(profile, EquipmentSlotKind::Backpack), 0U);
+        const auto stash = ProfileContainerId::stash();
+        stashScrap = add(profile, alpha_content::lootScrap, stash);
+        magazine = add(profile, rifleMagazine, stash);
+        const auto found = std::find_if(profile.assets.records().begin(), profile.assets.records().end(),
+            [](const auto &entry) { return entry.second.definitionId == alpha_content::chestRig; });
+        ASSERT_NE(found, profile.assets.records().end());
+        rig = found->first;
+        if (carryMaterials)
+        {
+            // The second copy of each input makes the exhausted-offer check independent of stock.
+            for (int copy = 0; copy < 2; ++copy)
+            {
+                add(profile, alpha_content::lootElectronics, bag);
+                add(profile, alpha_content::lootScrap, bag);
+            }
+        }
+        directory.claim("raidline-barter-", testing::UnitTest::GetInstance()->current_test_info()->name());
+        ASSERT_TRUE(SaveRepository(directory.path()).save(profile, current.contentVersion()).succeeded);
+        session.configurePersistence(directory.path());
+        ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+        ASSERT_TRUE(session.deployAlpha(42U, kFieldIntelligenceSourceMapId)) << session.persistenceMessage();
+        ASSERT_TRUE(session.profile().pendingRaid->fieldIntelligenceTrade);
+        contact = session.profile().pendingRaid->fieldIntelligenceTrade->position;
+        // Keep live actors available for the counterparty threat check, outside the trade radius.
+        for (const auto &enemy : session.world().enemies())
+            ASSERT_TRUE(const_cast<Enemy &>(enemy).setPosition({contact.x + 440.0F, contact.y}));
+        ASSERT_NO_FATAL_FAILURE(placeAt(contact));
+        ASSERT_EQ(session.fieldIntelligenceTradeStatus(), RaidFieldTradeAccess::Available);
+    }
+
+    void placeAt(Vec2 center)
+    {
+        auto &player = const_cast<Player &>(session.world().player());
+        const auto half = player.size() * 0.5F;
+        ASSERT_TRUE(player.setPosition({center.x - half, center.y - half}));
+    }
+
+    static std::vector<AssetInstanceId> carried(const ProfileState &profile, const ItemDefinitionId &type)
+    {
+        std::vector<AssetInstanceId> result;
+        for (const auto &[id, asset] : profile.assets.records())
+            if (asset.definitionId == type && assetIsCarried(profile, id))
+                result.push_back(id);
+        return result;
+    }
+
+    void exchange(std::size_t slot, const ItemDefinitionId &inputType, const ItemDefinitionId &outputType,
+                  unsigned quantity, AssetInstanceId &received)
+    {
+        const auto plan = session.queryFieldBarter(slot);
+        ASSERT_TRUE(plan.canCommit) << plan.message;
+        ASSERT_TRUE(plan.inputAssetId);
+        ASSERT_TRUE(plan.destination);
+        EXPECT_EQ(plan.inputDefinitionId, inputType);
+        EXPECT_EQ(plan.outputDefinitionId, outputType);
+        EXPECT_EQ(plan.outputQuantity, quantity);
+        ASSERT_TRUE(carried(session.profile(), outputType).empty());
+        const auto beforeCurrency = session.profile().currency;
+        const auto beforeBalance = session.profile().pendingRaid->fieldIntelligenceTrade->balance;
+        const auto revision = session.profile().revision;
+        ASSERT_TRUE(session.exchangeFieldBarter(slot, *plan.inputAssetId, plan.revision));
+        EXPECT_GT(session.profile().revision, revision);
+        EXPECT_EQ(session.profile().assets.find(*plan.inputAssetId), nullptr);
+        ASSERT_EQ(carried(session.profile(), inputType).size(), 1U);
+        const auto output = carried(session.profile(), outputType);
+        ASSERT_EQ(output.size(), 1U);
+        received = output.front();
+        ASSERT_NE(received, *plan.inputAssetId);
+        EXPECT_EQ(session.profile().assets.find(received)->quantity, quantity);
+        EXPECT_EQ(std::get<StoredAssetLocation>(session.profile().assets.find(received)->location), *plan.destination);
+        EXPECT_EQ(session.profile().currency, beforeCurrency);
+        EXPECT_EQ(session.profile().pendingRaid->fieldIntelligenceTrade->balance, beforeBalance);
+        EXPECT_TRUE(session.profile().pendingRaid->fieldIntelligenceTrade->bartered[slot]);
+        EXPECT_TRUE(session.queryFieldBarter(slot).exchanged);
+        const auto state = profileStateFingerprint(session.profile());
+        EXPECT_FALSE(session.exchangeFieldBarter(slot, *plan.inputAssetId, plan.revision));
+        EXPECT_FALSE(session.exchangeFieldBarter(slot, carried(session.profile(), inputType).front(), session.profile().revision));
+        EXPECT_EQ(profileStateFingerprint(session.profile()), state);
+    }
+};
+}
+
+TEST_F(RiversideBarterSessionTest, TradesSurviveOrdinaryExtractionAndSupplyARealMagazineAndNextRaidThrow)
+{
+    ASSERT_NO_FATAL_FAILURE(deployRiverside());
+    const auto previous = session.queryFieldBarter(1U);
+    ASSERT_TRUE(previous.canCommit && previous.inputAssetId);
+    AssetInstanceId rounds{}, decoy{};
+    ASSERT_NO_FATAL_FAILURE(exchange(0U, alpha_content::lootElectronics, enhancedRounds, 12U, rounds));
+    const auto changed = profileStateFingerprint(session.profile());
+    EXPECT_FALSE(session.exchangeFieldBarter(1U, *previous.inputAssetId, previous.revision));
+    EXPECT_EQ(profileStateFingerprint(session.profile()), changed);
+    ASSERT_NO_FATAL_FAILURE(exchange(1U, alpha_content::lootScrap, alpha_content::noiseDecoy, 1U, decoy));
+    const auto oldRoundsLocation = session.profile().assets.find(rounds)->location;
+    const auto oldDecoyLocation = session.profile().assets.find(decoy)->location;
+    ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(session.world().extractionPoint().bounds().position));
+    for (int frame = 0; frame < 50 && session.profile().pendingRaid; ++frame)
+        session.update({}, 0.1F);
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+    ASSERT_FALSE(session.profile().pendingRaid);
+    ASSERT_TRUE(session.profile().lastRaidResult);
+    EXPECT_EQ(session.profile().lastRaidResult->outcome, RaidResultOutcome::Extracted);
+
+    GameSession reopened;
+    reopened.configurePersistence(directory.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    ASSERT_TRUE(reopened.profile().assets.find(rounds));
+    ASSERT_TRUE(reopened.profile().assets.find(decoy));
+    EXPECT_EQ(reopened.profile().assets.find(rounds)->location, oldRoundsLocation);
+    EXPECT_EQ(reopened.profile().assets.find(decoy)->location, oldDecoyLocation);
+    const auto loaded = reopened.executeProfileWeaponAmmo(LoadMagazineCommand{magazine, rounds, 12U}, "barter-load-magazine");
+    ASSERT_TRUE(loaded.succeeded) << loaded.message;
+    const auto *filled = reopened.profile().assets.find(magazine);
+    ASSERT_NE(filled, nullptr);
+    ASSERT_EQ(filled->magazineRounds.size(), 12U);
+    EXPECT_TRUE(std::all_of(filled->magazineRounds.begin(), filled->magazineRounds.end(),
+        [](const auto &round) { return round.definitionId == enhancedRounds; }));
+    ASSERT_TRUE(reopened.executeProfileInventory(InventoryEquipCommand{rig, EquipmentSlotKind::ChestRig},
+        "barter-equip-rig").succeeded);
+    const auto pocket = ProfileContainerId::compartment(rig, 0);
+    const auto fit = findFirstProfileFit(reopened.profile(), current, pocket, current.item(alpha_content::noiseDecoy),
+        ItemOrientation::Degrees0);
+    ASSERT_TRUE(fit);
+    ASSERT_TRUE(reopened.executeProfileInventory(InventoryMoveCommand{decoy, 0, {pocket, *fit}},
+        "barter-carry-decoy").succeeded);
+    ASSERT_TRUE(waitForProfileUiDurability(reopened));
+    ASSERT_TRUE(reopened.deployAlpha(42U, kFieldIntelligenceTargetMapId)) << reopened.persistenceMessage();
+    ASSERT_TRUE(reopened.beginNoiseDecoySelection());
+    const auto spawn = reopened.world().player().position();
+    const auto thrown = reopened.throwNoiseDecoy(decoy, {spawn.x + 220, spawn.y + 20},
+        {reopened.profile().revision, "barter-next-raid-throw"});
+    ASSERT_TRUE(thrown.succeeded) << thrown.message;
+    EXPECT_TRUE(reopened.world().noiseDecoy().flight());
+    EXPECT_FALSE(reopened.profile().assets.find(decoy));
+}
+
+TEST_F(RiversideBarterSessionTest, StashOnlyStockCannotBeOfferedAtTheContact)
+{
+    ASSERT_NO_FATAL_FAILURE(deployRiverside(false));
+    ASSERT_TRUE(carried(session.profile(), alpha_content::lootScrap).empty());
+    ASSERT_TRUE(session.profile().assets.find(stashScrap));
+    const auto before = profileStateFingerprint(session.profile());
+    const auto plan = session.queryFieldBarter(1U);
+    EXPECT_FALSE(plan.canCommit);
+    EXPECT_FALSE(session.exchangeFieldBarter(1U, stashScrap, session.profile().revision));
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+    EXPECT_FALSE(session.profile().pendingRaid->fieldIntelligenceTrade->bartered[1]);
+}
+
+TEST_F(RiversideBarterSessionTest, ReadsOnlyTheLocalDocumentAndSearchesTheOriginalCacheIntoAnExtractedPack)
+{
+    ASSERT_NO_FATAL_FAILURE(deployRiverside(false));
+    ASSERT_NE(session.fieldClueCacheLoot(), nullptr);
+    const auto reward = *session.fieldClueCacheLoot();
+    const auto fileId = documentId(session.profile());
+    const auto &frozen = session.profile().pendingRaid->loot;
+    const auto it = std::find_if(frozen.begin(), frozen.end(), [&](const auto &loot) { return loot.assetId == fileId; });
+    ASSERT_NE(it, frozen.end());
+    auto interactAt = [&](Vec2 point, bool press) {
+        ASSERT_NO_FATAL_FAILURE(placeAt(point));
+        GameplayInput input;
+        input.aimWorldPosition = {point.x + 80.0F, point.y};
+        input.interactJustPressed = press;
+        session.update(input, 0.0F);
+    };
+    ASSERT_NO_FATAL_FAILURE(interactAt(it->position, true));
+    ASSERT_TRUE(assetIsCarried(session.profile(), fileId));
+    const auto quoted = session.queryFieldCacheClue(fileId);
+    ASSERT_TRUE(quoted.canCommit) << quoted.message;
+    const auto before = profileStateFingerprint(session.profile());
+    EXPECT_FALSE(session.readFieldCacheClue(fileId, quoted.revision - 1));
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+    const auto initialCurrency = session.profile().currency;
+    ASSERT_TRUE(session.readFieldCacheClue(fileId, quoted.revision));
+    EXPECT_EQ(session.profile().pendingRaid->fieldClueCache->decodedDocumentId, fileId);
+    EXPECT_EQ(session.profile().assets.find(fileId), nullptr);
+    EXPECT_FALSE(session.readFieldCacheClue(fileId, session.profile().revision));
+    ASSERT_NO_FATAL_FAILURE(placeAt(contact));
+    EXPECT_FALSE(session.sellFieldIntelligenceDocument(fileId));
+    EXPECT_EQ(session.profile().pendingRaid->fieldIntelligenceTrade->balance, 0U);
+    EXPECT_EQ(session.profile().currency, initialCurrency);
+
+    ASSERT_NO_FATAL_FAILURE(interactAt(reward.position, false));
+    ASSERT_TRUE(session.fieldClueCacheInRange());
+    const auto count = session.profile().assets.records().size();
+    ASSERT_NO_FATAL_FAILURE(interactAt(reward.position, true));
+    ASSERT_TRUE(assetIsCarried(session.profile(), reward.assetId)) << session.persistenceMessage();
+    ASSERT_TRUE(session.fieldClueCacheLoot()->collected);
+    EXPECT_EQ(session.profile().assets.records().size(), count);
+    EXPECT_EQ(session.profile().assets.find(reward.assetId)->quantity, reward.quantity);
+    EXPECT_FALSE(session.searchFieldCache());
+
+    ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(session.world().extractionPoint().bounds().position));
+    for (int frame = 0; frame < 50 && session.profile().pendingRaid; ++frame)
+        session.update({}, 0.1F);
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+    const auto disk = SaveRepository(directory.path()).load(current);
+    ASSERT_TRUE(disk.profile && !disk.profile->pendingRaid) << disk.message;
+    ASSERT_TRUE(disk.profile->lastRaidResult);
+    EXPECT_EQ(disk.profile->lastRaidResult->outcome, RaidResultOutcome::Extracted);
+    EXPECT_TRUE(assetIsCarried(*disk.profile, reward.assetId));
+    EXPECT_EQ(disk.profile->assets.find(reward.assetId)->definitionId, reward.definitionId);
+    EXPECT_EQ(disk.profile->assets.find(reward.assetId)->quantity, reward.quantity);
+    EXPECT_EQ(disk.profile->assets.find(fileId), nullptr);
+}
+
+TEST(RaidFieldIntelligenceTradeTest, ClosedCacheRejectsOrdinaryPickupDirectMoveAndFullBagsUntilSpaceIsFreed)
+{
+    auto profile = preparedProfile("clue-full-pack");
+    const auto bag = ProfileContainerId::compartment(*equippedAsset(profile, EquipmentSlotKind::Backpack), 0U);
+    const auto &filler = current.item(alpha_content::ammunition);
+    const auto &document = current.item(kFieldIntelligenceDocumentId);
+    const auto fileCell = findFirstProfileFit(profile, current, bag, document, ItemOrientation::Degrees0);
+    ASSERT_TRUE(fileCell);
+    const auto previousFile = profile.assets.create(document, StoredAssetLocation{bag, *fileCell});
+    ASSERT_TRUE(deploy(profile, current, 42U).succeeded);
+    ASSERT_TRUE(profile.pendingRaid->fieldClueCache);
+    ASSERT_NO_FATAL_FAILURE(pickUpDocument(profile));
+    const auto fileId = documentId(profile);
+    EXPECT_FALSE(queryRaidFieldCacheClue(profile, previousFile).canCommit);
+    ASSERT_TRUE(queryRaidFieldCacheClue(profile, fileId).canCommit);
+    const auto &raid = *profile.pendingRaid;
+    const auto rewardId = raid.fieldClueCache->rewardAssetId;
+    const auto reward = std::find_if(raid.loot.begin(), raid.loot.end(), [&](const auto &loot) { return loot.assetId == rewardId; });
+    ASSERT_NE(reward, raid.loot.end());
+    const auto view = observeAssetContractPoint(profile, reward->spaceId, reward->position);
+    const auto key = view.key();
+    const auto cell = findFirstProfileFit(profile, current, bag, current.item(reward->definitionId), ItemOrientation::Degrees0);
+    ASSERT_TRUE(cell);
+    const InventoryMoveCommand bypass{rewardId, 0, {bag, *cell}};
+    const auto beforeBypass = profileStateFingerprint(profile);
+    EXPECT_FALSE(pickupObservedRaidLoot(profile, current, rewardId, {profile.revision, "ordinary"}).succeeded);
+    EXPECT_FALSE(queryInventory(profile, current, bypass).canCommit);
+    EXPECT_FALSE(executeInventory(profile, current, bypass, {profile.revision, "direct"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), beforeBypass);
+
+    std::vector<AssetInstanceId> padding;
+    while (const auto available = findFirstProfileFit(profile, current, bag, filler, ItemOrientation::Degrees0))
+        padding.push_back(profile.assets.create(filler, StoredAssetLocation{bag, *available}));
+    ASSERT_FALSE(padding.empty());
+    const auto full = profileStateFingerprint(profile);
+    EXPECT_EQ(collectRaidFieldCache(profile, current, {profile.revision, "full"}, view, key).error, DomainErrorCode::Capacity);
+    EXPECT_EQ(profileStateFingerprint(profile), full);
+    ASSERT_FALSE(reward->collected);
+    for (const auto id : padding)
+        ASSERT_TRUE(profile.assets.erase(id));
+    ASSERT_TRUE(collectRaidFieldCache(profile, current, {profile.revision, "discover"}, view, key).succeeded);
+    ASSERT_TRUE(assetIsCarried(profile, rewardId));
+    const auto discovered = profileStateFingerprint(profile);
+    EXPECT_FALSE(executeRaidFieldCacheClue(profile, fileId, profile.revision));
+    EXPECT_FALSE(collectRaidFieldCache(profile, current, {profile.revision, "discover-again"}, view, key).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), discovered);
+    EXPECT_TRUE(assetIsCarried(profile, fileId));
+    EXPECT_TRUE(assetIsCarried(profile, previousFile));
+    ASSERT_TRUE(executeRaidFieldDocumentSale(profile, fileId));
+    EXPECT_EQ(profile.pendingRaid->fieldIntelligenceTrade->balance, kFieldIntelligenceSalePrice);
+
+    const auto pending = serializeProfileEnvelope(profile, current.contentVersion());
+    auto restored = deserializeProfileEnvelope(pending, current);
+    ASSERT_TRUE(restored.profile && restored.profile->pendingRaid) << restored.message;
+    ASSERT_TRUE(rollbackPendingRaidToBase(*restored.profile, current).succeeded);
+    EXPECT_TRUE(assetIsCarried(*restored.profile, previousFile));
+    EXPECT_FALSE(restored.profile->assets.find(fileId));
+    EXPECT_FALSE(restored.profile->assets.find(rewardId));
+}
+
+TEST_F(RiversideBarterSessionTest, LeavingOrThreateningTheContactInvalidatesAQuoteAndQuitLosesTheGoods)
+{
+    ASSERT_NO_FATAL_FAILURE(deployRiverside());
+    const auto quoted = session.queryFieldBarter(0U);
+    ASSERT_TRUE(quoted.canCommit && quoted.inputAssetId);
+    const auto before = profileStateFingerprint(session.profile());
+    ASSERT_NO_FATAL_FAILURE(placeAt({contact.x - 120.0F, contact.y}));
+    ASSERT_EQ(session.fieldIntelligenceTradeStatus(), RaidFieldTradeAccess::OutOfRange);
+    EXPECT_FALSE(session.exchangeFieldBarter(0U, *quoted.inputAssetId, quoted.revision));
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+    ASSERT_NO_FATAL_FAILURE(placeAt(contact));
+    ASSERT_FALSE(session.world().enemies().empty());
+    auto &enemy = const_cast<Enemy &>(session.world().enemies().front());
+    ASSERT_TRUE(enemy.setPosition({contact.x + 24.0F, contact.y}));
+    ASSERT_EQ(session.fieldIntelligenceTradeStatus(), RaidFieldTradeAccess::Threatened);
+    EXPECT_FALSE(session.exchangeFieldBarter(0U, *quoted.inputAssetId, quoted.revision));
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+    ASSERT_TRUE(enemy.setPosition({contact.x + 440.0F, contact.y}));
+    ASSERT_EQ(session.fieldIntelligenceTradeStatus(), RaidFieldTradeAccess::Available);
+    AssetInstanceId rounds{}, decoy{};
+    ASSERT_NO_FATAL_FAILURE(exchange(0U, alpha_content::lootElectronics, enhancedRounds, 12U, rounds));
+    ASSERT_NO_FATAL_FAILURE(exchange(1U, alpha_content::lootScrap, alpha_content::noiseDecoy, 1U, decoy));
+    ASSERT_TRUE(session.requestActiveQuitAlphaRaid().accepted) << session.persistenceMessage();
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+    const auto disk = SaveRepository(directory.path()).load(current);
+    ASSERT_TRUE(disk.profile) << disk.message;
+    ASSERT_FALSE(disk.profile->pendingRaid);
+    ASSERT_TRUE(disk.profile->lastRaidResult);
+    EXPECT_EQ(disk.profile->lastRaidResult->outcome, RaidResultOutcome::ActiveQuit);
+    EXPECT_TRUE(disk.profile->lastRaidResult->returnedItemDefinitionIds.empty());
+    EXPECT_FALSE(assetIsCarried(*disk.profile, rounds));
+    EXPECT_FALSE(assetIsCarried(*disk.profile, decoy));
+    EXPECT_TRUE(disk.profile->assets.find(stashScrap));
 }

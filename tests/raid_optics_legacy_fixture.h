@@ -4,9 +4,42 @@
 #include <algorithm>
 #include <nlohmann/json.hpp>
 
-inline nlohmann::json contentBeforeHospitalHybridOutdoorJson()
+inline nlohmann::json contentBeforeHospitalLandmarkInteriorsJson()
 {
     auto document = nlohmann::json::parse(publishedContentJson());
+    auto &recipes = document.at("base_manufacturing").at("recipes");
+    std::erase_if(recipes.get_ref<nlohmann::json::array_t &>(), [](const auto &recipe) {
+        return recipe.at("id") == "base_manufacturing.noise_decoy" ||
+            recipe.at("id") == "base_manufacturing.fire_bottle" || recipe.at("id") == "base_manufacturing.proximity_alarm";
+    });
+    auto &items = document.at("items").get_ref<nlohmann::json::array_t &>();
+    std::erase_if(items, [](const auto &item) {
+        return item.at("id") == "item.throwable.smoke_canister" || item.at("id") == "item.throwable.fire_bottle" ||
+            item.at("id") == "item.utility.proximity_alarm";
+    });
+    for (auto &map : document.at("maps"))
+    {
+        if (map.at("id") != std::string{kHospitalFloorplanMapId.value()})
+            continue;
+        map.at("procedural_outdoor").at("layout_version") = kHospitalHybridOutdoorLayoutVersion;
+        auto &interiors = map.at("interiors");
+        interiors.erase(std::remove_if(interiors.begin(), interiors.end(), [](const auto &entry) {
+            return entry.at("id") == std::string{kHospitalDepotSpaceId.value()};
+        }), interiors.end());
+        for (auto &interior : interiors)
+            interior.erase("landmark_definition_id");
+    }
+    return document;
+}
+
+inline ContentRegistry contentBeforeHospitalLandmarkInteriors()
+{
+    return ContentRegistry::fromJson(contentBeforeHospitalLandmarkInteriorsJson().dump());
+}
+
+inline nlohmann::json contentBeforeHospitalHybridOutdoorJson()
+{
+    auto document = contentBeforeHospitalLandmarkInteriorsJson();
     document["content_version"] = kRiversideArmedScavengersContentVersion;
     for (auto &map : document.at("maps"))
         if (map.at("id") == std::string{kHospitalFloorplanMapId.value()})

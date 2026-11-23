@@ -16,12 +16,33 @@ const UiBaseMedicalAsset *warehouseRow(
     return index < projection.warehouseMedicine.size() ? &projection.warehouseMedicine[index] : nullptr;
 }
 
+std::size_t dosePageCount(const UiBaseMedicalProjection &projection)
+{
+    return std::max<std::size_t>(1, (projection.doseChoices.size() + kUiBaseMedicalWarehouseRows - 1) /
+        kUiBaseMedicalWarehouseRows);
+}
+
+const UiMedicalDoseItem *doseRow(const UiBaseMedicalProjection &p, const UiMedicalDoseSelection &s, std::size_t row)
+{
+    const auto index = s.page * kUiBaseMedicalWarehouseRows + row;
+    return index < p.doseChoices.size() ? &p.doseChoices[index] : nullptr;
+}
+
 std::string medicalActionKey(const UiBaseMedicalHit &hit, const UiBaseMedicalState &state,
     const UiBaseMedicalProjection &projection, const UiBaseMedicalTransferProjection &transfer)
 {
     std::string key = uiBaseMedicalActionKey(hit.control, state.tab, projection);
     switch (hit.control)
     {
+    case Control::DoseRow:
+        if (const auto *item = doseRow(projection, state.doses, hit.index))
+            key += fmt::format(":{}:{}:{}:{}", state.doses.choosingTarget, state.doses.source.value_or(0),
+                item->id, item->charges);
+        break;
+    case Control::ConfirmDoses:
+        key += fmt::format(":{}:{}:{}:{}:{}", state.doses.source.value_or(0), state.doses.target.value_or(0),
+            projection.dosePlan.sourceBefore, projection.dosePlan.targetBefore, projection.dosePlan.canCommit);
+        break;
     case Control::WarehouseRow:
         if (const auto *asset = warehouseRow(projection, state, hit.index))
             key += fmt::format(":{}:{}:{}:{}", asset->id, asset->location.origin.x, asset->location.origin.y, asset->charges);
@@ -86,7 +107,8 @@ void App::refreshBaseMedicalUi(bool force) {
         medicalProjection_.medical = p.medicalStatus;
         return;
     }
-    medicalProjection_ = projectUiBaseMedical(p, publishedContentRegistry(), language);
+    medicalProjection_ = projectUiBaseMedical(p, publishedContentRegistry(), language, medicalUi_.doses);
+    medicalUi_.doses.page = std::min(medicalUi_.doses.page, dosePageCount(medicalProjection_) - 1);
     medicalTransferProjection_.reset();
     medicalUi_.warehousePage = std::min(medicalUi_.warehousePage,
         uiBaseMedicalWarehousePageCount(medicalProjection_) - 1);
@@ -115,6 +137,9 @@ void App::handleBaseMedicalEvent(const UiBaseMedicalEvent &event) {
         medicalUi_.press.reset();
         if (uiContains(uiBaseMedicalFeedbackRect(), event.position))
             medicalUi_.feedbackScroll = std::clamp(medicalUi_.feedbackScroll + event.delta * 2, 0, medicalUi_.feedbackMaximum);
+        else if (medicalUi_.doses.open && uiContains({464, 231, 728, 276}, event.position))
+            medicalUi_.doses.page = static_cast<std::size_t>(std::clamp(static_cast<int>(medicalUi_.doses.page) + event.delta,
+                0, static_cast<int>(dosePageCount(medicalProjection_) - 1)));
         else if ((medicalUi_.details[static_cast<std::size_t>(medicalUi_.tab)] ||
                   (medicalUi_.tab == Tab::Residents && medicalUi_.facilities)) &&
             uiContains(uiBaseMedicalDetailsRect(medicalUi_.tab), event.position))
@@ -163,10 +188,46 @@ void App::handleBaseMedicalEvent(const UiBaseMedicalEvent &event) {
         return;
     }
     switch (control) {
+    case Control::Consolidate: {
+        const bool open = !medicalUi_.doses.open;
+        medicalUi_.doses = {};
+        medicalUi_.doses.open = open;
+        medicalFeedback_.clear(); uiMessage_.clear();
+        refreshBaseMedicalUi(true);
+        return;
+    }
+    case Control::DoseSource: case Control::DoseTarget:
+        if (control == Control::DoseTarget && !medicalProjection_.doseSource) return;
+        medicalUi_.doses.choosingTarget = control == Control::DoseTarget;
+        medicalUi_.doses.page = 0;
+        medicalFeedback_.clear();
+        refreshBaseMedicalUi(true);
+        return;
+    case Control::DoseRow:
+        if (const auto *item = doseRow(medicalProjection_, medicalUi_.doses, hit->index)) {
+            if (medicalUi_.doses.choosingTarget)
+                medicalUi_.doses.target = item->id;
+            else {
+                if (medicalUi_.doses.source != item->id) medicalUi_.doses.target.reset();
+                medicalUi_.doses.source = item->id;
+                medicalUi_.doses.choosingTarget = true;
+                medicalUi_.doses.page = 0;
+            }
+            medicalFeedback_.clear();
+            refreshBaseMedicalUi(true);
+        }
+        return;
+    case Control::PreviousDosePage:
+        if (medicalUi_.doses.page > 0) --medicalUi_.doses.page;
+        return;
+    case Control::NextDosePage:
+        if (medicalUi_.doses.page + 1 < dosePageCount(medicalProjection_)) ++medicalUi_.doses.page;
+        return;
     case Control::Close:
         gameFlow_.closeBaseFacility(); resetBaseMedicalUi(); uiMessage_.clear();
         input_.suppressPrimaryPointerUntilRelease(); return;
     case Control::Personal: case Control::Residents:
+        if (medicalUi_.doses.open) { medicalUi_.doses = {}; refreshBaseMedicalUi(true); }
         medicalUi_.tab = control == Control::Personal ? Tab::Personal : Tab::Residents;
         medicalUi_.detailScroll = medicalUi_.feedbackScroll = 0; medicalFeedback_.clear(); uiMessage_.clear(); return;
     case Control::Details:
@@ -221,7 +282,19 @@ void App::handleBaseMedicalEvent(const UiBaseMedicalEvent &event) {
         gameAudio_.play(succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);
         refreshBaseMedicalUi(true);
     };
-    if (control == Control::ReserveTransfer) {
+    if (control == Control::ConfirmDoses) {
+        const auto &plan = p.dosePlan;
+        if (!plan.canCommit || !medicalUi_.doses.source || !medicalUi_.doses.target) {
+            feedback(plan.message); return;
+        }
+        const MedicalConsolidationCommand command{*medicalUi_.doses.source, *medicalUi_.doses.target,
+            plan.sourceBefore, plan.targetBefore};
+        submitProfileUi<InventoryReceipt>(command, nextProfileTransactionId("medical-consolidation"),
+            [this, finish](const auto &receipt) {
+                if (receipt.succeeded) { medicalUi_.doses = {}; medicalUi_.doses.open = true; }
+                finish(receipt.succeeded, receipt.succeeded ? "Medical charges consolidated" : receipt.message);
+            });
+    } else if (control == Control::ReserveTransfer) {
         if (!transfer.canCommit || !transfer.command) {
             if (!transfer.message.empty()) feedback(transfer.message);
             return;
@@ -317,6 +390,51 @@ void App::renderBaseMedicalService() {
     button(Control::Personal, "PERSONAL TREATMENT", personal);
     button(Control::Residents, "RESIDENT CARE", !personal);
 
+    if (personal) button(Control::Consolidate, medicalUi_.doses.open ? "Back to personal care" : "Combine medical charges");
+    if (medicalUi_.doses.open) {
+        const auto &selection = medicalUi_.doses;
+        const auto &plan = p.dosePlan;
+        const auto doseButton = [&](Control control, std::string_view label, bool enabled, bool selected = false) {
+            renderFoundationButton(5700 + static_cast<int>(control), uiBaseMedicalControlRect(control), label,
+                !profileUiBusy() && enabled, false, selected, {}, 14);
+        };
+        const auto itemLabel = [&](const UiMedicalDoseItem &item) {
+            return fmt::format("{} #{}  ·  {}  ·  {}/{}", item.name, item.id,
+                tr(item.inWarehouse ? "WAREHOUSE" : "Carried medicine"), item.charges, item.maximum);
+        };
+        text({80, 196, 328, 28}, "Combine medical charges", 17);
+        doseButton(Control::DoseSource, "Select source item", true, !selection.choosingTarget);
+        doseButton(Control::DoseTarget, "Select receiving item", p.doseSource.has_value(), selection.choosingTarget);
+        if (p.doseSource) text({80, 284, 328, 40}, itemLabel(*p.doseSource));
+        if (p.doseTarget) text({80, 380, 328, 40}, itemLabel(*p.doseTarget));
+        if (plan.canCommit) {
+            const auto preview = fmt::format("{}  {} → {}\n{}  {} → {}", tr("Dose source"), plan.sourceBefore, plan.sourceAfter,
+                tr("Dose recipient"), plan.targetBefore, plan.targetAfter);
+            text({80, 438, 328, 57}, preview, 15);
+            if (!plan.sourceAfter) text({80, 501, 328, 26}, "Empty source will be removed", 12);
+        }
+        text({464, 196, 728, 28}, selection.choosingTarget ? "Choose a matching recipient" : "Choose the medicine to transfer from", 16);
+        for (std::size_t i = 0; i < kUiBaseMedicalWarehouseRows; ++i) {
+            const auto *item = doseRow(p, selection, i);
+            if (!item) break;
+            renderFoundationButton(5850 + static_cast<int>(i), uiBaseMedicalDoseRowRect(i), itemLabel(*item),
+                !profileUiBusy(), false, item->id == (selection.choosingTarget ? selection.target : selection.source), {}, 14);
+        }
+        if (p.doseChoices.empty())
+            text({464, 244, 728, 52}, selection.choosingTarget ? "No matching medicine with free capacity" : "No personal multi-use medicine", 14);
+        const auto pages = dosePageCount(p);
+        if (pages > 1) {
+            doseButton(Control::PreviousDosePage, "←", selection.page > 0);
+            doseButton(Control::NextDosePage, "→", selection.page + 1 < pages);
+            text({550, 480, 556, 28}, fmt::format("{} / {}", selection.page + 1, pages), 14, UiTextAlign::Center);
+        }
+        doseButton(Control::ConfirmDoses, "Confirm charge transfer", plan.canCommit);
+        const auto feedback = profileUiBusy() ? std::string{"SAVING CHANGES"} : medicalFeedback_;
+        if (!feedback.empty()) fill({64, 606, 1152, 60}, {31, 39, 40, 255});
+        scrollText(uiBaseMedicalFeedbackRect(), feedback, 14, medicalUi_.feedbackScroll, medicalUi_.feedbackMaximum);
+        SDL_SetRenderDrawBlendMode(renderer_, previousBlend);
+        return;
+    }
     if (personal) {
         text({80, 200, 328, 28}, "CURRENT CONDITION", 16);
         text({80, 242, 328, 48}, fmt::format("{} / 100", p.health), 30);

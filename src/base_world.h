@@ -202,6 +202,7 @@ public:
     [[nodiscard]] const WorldMeleeRuntime &melee() const noexcept {return melee_;}
     [[nodiscard]] bool commitPreparedMelee();
     void cancelPreparedMelee() noexcept {melee_.cancelPrepared();}
+    void cancelHeavyMelee() noexcept {melee_.cancelHeavyCharge();}
     [[nodiscard]] std::vector<ShotPresentationSnapshot>
     shotPresentationSnapshots() const;
     [[nodiscard]] std::vector<ShotFeedbackPresentationSnapshot>

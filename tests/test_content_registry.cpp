@@ -250,7 +250,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(registry.baseWorkforce().generalFallbackDurationPercent, 150U);
     EXPECT_EQ(registry.baseWorkforce().workshopLevel2DurationPercent, 85U);
     EXPECT_EQ(registry.baseWorkforce().medicalLevel2DurationPercent, 85U);
-    ASSERT_EQ(registry.baseManufacturingRecipes().size(), 11U);
+    ASSERT_EQ(registry.baseManufacturingRecipes().size(), 14U);
     const BaseManufacturingRecipeDefinition &manufacturing =
         registry.baseManufacturingRecipe(
             BaseManufacturingRecipeDefinitionId{
@@ -278,7 +278,7 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_EQ(comfort.category, BaseSupplyCategory::Recreation);
     EXPECT_EQ(comfort.requiredContribution, 14U);
     EXPECT_FALSE(comfort.sourceHint.empty());
-    ASSERT_EQ(registry.items().size(), 73U);
+    ASSERT_EQ(registry.items().size(), 76U);
     const auto &light = registry.item(ItemDefinitionId{"item.component.weapon_flashlight_basic"});
     const auto &battery = registry.item(ItemDefinitionId{"item.battery.universal"});
     ASSERT_TRUE(light.weaponLight);
@@ -356,7 +356,11 @@ TEST(ContentRegistryTest, PublishedRegistryPreservesCurrentContentContract)
     EXPECT_NE(
         freightBay.worldSize.x,
         frontierWithInterior.interiors.front().worldSize.x);
-    ASSERT_EQ(registry.lootTables().size(), 18U);
+    ASSERT_EQ(registry.lootTables().size(), 19U);
+    const auto &depot = registry.raidInterior(kHospitalDepotSpaceId);
+    EXPECT_EQ(depot.intelligencePrice, 120U);
+    EXPECT_EQ(depot.roomLabels.size(), 3U);
+    EXPECT_EQ(depot.lootSlots.size(), 2U);
     const auto lootItemIds = [&](std::string_view tableId)
     {
         std::set<ItemDefinitionId> ids;
@@ -880,7 +884,7 @@ TEST(ContentRegistryTest, HospitalHybridLayoutIsExclusiveAndIndustrialVersionIsR
 {
     const auto &content = publishedContentRegistry();
     EXPECT_EQ(content.map(kHospitalFloorplanMapId).proceduralOutdoor.layoutVersion,
-              kHospitalHybridOutdoorLayoutVersion);
+              kHospitalLandmarkInteriorLayoutVersion);
     for (const auto &id : {kHospitalFloorplanMapId, kFreightCrateMapId})
     {
         auto catalog = nlohmann::json::parse(publishedContentJson());
@@ -1914,6 +1918,77 @@ TEST(ContentRegistryTest, ContentBetaReleasedItemsHaveSourceUseAndSink)
     }
 }
 
+TEST(ContentRegistryTest, ProximityAlarmIsAConsumableWithLimitedReachAndNoCombatUse)
+{
+    const auto &content = publishedContentRegistry();
+    const auto &item = content.item(kRaidAlarmItemId);
+    EXPECT_EQ(item.category, ItemCategory::Consumable);
+    EXPECT_EQ(item.marketBuyPrice, 0U);
+    EXPECT_EQ(item.maxStackSize, 2U);
+    EXPECT_FALSE(item.weaponUse || item.grenadeUse || item.fireZoneUse);
+    ASSERT_TRUE(item.alarmUse);
+    EXPECT_FLOAT_EQ(item.alarmUse->maximumRange, 80.0F);
+    EXPECT_FLOAT_EQ(item.alarmUse->minimumSpacing, 24.0F);
+    EXPECT_FLOAT_EQ(item.alarmUse->triggerRadius, 100.0F);
+    auto catalog = nlohmann::json::parse(publishedContentJson());
+    auto &items = catalog["items"];
+    const auto found = std::find_if(items.begin(), items.end(), [](const nlohmann::json &entry) {
+        return entry.at("id").get<std::string>() == kRaidAlarmItemId.value();
+    });
+    ASSERT_NE(found, items.end());
+    (*found)["proximity_alarm_use"]["placement_range"] = 900;
+    EXPECT_THROW(ContentRegistry::fromJson(catalog.dump()), ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, FireZoneIsAWorkshopSupplyWithBoundedDurationAndDamage)
+{
+    const auto &content = publishedContentRegistry();
+    const auto &item = content.item(kRaidFireBottleItemId);
+    EXPECT_EQ(item.marketBuyPrice, 0U);
+    EXPECT_EQ(item.maxStackSize, 2U);
+    ASSERT_TRUE(item.fireZoneUse);
+    EXPECT_TRUE(item.fireZoneUse->valid());
+    EXPECT_EQ(item.fireZoneUse->damagePerSecond, 6);
+    EXPECT_FLOAT_EQ(item.fireZoneUse->radius, 90.0F);
+    EXPECT_FLOAT_EQ(item.fireZoneUse->durationSeconds, 6.0F);
+    auto invalid = *item.fireZoneUse;
+    invalid.damagePerSecond = 7;
+    EXPECT_FALSE(invalid.valid());
+    auto catalog = nlohmann::json::parse(publishedContentJson());
+    auto &items = catalog["items"];
+    const auto found = std::find_if(items.begin(), items.end(), [](const nlohmann::json &entry) {
+        return entry.at("id").get<std::string>() == kRaidFireBottleItemId.value();
+    });
+    ASSERT_NE(found, items.end());
+    (*found)["fire_zone_use"]["duration_seconds"] = 120;
+    EXPECT_THROW(ContentRegistry::fromJson(catalog.dump()), ContentRegistryError);
+}
+
+TEST(ContentRegistryTest, SmokeCanisterIsPurchasedAndHasOneBoundedVisualEffect)
+{
+    const auto &item = publishedContentRegistry().item(kRaidSmokeItemId);
+    ASSERT_TRUE(item.smokeUse);
+    EXPECT_TRUE(item.smokeUse->valid());
+    EXPECT_EQ(item.marketBuyPrice, 60U);
+    EXPECT_EQ(item.marketRecyclePrice, 15U);
+    EXPECT_FLOAT_EQ(item.smokeUse->radius, 120.0F);
+    EXPECT_FLOAT_EQ(item.smokeUse->durationSeconds, 8.0F);
+    EXPECT_FALSE(item.grenadeUse || item.noiseDecoyUse || item.thrownIlluminationUse);
+
+    auto catalog = nlohmann::json::parse(publishedContentJson());
+    auto &items = catalog["items"];
+    const auto found = std::find_if(items.begin(), items.end(), [](const nlohmann::json &entry) {
+        return entry.at("id").get<std::string>() == kRaidSmokeItemId.value();
+    });
+    ASSERT_NE(found, items.end());
+    auto &smoke = *found;
+    smoke["smoke_use"]["radius"] = -1;
+    EXPECT_THROW(ContentRegistry::fromJson(catalog.dump()), ContentRegistryError);
+    smoke["smoke_use"]["radius"] = 120;
+    smoke["thrown_illumination_use"] = smoke["smoke_use"];
+    EXPECT_THROW(ContentRegistry::fromJson(catalog.dump()), ContentRegistryError);
+}
+
 TEST(ContentRegistryTest,
      FixedSupplyIsDerivedFromPurchasableDefinitionsAndExcludesHighTierItems)
 {
@@ -2092,7 +2167,13 @@ TEST(ContentRegistryTest, FieldMedicalRecipesPreserveExistingProductionAndSingle
         {"base_manufacturing.field_flare", "item.throwable.field_flare", 2, 90,
          {{ItemDefinitionId{"item.loot.copper_wire_spool"}, 1}, {ItemDefinitionId{"item.loot.electronics"}, 1}}},
         {"base_manufacturing.freight_breach_wedges", "item.loot.freight_breach_wedges", 1, 90,
-         {{ItemDefinitionId{"item.loot.scrap_parts"}, 2}, {ItemDefinitionId{"item.loot.industrial_fasteners"}, 1}}}};
+         {{ItemDefinitionId{"item.loot.scrap_parts"}, 2}, {ItemDefinitionId{"item.loot.industrial_fasteners"}, 1}}},
+        {"base_manufacturing.noise_decoy", "item.throwable.noise_decoy", 2, 90,
+         {{ItemDefinitionId{"item.loot.scrap_parts"}, 1}, {ItemDefinitionId{"item.loot.copper_wire_spool"}, 1}}},
+        {"base_manufacturing.fire_bottle", "item.throwable.fire_bottle", 1, 120,
+         {{kRaidFuelCanId, 1}, {ItemDefinitionId{"item.loot.scrap_parts"}, 1}}},
+        {"base_manufacturing.proximity_alarm", "item.utility.proximity_alarm", 1, 90,
+         {{ItemDefinitionId{"item.loot.copper_wire_spool"}, 1}, {ItemDefinitionId{"item.loot.scrap_parts"}, 1}}}};
     ASSERT_EQ(content.baseManufacturingRecipes().size(), std::size(expected));
     for (const auto &entry : expected)
     {

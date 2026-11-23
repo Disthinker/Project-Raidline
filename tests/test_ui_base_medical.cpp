@@ -121,6 +121,87 @@ protected:
     }
 };
 
+TEST_F(UiBaseMedicalTest, PersonalDoseTransferPreviewsTwoInstancesAndPersistsOnlyAfterConfirmation)
+{
+    for (int i = 0; i < 7; ++i) ASSERT_NE(create(alpha_content::medkit, 1), 0U);
+    const auto source = create(alpha_content::medkit, 1);
+    const auto target = create(alpha_content::medkit, 1);
+    ASSERT_NE(source, 0U);
+    ASSERT_NE(target, 0U);
+    profile().assets.findMutable(source)->remainingCharges = 1;
+    profile().assets.findMutable(target)->remainingCharges = 2;
+    ++profile().revision;
+    A::refresh(*app);
+    const auto originalFunds = profile().currency;
+    const auto originalHealth = profile().currentHealth;
+    const auto selectItem = [&](AssetInstanceId id) {
+        const auto &items = A::projection(*app).doseChoices;
+        const auto it = std::find_if(items.begin(), items.end(), [id](const auto &item) { return item.id == id; });
+        ASSERT_NE(it, items.end());
+        const auto offset = static_cast<std::size_t>(it-items.begin());
+        const auto page = offset / kUiBaseMedicalWarehouseRows;
+        for (std::size_t i = A::state(*app).doses.page; i < page; ++i) control(Control::NextDosePage);
+        ASSERT_EQ(A::state(*app).doses.page, page);
+        click(uiBaseMedicalDoseRowRect(offset % kUiBaseMedicalWarehouseRows));
+    };
+    control(Control::Consolidate);
+    ASSERT_TRUE(A::state(*app).doses.open);
+    ASSERT_NO_FATAL_FAILURE(selectItem(source));
+    EXPECT_TRUE(A::state(*app).doses.choosingTarget);
+    EXPECT_FALSE(A::projection(*app).dosePlan.canCommit);
+    const auto &targets = A::projection(*app).doseChoices;
+    EXPECT_TRUE(std::none_of(targets.begin(), targets.end(), [source](const auto &item) {
+        return item.id == source || item.charges >= item.maximum;
+    }));
+    ASSERT_NO_FATAL_FAILURE(selectItem(target));
+    auto preview = A::projection(*app).dosePlan;
+    ASSERT_TRUE(preview.canCommit) << preview.message;
+    EXPECT_EQ(preview.sourceAfter, 0U);
+    EXPECT_EQ(preview.targetAfter, 3U);
+    key(SDL_SCANCODE_ESCAPE); A::frame(*app);
+    EXPECT_FALSE(A::state(*app).doses.open);
+    EXPECT_EQ(A::flow(*app).activeBaseFacility(), BaseFacilityKind::Medical);
+    EXPECT_EQ(profile().assets.find(source)->remainingCharges, 1U);
+    EXPECT_EQ(profile().assets.find(target)->remainingCharges, 2U);
+
+    control(Control::Consolidate);
+    ASSERT_NO_FATAL_FAILURE(selectItem(source));
+    ASSERT_NO_FATAL_FAILURE(selectItem(target));
+    down(Control::ConfirmDoses);
+    profile().assets.findMutable(target)->remainingCharges = 1;
+    ++profile().revision;
+    up(Control::ConfirmDoses);
+    ASSERT_NE(profile().assets.find(source), nullptr);
+    EXPECT_EQ(profile().assets.find(target)->remainingCharges, 1U);
+    EXPECT_EQ(A::message(*app), "TREATMENT PLAN CHANGED - CHECK AND CLICK AGAIN");
+    profile().assets.findMutable(target)->remainingCharges = 2;
+    ++profile().revision;
+    A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+    A::refresh(*app);
+    ASSERT_TRUE(A::projection(*app).dosePlan.canCommit);
+    if (const char *out = std::getenv("RAIDLINE_MEDICAL_CONSOLIDATION_UI_DIR"); out && *out) {
+        const std::filesystem::path directory(out);
+        ASSERT_TRUE(directory.is_absolute());
+        std::filesystem::create_directories(directory);
+        ASSERT_TRUE(SDL_SetRenderDrawColor(renderer, 10, 16, 18, 255));
+        ASSERT_TRUE(SDL_RenderClear(renderer));
+        A::draw(*app);
+        ASSERT_TRUE(SDL_RenderPresent(renderer));
+        ASSERT_TRUE(IMG_SavePNG(surface, (directory / "medical-consolidation-1280-zh.png").string().c_str()));
+    }
+    control(Control::ConfirmDoses);
+    ASSERT_EQ(profile().assets.find(source), nullptr);
+    ASSERT_NE(profile().assets.find(target), nullptr);
+    EXPECT_EQ(profile().assets.find(target)->remainingCharges, 3U);
+    EXPECT_EQ(profile().currentHealth, originalHealth);
+    EXPECT_EQ(profile().currency, originalFunds);
+    const auto saved = SaveRepository(path).load(content);
+    ASSERT_TRUE(saved.profile);
+    EXPECT_EQ(saved.profile->assets.find(source), nullptr);
+    ASSERT_NE(saved.profile->assets.find(target), nullptr);
+    EXPECT_EQ(saved.profile->assets.find(target)->remainingCharges, 3U);
+}
+
 TEST_F(UiBaseMedicalTest, PersonalCommitsOnlyOnReleaseAndPreservesMedicineAndWorldTime) {
     const auto quote = queryBaseMedicalService(profile(), content); ASSERT_TRUE(quote.canCommit);
     const auto funds = profile().currency; const auto drugs = quantity(alpha_content::medkit);

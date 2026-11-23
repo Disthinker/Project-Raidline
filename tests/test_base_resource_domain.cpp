@@ -572,6 +572,30 @@ TEST(BaseResourceDomainTest, DailyNeedConsumesOnlyAssignedCategoryAndMinimumQuan
         alpha_content::lootCola));
 }
 
+TEST(BaseResourceDomainTest, RationPolicySettlesSeveralDaysWithOnlyTheFoodActuallyAuthorized)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("ration-authorized", content);
+    profile.rationPolicy = BaseRationPolicy::Conserve;
+    profile.baseResources.pool = {7,100,100,100};
+    const auto cola = createStashAsset(profile, alpha_content::lootCola);
+    ASSERT_TRUE(executeBaseSupplyAssignment(profile, content, {alpha_content::lootCola, BaseSupplyCategory::Food},
+        {profile.revision, "ration-authorize"}).succeeded);
+    auto batched = profile;
+    EXPECT_EQ(projectBaseSupplyReadiness(profile, content).dailyDemand.food, 6U);
+    ASSERT_EQ(applyBaseDailyDemandWithSupplyThrough(profile, content, 1).cyclesResolved, 1U);
+    EXPECT_EQ(profile.baseResources.pool.food, 1U);
+    ASSERT_NE(profile.assets.find(cola), nullptr);
+    ASSERT_EQ(applyBaseDailyDemandWithSupplyThrough(profile, content, 2).cyclesResolved, 1U);
+    EXPECT_EQ(profile.assets.find(cola), nullptr);
+    EXPECT_EQ(profile.baseResources.pool.food, 7U);
+    const auto bulk = applyBaseDailyDemandWithSupplyThrough(batched, content, 2);
+    EXPECT_EQ(bulk.cyclesResolved, 2U);
+    EXPECT_EQ(batched.baseResources.pool, profile.baseResources.pool);
+    EXPECT_EQ(batched.assets.find(cola), nullptr);
+    EXPECT_EQ(applyBaseDailyDemandWithSupplyThrough(batched, content, 2).cyclesResolved, 0U);
+}
+
 TEST(BaseResourceDomainTest, BaseDoesNotConsumeAnySupplyDuringPendingRaid)
 {
     ProfileState profile = makeNewAlphaProfile(

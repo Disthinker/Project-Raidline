@@ -160,7 +160,7 @@ int hospitalEnvironmentalField(std::uint64_t seed, int x, int y) noexcept
 
 bool usesHospitalOutdoorPlan(const MapDefinition &map) noexcept
 {
-    return map.id == kHospitalFloorplanMapId && map.proceduralOutdoor.layoutVersion == kHospitalHybridOutdoorLayoutVersion;
+    return map.id == kHospitalFloorplanMapId && isHospitalHybridLayoutVersion(map.proceduralOutdoor.layoutVersion);
 }
 
 HospitalOutdoorPlan planHospitalOutdoor(const MapDefinition &map,
@@ -516,6 +516,20 @@ HospitalOutdoorRouteReport inspectHospitalOutdoorRoutes(const MapDefinition &map
         std::all_of(layout.anchorPlacements.begin(), layout.anchorPlacements.end(),
                     [&](const auto &a)
                     {
+                        if (layout.layoutVersion == kHospitalLandmarkInteriorLayoutVersion &&
+                            a.kind == RaidMapAnchorKind::InteriorEntrance)
+                        {
+                            const Vec2 arrival = raidExteriorReturnPoint(map, a.bounds);
+                            // A portal passes the top-left to Player::setPosition, not the body's center.
+                            constexpr float playerSize = 32.0F;
+                            if (!reachable({arrival.x + playerSize / 2, arrival.y + playerSize / 2}) ||
+                                std::any_of(layout.ballisticBlockers.begin(), layout.ballisticBlockers.end(),
+                                    [&](ContentRect b) {
+                                        return arrival.x + playerSize > b.position.x && arrival.x < b.position.x + b.size.x &&
+                                               arrival.y + playerSize > b.position.y && arrival.y < b.position.y + b.size.y;
+                                    }))
+                                return false;
+                        }
                         return reachable({a.bounds.position.x + a.bounds.size.x * 0.5F,
                                           a.bounds.position.y + a.bounds.size.y * 0.5F});
                     });

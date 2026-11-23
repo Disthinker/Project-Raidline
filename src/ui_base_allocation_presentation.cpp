@@ -67,7 +67,7 @@ UiAllocationProjection projectUiAllocation(const ProfileState &p, const ContentR
     UiLanguage language, const UiAllocationState &s) {
     UiAllocationProjection r;
     r.profileId=p.profileId; r.revision=p.revision; r.worldMinute=p.worldClock.elapsedWorldMinutes; r.language=language;
-    r.clock=projectWorldClock(p.worldClock); r.demand=populationAdjustedDailyDemand(p.basePopulation);
+    r.clock=projectWorldClock(p.worldClock); r.demand=previewBaseRationPolicy(p).dailyDemand;
     r.lastShortfall=p.baseResources.lastShortfall; r.readiness=projectBaseSupplyReadiness(p,c,r.demand);
     r.operations=projectBaseOperations(p.baseResources,c.baseOperations(),r.demand);
     const std::array stock{r.readiness.pool.food,r.readiness.pool.hygiene,r.readiness.pool.morale,r.readiness.pool.security};

@@ -85,6 +85,38 @@ TEST(BaseMoraleDomainTest, FulfilledWishIsDeferredUntilDailyBoundary)
     EXPECT_EQ(state.baseMorale.lastLedger.fulfilledWishCount, 1U);
 }
 
+TEST(BaseMoraleDomainTest, RationPolicyCapsOnlyTheSettledTierAndRecordsOnlyAnActualConstraint)
+{
+    const auto &content = publishedContentRegistry();
+    auto state = profile();
+    state.baseMorale.tier = BaseMoraleTier::High;
+    state.baseResources.pool = {100,100,100,100};
+    state.rationPolicy = BaseRationPolicy::Conserve;
+    const auto before = state.baseMorale;
+    EXPECT_EQ(advanceDays(state, 0).morale.daysResolved, 0U);
+    EXPECT_EQ(state.baseMorale, before);
+    ASSERT_EQ(advanceDays(state, 1).morale.daysResolved, 1U);
+    EXPECT_EQ(state.baseMorale.tier, BaseMoraleTier::Stable);
+    EXPECT_EQ(state.baseMorale.trend, BaseMoraleTrend::Falling);
+    EXPECT_TRUE(state.baseMorale.lastLedger.rationPolicyLimited);
+    EXPECT_EQ(baseManufacturingDurationPercent(state.baseMorale.tier, content.baseMorale()),
+        content.baseMorale().stableManufacturingDurationPercent);
+    state.rationPolicy = BaseRationPolicy::Standard;
+    EXPECT_EQ(advanceDays(state, 0).morale.daysResolved, 0U);
+    EXPECT_TRUE(state.baseMorale.lastLedger.rationPolicyLimited);
+    state.baseMorale.pendingFulfilledWishCount = 1U;
+    ASSERT_EQ(advanceDays(state, 1).morale.daysResolved, 1U);
+    EXPECT_EQ(state.baseMorale.tier, BaseMoraleTier::High);
+    EXPECT_FALSE(state.baseMorale.lastLedger.rationPolicyLimited);
+    EXPECT_EQ(state.baseResources.pool.food, 86U);
+    state.rationPolicy = BaseRationPolicy::Conserve;
+    state.baseResources.pool.food = 0;
+    ASSERT_EQ(advanceDays(state, 1).morale.daysResolved, 1U);
+    EXPECT_EQ(state.baseMorale.tier, BaseMoraleTier::Stable);
+    EXPECT_FALSE(state.baseMorale.lastLedger.rationPolicyLimited);
+    EXPECT_EQ(state.baseMorale.lastLedger.resourceShortfall.food, 6U);
+}
+
 TEST(BaseMoraleDomainTest, EventRotationIsStableAndAppliesOnFollowingDay)
 {
     ProfileState state = profile();

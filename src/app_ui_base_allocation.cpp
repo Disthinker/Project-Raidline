@@ -220,6 +220,7 @@ void App::renderBaseAllocation() {
                 tr("FULFILLED / MISSED WISHES"),ledger.fulfilledWishCount,ledger.missedWishCount,tr("EVENT EFFECTS"),ledger.positiveEventCount,ledger.negativeEventCount,
                 tr("CURRENT COMMUNITY EVENT"),tr(p.eventName),p.eventEffect,tr("NEXT EVENT IN DAYS"),p.eventDays,
                 tr("PRODUCTION DURATION"),p.productionPercent,tr("ESTIMATE USES CURRENT STOCK AND AUTHORIZATION ONLY"));
+            if (ledger.rationPolicyLimited) details += "\n" + tr("LAST SETTLEMENT CAPPED MORALE");
         }
         scroll(uiAllocationDetailsRect(s.tab),details,s.detailsScroll,s.detailsMaximum);
         button(C::Details,s.details?"HIDE DAILY DETAILS":"DAILY DETAILS",s.details);

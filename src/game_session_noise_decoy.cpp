@@ -5,13 +5,11 @@ bool GameSession::canSelectNoiseDecoy() const
 {
     if(profileUiCommitPending())return false;
     const auto context=playerGameplayContext();
-    if(!context.available || context.dead || context.controlled)return false;
+    if(!context.available || context.dead || context.controlled || playerThrowFlightActive())return false;
     if (alphaRaidActive_)
-        return world_->noiseDecoyEnabled() && !world_->noiseDecoy().flight() &&
-            !world_->grenade().active() && !world_->thrownIllumination().flight() &&
+        return world_->noiseDecoyEnabled() && !world_->grenade().active() &&
             world_->melee().recoverySeconds() <= 0;
-    return basePlayerWorld_ && !basePlayerWorld_->noiseDecoy().flight() &&
-        !basePlayerWorld_->grenade().active() && !basePlayerWorld_->thrownIllumination().flight() &&
+    return basePlayerWorld_ && !basePlayerWorld_->grenade().active() &&
         basePlayerWorld_->melee().recoverySeconds() <= 0;
 }
 bool GameSession::beginNoiseDecoySelection()
@@ -60,6 +58,7 @@ void GameSession::prepareNoiseDecoyInput(GameplayInput &input,const GameplayInpu
     input.sprint=false;input.aimDownSights=false;input.reloadJustPressed=input.healJustPressed=false;
     input.interactPressed=input.interactJustPressed=false;input.weaponSlotJustPressed.reset();
     input.meleeJustPressed=input.meleePressed=false;
+    input.meleeHeavyJustPressed=input.meleeHeavyHeld=false;
     input.lightJustPressed=input.lightJustReleased=input.lightPressed=false;
     input.quitRaidJustPressed=false;
     sprintFireIntentPending_=false;sprintFireReadyRemaining_=0;weaponClearGesture_.reset();

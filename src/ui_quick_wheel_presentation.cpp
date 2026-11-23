@@ -28,7 +28,7 @@ bool inWornRig(const ProfileState &p,const ContentRegistry &c,const AssetRecord 
        pockets[stored->container.compartmentIndex].pocketKind!=ContainerPocketKind::General)return false;
     const auto &d=c.item(a.definitionId);
     return kind==UiQuickWheelKind::Medical ? d.medicalUse.has_value() && a.remainingCharges>0 :
-        (d.noiseDecoyUse.has_value() || d.grenadeUse.has_value() || d.thrownIlluminationUse.has_value()) &&
+        (d.noiseDecoyUse || d.grenadeUse || d.thrownIlluminationUse || d.smokeUse || d.fireZoneUse || d.alarmUse) &&
         a.quantity>0;
 }
 }
@@ -123,7 +123,16 @@ std::vector<UiQuickWheelEntry> projectUiQuickWheel(
             } else {
                 const auto &definition=content.item(asset->definitionId);
                 const char *unavailable = "DECOY INVENTORY CHANGED";
-                if (definition.thrownIlluminationUse) {
+                if (definition.alarmUse) {
+                    entry.usable = proximityAlarmInChestRig(profile,content,id);
+                    unavailable = "ALARM INVENTORY CHANGED";
+                } else if (definition.fireZoneUse) {
+                    entry.usable = fireBottleInChestRig(profile,content,id);
+                    unavailable = "FIRE BOTTLE INVENTORY CHANGED";
+                } else if (definition.smokeUse) {
+                    entry.usable = smokeInChestRig(profile, content, id);
+                    unavailable = "SMOKE INVENTORY CHANGED";
+                } else if (definition.thrownIlluminationUse) {
                     entry.usable = thrownIlluminationInChestRig(profile, content, id);
                     unavailable = "ILLUMINATION INVENTORY CHANGED";
                 } else if (definition.grenadeUse) {
@@ -132,7 +141,8 @@ std::vector<UiQuickWheelEntry> projectUiQuickWheel(
                 } else {
                     entry.usable = noiseDecoyInChestRig(profile, content, id);
                 }
-                entry.status = entry.usable ? "READY TO SELECT | AIM BEFORE THROWING" : unavailable;
+                entry.status = !entry.usable ? unavailable : definition.alarmUse
+                    ? "READY TO PLACE NEARBY" : "READY TO SELECT | AIM BEFORE THROWING";
                 entry.count=fmt::format("x{}",entry.quantity);
             }
         }

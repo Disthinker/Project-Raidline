@@ -13,6 +13,7 @@ inline const ItemDefinitionId kRaidFireSupportRifleId{"item.weapon.rifle_5_45_se
 inline const ItemDefinitionId kRaidFireSupportAmmunitionId{"item.ammunition.5_45x39_standard"};
 
 [[nodiscard]] bool isRaidFireSupportMap(const MapDefinitionId &map) noexcept;
+[[nodiscard]] bool hasLivingRaidFireSupport(const ProfileState &) noexcept;
 
 enum class RaidFireSupportLoadoutFailure
 {

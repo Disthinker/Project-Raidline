@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <limits>
+#include <utility>
 
 #include "base_population_domain.h"
 #include "base_manufacturing_domain.h"
@@ -57,6 +58,39 @@ TEST(BasePopulationDomainTest, RestCrossesMidnightAndResolvesPopulationDemand)
     EXPECT_EQ(profile.baseMorale.resolvedDayCount, 1U);
     EXPECT_EQ(profile.baseMorale.tier, BaseMoraleTier::Stable);
     EXPECT_TRUE(validateProfileState(profile, content).valid);
+}
+
+TEST(BasePopulationDomainTest, RationPolicyRoundsUpAgainstAllResidentsAndRestUsesTheSameDemand)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("ration-rounding", content);
+    const std::pair<std::uint32_t, std::uint32_t> counts[]{
+        {0, 0}, {1, 1}, {3, 3}, {4, 3}, {7, 6}, {8, 6}, {9, 7}, {11, 9}, {12, 9}, {10000, 7500}};
+    for (const auto &[residents, conserved] : counts)
+    {
+        profile.basePopulation.ordinaryResidents = residents;
+        profile.basePopulation.injuredResidents = residents / 3;
+        const auto standard = previewBaseRationPolicy(profile);
+        const auto rationed = previewBaseRationPolicy(profile, BaseRationPolicy::Conserve);
+        EXPECT_EQ(standard.dailyDemand, (BaseResourceBundle{residents, 6, 5, 4}));
+        EXPECT_EQ(rationed.dailyDemand, (BaseResourceBundle{conserved, 6, 5, 4}));
+        EXPECT_EQ(rationed.standardFoodDemand, residents);
+        EXPECT_EQ(rationed.population.dailyRationDemand, conserved);
+        EXPECT_EQ(rationed.maximumMoraleTier, BaseMoraleTier::Stable);
+    }
+    EXPECT_EQ(dailyRationsForResidents(std::numeric_limits<std::uint32_t>::max(), BaseRationPolicy::Conserve),
+        3221225472U);
+    profile = makeNewAlphaProfile("ration-rest", content);
+    profile.rationPolicy = BaseRationPolicy::Conserve;
+    profile.worldClock.elapsedWorldMinutes = 22 * kWorldMinutesPerHour;
+    const auto rest = queryBaseRest(profile, {4});
+    ASSERT_TRUE(rest.canCommit);
+    EXPECT_EQ(rest.population.dailyRationDemand, 6U);
+    EXPECT_EQ(rest.dailyDemand, previewBaseRationPolicy(profile).dailyDemand);
+    const auto receipt = executeBaseRest(profile, content, {4}, {profile.revision, "rest-conserved"});
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(receipt.dailyCyclesResolved, 1U);
+    EXPECT_EQ(profile.baseResources.pool, (BaseResourceBundle{34, 34, 35, 36}));
 }
 
 TEST(BasePopulationDomainTest, RestCompletesDueDormitoryExpansion)

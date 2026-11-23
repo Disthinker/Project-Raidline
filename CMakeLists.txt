@@ -381,6 +381,8 @@ add_library(raidline_simulation STATIC
     src/thrown_illumination_runtime.cpp
     src/thrown_illumination_runtime.h
     src/gameplay_world_grenade.cpp
+    src/gameplay_world_fire_zone.cpp
+    src/gameplay_world_proximity_alarm.cpp
     src/gameplay_world_noise_decoy.cpp
     src/raid_noise_decoy_runtime.cpp
     src/raid_noise_decoy_runtime.h
@@ -503,6 +505,9 @@ add_library(raidline::services ALIAS raidline_services)
 
 add_library(raidline_sdl_client STATIC
     src/app_throwable.cpp
+    src/app_raid_smoke.cpp
+    src/app_raid_barrels.cpp
+    src/app_raid_fire_zones.cpp
     src/app_melee.cpp
     src/app_base_defense.cpp
     src/app_base_fortification.cpp
@@ -565,6 +570,7 @@ add_library(raidline_sdl_client STATIC
     src/app_ui_raid_result.cpp
     src/app_ui_raid_field_trade.cpp
     src/app_ui_raid_fire_support.cpp
+    src/app_ui_hospital_escort.cpp
     src/ui_raid_result_presentation.cpp
     src/ui_raid_result_presentation.h
     src/ui_regional_operations_presentation.cpp
@@ -1067,6 +1073,8 @@ if(MSVC)
     # Schema60 ownership variants expand this existing large save test beyond
     # the legacy COFF section limit. Keep all cases and Debug instrumentation.
     target_compile_options(SaveRepositoryTest PRIVATE /bigobj)
+    # App owns the live game state and can exceed the normal COFF debug section limit.
+    set_property(SOURCE src/app.cpp APPEND PROPERTY COMPILE_OPTIONS /bigobj)
 endif()
 raidline_add_test(
     ChestRigLayoutTest

@@ -1,4 +1,5 @@
 #include "base_resource_domain.h"
+#include "base_population_domain.h"
 #include "base_wish_expedition.h"
 
 #include <array>
@@ -8,6 +9,41 @@
 #include <stdexcept>
 
 #include "stable_random.h"
+
+InventoryReceipt executeBaseRationPolicy(ProfileState &profile, const ContentRegistry &content,
+    const SetBaseRationPolicyCommand &command, const CommandContext &context)
+{
+    const auto reject = [&](DomainErrorCode error, std::string message) {
+        return InventoryReceipt{false, false, error, std::move(message), profile.revision};
+    };
+    if (context.transactionId.empty()) return reject(DomainErrorCode::InvalidTransaction, "INVALID RATION POLICY COMMAND");
+    if (profile.committedTransactions.contains(context.transactionId))
+        return {true, true, DomainErrorCode::None, {}, profile.revision};
+    if (context.expectedRevision != profile.revision || command.previewRevision != profile.revision)
+        return reject(DomainErrorCode::StaleRevision, "RATION POLICY PREVIEW EXPIRED");
+    if (!supportsBaseRationPolicyContent(content.contentVersion()) || !profile.homeFounding.established ||
+        profile.pendingRaid || profile.homePerimeter.activeOuting || profile.activeBaseDefense)
+        return reject(DomainErrorCode::IllegalDestination, "RATION POLICY UNAVAILABLE HERE");
+    if (command.policy != BaseRationPolicy::Standard && command.policy != BaseRationPolicy::Conserve)
+        return reject(DomainErrorCode::IllegalDestination, "INVALID RATION POLICY");
+    if (command.policy == profile.rationPolicy)
+        return reject(DomainErrorCode::IllegalDestination, "RATION POLICY ALREADY ACTIVE");
+    // An older save can contain elapsed but unsettled days. The normal daily update
+    // resolves them under the old policy before the player can switch future days.
+    const auto days = projectWorldClock(profile.worldClock).completedDays;
+    if (profile.baseResources.resolvedDemandCycleCount != days || profile.baseMorale.resolvedDayCount != days)
+        return reject(DomainErrorCode::IllegalDestination, "DAILY RATION SETTLEMENT PENDING");
+    if (profile.revision == std::numeric_limits<ProfileRevision>::max())
+        return reject(DomainErrorCode::RevisionOverflow, "RATION POLICY REVISION LIMIT");
+    auto candidate = profile;
+    candidate.rationPolicy = command.policy;
+    candidate.committedTransactions.insert(context.transactionId);
+    ++candidate.revision;
+    const auto validation = validateProfileState(candidate, content);
+    if (!validation.valid) return reject(DomainErrorCode::InvalidProfile, validation.message);
+    profile = std::move(candidate);
+    return {true, false, DomainErrorCode::None, {}, profile.revision};
+}
 
 namespace
 {
@@ -385,6 +421,11 @@ BaseResourceReceipt executeBaseResourceContribution(
             profile.revision, plan.contribution};
 }
 
+BaseSupplyReadinessProjection projectBaseSupplyReadiness(const ProfileState &profile, const ContentRegistry &content)
+{
+    return projectBaseSupplyReadiness(profile, content, previewBaseRationPolicy(profile).dailyDemand);
+}
+
 BaseSupplyReadinessProjection projectBaseSupplyReadiness(
     const ProfileState &profile,
     const ContentRegistry &content,
@@ -640,6 +681,12 @@ BaseDailyDemandResult applyBaseDailyDemandThrough(
         pool.security, dailyDemand.security, cycles);
     state.resolvedDemandCycleCount = completedWorldDays;
     return {cycles, shortfall, shortageCount};
+}
+
+BaseDailyDemandResult applyBaseDailyDemandWithSupplyThrough(ProfileState &profile, const ContentRegistry &content,
+    std::uint64_t completedWorldDays) noexcept
+{
+    return applyBaseDailyDemandWithSupplyThrough(profile, content, completedWorldDays, previewBaseRationPolicy(profile).dailyDemand);
 }
 
 BaseDailyDemandResult applyBaseDailyDemandWithSupplyThrough(

@@ -65,6 +65,8 @@ void InputSystem::handleEvent(
         primaryPointerSuppressedUntilRelease_ = false;
         secondaryPointerPressed_ = false;
         secondaryPointerJustPressed_ = false;
+        heavyMeleeJustPressed_ = false;
+        heavyMeleeHeld_ = false;
         reloadTransitions_.clear();
         return;
     }
@@ -118,6 +120,9 @@ void InputSystem::handleEvent(
     {
         pressedScancodes_.erase(
             event.key.scancode);
+        if ((event.key.scancode == SDL_SCANCODE_LALT || event.key.scancode == SDL_SCANCODE_RALT) &&
+            !pressedScancodes_.contains(SDL_SCANCODE_LALT) && !pressedScancodes_.contains(SDL_SCANCODE_RALT))
+            heavyMeleeHeld_ = false;
     }
 
     const std::optional<GameAction> action =
@@ -140,6 +145,13 @@ void InputSystem::handleEvent(
         {
             justPressedActions_.insert(
                 *action);
+            if (*action == GameAction::QuickMelee)
+            {
+                // Lock the mode on the V edge; changing Alt later cannot start a second swing.
+                heavyMeleeJustPressed_ = pressedScancodes_.contains(SDL_SCANCODE_LALT) ||
+                                         pressedScancodes_.contains(SDL_SCANCODE_RALT);
+                heavyMeleeHeld_ = heavyMeleeJustPressed_;
+            }
             if(*action==GameAction::Reload && !event.key.repeat)
                 reloadTransitions_.push_back({true,static_cast<double>(event.common.timestamp?event.common.timestamp:SDL_GetTicksNS())/1e9});
         }
@@ -159,6 +171,8 @@ void InputSystem::handleEvent(
     }
     if (isActionPressed(*action))
     {
+        if (*action == GameAction::QuickMelee)
+            heavyMeleeHeld_ = false;
         justReleasedActions_.insert(*action);
         if(*action==GameAction::Reload)
             reloadTransitions_.push_back({false,static_cast<double>(event.common.timestamp?event.common.timestamp:SDL_GetTicksNS())/1e9});
@@ -233,6 +247,7 @@ void InputSystem::endFrame()
     justReleasedActions_.clear();
     primaryPointerJustPressed_ = false;
     secondaryPointerJustPressed_ = false;
+    heavyMeleeJustPressed_ = false;
     reloadTransitions_.clear();
 }
 

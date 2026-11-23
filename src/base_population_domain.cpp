@@ -3,6 +3,7 @@
 #include "base_emergency_power_domain.h"
 #include "recovery_task_domain.h"
 
+#include <algorithm>
 #include <limits>
 #include <utility>
 
@@ -17,15 +18,20 @@ BaseRestPlan failure(
 }
 }
 
+std::uint32_t dailyRationsForResidents(std::uint32_t residents, BaseRationPolicy policy) noexcept
+{
+    const auto standard = static_cast<std::uint64_t>(residents) * kRationsPerResidentPerDay;
+    // n - floor(n/4) is ceil(3n/4) without an overflowing multiplication.
+    const auto demand = policy == BaseRationPolicy::Conserve ? standard - standard / 4 : standard;
+    return static_cast<std::uint32_t>(std::min<std::uint64_t>(demand, std::numeric_limits<std::uint32_t>::max()));
+}
+
 BasePopulationProjection projectBasePopulation(
     const BasePopulationState &state) noexcept
 {
     const std::uint32_t shortfall = state.ordinaryResidents > state.bedCapacity
         ? state.ordinaryResidents - state.bedCapacity
         : 0U;
-    const std::uint64_t demand =
-        static_cast<std::uint64_t>(state.ordinaryResidents) *
-        kRationsPerResidentPerDay;
     const std::uint32_t healthy =
         state.ordinaryResidents > state.injuredResidents
             ? state.ordinaryResidents - state.injuredResidents
@@ -34,9 +40,7 @@ BasePopulationProjection projectBasePopulation(
         state.ordinaryResidents,
         state.bedCapacity,
         shortfall,
-        demand > std::numeric_limits<std::uint32_t>::max()
-            ? std::numeric_limits<std::uint32_t>::max()
-            : static_cast<std::uint32_t>(demand),
+        dailyRationsForResidents(state.ordinaryResidents, BaseRationPolicy::Standard),
         state.injuredResidents,
         healthy};
 }
@@ -47,6 +51,17 @@ BaseResourceBundle populationAdjustedDailyDemand(
     BaseResourceBundle demand = kBaseDailyDemand;
     demand.food = projectBasePopulation(state).dailyRationDemand;
     return demand;
+}
+
+BaseRationPolicyPreview previewBaseRationPolicy(const ProfileState &profile, BaseRationPolicy policy) noexcept
+{
+    auto population = projectBasePopulation(profile.basePopulation);
+    const std::uint32_t standard = population.dailyRationDemand;
+    const bool conserve = policy == BaseRationPolicy::Conserve;
+    if (conserve) population.dailyRationDemand = dailyRationsForResidents(population.ordinaryResidents, policy);
+    auto demand = kBaseDailyDemand;
+    demand.food = population.dailyRationDemand;
+    return {policy, population, demand, standard, conserve ? BaseMoraleTier::Stable : BaseMoraleTier::High};
 }
 
 BaseRestPlan queryBaseRest(
@@ -93,8 +108,7 @@ BaseRestPlan queryBaseRest(
             "world clock cannot advance by the requested rest",
             profile.revision);
     }
-    const BasePopulationProjection population = projectBasePopulation(
-        profile.basePopulation);
+    const auto rations = previewBaseRationPolicy(profile);
     return {
         true,
         DomainErrorCode::None,
@@ -104,8 +118,8 @@ BaseRestPlan queryBaseRest(
         minutes,
         projectWorldClock(arrivalState),
         projectWorldClock(arrivalState).completedDays - before.completedDays,
-        population,
-        populationAdjustedDailyDemand(profile.basePopulation)};
+        rations.population,
+        rations.dailyDemand};
 }
 
 BaseRestReceipt executeBaseRest(

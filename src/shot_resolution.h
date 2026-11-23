@@ -101,6 +101,7 @@ struct HitResult
     CombatTargetId targetId{kInvalidCombatTargetId};
     bool armorReducedDamage{};
     bool armorBroken{};
+    std::uint64_t environmentObjectId{};
 };
 
 // Read-only App projection for one short, already-travelled tracer segment.

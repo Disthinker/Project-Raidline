@@ -2,6 +2,7 @@
 
 #include "definition_id.h"
 #include "rect.h"
+#include "raid_smoke_sight.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -54,6 +55,7 @@ struct RaidObservationKey
     std::uint64_t lightAssetId{}, lightBatteryId{};
     float lightAngleDegrees{}, lightDistance{};
     RaidIlluminationObservationKey illumination{};
+    RaidSmokeSight smoke{};
 
     friend bool operator==(const RaidObservationKey &a,
                            const RaidObservationKey &b)
@@ -66,7 +68,7 @@ struct RaidObservationKey
                a.environment == b.environment &&
                a.geometryRevision == b.geometryRevision && a.lightAssetId == b.lightAssetId && a.lightBatteryId == b.lightBatteryId &&
                a.lightAngleDegrees == b.lightAngleDegrees && a.lightDistance == b.lightDistance &&
-               a.illumination == b.illumination;
+               a.illumination == b.illumination && a.smoke == b.smoke;
     }
 };
 
@@ -99,6 +101,7 @@ struct RaidVisibilityProjection
     float lightAngleDegrees{}, lightDistance{};
     RaidIlluminationObservationKey illuminationKey{};
     std::shared_ptr<const RaidIlluminatedObservation> illumination;
+    RaidSmokeSight smoke{};
 
     [[nodiscard]] RaidObservationKey key() const;
     // Cache comparison only. Commands must use matches(), which validates
@@ -154,6 +157,7 @@ class RaidVisibilityBoundsQuery
     // Contiguous ranges and owned bounds remain valid after copy/move.
     std::vector<TriangleGroup> triangleGroups_;
     std::shared_ptr<const RaidIlluminatedObservation> illumination_;
+    RaidSmokeSight smoke_{};
 };
 
 struct RaidIlluminationCoverage

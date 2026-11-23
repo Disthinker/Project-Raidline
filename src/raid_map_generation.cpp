@@ -1309,6 +1309,18 @@ std::vector<RaidAnchorPlacementSnapshot> placeAnchors(
                 roadCandidates.push_back({column, row});
         }
     }
+    std::vector<Vec2> protectedDoorSockets;
+    if (usesHospitalOutdoorPlan(map) && !landmarks.empty())
+    {
+        for (const auto &landmark : landmarks)
+        {
+            if (&landmark == &landmarks.front() ||
+                (definition.layoutVersion == kHospitalLandmarkInteriorLayoutVersion &&
+                 std::any_of(map.interiors.begin(), map.interiors.end(), [&](const auto &space)
+                 { return space.landmarkDefinitionId == landmark.definitionId; })))
+                protectedDoorSockets.insert(protectedDoorSockets.end(), landmark.roadSockets.begin(), landmark.roadSockets.end());
+        }
+    }
     std::vector<RaidAnchorPlacementSnapshot> result;
     std::optional<Vec2> playerCenter;
     std::size_t interiorOrdinal{};
@@ -1340,9 +1352,9 @@ std::vector<RaidAnchorPlacementSnapshot> placeAnchors(
         if (request.kind == RaidMapAnchorKind::InteriorEntrance &&
             !landmarks.empty())
         {
-            const RaidLandmarkPlacementSnapshot &landmark = landmarks.front();
-            const Vec2 socket = landmark.roadSockets[
-                interiorOrdinal % landmark.roadSockets.size()];
+            const RaidLandmarkPlacementSnapshot &landmark = requiredLandmark ? *requiredLandmark : landmarks.front();
+            const Vec2 socket = requiredLandmark ? landmark.roadSockets.front()
+                : landmark.roadSockets[interiorOrdinal % landmark.roadSockets.size()];
             selected = fineCellForPoint(map, socket);
             ++interiorOrdinal;
         }
@@ -1440,9 +1452,8 @@ std::vector<RaidAnchorPlacementSnapshot> placeAnchors(
                     continue;
                 }
             }
-            if (usesHospitalOutdoorPlan(map) && !landmarks.empty() &&
-                std::any_of(landmarks.front().roadSockets.begin(), landmarks.front().roadSockets.end(),
-                    [&](Vec2 point){ return overlaps(pointRegion(point, 155.0F), bounds); }))
+            if (std::any_of(protectedDoorSockets.begin(), protectedDoorSockets.end(),
+                    [&](Vec2 point) { return overlaps(pointRegion(point, 155.0F), bounds); }))
                 continue;
             if (std::any_of(result.begin(), result.end(),
                 [&](const RaidAnchorPlacementSnapshot &existing)
@@ -1704,7 +1715,12 @@ void populateProps(
         markRect(bounds);
     };
     for (const RaidAnchorPlacementSnapshot &anchor : layout.anchorPlacements)
+    {
         markRect(inflated(anchor.bounds, 80.0F));
+        if (layout.layoutVersion == kHospitalLandmarkInteriorLayoutVersion &&
+            anchor.kind == RaidMapAnchorKind::InteriorEntrance)
+            markRect(pointRegion(raidExteriorReturnPoint(map, anchor.bounds), 50.0F));
+    }
     for (const RaidLandmarkPlacementSnapshot &landmark : layout.landmarks)
     {
         markRect(landmark.bounds);
@@ -2189,6 +2205,73 @@ std::optional<RaidAnchorPlacementSnapshot> selectHospitalRescueAnchor(
     return std::nullopt;
 }
 
+namespace
+{
+bool clearEscortPassage(const MapDefinition &map, const RaidGeneratedMapLayout &layout, Vec2 from, Vec2 to)
+{
+    // Neighbours are axis aligned. The swept rectangle includes the whole character at either end.
+    constexpr float halfWidth = 20.0F;
+    const ContentRect swept{{std::min(from.x, to.x) - halfWidth, std::min(from.y, to.y) - halfWidth},
+        {std::abs(from.x - to.x) + 2.0F * halfWidth, std::abs(from.y - to.y) + 2.0F * halfWidth}};
+    const auto &bounds = map.walkableBounds;
+    return swept.position.x >= bounds.position.x && swept.position.y >= bounds.position.y &&
+        swept.position.x + swept.size.x <= bounds.position.x + bounds.size.x &&
+        swept.position.y + swept.size.y <= bounds.position.y + bounds.size.y &&
+        std::none_of(layout.ballisticBlockers.begin(), layout.ballisticBlockers.end(),
+            [&](ContentRect obstacle) { return overlaps(swept, obstacle); });
+}
+}
+
+bool validHospitalEscortStart(const MapDefinition &map, const RaidGeneratedMapLayout &layout,
+                             ContentRect transfer, Vec2 start) noexcept
+{
+    const Vec2 center{transfer.position.x + transfer.size.x * 0.5F, transfer.position.y + transfer.size.y * 0.5F};
+    const float distance = std::hypot(start.x - center.x, start.y - center.y);
+    return distance >= 600.0F && distance <= 1000.0F && clearEscortPassage(map, layout, start, start);
+}
+
+std::optional<Vec2> selectHospitalEscortStart(const MapDefinition &map, const RaidGeneratedMapLayout &layout,
+                                             ContentRect transfer)
+{
+    constexpr int radius = 14;
+    constexpr int width = radius * 2 + 1;
+    constexpr float stride = 80.0F;
+    const Vec2 center{transfer.position.x + transfer.size.x * 0.5F, transfer.position.y + transfer.size.y * 0.5F};
+    const auto position = [&](int x, int y) {
+        return Vec2{center.x + stride * (x - radius), center.y + stride * (y - radius)};
+    };
+    if (!clearEscortPassage(map, layout, center, center)) return std::nullopt;
+    std::array<bool, width * width> visited{};
+    std::queue<std::pair<int, int>> frontier;
+    frontier.emplace(radius, radius);
+    visited[radius * width + radius] = true;
+    constexpr std::array<std::pair<int, int>, 4> steps{{{1, 0}, {0, -1}, {-1, 0}, {0, 1}}};
+    std::optional<Vec2> fallback;
+    while (!frontier.empty())
+    {
+        const auto [x, y] = frontier.front();
+        frontier.pop();
+        const Vec2 from = position(x, y);
+        if (validHospitalEscortStart(map, layout, transfer, from))
+        {
+            if (std::hypot(from.x - center.x, from.y - center.y) >= 720.0F) return from;
+            fallback = from;
+        }
+        for (const auto &[dx, dy] : steps)
+        {
+            const int nx = x + dx, ny = y + dy;
+            if (nx < 0 || nx >= width || ny < 0 || ny >= width) continue;
+            const auto index = ny * width + nx;
+            if (!visited[index] && clearEscortPassage(map, layout, from, position(nx, ny)))
+            {
+                visited[index] = true;
+                frontier.emplace(nx, ny);
+            }
+        }
+    }
+    return fallback;
+}
+
 Vec2 raidResourcePointLootPosition(
     const RaidResourcePointSnapshot &resourcePoint,
     std::uint32_t slotIndex) noexcept
@@ -2424,6 +2507,13 @@ RaidGeneratedMapLayout generateRaidMapLayout(
     return fallback;
 }
 
+Vec2 raidExteriorReturnPoint(const MapDefinition &map, ContentRect entrance) noexcept
+{
+    return {entrance.position.x + entrance.size.x * 0.5F,
+            std::min(map.walkableBounds.position.y + map.walkableBounds.size.y - 50.0F,
+                     entrance.position.y + entrance.size.y + 70.0F)};
+}
+
 bool raidMapLayoutConnectsAnchors(
     const MapDefinition &map,
     const RaidGeneratedMapLayout &layout,
@@ -2449,7 +2539,7 @@ bool raidMapLayoutConnectsAnchors(
         }
         return roadLayoutIsValid(map, layout, frozenAnchors) &&
             layoutConnects(map, layout, frozenAnchors) &&
-            (layout.layoutVersion != kHospitalHybridOutdoorLayoutVersion || !usesHospitalOutdoorPlan(map) ||
+            (!isHospitalHybridLayoutVersion(layout.layoutVersion) || !usesHospitalOutdoorPlan(map) ||
              inspectHospitalOutdoorRoutes(map, layout).passable());
     }
     return (!map.proceduralOutdoor.enabled || layout.layoutVersion == 0U ||

@@ -39,6 +39,12 @@ struct ProfileUiClearWorkerCommand { BaseFacilityStaffingKind facility{}; };
 struct ProfileUiAutoFillWorkersCommand {};
 struct ProfileUiWishFocusCommand { std::optional<BaseWishInstanceId> focus; };
 struct ProfileUiCancelManufacturingCommand {};
+struct ProfileUiExpediteManufacturingCommand
+{
+    BaseServiceJobId jobId{};
+    AssetInstanceId materialId{};
+    ProfileRevision previewRevision{};
+};
 struct ProfileUiStartEngineeringTrainingCommand {};
 struct ProfileUiCancelEngineeringTrainingCommand {};
 struct ProfileUiCollectManufacturingCommand {};
@@ -58,6 +64,7 @@ using ProfileUiCommand = std::variant<
     BaseRestCommand,
     ContributeBaseAssetCommand,
     SetBaseSupplyAssignmentCommand,
+    SetBaseRationPolicyCommand,
     ContributeConstructionMaterialCommand,
     StartBaseConstructionCommand,
     CancelBaseConstructionCommand,
@@ -86,6 +93,7 @@ using ProfileUiCommand = std::variant<
     ProfileUiAutoFillWorkersCommand,
     ProfileUiWishFocusCommand,
     ProfileUiCancelManufacturingCommand,
+    ProfileUiExpediteManufacturingCommand,
     ProfileUiStartEngineeringTrainingCommand,
     ProfileUiCancelEngineeringTrainingCommand,
     ProfileUiCollectManufacturingCommand,
@@ -104,6 +112,7 @@ using ProfileUiCommand = std::variant<
     FortificationCommand,
     InstallFortificationCommand,
     ProfileUiBaseMedicalCommand,
+    MedicalConsolidationCommand,
     ProfileUiBaseHealCommand,
     ProfileUiEstablishHomeCommand,
     ProfileUiHintsCommand>;

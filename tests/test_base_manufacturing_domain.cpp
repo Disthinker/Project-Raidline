@@ -7,6 +7,8 @@
 
 #include "alpha_content_ids.h"
 #include "base_engineering_training_domain.h"
+#include "base_emergency_power_domain.h"
+#include "base_facility_layout_domain.h"
 #include "base_workforce_domain.h"
 #include "base_manufacturing_domain.h"
 #include "base_site_feature_domain.h"
@@ -116,6 +118,174 @@ TEST(BaseManufacturingDomainTest,
     }
     EXPECT_TRUE(validateProfileState(
         profile, publishedContentRegistry()).valid);
+}
+
+TEST(BaseManufacturingDomainTest, ExpediteConsumesOnlyTheSelectedStashItemAndHalvesOddRemainingWorkOnce)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeProfile();
+    addToStash(profile, alpha_content::lootElectronics);
+    addToStash(profile, ItemDefinitionId{"item.loot.scrap_parts"});
+    const auto order = startOrder(profile);
+    ASSERT_TRUE(order.succeeded) << order.message;
+    const auto inputs = profile.baseManufacturing.activeOrder->inputAssetIds;
+    const auto keep = addToStash(profile, alpha_content::lootElectronics);
+    // Select the later of two independent stash instances, after the order reserved a third one.
+    const auto payment = addToStash(profile, alpha_content::lootElectronics);
+    const auto oldFunds = profile.currency;
+    static_cast<void>(advanceWorldClock(profile.worldClock, 13));
+    const ExpediteBaseManufacturingCommand command{order.jobId, payment};
+    const CommandContext tx{profile.revision, "expedite-order"};
+    const auto before = profileStateFingerprint(profile);
+    const auto quote = queryExpediteBaseManufacturing(profile, content, command);
+    ASSERT_TRUE(quote.canCommit) << quote.message;
+    EXPECT_EQ(quote.remainingMinutes, 347U);
+    EXPECT_EQ(quote.newRemainingMinutes, 174U);
+    EXPECT_EQ(quote.newCompletionWorldMinute, profile.worldClock.elapsedWorldMinutes + 174);
+    EXPECT_EQ(quote.estimatedCompletionBefore, profile.worldClock.elapsedWorldMinutes + 347);
+    EXPECT_EQ(quote.estimatedCompletionAfter, profile.worldClock.elapsedWorldMinutes + 174);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+    const auto result = executeExpediteBaseManufacturing(profile, content, command, tx);
+    ASSERT_TRUE(result.succeeded) << result.message;
+    EXPECT_EQ(result.jobId, order.jobId);
+    EXPECT_FALSE(profile.assets.find(payment));
+    EXPECT_NE(profile.assets.find(keep), nullptr);
+    EXPECT_EQ(profile.currency, oldFunds);
+    const auto &running = *profile.baseManufacturing.activeOrder;
+    EXPECT_EQ(running.expediteMinutesSaved, 173U);
+    EXPECT_EQ(running.outputAssetId, order.outputAssetId);
+    EXPECT_EQ(running.inputAssetIds, inputs);
+    EXPECT_EQ(running.committedWorkers, 1U);
+    const auto committed = profileStateFingerprint(profile);
+    EXPECT_TRUE(executeExpediteBaseManufacturing(profile, content, command, tx).alreadyCommitted);
+    EXPECT_FALSE(executeExpediteBaseManufacturing(profile, content, {order.jobId, keep},
+        {profile.revision, "duplicate-other-electronics"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), committed);
+    auto cancelled = profile;
+    ASSERT_TRUE(executeCancelBaseManufacturing(cancelled, content,
+        {cancelled.revision, "cancel-expedited"}).succeeded);
+    EXPECT_FALSE(cancelled.assets.find(payment));
+    for (const auto id : inputs) EXPECT_NE(cancelled.assets.find(id), nullptr);
+    static_cast<void>(advanceWorldClock(profile.worldClock, 173));
+    EXPECT_FALSE(applyBaseManufacturingThrough(profile, content).completed);
+    static_cast<void>(advanceWorldClock(profile.worldClock, 1));
+    EXPECT_EQ(applyBaseManufacturingThrough(profile, content).outputAssetId, order.outputAssetId);
+    EXPECT_FALSE(applyBaseManufacturingThrough(profile, content).completed);
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
+}
+
+TEST(BaseManufacturingDomainTest, ExpeditePreservesFuelBonusAndReservePauseAcrossReinstallation)
+{
+    const auto &content = publishedContentRegistry();
+    const BaseFacilityDefinitionId workshop{"base_facility.workshop"};
+    auto profile = makeProfile();
+    profile.baseConstruction.facilities.emplace(kBaseGeneratorFacilityId, BaseConstructionState::FacilityPlacement::Installed);
+    initializeBaseFacilityLayouts(profile, content);
+    addToStash(profile, alpha_content::lootElectronics);
+    addToStash(profile, ItemDefinitionId{"item.loot.scrap_parts"});
+    const auto order = startOrder(profile);
+    ASSERT_TRUE(order.succeeded) << order.message;
+    const auto fuel = addToStash(profile, kRaidFuelCanId);
+    const auto paid = addToStash(profile, alpha_content::lootElectronics);
+    const auto power = executeBaseEmergencyPower(profile, content,
+        StartBaseEmergencyPowerCommand{BaseEmergencyPowerTarget::Workshop, fuel, order.jobId}, {profile.revision, "power"});
+    ASSERT_TRUE(power.succeeded) << power.message;
+    const auto advance = [&](std::uint64_t minutes) {
+        EXPECT_EQ(advanceWorldClock(profile.worldClock, minutes).minutesApplied, minutes);
+        return synchronizeBaseWorkThrough(profile, content, minutes);
+    };
+    static_cast<void>(advance(31));
+    const auto nominal = profile.baseManufacturing.activeOrder->completionWorldMinute;
+    const auto quote = queryExpediteBaseManufacturing(profile, content, {order.jobId, paid});
+    ASSERT_TRUE(quote.canCommit) << quote.message;
+    EXPECT_EQ(quote.remainingMinutes, 298U);
+    EXPECT_EQ(quote.newRemainingMinutes, 149U);
+    EXPECT_EQ(quote.estimatedCompletionBefore, profile.worldClock.elapsedWorldMinutes + 149);
+    EXPECT_EQ(quote.estimatedCompletionAfter, profile.worldClock.elapsedWorldMinutes + 75);
+    auto limitedFuel = profile;
+    limitedFuel.emergencyPower->remainingMinutes = 5;
+    const auto limited = queryExpediteBaseManufacturing(limitedFuel, content, {order.jobId, paid});
+    ASSERT_TRUE(limited.canCommit);
+    EXPECT_EQ(limited.estimatedCompletionBefore, limitedFuel.worldClock.elapsedWorldMinutes + 293);
+    EXPECT_EQ(limited.estimatedCompletionAfter, limitedFuel.worldClock.elapsedWorldMinutes + 144);
+    const auto result = executeExpediteBaseManufacturing(profile, content, {order.jobId, paid}, {profile.revision, "rush"});
+    ASSERT_TRUE(result.succeeded) << result.message;
+    EXPECT_EQ(profile.baseManufacturing.activeOrder->emergencyPowerBonusMinutes, 31U);
+    EXPECT_EQ(profile.baseManufacturing.activeOrder->completionWorldMinute, nominal - 149U);
+    EXPECT_EQ(profile.emergencyPower->activeJobId, order.jobId);
+    EXPECT_EQ(profile.emergencyPower->remainingMinutes, kBaseEmergencyPowerBatchMinutes - 31);
+
+    pauseBaseEmergencyPowerForFacility(profile, workshop);
+    profile.baseConstruction.facilities[workshop] = BaseConstructionState::FacilityPlacement::Reserve;
+    profile.baseConstruction.facilityReserveStartedWorldMinutes[workshop] = profile.worldClock.elapsedWorldMinutes;
+    static_cast<void>(advance(70));
+    EXPECT_EQ(projectBaseManufacturing(profile).remainingMinutes, 149U);
+    EXPECT_EQ(queryExpediteBaseManufacturing(profile, content, {order.jobId, paid}).message, "WORKSHOP IN RESERVE");
+    const auto installed = executeInstallBaseFacility(profile, content, {workshop}, {profile.revision, "reinstall"});
+    ASSERT_TRUE(installed.succeeded) << installed.message;
+    EXPECT_EQ(projectBaseManufacturing(profile).remainingMinutes, 149U);
+    const auto resumed = executeBaseEmergencyPower(profile, content, ResumeBaseEmergencyPowerCommand{order.jobId},
+        {profile.revision, "resume-power"});
+    ASSERT_TRUE(resumed.succeeded) << resumed.message;
+    EXPECT_FALSE(advance(74).manufacturing.completed);
+    EXPECT_EQ(projectBaseManufacturing(profile).remainingMinutes, 1U);
+    EXPECT_EQ(advance(1).manufacturing.outputAssetId, order.outputAssetId);
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
+}
+
+TEST(BaseManufacturingDomainTest, ExpediteRejectsResearchNearCompletionStaleOrdersAndUnownedPayment)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeProfile();
+    addToStash(profile, alpha_content::lootElectronics);
+    addToStash(profile, ItemDefinitionId{"item.loot.scrap_parts"});
+    const auto order = startOrder(profile);
+    ASSERT_TRUE(order.succeeded) << order.message;
+    const auto payment = addToStash(profile, alpha_content::lootElectronics);
+    const auto &work = *profile.baseManufacturing.activeOrder;
+    const auto before = profileStateFingerprint(profile);
+    for (const ExpediteBaseManufacturingCommand wrong : {ExpediteBaseManufacturingCommand{order.jobId + 1, payment},
+             {order.jobId, 0}, {order.jobId, work.inputAssetIds.back()}, {order.jobId, work.outputAssetId}})
+    {
+        EXPECT_FALSE(executeExpediteBaseManufacturing(profile, content, wrong, {profile.revision, "wrong"}).succeeded);
+        EXPECT_EQ(profileStateFingerprint(profile), before);
+    }
+    EXPECT_EQ(executeExpediteBaseManufacturing(profile, content, {order.jobId, payment},
+        {profile.revision - 1, "stale"}).error, DomainErrorCode::StaleRevision);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+
+    auto unavailable = profile;
+    unavailable.homePerimeter.activeOuting.emplace();
+    EXPECT_FALSE(queryExpediteBaseManufacturing(unavailable, content, {order.jobId, payment}).canCommit);
+    unavailable = profile;
+    unavailable.activeEngineeringTraining.emplace();
+    EXPECT_FALSE(queryExpediteBaseManufacturing(unavailable, content, {order.jobId, payment}).canCommit);
+    unavailable = profile;
+    unavailable.assets.findMutable(payment)->reliefBatchId = "relief";
+    EXPECT_FALSE(queryExpediteBaseManufacturing(unavailable, content, {order.jobId, payment}).canCommit);
+    unavailable = profile;
+    unavailable.worldClock.elapsedWorldMinutes = work.completionWorldMinute - 1;
+    EXPECT_EQ(queryExpediteBaseManufacturing(unavailable, content, {order.jobId, payment}).message,
+        "ORDER TOO NEAR COMPLETION");
+    EXPECT_TRUE(unavailable.assets.find(payment));
+    auto tampered = profile;
+    auto &forged = *tampered.baseManufacturing.activeOrder;
+    forged.expediteMinutesSaved = static_cast<std::uint32_t>(work.completionWorldMinute - work.startedWorldMinute) - 1;
+    forged.completionWorldMinute = work.startedWorldMinute + 1;
+    EXPECT_FALSE(validateProfileState(tampered, content).valid);
+
+    auto research = makeProfile();
+    research.baseConstruction.workshopLevel = 2;
+    addToStash(research, kArmorRepairBlueprintId);
+    const auto blueprint = executeStartBaseManufacturing(research, content, {kArmorRepairResearchId},
+        {research.revision, "research"});
+    ASSERT_TRUE(blueprint.succeeded) << blueprint.message;
+    const auto extra = addToStash(research, alpha_content::lootElectronics);
+    const auto locked = executeExpediteBaseManufacturing(research, content, {blueprint.jobId, extra},
+        {research.revision, "try-expedite-research"});
+    EXPECT_FALSE(locked.succeeded);
+    EXPECT_EQ(locked.message, "RESEARCH CANNOT BE EXPEDITED");
+    EXPECT_NE(research.assets.find(extra), nullptr);
 }
 
 TEST(BaseManufacturingDomainTest,
@@ -242,6 +412,98 @@ TEST(BaseManufacturingDomainTest,
     EXPECT_EQ(output->definitionId, kFreightBreachWedgesId);
     EXPECT_EQ(output->quantity, 1U);
     EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(output->location));
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
+}
+
+TEST(BaseManufacturingDomainTest, FireZoneContractReservesActualInputsAndDeliversOneItemAfterTwoHours)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeProfile();
+    const auto fuel = addToStash(profile, kRaidFuelCanId);
+    const StartBaseManufacturingCommand order{kRaidFireBottleRecipeId};
+    const auto before = profileStateFingerprint(profile);
+    EXPECT_FALSE(executeStartBaseManufacturing(profile, content, order, {profile.revision, "fuel-only"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+    const auto scrap = addToStash(profile, alpha_content::lootScrap);
+    const CommandContext commit{profile.revision, "request-area-denial-supply"};
+    const auto receipt = executeStartBaseManufacturing(profile, content, order, commit);
+    ASSERT_TRUE(receipt.succeeded && receipt.outputAssetId) << receipt.message;
+    ASSERT_TRUE(profile.baseManufacturing.activeOrder);
+    EXPECT_EQ(profile.baseManufacturing.activeOrder->inputAssetIds, (std::vector<AssetInstanceId>{fuel, scrap}));
+    EXPECT_EQ(profile.baseManufacturing.activeOrder->committedWorkers, 1U);
+    EXPECT_TRUE(executeStartBaseManufacturing(profile, content, order, commit).alreadyCommitted);
+    ASSERT_EQ(advanceWorldClock(profile.worldClock, 119).minutesApplied, 119U);
+    EXPECT_FALSE(applyBaseManufacturingThrough(profile, content).completed);
+    ASSERT_EQ(advanceWorldClock(profile.worldClock, 1).minutesApplied, 1U);
+    const auto completed = applyBaseManufacturingThrough(profile, content);
+    ASSERT_TRUE(completed.completed);
+    EXPECT_FALSE(completed.outputBlocked);
+    EXPECT_FALSE(profile.baseManufacturing.activeOrder);
+    const auto *item = profile.assets.find(*receipt.outputAssetId);
+    ASSERT_NE(item, nullptr);
+    EXPECT_EQ(item->definitionId, kRaidFireBottleItemId);
+    EXPECT_EQ(item->quantity, 1U);
+    const auto after = profileStateFingerprint(profile);
+    EXPECT_FALSE(applyBaseManufacturingThrough(profile, content).completed);
+    EXPECT_EQ(profileStateFingerprint(profile), after);
+
+}
+
+TEST(BaseManufacturingDomainTest, NoiseDecoyBatchSurvivesFullStashAndCanOnlyBeCollectedOnce)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeProfile();
+    const StartBaseManufacturingCommand craft{
+        BaseManufacturingRecipeDefinitionId{"base_manufacturing.noise_decoy"}};
+    const auto scrap = addToStash(profile, alpha_content::lootScrap);
+    const auto before = profileStateFingerprint(profile);
+    EXPECT_FALSE(executeStartBaseManufacturing(profile, content, craft,
+        {profile.revision, "missing-wire"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+
+    const auto wire = addToStash(profile, ItemDefinitionId{"item.loot.copper_wire_spool"});
+    const auto funds = profile.currency;
+    const auto started = executeStartBaseManufacturing(profile, content, craft,
+        {profile.revision, "assemble-decoys"});
+    ASSERT_TRUE(started.succeeded && started.outputAssetId) << started.message;
+    ASSERT_TRUE(profile.baseManufacturing.activeOrder);
+    const auto order = *profile.baseManufacturing.activeOrder;
+    EXPECT_EQ(order.inputAssetIds, (std::vector<AssetInstanceId>{scrap, wire}));
+    EXPECT_EQ(order.committedWorkers, 1U);
+    EXPECT_EQ(order.completionWorldMinute - order.startedWorldMinute, 90U);
+    const auto filler = fillStash(profile);
+    ASSERT_FALSE(filler.empty());
+    ASSERT_EQ(advanceWorldClock(profile.worldClock, 89U).minutesApplied, 89U);
+    EXPECT_FALSE(applyBaseManufacturingThrough(profile, content).completed);
+    EXPECT_FALSE(queryCollectBaseManufacturing(profile, content).canCommit);
+    ASSERT_EQ(advanceWorldClock(profile.worldClock, 1U).minutesApplied, 1U);
+    const auto completed = applyBaseManufacturingThrough(profile, content);
+    ASSERT_TRUE(completed.completed && completed.outputBlocked);
+    EXPECT_EQ(profile.assets.find(scrap), nullptr);
+    EXPECT_EQ(profile.assets.find(wire), nullptr);
+    EXPECT_FALSE(queryCollectBaseManufacturing(profile, content).canCommit);
+
+    ASSERT_TRUE(profile.baseManufacturing.activeOrder);
+    EXPECT_TRUE(profile.baseManufacturing.activeOrder->outputReady);
+    EXPECT_EQ(profile.baseManufacturing.activeOrder->outputAssetId, *started.outputAssetId);
+    EXPECT_EQ(profile.baseManufacturing.activeOrder->committedWorkers, 0U);
+    ASSERT_TRUE(profile.assets.erase(filler.front()));
+    const CommandContext collect{profile.revision, "collect-decoys"};
+    const auto collected = executeCollectBaseManufacturing(profile, content, collect);
+    ASSERT_TRUE(collected.succeeded) << collected.message;
+    EXPECT_EQ(collected.outputAssetId, started.outputAssetId);
+    const auto *stack = profile.assets.find(*started.outputAssetId);
+    ASSERT_NE(stack, nullptr);
+    EXPECT_EQ(stack->definitionId, alpha_content::noiseDecoy);
+    EXPECT_EQ(stack->quantity, 2U);
+    EXPECT_TRUE(std::holds_alternative<StoredAssetLocation>(stack->location));
+    EXPECT_EQ(profile.currency, funds);
+    EXPECT_FALSE(profile.baseManufacturing.activeOrder);
+    const auto after = profileStateFingerprint(profile);
+    EXPECT_TRUE(executeCollectBaseManufacturing(profile, content, collect).alreadyCommitted);
+    EXPECT_FALSE(executeCollectBaseManufacturing(profile, content,
+        {profile.revision, "collect-again"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), after);
     EXPECT_TRUE(validateProfileState(profile, content).valid);
 }
 

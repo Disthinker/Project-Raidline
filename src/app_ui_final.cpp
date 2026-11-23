@@ -18,6 +18,7 @@ bool transientBaseMessage(std::string_view message) {
       "HOME REGION MAP CLOSED", "LANGUAGE UPDATED", "DEVELOPER RUNTIME PANEL CLOSED",
       "RETURNED FROM TEST RANGE | ORIGINAL PROFILE RESTORED",
       "BASE FACILITY FUNCTION OPENED", "BASE GROUND CONTAINER OPENED",
+      "ALARM DEPLOYED", "ALARM PLACEMENT CANCELLED",
       "WEAPON MALFUNCTION CLEARED", "MEDICAL SELECTION CANCELLED",
       "CARRIED ASSET SELECTED", "ROTATED", "FIRE MODE CHANGED",
       "FIRE MODE: SEMI", "FIRE MODE: BURST", "FIRE MODE: AUTO",
@@ -77,6 +78,12 @@ void App::updateBasePresentation(float deltaTime) {
 std::string_view App::visibleFeedbackMessage() const noexcept {
   if(transientBaseMessage(uiMessage_) && baseToastMessage_==uiMessage_ && baseToastSeconds_>=3)return {};
   return uiMessage_;
+}
+
+std::string_view App::raidHudFeedback() const {
+  if (raidSaveProtectionVisible()) return {};
+  if (gameSession_.world().proximityAlarmAlertSeconds() > 0.0F) return "ALARM TRIGGERED";
+  return visibleFeedbackMessage();
 }
 
 int App::finalDiscreteActionAt(Vec2 point) const {

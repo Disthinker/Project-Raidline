@@ -13,6 +13,7 @@
 #include "economy_domain.h"
 #include "game_session.h"
 #include "medical_domain.h"
+#include "profile_ui_test_wait.h"
 #include "raid_action.h"
 #include "raid_lifecycle.h"
 #include "save_repository.h"
@@ -192,14 +193,14 @@ TEST(FieldMedicalSuppliesTest, BothRecipesReserveRealStockAndDeliverFullChargesW
     }
 }
 
-TEST(FieldMedicalSuppliesTest, ExistingWorkshopListsAllSixRecipesInChineseWithoutAnotherPage)
+TEST(FieldMedicalSuppliesTest, ExistingWorkshopListsAllPublishedRecipesInChineseAcrossThreePages)
 {
     auto profile = makeProfile();
     addToStash(profile, kStock);
     const auto before = profileStateFingerprint(profile);
     const auto projection = projectUiWorkshop(profile, content(), UiLanguage::SimplifiedChinese, kRollRecipe);
-    ASSERT_EQ(projection.recipes.size(), 11U);
-    EXPECT_EQ(uiWorkshopPageCount(projection.recipes.size()), 2U);
+    ASSERT_EQ(projection.recipes.size(), 14U);
+    EXPECT_EQ(uiWorkshopPageCount(projection.recipes.size()), 3U);
     EXPECT_EQ(projection.recipes[kUiWorkshopPageSize].id,
         BaseManufacturingRecipeDefinitionId{"base_manufacturing.ammunition_5_45x39_expanding"});
     EXPECT_EQ(projection.recipes[kUiWorkshopPageSize + 1].id, kArmorRepairResearchId);
@@ -208,9 +209,18 @@ TEST(FieldMedicalSuppliesTest, ExistingWorkshopListsAllSixRecipesInChineseWithou
     EXPECT_EQ(wedges.id, kFreightBreachRecipeId);
     EXPECT_EQ(wedges.fullName, "破拆楔组");
     EXPECT_EQ(wedges.materials, "废旧零件  x2\n工业紧固件  x1\n");
-    EXPECT_EQ(projection.recipes.back().id, kRaidFieldSplintRecipeId);
-    EXPECT_EQ(projection.recipes.back().fullName, "野战夹板");
-    EXPECT_EQ(projection.recipes.back().materials, "绷带  x1\n废旧零件  x1\n");
+    const auto &splint = projection.recipes[kUiWorkshopPageSize + 4];
+    EXPECT_EQ(splint.id, kRaidFieldSplintRecipeId);
+    EXPECT_EQ(splint.fullName, "野战夹板");
+    EXPECT_EQ(splint.materials, "绷带  x1\n废旧零件  x1\n");
+    const auto &decoy = projection.recipes[2 * kUiWorkshopPageSize - 1];
+    EXPECT_EQ(decoy.id, BaseManufacturingRecipeDefinitionId{"base_manufacturing.noise_decoy"});
+    EXPECT_EQ(decoy.fullName, "声响诱饵组装");
+    EXPECT_EQ(decoy.materials, "废旧零件  x1\n铜线卷  x1\n");
+    EXPECT_EQ(projection.recipes[2 * kUiWorkshopPageSize].id, kRaidFireBottleRecipeId);
+    EXPECT_EQ(projection.recipes[2 * kUiWorkshopPageSize].fullName, "火区装备委托");
+    EXPECT_EQ(projection.recipes.back().id, kRaidAlarmRecipeId);
+    EXPECT_EQ(projection.recipes.back().fullName, "警戒器委托");
     const auto firstPageEnd = projection.recipes.begin() + kUiWorkshopPageSize;
     ASSERT_TRUE(projection.start.canCommit) << projection.start.message;
     EXPECT_EQ(projection.start.durationMinutes, 60U);
@@ -577,6 +587,114 @@ TEST(FieldMedicalSuppliesTest, ServiceSaveFailurePreservesStockAndRetryStartsOnl
     ASSERT_TRUE(reopened.continueProfile());
     EXPECT_EQ(profileStateFingerprint(reopened.profile()), once);
     EXPECT_EQ(reopened.profile().assets.find(*started.outputAssetId)->remainingCharges, 3U);
+}
+
+TEST(FieldMedicalSuppliesTest, ExpediteUsesThePreviewedJobAndRetryCancelsOnlyTheOriginalMaterials)
+{
+    TemporarySave temporary;
+    const SaveRepository repository{temporary.path};
+    auto profile = makeProfile();
+    const auto stock = addToStash(profile, kStock);
+    const auto paid = addToStash(profile, alpha_content::lootElectronics);
+    const auto spare = addToStash(profile, alpha_content::lootElectronics);
+    ASSERT_TRUE(repository.save(profile, content().contentVersion()).succeeded);
+    GameSession session;
+    session.configurePersistence(temporary.path);
+    ASSERT_TRUE(session.continueProfile());
+    const auto started = session.executeStartBaseManufacturing(kRollRecipe, "start-for-expedite");
+    ASSERT_TRUE(started.succeeded && started.outputAssetId) << started.message;
+    const auto plan = queryExpediteBaseManufacturing(session.profile(), content(), {started.jobId, paid});
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    const auto before = profileStateFingerprint(session.profile());
+    EXPECT_FALSE(session.executeExpediteBaseManufacturing(started.jobId + 1, paid, plan.revision, "wrong-job").succeeded);
+    EXPECT_FALSE(session.requestProfileUiCommand(
+        ProfileUiExpediteManufacturingCommand{started.jobId, paid, plan.revision - 1}, "stale-quote").accepted);
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+    const auto blocker = temporary.path / "profile.tmp.json";
+    ASSERT_TRUE(std::filesystem::create_directory(blocker));
+    const ProfileUiExpediteManufacturingCommand confirmed{started.jobId, paid, plan.revision};
+    ASSERT_TRUE(session.requestProfileUiCommand(confirmed, "expedite-one").accepted);
+    EXPECT_FALSE(waitForProfileUiDurability(session));
+    EXPECT_EQ(profileStateFingerprint(session.profile()), before);
+    const auto failedDisk = repository.load(content());
+    ASSERT_TRUE(failedDisk.profile) << failedDisk.message;
+    EXPECT_EQ(profileStateFingerprint(*failedDisk.profile), before);
+    ASSERT_TRUE(std::filesystem::remove(blocker));
+    ASSERT_TRUE(session.retryProfileUiCommit().accepted);
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+    EXPECT_EQ(session.profile().baseManufacturing.activeOrder->completionWorldMinute, plan.newCompletionWorldMinute);
+    EXPECT_EQ(session.profile().assets.find(paid), nullptr);
+    EXPECT_TRUE(session.profile().assets.find(spare));
+
+    GameSession restored;
+    restored.configurePersistence(temporary.path);
+    ASSERT_TRUE(restored.continueProfile());
+    const auto once = profileStateFingerprint(restored.profile());
+    ASSERT_TRUE(std::filesystem::create_directory(blocker));
+    const auto replay = restored.executeExpediteBaseManufacturing(started.jobId, paid, plan.revision, "expedite-one");
+    EXPECT_TRUE(replay.succeeded && replay.alreadyCommitted);
+    const auto uiReplay = restored.requestProfileUiCommand(confirmed, "expedite-one");
+    ASSERT_TRUE(uiReplay.accepted);
+    EXPECT_FALSE(restored.profileUiCommitPending());
+    const auto completions = restored.takeProfileUiCompletions();
+    ASSERT_EQ(completions.size(), 1U);
+    ASSERT_TRUE(completions.front().succeeded && completions.front().commandResult);
+    EXPECT_TRUE(profileUiReceiptAlreadyCommitted(completions.front().commandResult->receipt));
+    EXPECT_FALSE(restored.executeExpediteBaseManufacturing(started.jobId, spare, restored.profile().revision, "pay-twice").succeeded);
+    EXPECT_EQ(profileStateFingerprint(restored.profile()), once);
+    ASSERT_TRUE(std::filesystem::remove(blocker));
+    ASSERT_TRUE(restored.executeCancelBaseManufacturing("cancel-after-expedite").succeeded);
+    const auto final = repository.load(content());
+    ASSERT_TRUE(final.profile && !final.profile->baseManufacturing.activeOrder);
+    EXPECT_TRUE(assetIsBaseAccessible(*final.profile, stock));
+    EXPECT_TRUE(final.profile->assets.find(spare));
+    EXPECT_FALSE(final.profile->assets.find(paid));
+    EXPECT_FALSE(final.profile->assets.find(*started.outputAssetId));
+}
+
+TEST(FieldMedicalSuppliesTest, ExpeditedProductionWithAFullWarehouseCollectsTheOriginalOutputExactlyOnce)
+{
+    TemporarySave temporary;
+    const SaveRepository repository{temporary.path};
+    auto profile = makeProfile();
+    const auto stock = addToStash(profile, kStock);
+    const auto paid = addToStash(profile, alpha_content::lootElectronics);
+    ASSERT_TRUE(repository.save(profile, content().contentVersion()).succeeded);
+    GameSession session;
+    session.configurePersistence(temporary.path);
+    ASSERT_TRUE(session.continueProfile());
+    const auto started = session.executeStartBaseManufacturing(kRollRecipe, "order-bandages");
+    ASSERT_TRUE(started.succeeded && started.outputAssetId);
+    const auto output = *started.outputAssetId;
+    const auto plan = queryExpediteBaseManufacturing(session.profile(), content(), {started.jobId, paid});
+    ASSERT_TRUE(plan.canCommit);
+    const auto result = session.executeExpediteBaseManufacturing(started.jobId, paid, plan.revision, "expedite-bandages");
+    ASSERT_TRUE(result.succeeded) << result.message;
+    auto packed = repository.load(content());
+    ASSERT_TRUE(packed.profile && packed.profile->baseManufacturing.activeOrder) << packed.message;
+    EXPECT_EQ(packed.profile->baseManufacturing.activeOrder->outputAssetId, output);
+    const auto filler = fillStash(*packed.profile);
+    ASSERT_FALSE(filler.empty());
+    ASSERT_TRUE(repository.save(*packed.profile, content().contentVersion()).succeeded);
+    GameSession full;
+    full.configurePersistence(temporary.path);
+    ASSERT_TRUE(full.continueProfile());
+    ASSERT_TRUE(full.executeBaseRest(1U, "complete-expedited-order").succeeded);
+    ASSERT_TRUE(full.profile().baseManufacturing.activeOrder);
+    EXPECT_TRUE(full.profile().baseManufacturing.activeOrder->outputReady);
+    EXPECT_FALSE(full.executeCollectBaseManufacturing("collect-full").succeeded);
+    ASSERT_TRUE(full.executeProfileEconomy(RecycleCommand{filler.back()}, "clear-output-cell").succeeded);
+    const auto collected = full.executeCollectBaseManufacturing("collect-original-roll");
+    ASSERT_TRUE(collected.succeeded) << collected.message;
+    EXPECT_EQ(collected.outputAssetId, output);
+    EXPECT_TRUE(full.executeCollectBaseManufacturing("collect-original-roll").alreadyCommitted);
+    EXPECT_FALSE(full.executeCollectBaseManufacturing("duplicate-product").succeeded);
+    const auto final = repository.load(content());
+    ASSERT_TRUE(final.profile && !final.profile->baseManufacturing.activeOrder) << final.message;
+    ASSERT_TRUE(assetIsBaseAccessible(*final.profile, output));
+    EXPECT_EQ(final.profile->assets.find(output)->remainingCharges, 3U);
+    EXPECT_FALSE(final.profile->assets.find(stock));
+    EXPECT_FALSE(final.profile->assets.find(paid));
 }
 
 TEST(FieldMedicalSuppliesTest, RaidRuntimeInterruptsRollWithoutCostAndCompletesOnlyAfterTwoSeconds)

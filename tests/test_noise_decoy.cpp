@@ -5,6 +5,8 @@
 #include "economy_domain.h"
 #include "game_session.h"
 #include "save_repository.h"
+#include "profile_ui_test_wait.h"
+#include "test_temp_directory.h"
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -14,6 +16,7 @@
 #include <cstdlib>
 #include <limits>
 #include <random>
+#include <set>
 
 namespace {
 const auto &content(){return publishedContentRegistry();}
@@ -43,6 +46,128 @@ TEST(NoiseDecoyTest, DefinitionIsIndependentStackAndDoesNotEnterFreeGrant){
     EXPECT_EQ(d.category,ItemCategory::Throwable);EXPECT_FALSE(d.weaponUse);EXPECT_FALSE(d.meleeUse);EXPECT_FALSE(d.battery);
     EXPECT_EQ(d.maxStackSize,3U);EXPECT_EQ(d.unitWeightGrams,250U);EXPECT_EQ(d.marketBuyPrice,40U);EXPECT_EQ(d.marketRecyclePrice,10U);
     auto p=makeNewPublishedProfile("no-grant",content());for(const auto &[id,a]:p.assets.records())EXPECT_NE(a.definitionId,alpha_content::noiseDecoy);
+}
+
+TEST(NoiseDecoyTest, HospitalWireAndSalvagedGunSupplyARealRigThrowAndReturnTheRemainingDecoy)
+{
+    const ItemDefinitionId wireType{"item.loot.copper_wire_spool"};
+    const BaseManufacturingRecipeDefinitionId recipe{"base_manufacturing.noise_decoy"};
+    const auto &catalog = content();
+    auto profile = makeNewPublishedProfile("depot-to-decoy", catalog);
+    profile.tutorial = TutorialProgress::Complete;
+    std::vector<AssetInstanceId> oldMaterials;
+    AssetInstanceId gun{}, backpack{}, rig{};
+    for (const auto &[id, item] : profile.assets.records())
+    {
+        if (item.definitionId == wireType || item.definitionId == kWeaponSalvageMaterialId)
+            oldMaterials.push_back(id);
+        if (item.definitionId == alpha_content::rifle) gun = id;
+        if (item.definitionId == alpha_content::backpack) backpack = id;
+        if (item.definitionId == alpha_content::chestRig) rig = id;
+    }
+    for (const auto id : oldMaterials)
+        ASSERT_TRUE(profile.assets.erase(id));
+    ASSERT_NE(gun, 0U);
+    ASSERT_NE(backpack, 0U);
+    ASSERT_NE(rig, 0U);
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-depot-to-decoy-", "hospital-workshop-throw-return");
+    ASSERT_TRUE(SaveRepository(directory.path()).save(profile, catalog.contentVersion()).succeeded);
+    GameSession session;
+    session.configurePersistence(directory.path());
+    ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+    ASSERT_TRUE(session.executeProfileInventory(InventoryEquipCommand{backpack, EquipmentSlotKind::Backpack}, "equip-bag").succeeded);
+    ASSERT_TRUE(session.executeProfileInventory(InventoryEquipCommand{rig, EquipmentSlotKind::ChestRig}, "equip-rig").succeeded);
+    ASSERT_TRUE(waitForProfileUiDurability(session));
+
+    // Seed 6 places a copper spool at the maintenance bench in the normally deployed hospital.
+    ASSERT_TRUE(session.deployAlpha(6, kHospitalFloorplanMapId)) << session.persistenceMessage();
+    const auto &raid = *session.profile().pendingRaid;
+    const auto depot = std::find_if(raid.interiors.begin(), raid.interiors.end(),
+        [](const auto &room) { return room.id == kHospitalDepotSpaceId; });
+    ASSERT_NE(depot, raid.interiors.end());
+    const auto wireLoot = std::find_if(raid.loot.begin(), raid.loot.end(), [&](const auto &loot) {
+        return loot.spaceId == kHospitalDepotSpaceId && loot.definitionId == wireType;
+    });
+    ASSERT_NE(wireLoot, raid.loot.end());
+    const auto wire = wireLoot->assetId;
+    const auto position = wireLoot->position;
+    const auto exit = depot->interiorExit.position;
+    auto &player = const_cast<Player &>(session.world().player());
+    GameplayInput interact;
+    interact.interactJustPressed = true;
+    ASSERT_TRUE(player.setPosition(depot->exteriorEntrance.position));
+    session.update(interact, 0);
+    ASSERT_FALSE(session.world().inOutdoorRaidSpace());
+    ASSERT_TRUE(player.setPosition({position.x - player.size() / 2, position.y - player.size() / 2}));
+    interact.aimWorldPosition = {position.x + 60, position.y};
+    session.update(interact, 0);
+    ASSERT_TRUE(assetIsCarried(session.profile(), wire)) << session.persistenceMessage();
+    ASSERT_TRUE(player.setPosition(exit));
+    session.update(interact, 0);
+    ASSERT_TRUE(session.world().inOutdoorRaidSpace());
+    const auto extract = [&] {
+        ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(session.world().extractionPoint().bounds().position));
+        for (int frame = 0; frame < 45 && session.profile().pendingRaid; ++frame)
+            session.update({}, 0.1F);
+        ASSERT_TRUE(waitForProfileUiDurability(session));
+        ASSERT_FALSE(session.profile().pendingRaid);
+        ASSERT_TRUE(session.profile().lastRaidResult);
+        EXPECT_EQ(session.profile().lastRaidResult->outcome, RaidResultOutcome::Extracted);
+    };
+    ASSERT_NO_FATAL_FAILURE(extract());
+    const auto stash = ProfileContainerId::stash();
+    const auto wireCell = findFirstProfileFit(session.profile(), catalog, stash, catalog.item(wireType), ItemOrientation::Degrees0);
+    ASSERT_TRUE(wireCell);
+    ASSERT_TRUE(session.executeProfileInventory(InventoryMoveCommand{wire, 0, {stash, *wireCell}}, "store-wire").succeeded);
+    ASSERT_TRUE(waitForProfileUiDurability(session));
+    const auto scrap = session.profile().assets.nextAssetId();
+    const auto salvage = session.executeProfileEconomy(SalvageWeaponCommand{gun}, "strip-spare-gun");
+    ASSERT_TRUE(salvage.succeeded) << salvage.message;
+    ASSERT_EQ(session.profile().assets.find(gun), nullptr);
+    ASSERT_NE(session.profile().assets.find(scrap), nullptr);
+    EXPECT_EQ(session.profile().assets.find(scrap)->definitionId, kWeaponSalvageMaterialId);
+    const auto order = session.executeStartBaseManufacturing(recipe, "make-decoys");
+    ASSERT_TRUE(order.succeeded) << order.message;
+    ASSERT_TRUE(order.outputAssetId);
+    ASSERT_TRUE(session.profile().baseManufacturing.activeOrder);
+    const auto &job = *session.profile().baseManufacturing.activeOrder;
+    EXPECT_EQ((std::set<AssetInstanceId>{job.inputAssetIds.begin(), job.inputAssetIds.end()}),
+              (std::set<AssetInstanceId>{wire, scrap}));
+    session.advanceBaseWorldClock(static_cast<float>(job.completionWorldMinute - session.profile().worldClock.elapsedWorldMinutes));
+    ASSERT_TRUE(waitForProfileUiDurability(session));
+    ASSERT_FALSE(session.profile().baseManufacturing.activeOrder);
+    ASSERT_EQ(session.profile().assets.find(wire), nullptr);
+    ASSERT_EQ(session.profile().assets.find(scrap), nullptr);
+    const auto decoys = *order.outputAssetId;
+    const auto *output = session.profile().assets.find(decoys);
+    ASSERT_NE(output, nullptr);
+    ASSERT_EQ(output->definitionId, alpha_content::noiseDecoy);
+    ASSERT_EQ(output->quantity, 2U);
+    const auto &pockets = catalog.item(alpha_content::chestRig).containerCompartments;
+    const auto pocket = std::find_if(pockets.begin(), pockets.end(), [](const auto &p) { return p.pocketKind == ContainerPocketKind::General; });
+    ASSERT_NE(pocket, pockets.end());
+    const auto destination = ProfileContainerId::compartment(rig, static_cast<std::uint32_t>(pocket - pockets.begin()));
+    const auto slot = findFirstProfileFit(session.profile(), catalog, destination, catalog.item(alpha_content::noiseDecoy), ItemOrientation::Degrees0);
+    ASSERT_TRUE(slot);
+    ASSERT_TRUE(session.executeProfileInventory(InventoryMoveCommand{decoys, 0, {destination, *slot}}, "pack-decoys").succeeded);
+    ASSERT_TRUE(waitForProfileUiDurability(session));
+    ASSERT_TRUE(session.deployAlpha(42, MapDefinitionId{"map.raid.frontier_exchange"})) << session.persistenceMessage();
+    const auto start = session.world().player().position();
+    ASSERT_TRUE(session.beginNoiseDecoySelection());
+    const auto thrown = session.throwNoiseDecoy(decoys, {start.x + 220, start.y + 20}, {session.profile().revision, "throw-one"});
+    ASSERT_TRUE(thrown.succeeded) << thrown.message;
+    EXPECT_TRUE(session.world().noiseDecoy().flight());
+    ASSERT_NE(session.profile().assets.find(decoys), nullptr);
+    EXPECT_EQ(session.profile().assets.find(decoys)->quantity, 1U);
+    ASSERT_NO_FATAL_FAILURE(extract());
+    GameSession reopened;
+    reopened.configurePersistence(directory.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    const auto *remaining = reopened.profile().assets.find(decoys);
+    ASSERT_NE(remaining, nullptr);
+    EXPECT_EQ(remaining->quantity, 1U);
+    EXPECT_TRUE(noiseDecoyInChestRig(reopened.profile(), catalog, decoys));
 }
 TEST(NoiseDecoyTest, ExactStackConsumptionAndReplayHaveOneEffect){
     auto p=makeNewPublishedProfile("consume",content());const auto id=add(p);ASSERT_TRUE(validateProfileState(p,content()).valid);

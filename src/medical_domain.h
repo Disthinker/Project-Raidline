@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "inventory_domain.h"
 #include "medical_types.h"
@@ -69,18 +70,48 @@ enum class MedicalAccess
     CarriedOnly
 };
 
+struct TeammateMedicalTarget
+{
+    int health{};
+    int maximumHealth{};
+};
+
+struct MedicalConsolidationCommand
+{
+    AssetInstanceId sourceId{}, targetId{};
+    std::uint32_t sourceBefore{}, targetBefore{};
+};
+
+struct MedicalConsolidationPlan
+{
+    bool canCommit{};
+    DomainErrorCode error{DomainErrorCode::None};
+    std::string message;
+    ProfileRevision revision{};
+    std::uint32_t sourceBefore{}, targetBefore{}, transferCharges{}, sourceAfter{}, targetAfter{};
+};
+
+[[nodiscard]] std::vector<AssetInstanceId> medicalConsolidationCandidates(
+    const ProfileState &, const ContentRegistry &);
+[[nodiscard]] MedicalConsolidationPlan queryMedicalConsolidation(
+    const ProfileState &, const ContentRegistry &, AssetInstanceId source, AssetInstanceId target);
+[[nodiscard]] InventoryReceipt executeMedicalConsolidation(
+    ProfileState &, const ContentRegistry &, const MedicalConsolidationCommand &, const CommandContext &);
+
 [[nodiscard]] MedicalUsePlan queryMedicalUse(
     const ProfileState &profile,
     const ContentRegistry &content,
     AssetInstanceId medicalAssetId,
-    MedicalAccess access);
+    MedicalAccess access,
+    std::optional<TeammateMedicalTarget> teammate = std::nullopt);
 
 [[nodiscard]] MedicalUseReceipt executeMedicalUse(
     ProfileState &profile,
     const ContentRegistry &content,
     AssetInstanceId medicalAssetId,
     MedicalAccess access,
-    const CommandContext &context);
+    const CommandContext &context,
+    std::optional<TeammateMedicalTarget> teammate = std::nullopt);
 
 // Medkit healing is continuous in Raid. The first real point of healing
 // consumes one charge atomically; later points are applied by the session

@@ -359,6 +359,7 @@ std::size_t populatePublishedWarehouseCatalog(
         }
         // Tactical equipment is purchased, never an automatic catalog grant.
         if (!definition.weaponLight && !definition.nightVision && !definition.battery && !definition.meleeUse && !definition.noiseDecoyUse && !definition.grenadeUse &&
+            !definition.smokeUse && !definition.fireZoneUse && !definition.alarmUse &&
             !(definition.weaponComponent &&
               (definition.weaponComponent->slot == WeaponComponentSlot::Muzzle ||
                definition.weaponComponent->slot == WeaponComponentSlot::Optic)))
@@ -1131,6 +1132,15 @@ const AssetRecord *inventoryOwnershipRoot(
 }
 }
 
+bool assetIsInStashOrEquipped(const ProfileState &profile, AssetInstanceId id) noexcept
+{
+    const auto *root = inventoryOwnershipRoot(profile.assets, id);
+    if (!root) return false;
+    const auto *stored = std::get_if<StoredAssetLocation>(&root->location);
+    return std::holds_alternative<EquippedAssetLocation>(root->location) ||
+        (stored && stored->container == ProfileContainerId::stash());
+}
+
 std::optional<AssetInstanceId> raidDroppedBackpackRoot(
     const ProfileState &profile, AssetInstanceId assetId) noexcept
 {
@@ -1438,6 +1448,12 @@ ProfileValidationResult validateProfileState(
     const ProfileState &profile,
     const ContentRegistry &content)
 {
+    if (profile.rationPolicy != BaseRationPolicy::Standard && profile.rationPolicy != BaseRationPolicy::Conserve)
+        return {false, "invalid base ration policy"};
+    if (!supportsBaseRationPolicyContent(content.contentVersion()) &&
+        (profile.rationPolicy != BaseRationPolicy::Standard || profile.baseMorale.lastLedger.rationPolicyLimited ||
+         (profile.pendingRaid && profile.pendingRaid->travel.startingBaseMorale.lastLedger.rationPolicyLimited)))
+        return {false, "base ration policy requires compatible content"};
     if (profile.chestRigLayoutVersion > 1)
         return {false, "unsupported chest rig layout version"};
     if (profile.stashLayoutVersion > 1)
@@ -2640,8 +2656,15 @@ ProfileValidationResult validateProfileState(
                 remainingInputUnits.emplace(input.itemDefinitionId, input.quantity);
             }
         }
-        const std::uint64_t frozenDuration =
-            order.completionWorldMinute - order.startedWorldMinute;
+        if (order.completionWorldMinute <= order.startedWorldMinute)
+            return {false, "Base manufacturing duration is invalid"};
+        const auto adjustedDuration = order.completionWorldMinute - order.startedWorldMinute;
+        if (order.expediteMinutesSaved &&
+            (research || !supportsWorkshopExpediteContent(content.contentVersion()) ||
+             order.expediteMinutesSaved > adjustedDuration ||
+             adjustedDuration > std::numeric_limits<std::uint64_t>::max() - order.expediteMinutesSaved))
+            return {false, "Base manufacturing expedite duration is invalid"};
+        const auto frozenDuration = adjustedDuration + order.expediteMinutesSaved;
         const std::optional<std::uint64_t> workshopReserveStarted =
             baseFacilityReserveStartedWorldMinute(
                 profile,
@@ -2802,6 +2825,47 @@ ProfileValidationResult validateProfileState(
         catch (...)
         {
             return {false, "pending Raid map is invalid"};
+        }
+        if (!supportsRaidScavengerRetreatContent(content.contentVersion()) &&
+            std::any_of(raid.armedScavengers.begin(), raid.armedScavengers.end(),
+                [](const auto &actor) { return actor.retreatPoint.has_value() || actor.escaped; }))
+            return {false, "scavenger retreat requires compatible content"};
+        if (raid.fieldClueCache)
+        {
+            if (!supportsFieldClueCacheContent(content.contentVersion()) || raid.mapDefinitionId != kFieldIntelligenceSourceMapId ||
+                !raid.fieldIntelligenceTrade || raid.selfRecovery || raid.outpostRestoration ||
+                raid.baseSiteClearance || raid.basePerimeterSweep || !validRaidFieldClueCache(*raidMap, raid))
+                return {false, "invalid frozen riverside cache"};
+            if (const auto document = raid.fieldClueCache->decodedDocumentId)
+            {
+                const auto original = std::find_if(raid.loot.begin(), raid.loot.end(), [&](const auto &slot) {
+                    return slot.assetId == *document && slot.definitionId == kFieldIntelligenceDocumentId &&
+                        slot.quantity == 1 && slot.collected;
+                });
+                if (original == raid.loot.end() || profile.assets.find(*document))
+                    return {false, "riverside cache clue must consume one collected field document"};
+            }
+        }
+        if (!raid.volatileBarrels.empty())
+        {
+            if (!supportsRaidVolatileBarrelsContent(content.contentVersion()) ||
+                raid.volatileBarrels.size() != 2 || raid.selfRecovery || raid.outpostRestoration ||
+                raid.baseSiteClearance || raid.basePerimeterSweep ||
+                (raid.mapDefinitionId != MapDefinitionId{"map.raid.frontier_exchange"} &&
+                 raid.mapDefinitionId != kHospitalFloorplanMapId))
+                return {false, "invalid volatile barrel deployment"};
+            for (std::size_t index = 0; index < raid.volatileBarrels.size(); ++index)
+            {
+                const auto &barrel = raid.volatileBarrels[index];
+                if (barrel.id != index + 1 ||
+                    !validRaidVolatileBarrelPlacement(*raidMap, raid, barrel.center))
+                    return {false, "invalid frozen volatile barrel position"};
+            }
+            const float dx = raid.volatileBarrels[0].center.x - raid.volatileBarrels[1].center.x;
+            const float dy = raid.volatileBarrels[0].center.y - raid.volatileBarrels[1].center.y;
+            if (dx * dx + dy * dy <
+                4.0F * kRaidVolatileBarrelRadius * kRaidVolatileBarrelRadius)
+                return {false, "overlapping frozen volatile barrels"};
         }
         if (raid.backpackRecoveryEnabled &&
             (!supportsRaidBackpackRecoveryContent(content.contentVersion()) || !raid.startingAssets ||
@@ -3139,15 +3203,22 @@ ProfileValidationResult validateProfileState(
             : 0U;
         std::size_t expectedInteriorEnemyCount{};
         std::size_t expectedInteriorLootCount{};
-        const std::size_t expectedInteriorCount = multipleInteriorRules
-            ? raidMap->interiors.size()
-            : std::min<std::size_t>(raidMap->interiors.size(), 1U);
+        const bool hospitalDepotRaid = raid.spatialLayout.layoutVersion == kHospitalLandmarkInteriorLayoutVersion;
+        const bool hospitalMap = raid.mapDefinitionId == kHospitalFloorplanMapId;
+        if (hospitalDepotRaid && (!hospitalMap || raidMap->interiors.size() != 2U ||
+            raidMap->interiors.back().id != kHospitalDepotSpaceId))
+            return {false, "pending Raid hospital depot layout has no matching definitions"};
+        // Older hospital layouts froze only the main building, including special missions.
+        const bool singleInterior = !multipleInteriorRules || (hospitalMap && !hospitalDepotRaid);
+        const std::size_t expectedInteriorCount = singleInterior
+            ? std::min<std::size_t>(raidMap->interiors.size(), 1U) : raidMap->interiors.size();
         for (std::size_t index{}; index < expectedInteriorCount; ++index)
         {
             const RaidInteriorDefinition &interior = raidMap->interiors[index];
             expectedInteriorEnemyCount += interior.enemies.size();
-            expectedInteriorLootCount += interior.lootSlots.size();
+            expectedInteriorLootCount += interior.id == kHospitalDepotSpaceId ? 1U : interior.lootSlots.size();
         }
+        const auto budgetedOutdoorEnemyCount = outdoorEnemyCount + (hospitalDepotRaid ? 1U : 0U);
         if (raid.raidId.empty() || raid.settlementId.empty() ||
             raid.rulesVersion.empty() || raid.mapDefinitionId.value().empty() ||
             raid.spawnExtractionPairId.empty() ||
@@ -3156,9 +3227,9 @@ ProfileValidationResult validateProfileState(
             !validMedicalStatus(raid.startingMedicalStatus) ||
             (raid.startingMedicalStatus.legFractured && !supportsRaidFractureContent(content.contentVersion())) ||
             (expandedResourceEcologyRules
-                 ? outdoorEnemyCount <
+                 ? budgetedOutdoorEnemyCount <
                            raidMap->proceduralOutdoor.minimumInitialEnemies ||
-                       outdoorEnemyCount >
+                       budgetedOutdoorEnemyCount >
                            raidMap->proceduralOutdoor.maximumInitialEnemies
                  : outdoorEnemyCount < 4 || outdoorEnemyCount > 6) ||
             (resourceEcologyRules
@@ -3496,10 +3567,10 @@ ProfileValidationResult validateProfileState(
             bool districtVersionValid = frozenVersion == (legacyDistrictLayoutRules ? 3U : procedural.layoutVersion);
             if (!legacyDistrictLayoutRules && raid.mapDefinitionId == kHospitalFloorplanMapId &&
                 (procedural.layoutVersion == kHospitalLegacyOutdoorLayoutVersion ||
-                 procedural.layoutVersion == kHospitalHybridOutdoorLayoutVersion))
+                 isHospitalHybridLayoutVersion(procedural.layoutVersion)))
             {
                 districtVersionValid = frozenVersion == kHospitalLegacyOutdoorLayoutVersion ||
-                    (frozenVersion == kHospitalHybridOutdoorLayoutVersion && regionalMissionCount == 0U &&
+                    (isHospitalHybridLayoutVersion(frozenVersion) && regionalMissionCount == 0U &&
                      content.contentVersion() == kHospitalHybridOutdoorContentVersion);
             }
             const bool layoutVersionValid = !playableOutdoorRules ||
@@ -3691,7 +3762,7 @@ ProfileValidationResult validateProfileState(
                         : placement->bounds.position;
                     return point.x == expected.x && point.y == expected.y;
                 };
-                const bool hybridHospital = frozenVersion == kHospitalHybridOutdoorLayoutVersion;
+                const bool hybridHospital = isHospitalHybridLayoutVersion(frozenVersion);
                 // Each authored hospital district occupies one connected region.
                 const auto expectedDistricts = hybridHospital ? procedural.districtArchetypes.size() : 8U;
                 const auto expectedLandmarks = hybridHospital ? procedural.landmarkTemplates.size() : 3U;
@@ -3809,7 +3880,8 @@ ProfileValidationResult validateProfileState(
                             resourcePoint.kind == definition->kind &&
                             lootTableValid &&
                             resourcePoint.riskTier == definition->riskTier &&
-                            resourcePoint.capacity == definition->capacity &&
+                            resourcePoint.capacity == raidResourcePointCapacity(
+                                frozenVersion, *definition, resourcePoint.instanceId) &&
                             resourcePoint.capacity > 0U &&
                             anchor != nullptr &&
                             anchor->kind == RaidMapAnchorKind::ResourcePoint &&
@@ -4275,6 +4347,21 @@ ProfileValidationResult validateProfileState(
                               raid.spatialLayout,
                               raidIndexedAnchorId("interior", index))
                         : nullptr;
+                if (hospitalDepotRaid)
+                {
+                    const auto landmark = std::find_if(raid.spatialLayout.landmarks.begin(),
+                        raid.spatialLayout.landmarks.end(), [&](const RaidLandmarkPlacementSnapshot &entry)
+                        { return entry.definitionId == definition.landmarkDefinitionId; });
+                    if (!districtPortal || landmark == raid.spatialLayout.landmarks.end() || landmark->roadSockets.empty())
+                        return {false, "pending Raid hospital landmark entrance is missing"};
+                    const auto &entrance = districtPortal->bounds;
+                    const Vec2 center{entrance.position.x + entrance.size.x * 0.5F,
+                                      entrance.position.y + entrance.size.y * 0.5F};
+                    const auto returnPoint = raidExteriorReturnPoint(*raidMap, entrance);
+                    if (center.x != landmark->roadSockets.front().x || center.y != landmark->roadSockets.front().y ||
+                        snapshot.exteriorReturn.x != returnPoint.x || snapshot.exteriorReturn.y != returnPoint.y)
+                        return {false, "pending Raid hospital entrance is bound to the wrong landmark"};
+                }
                 const bool portalMatches = districtLayoutRules
                     ? districtPortal != nullptr &&
                           districtPortal->bounds == snapshot.exteriorEntrance &&
@@ -4651,6 +4738,7 @@ ProfileValidationResult validateProfileState(
         bool foundNightVisionSlot{};
         bool foundHospitalPharmacySlot{};
         bool foundHospitalSplintSlot{};
+        bool foundDepotMaterial{};
         const auto isHospitalLungeSlot = [](const RaidEnemySnapshot &enemy)
         {
             return enemy.spaceId == kHospitalFloorplanSpaceId &&
@@ -4676,6 +4764,8 @@ ProfileValidationResult validateProfileState(
         if (raid.fieldIntelligenceTrade)
         {
             const auto &trade = *raid.fieldIntelligenceTrade;
+            if (trade.hasBarteredOffer() && !supportsFieldBarterContent(content.contentVersion()))
+                return {false, "field barter is unavailable in this content"};
             if (!supportsFieldIntelligenceTradeContent(content.contentVersion()) ||
                 raid.mapDefinitionId != kFieldIntelligenceSourceMapId ||
                 resourceEcologyRules || regionalMissionCount != 0U ||
@@ -4909,6 +4999,18 @@ ProfileValidationResult validateProfileState(
                         firstInteriorSlot + interior.lootSlots.size();
                     if (loot.spaceId == interior.id)
                     {
+                        if (interior.id == kHospitalDepotSpaceId)
+                        {
+                            const auto &materials = content.lootTable(interior.lootTableId).entries;
+                            const bool matchesRoll = std::any_of(materials.begin(), materials.end(),
+                                [&](const LootContentEntry &entry) {
+                                    return loot.definitionId == entry.itemDefinitionId &&
+                                        loot.quantity >= entry.minimumQuantity && loot.quantity <= entry.maximumQuantity;
+                                });
+                            if (!hospitalDepotRaid || foundDepotMaterial || loot.sceneContainerAssetId || !matchesRoll)
+                                return {false, "pending Raid depot material is invalid"};
+                            foundDepotMaterial = true;
+                        }
                         validSlot = loot.slotIndex >= firstInteriorSlot &&
                             loot.slotIndex < end;
                         if (validSlot)
@@ -5098,6 +5200,8 @@ ProfileValidationResult validateProfileState(
             else if (loot.definitionId == kRaidFuelCanId && recoveryRoot == nullptr)
                 return {false, "pending Raid extraction fuel is outside its fixed loot slot"};
         }
+        if (hospitalDepotRaid && !foundDepotMaterial)
+            return {false, "pending Raid depot material is missing"};
         if (raid.hospitalNightVisionLoot && !foundNightVisionSlot)
             return {false, "pending hospital night vision slot is missing"};
         if (raid.hospitalMedicalReserveEnabled && !foundHospitalPharmacySlot)
@@ -5400,6 +5504,8 @@ ProfileValidationResult validateProfileState(
         if (raid.nightRendezvous)
         {
             const auto &rescue = *raid.nightRendezvous;
+            if (rescue.escortStart)
+                return {false, "night rendezvous cannot use a hospital escort"};
             const auto &definition = raidMap->nightRendezvous;
             WorldClockState arrival = raid.travel.startingWorldClock;
             const auto advance = advanceWorldClock(arrival, raid.travel.outboundMinutes);
@@ -5437,6 +5543,12 @@ ProfileValidationResult validateProfileState(
         if (raid.rescue.has_value())
         {
             const RaidRescueSnapshot &rescue = *raid.rescue;
+            if (rescue.escortStart &&
+                (raid.mapDefinitionId != kHospitalFloorplanMapId || rescue.definitionId != kHospitalMedicalRescueId ||
+                 !raid.hospitalMedicalReserveEnabled || regionalMissionCount != 0U ||
+                 raid.spatialLayout.layoutVersion != kHospitalLandmarkInteriorLayoutVersion ||
+                 !validHospitalEscortStart(*raidMap, raid.spatialLayout, rescue.transferPoint, *rescue.escortStart)))
+                return {false, "hospital survivor escort has an invalid mission or street position"};
             const bool committed = raid.fireSupportReplacementSource
                 ? profile.committedTransactions.contains(
                     raidFireSupportReplacementTransactionId(*raid.fireSupportReplacementSource))
@@ -5687,6 +5799,8 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
     hashInteger(hash, profile.baseMorale.lastLedger.positiveEventCount);
     hashInteger(hash, profile.baseMorale.lastLedger.negativeEventCount);
     hashInteger(hash, profile.baseMorale.lastLedger.netScore);
+    if (profile.rationPolicy == BaseRationPolicy::Conserve) hashBytes(hash, "ration-conserve");
+    if (profile.baseMorale.lastLedger.rationPolicyLimited) hashBytes(hash, "ration-cap");
     hashBytes(hash, profile.baseCommunityEvent.definitionId.value());
     hashInteger(hash, profile.baseCommunityEvent.cycleIndex);
     for (const auto &[definitionId, category] :
@@ -5893,6 +6007,11 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         {
             hashBytes(hash, "base-workshop-power-bonus-v1");
             hashInteger(hash, order.emergencyPowerBonusMinutes);
+        }
+        if (order.expediteMinutesSaved)
+        {
+            hashBytes(hash, "base-workshop-expedite-v1");
+            hashInteger(hash, order.expediteMinutesSaved);
         }
     }
     if (profile.activeEngineeringTraining)
@@ -6344,6 +6463,18 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
                 hashFloat(hash, socket.y);
             }
         }
+        if (raid.fieldClueCache)
+        {
+            hashBytes(hash, "field-clue-cache");
+            hashInteger(hash, raid.fieldClueCache->rewardAssetId);
+            if (raid.fieldClueCache->decodedDocumentId) hashInteger(hash, *raid.fieldClueCache->decodedDocumentId);
+        }
+        for (const auto &barrel : raid.volatileBarrels)
+        {
+            hashInteger(hash, barrel.id);
+            hashFloat(hash, barrel.center.x);
+            hashFloat(hash, barrel.center.y);
+        }
         for (const auto &scavenger : raid.armedScavengers)
         {
             hashBytes(hash, scavenger.sourceEnemyId);
@@ -6351,6 +6482,13 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, scavenger.pistolAssetId);
             hashInteger(hash, scavenger.firstMagazineId);
             hashInteger(hash, scavenger.secondMagazineId);
+            if (scavenger.retreatPoint)
+            {
+                hashBytes(hash, "scavenger-retreat");
+                hashFloat(hash, scavenger.retreatPoint->x);
+                hashFloat(hash, scavenger.retreatPoint->y);
+                hashInteger(hash, scavenger.escaped ? 1U : 0U);
+            }
         }
         for (const RaidEnemySnapshot &enemy : raid.enemies)
         {
@@ -6503,6 +6641,12 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, rescue.injuredResidentCount);
             hashInteger(hash, static_cast<std::uint32_t>(rescue.profession));
             hashInteger(hash, rescue.secured ? 1U : 0U);
+            if (rescue.escortStart)
+            {
+                hashBytes(hash, "hospital-survivor-escort");
+                hashFloat(hash, rescue.escortStart->x);
+                hashFloat(hash, rescue.escortStart->y);
+            }
         };
         if (raid.rescue)
             hashRescue(*raid.rescue);
@@ -6620,6 +6764,12 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash, trade.frontierTransportPurchased ? 1U : 0U);
             hashInteger(hash, trade.transportPurchased ? 1U : 0U);
             hashInteger(hash, trade.extraPurchased ? 1U : 0U);
+            if (trade.hasBarteredOffer())
+            {
+                hashBytes(hash, "riverside-barter");
+                for (const bool exchanged : trade.bartered)
+                    hashInteger(hash, exchanged ? 1U : 0U);
+            }
         }
         hashInteger(hash, raid.travel.outboundMinutes);
         hashInteger(hash, raid.travel.returnMinutes);
@@ -6775,6 +6925,8 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
                         .negativeEventCount);
         hashInteger(hash,
                     raid.travel.startingBaseMorale.lastLedger.netScore);
+        if (raid.travel.startingBaseMorale.lastLedger.rationPolicyLimited)
+            hashBytes(hash, "starting-ration-cap");
         hashBytes(hash,
                   raid.travel.startingBaseCommunityEvent.definitionId.value());
         hashInteger(hash, raid.travel.startingBaseCommunityEvent.cycleIndex);

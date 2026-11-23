@@ -16,6 +16,7 @@
 #include "grid_inventory.h"
 #include "medical_types.h"
 #include "raid_intelligence_types.h"
+#include "raid_volatile_barrel.h"
 #include "raid_map_generation.h"
 #include "world_clock.h"
 #include "base_wish_types.h"
@@ -506,7 +507,16 @@ struct RaidArmedScavengerSnapshot
     AssetInstanceId firstMagazineId{};
     AssetInstanceId secondMagazineId{};
 
-    friend bool operator==(const RaidArmedScavengerSnapshot &, const RaidArmedScavengerSnapshot &) = default;
+    std::optional<Vec2> retreatPoint;
+    bool escaped{};
+    friend bool operator==(const RaidArmedScavengerSnapshot &a, const RaidArmedScavengerSnapshot &b)
+    {
+        return a.sourceEnemyId == b.sourceEnemyId && a.corpseAssetId == b.corpseAssetId &&
+            a.pistolAssetId == b.pistolAssetId && a.firstMagazineId == b.firstMagazineId &&
+            a.secondMagazineId == b.secondMagazineId && a.escaped == b.escaped &&
+            a.retreatPoint.has_value() == b.retreatPoint.has_value() &&
+            (!a.retreatPoint || (a.retreatPoint->x == b.retreatPoint->x && a.retreatPoint->y == b.retreatPoint->y));
+    }
 };
 
 struct RaidEncounterGroupSnapshot
@@ -711,14 +721,23 @@ struct RaidRescueSnapshot
     std::uint32_t injuredResidentCount{};
     BaseResidentProfession profession{BaseResidentProfession::General};
     bool secured{};
+    std::optional<Vec2> escortStart;
 
-    friend bool operator==(
-        const RaidRescueSnapshot &,
-        const RaidRescueSnapshot &) = default;
+    friend bool operator==(const RaidRescueSnapshot &a, const RaidRescueSnapshot &b)
+    {
+        return a.definitionId == b.definitionId && a.subjectKind == b.subjectKind &&
+            a.transferPoint == b.transferPoint && a.interactionDurationSeconds == b.interactionDurationSeconds &&
+            a.ordinaryResidentCount == b.ordinaryResidentCount && a.injuredResidentCount == b.injuredResidentCount &&
+            a.profession == b.profession && a.secured == b.secured &&
+            a.escortStart.has_value() == b.escortStart.has_value() &&
+            (!a.escortStart || (a.escortStart->x == b.escortStart->x && a.escortStart->y == b.escortStart->y));
+    }
 };
 
 // Ordinary residents are deliberately aggregated. The player and future
 // named NPCs have separate ownership and are not counted here.
+enum class BaseRationPolicy { Standard, Conserve };
+
 struct BasePopulationState
 {
     std::uint32_t ordinaryResidents{8};
@@ -863,6 +882,7 @@ struct BaseMoraleDailyLedger
     std::uint64_t positiveEventCount{};
     std::uint64_t negativeEventCount{};
     std::int32_t netScore{};
+    bool rationPolicyLimited{};
 
     friend bool operator==(
         const BaseMoraleDailyLedger &,
@@ -946,6 +966,7 @@ struct BaseManufacturingOrder
     AssetInstanceId outputAssetId{};
     bool outputReady{};
     std::uint32_t emergencyPowerBonusMinutes{};
+    std::uint32_t expediteMinutesSaved{};
 
     friend bool operator==(
         const BaseManufacturingOrder &,
@@ -1278,6 +1299,13 @@ struct RaidSealedFreightCrateSnapshot
     bool unlocked{};
 };
 
+struct RaidFieldCacheSnapshot
+{
+    AssetInstanceId rewardAssetId{};
+    std::optional<AssetInstanceId> decodedDocumentId;
+    friend bool operator==(const RaidFieldCacheSnapshot &, const RaidFieldCacheSnapshot &) = default;
+};
+
 struct RaidFieldIntelligenceTrade
 {
     Vec2 position{};
@@ -1287,6 +1315,8 @@ struct RaidFieldIntelligenceTrade
     bool frontierTransportPurchased{};
     bool transportPurchased{};
     bool extraPurchased{};
+    std::array<bool, 2> bartered{};
+    [[nodiscard]] bool hasBarteredOffer() const noexcept { return bartered[0] || bartered[1]; }
 };
 
 struct RaidFireSupportLoadout
@@ -1345,6 +1375,7 @@ struct PendingRaidSnapshot
     ContentRect extractionPoint;
     std::vector<RaidEnemySnapshot> enemies;
     std::vector<RaidArmedScavengerSnapshot> armedScavengers;
+    std::vector<RaidVolatileBarrelSpawn> volatileBarrels;
     std::vector<RaidEncounterGroupSnapshot> encounterGroups;
     std::vector<RaidLootSnapshot> loot;
     std::optional<AssetRegistry> startingAssets; // Exact pre-deploy assets for Raid rollback.
@@ -1372,6 +1403,7 @@ struct PendingRaidSnapshot
     bool freightBreachEnabled{};
     bool hospitalMedicalReserveEnabled{};
     std::optional<RaidFieldIntelligenceTrade> fieldIntelligenceTrade;
+    std::optional<RaidFieldCacheSnapshot> fieldClueCache;
     std::optional<RaidFireSupportSnapshot> fireSupport;
     std::optional<std::string> fireSupportReplacementSource;
 };
@@ -1410,6 +1442,7 @@ struct ProfileState
     BaseResourceState baseResources;
     BaseSupplyPolicyState baseSupplyPolicy;
     BasePopulationState basePopulation;
+    BaseRationPolicy rationPolicy{BaseRationPolicy::Standard};
     BaseWorkforceState baseWorkforce;
     RegionalOperationsState regionalOperations;
     BaseFortificationState baseFortifications;
@@ -1518,6 +1551,8 @@ grantDeveloperWarehouseCatalog(
 [[nodiscard]] bool assetIsCarried(
     const ProfileState &profile,
     AssetInstanceId instanceId) noexcept;
+
+[[nodiscard]] bool assetIsInStashOrEquipped(const ProfileState &, AssetInstanceId) noexcept;
 
 // Base allocation commands may explicitly consume an asset from the personal
 // Stash or the equipped ownership tree without moving it into a transit

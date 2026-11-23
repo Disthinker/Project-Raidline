@@ -9,6 +9,15 @@
 inline constexpr std::uint32_t kMaximumBaseResource = 100;
 inline constexpr BaseResourceBundle kBaseDailyDemand{8, 6, 5, 4};
 
+struct SetBaseRationPolicyCommand
+{
+    BaseRationPolicy policy{BaseRationPolicy::Standard};
+    ProfileRevision previewRevision{};
+};
+
+[[nodiscard]] InventoryReceipt executeBaseRationPolicy(ProfileState &, const ContentRegistry &,
+    const SetBaseRationPolicyCommand &, const CommandContext &);
+
 enum class BaseResourceKind
 {
     Food,
@@ -107,9 +116,11 @@ struct BaseSupplyReadinessProjection
 };
 
 [[nodiscard]] BaseSupplyReadinessProjection projectBaseSupplyReadiness(
+    const ProfileState &profile, const ContentRegistry &content);
+[[nodiscard]] BaseSupplyReadinessProjection projectBaseSupplyReadiness(
     const ProfileState &profile,
     const ContentRegistry &content,
-    BaseResourceBundle dailyDemand = kBaseDailyDemand);
+    BaseResourceBundle dailyDemand);
 
 [[nodiscard]] std::uint32_t baseSupplyContribution(
     const ItemDefinition &definition,
@@ -160,10 +171,12 @@ struct BaseDailyDemandResult
 // assets are auto-consumed, so abnormal rollback can restore the exact
 // pre-deployment Profile without reconstructing inventory instances.
 [[nodiscard]] BaseDailyDemandResult applyBaseDailyDemandWithSupplyThrough(
+    ProfileState &profile, const ContentRegistry &content, std::uint64_t completedWorldDays) noexcept;
+[[nodiscard]] BaseDailyDemandResult applyBaseDailyDemandWithSupplyThrough(
     ProfileState &profile,
     const ContentRegistry &content,
     std::uint64_t completedWorldDays,
-    BaseResourceBundle dailyDemand = kBaseDailyDemand) noexcept;
+    BaseResourceBundle dailyDemand) noexcept;
 
 struct BasePrioritySyncResult
 {

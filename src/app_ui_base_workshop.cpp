@@ -1,4 +1,5 @@
 #include "app.h"
+#include "alpha_content_ids.h"
 #include <algorithm>
 #include <fmt/format.h>
 
@@ -13,19 +14,45 @@ void App::refreshBaseWorkshopUi(bool force) {
     if(workshopProjectionRevision_ && workshopProjection_.profileId!=p.profileId)resetBaseWorkshopUi();
     if(workshopProjectionRevision_ && workshopProjectionLanguage_!=language) {
         workshopUi_.press.reset(); workshopUi_.detailScroll=workshopUi_.feedbackScroll=0;
+        workshopUi_.salvageConfirmation.reset();
+        workshopUi_.selectedMaterial.reset();
+    }
+    const auto &order = p.baseManufacturing.activeOrder;
+    if (workshopUi_.selectedMaterial && (!order || order->jobId != workshopUi_.expediteJob ||
+        p.revision != workshopUi_.expediteRevision || p.worldClock.elapsedWorldMinutes != workshopUi_.expeditePreviewMinute)) {
+        workshopUi_.selectedMaterial.reset();
+        workshopFeedback_ = "EXPEDITE PREVIEW CHANGED";
     }
     if(!force && workshopProjectionRevision_ && *workshopProjectionRevision_==p.revision &&
         workshopProjection_.worldMinute==p.worldClock.elapsedWorldMinutes && workshopProjectionLanguage_==language &&
         workshopProjection_.selection==workshopUi_.selection &&
+        workshopProjection_.salvageOpen == workshopUi_.salvageOpen &&
+        workshopProjection_.selectedGun == workshopUi_.selectedGun &&
+        workshopProjection_.expediteOpen == workshopUi_.expediteOpen &&
+        workshopProjection_.selectedMaterial == workshopUi_.selectedMaterial &&
         workshopProjection_.trainingSelected==workshopUi_.trainingSelected)return;
     workshopProjection_=projectUiWorkshop(p,publishedContentRegistry(),language,workshopUi_.selection,
-        workshopUi_.trainingSelected);
-    workshopUi_.selection=workshopProjection_.selection;
-    workshopUi_.trainingSelected=workshopProjection_.trainingSelected;
-    workshopUi_.page=std::min(workshopUi_.page,uiWorkshopPageCount(workshopProjection_.recipes.size())-1);
-    if(workshopProjection_.order) {
-        const auto it=std::find_if(workshopProjection_.recipes.begin(),workshopProjection_.recipes.end(),[&](const auto &r){return workshopProjection_.selection==r.id;});
-        if(it!=workshopProjection_.recipes.end())workshopUi_.page=static_cast<std::size_t>(it-workshopProjection_.recipes.begin())/6;
+        workshopUi_.trainingSelected, workshopUi_.salvageOpen, workshopUi_.selectedGun,
+        workshopUi_.expediteOpen, workshopUi_.selectedMaterial);
+    if (workshopUi_.expediteOpen) {
+        workshopUi_.selectedMaterial = workshopProjection_.selectedMaterial;
+        workshopUi_.expeditePage = std::min(workshopUi_.expeditePage, uiWorkshopPageCount(workshopProjection_.materials.size())-1);
+    } else if (workshopUi_.salvageOpen) {
+        workshopUi_.selectedGun = workshopProjection_.selectedGun;
+        workshopUi_.salvagePage = std::min(workshopUi_.salvagePage, uiWorkshopPageCount(workshopProjection_.guns.size())-1);
+        if (workshopUi_.salvageConfirmation &&
+            *workshopUi_.salvageConfirmation != uiWorkshopActionKey({{}, Control::ConfirmSalvage}, workshopProjection_)) {
+            workshopUi_.salvageConfirmation.reset();
+            workshopFeedback_ = "SALVAGE PREVIEW CHANGED";
+        }
+    } else {
+        workshopUi_.selection=workshopProjection_.selection;
+        workshopUi_.trainingSelected=workshopProjection_.trainingSelected;
+        workshopUi_.page=std::min(workshopUi_.page,uiWorkshopPageCount(workshopProjection_.recipes.size())-1);
+        if(workshopProjection_.order) {
+            const auto it=std::find_if(workshopProjection_.recipes.begin(),workshopProjection_.recipes.end(),[&](const auto &r){return workshopProjection_.selection==r.id;});
+            if(it!=workshopProjection_.recipes.end())workshopUi_.page=static_cast<std::size_t>(it-workshopProjection_.recipes.begin())/6;
+        }
     }
     workshopProjectionRevision_=p.revision; workshopProjectionLanguage_=language; ++workshopProjectionGeneration_;
 }
@@ -37,26 +64,48 @@ void App::handleBaseWorkshopEvent(const UiWorkshopEvent &e) {
     }
     refreshBaseWorkshopUi(e.kind==Kind::Down || e.kind==Kind::Up);
     const auto changePage=[&](int delta) {
-        workshopUi_.page=static_cast<std::size_t>(std::clamp(static_cast<int>(workshopUi_.page)+delta,0,static_cast<int>(uiWorkshopPageCount(workshopProjection_.recipes.size())-1)));
+        if (workshopUi_.expediteOpen) {
+            auto &page = workshopUi_.expeditePage;
+            const auto next = static_cast<std::size_t>(std::clamp(static_cast<int>(page)+delta,0,
+                static_cast<int>(uiWorkshopPageCount(workshopProjection_.materials.size())-1)));
+            if (next != page) {
+                page = next;
+                workshopUi_.selectedMaterial.reset();
+                workshopFeedback_.clear();
+            }
+            workshopUi_.press.reset();
+            return;
+        }
+        auto &page = workshopUi_.salvageOpen ? workshopUi_.salvagePage : workshopUi_.page;
+        const auto count = workshopUi_.salvageOpen ? workshopProjection_.guns.size() : workshopProjection_.recipes.size();
+        const auto next = static_cast<std::size_t>(std::clamp(static_cast<int>(page)+delta, 0,
+            static_cast<int>(uiWorkshopPageCount(count)-1)));
+        if (next != page && workshopUi_.salvageOpen) {
+            workshopUi_.selectedGun.reset();
+            workshopUi_.salvageConfirmation.reset();
+            workshopFeedback_.clear();
+        }
+        page = next;
         workshopUi_.press.reset();
     };
     if(e.kind==Kind::Wheel) {
         workshopUi_.press.reset();
         if(uiContains(uiWorkshopFeedbackRect(),e.position)) workshopUi_.feedbackScroll=std::clamp(workshopUi_.feedbackScroll+e.delta*2,0,workshopUi_.feedbackMaximum);
         else if(uiContains(uiWorkshopDetailsRect(),e.position))workshopUi_.detailScroll=std::clamp(workshopUi_.detailScroll+e.delta*2,0,workshopUi_.detailMaximum);
-        else if(e.position.x>=64 && e.position.x<=424 && e.position.y>=138 && e.position.y<=538 && !workshopProjection_.order)changePage(e.delta);
+        else if(e.position.x>=64 && e.position.x<=424 && e.position.y>=138 && e.position.y<=538 && (!workshopProjection_.order || workshopUi_.expediteOpen))changePage(e.delta);
         return;
     }
     const auto hit=hitUiWorkshop(e.position,workshopUi_,workshopProjection_);
-    if(e.kind==Kind::Move) {if(workshopUi_.press && hit!=workshopUi_.press->hit)workshopUi_.press.reset(); return;}
+    if(e.shortcut && (!hit || hit->control!=*e.shortcut))return;
+    if(e.kind==Kind::Move) {if(workshopUi_.press && !workshopUi_.press->fromKeyboard && hit!=workshopUi_.press->hit)workshopUi_.press.reset(); return;}
     const auto language=uiTextRenderer_.language();
     if(e.kind==Kind::Down) {
         workshopUi_.press.reset();
-        if(hit)workshopUi_.press=UiWorkshopPress{*hit,language,uiWorkshopActionKey(*hit,workshopProjection_)};
+        if(hit)workshopUi_.press=UiWorkshopPress{*hit,language,uiWorkshopActionKey(*hit,workshopProjection_),e.shortcut.has_value()};
         return;
     }
     const auto press=workshopUi_.press; workshopUi_.press.reset();
-    if(!press || !hit || *hit!=press->hit || press->language!=language)return;
+    if(!press || !hit || *hit!=press->hit || press->language!=language || press->fromKeyboard!=e.shortcut.has_value())return;
     const auto feedback=[&](std::string s){workshopFeedback_=std::move(s);uiMessage_=workshopFeedback_;workshopUi_.feedbackScroll=0;};
     if(press->action!=uiWorkshopActionKey(*hit,workshopProjection_)) {feedback("PRODUCTION PLAN CHANGED - CHECK AND CLICK AGAIN");return;}
     if (hit->recipe) {
@@ -69,6 +118,29 @@ void App::handleBaseWorkshopEvent(const UiWorkshopEvent &e) {
     }
     const auto control=hit->control;
     if(control==Control::Close) {gameFlow_.closeBaseFacility();resetBaseWorkshopUi();uiMessage_.clear();input_.suppressPrimaryPointerUntilRelease();return;}
+    if (control == Control::Expedite) {
+        if (!uiWorkshopEnabled(control, workshopProjection_)) {
+            if (workshopProjection_.order) feedback(queryExpediteBaseManufacturing(gameSession_.profile(),
+                publishedContentRegistry(),{workshopProjection_.order->jobId,0}).message);
+            return;
+        }
+        workshopUi_.expediteOpen = !workshopUi_.expediteOpen;
+        workshopUi_.expeditePage = 0;
+        workshopUi_.selectedMaterial.reset();
+        workshopFeedback_.clear();
+        refreshBaseWorkshopUi(true);
+        return;
+    }
+    if (control == Control::Salvage) {
+        workshopUi_.salvageOpen = !workshopUi_.salvageOpen;
+        workshopUi_.salvagePage = 0;
+        workshopUi_.selectedGun.reset();
+        workshopUi_.salvageConfirmation.reset();
+        workshopUi_.feedbackScroll = 0;
+        workshopFeedback_.clear();
+        refreshBaseWorkshopUi(true);
+        return;
+    }
     if (control == Control::Training) {
         if (uiWorkshopEnabled(control, workshopProjection_)) {
             workshopUi_.trainingSelected = !workshopUi_.trainingSelected;
@@ -82,6 +154,55 @@ void App::handleBaseWorkshopEvent(const UiWorkshopEvent &e) {
     if(control==Control::Facilities) {workshopUi_.facilities=!workshopUi_.facilities;workshopUi_.detailScroll=0;return;}
     if(control==Control::Previous || control==Control::Next) {changePage(control==Control::Previous?-1:1);return;}
     const auto &p=workshopProjection_;
+    if (p.expediteOpen) {
+        if (hit->material && p.order) {
+            workshopUi_.selectedMaterial = hit->material;
+            workshopUi_.expediteRevision = p.revision;
+            workshopUi_.expediteJob = p.order->jobId;
+            workshopUi_.expeditePreviewMinute = p.worldMinute;
+            workshopFeedback_.clear();
+            refreshBaseWorkshopUi(true);
+        } else if (control == Control::ConfirmExpedite && p.expedite.canCommit && p.selectedMaterial) {
+            const auto command = ProfileUiExpediteManufacturingCommand{workshopUi_.expediteJob,
+                *p.selectedMaterial,workshopUi_.expediteRevision};
+            workshopUi_.selectedMaterial.reset();
+            submitProfileUi<BaseManufacturingReceipt>(command, nextProfileTransactionId("workshop-expedite"),
+                [this](const auto &receipt) {
+                    if (receipt.succeeded) workshopUi_.expediteOpen = false;
+                    workshopFeedback_ = receipt.succeeded ? "MANUFACTURING EXPEDITED" : receipt.message;
+                    uiMessage_ = workshopFeedback_;
+                    gameAudio_.play(receipt.succeeded ? SoundEventId::UiConfirm : SoundEventId::UiDeny);
+                    refreshBaseWorkshopUi(true);
+                });
+        }
+        return;
+    }
+    if (p.salvageOpen) {
+        if (hit->gun) {
+            workshopUi_.selectedGun = hit->gun;
+            workshopUi_.salvageConfirmation.reset();
+            workshopFeedback_.clear();
+            refreshBaseWorkshopUi(true);
+        } else if (control == Control::Cancel) {
+            workshopUi_.salvageConfirmation.reset();
+            workshopFeedback_.clear();
+        } else if (p.selectedGun && p.salvage.canCommit && control == Control::PreviewSalvage) {
+            workshopUi_.salvageConfirmation = uiWorkshopActionKey({{}, Control::ConfirmSalvage}, p);
+            workshopFeedback_.clear();
+        } else if (control == Control::ConfirmSalvage && workshopUi_.salvageConfirmation &&
+                   *workshopUi_.salvageConfirmation == press->action && p.selectedGun && p.salvage.canCommit) {
+            const auto gun = *p.selectedGun;
+            workshopUi_.salvageConfirmation.reset();
+            submitProfileUi<EconomyReceipt>(EconomyCommand{SalvageWeaponCommand{gun}},
+                nextProfileTransactionId("workshop-salvage"), [this](const EconomyReceipt &receipt) {
+                    workshopFeedback_ = receipt.succeeded ? "WEAPON SALVAGED · MATERIAL IN STASH" : receipt.message;
+                    uiMessage_ = workshopFeedback_;
+                    gameAudio_.play(receipt.succeeded ? SoundEventId::UiConfirm : SoundEventId::UiDeny);
+                    refreshBaseWorkshopUi(true);
+                });
+        }
+        return;
+    }
     const bool research = p.selection == kArmorRepairResearchId;
     if(!uiWorkshopEnabled(control,p)) {
         if (p.trainingSelected && (control == Control::Main || control == Control::Cancel)) {
@@ -136,7 +257,12 @@ void App::renderBaseWorkshop() {
     const auto tr=[&](std::string_view s){return localizeUiText(language,s);};
     const auto fill=[&](SDL_FRect r,SDL_Color c){SDL_SetRenderDrawColor(renderer_,c.r,c.g,c.b,c.a);SDL_RenderFillRect(renderer_,&r);};
     const auto text=[&](SDL_FRect r,std::string_view s,int size=14){SDL_SetRenderDrawColor(renderer_,222,231,226,255);uiTextRenderer_.renderBox(renderer_,r,s,{size,UiTextAlign::Left,0});};
-    const auto button=[&](Control c,std::string_view label,bool selected=false){renderFoundationButton(5900+static_cast<int>(c),uiWorkshopControlRect(c),label,uiWorkshopEnabled(c,p),c==Control::Cancel || (c==Control::Upgrade && p.cancelUpgrade),selected,{},14);};
+    const auto button=[&](Control c,std::string_view label,bool selected=false) {
+        const bool warning = p.salvageOpen ? c == Control::ConfirmSalvage :
+            c == Control::Cancel || (c == Control::Upgrade && p.cancelUpgrade);
+        renderFoundationButton(5900+static_cast<int>(c),uiWorkshopControlRect(c),label,
+                               uiWorkshopEnabled(c,p),warning,selected,{},14);
+    };
     const auto duration=[&](std::uint64_t m){return fmt::format("{}{} {}{}",m/60,language==UiLanguage::English?"h":"小时",m%60,language==UiLanguage::English?"m":"分");};
     const auto scroll=[&](SDL_FRect r,std::string_view value,int size,int &offset,int &maximum) {
         const auto lines=wrapUiText(tr(value),r.w-12,0,[&](auto s){return uiTextRenderer_.measure(s,size);});
@@ -147,7 +273,92 @@ void App::renderBaseWorkshop() {
     };
     SDL_BlendMode previous{};SDL_GetRenderDrawBlendMode(renderer_,&previous);SDL_SetRenderDrawBlendMode(renderer_,SDL_BLENDMODE_BLEND);
     fill({40,60,1200,620},{21,29,31,252});fill({64,138,360,400},{27,38,40,255});fill({444,138,772,400},{27,38,40,255});
-    text({64,80,724,34},"WORKSHOP & PRODUCTION",22);button(Control::Close,language==UiLanguage::English?"CLOSE":tr("CLOSE WORKSHOP"));
+    text({64,80,360,34},p.expediteOpen?"EXPEDITE ORDER":p.salvageOpen?"WEAPON SALVAGE":"WORKSHOP & PRODUCTION",22);
+    button(Control::Close,language==UiLanguage::English?"CLOSE":tr("CLOSE WORKSHOP"));
+    if (p.expediteOpen || (p.order && !p.trainingSelected && !p.salvageOpen && p.order->recipeDefinitionId!=kArmorRepairResearchId)) {
+        const auto label = p.expediteOpen ? "BACK TO PRODUCTION" : p.order->expediteMinutesSaved ? "ORDER EXPEDITED" : "EXPEDITE ORDER";
+        button(Control::Expedite,fmt::format("X  {}",tr(label)),p.expediteOpen);
+    }
+    if (p.expediteOpen) {
+        const auto pages = uiWorkshopPageCount(p.materials.size());
+        text({80,117,328,21},fmt::format("{}  ·  {} / {}",tr("STASH ELECTRONICS"),workshopUi_.expeditePage+1,pages),12);
+        const auto &def = publishedContentRegistry().item(alpha_content::lootElectronics);
+        const auto name = tr(def.displayName);
+        for (std::size_t i=0; i<kUiWorkshopPageSize; ++i) {
+            const auto n = workshopUi_.expeditePage*kUiWorkshopPageSize+i;
+            if (n>=p.materials.size()) break;
+            const auto &m = p.materials[n];
+            const auto row = uiWorkshopRecipeRect(i);
+            renderFoundationButton(6200+static_cast<int>(i),row,"",true,false,m.id==p.selectedMaterial,{},14);
+            renderBaseSupplyImage(alpha_content::lootElectronics,{row.x+8,row.y+6,46,36});
+            text({row.x+64,row.y+4,250,22},fmt::format("{}  {}  ×{}",i+1,name,m.quantity));
+            text({row.x+64,row.y+27,250,18},fmt::format("#{}",m.id),12);
+        }
+        if (p.materials.empty()) text({80,159,328,62},"SELECT STASH ELECTRONICS");
+        if (pages>1) {
+            button(Control::Previous,"PREVIOUS PAGE");
+            button(Control::Next,"NEXT");
+        }
+        const auto nameOfOrder = !p.order ? tr("MANUFACTURING ORDER CHANGED") :
+            p.order->recipeDefinitionId == kArmorRepairResearchId ? tr("ARMOR REPAIR RESEARCH") :
+            tr(publishedContentRegistry().baseManufacturingRecipe(p.order->recipeDefinitionId).displayName);
+        text({464,160,728,36},nameOfOrder,20);
+        text({464,226,728,32},fmt::format("{}  {} ×1{}",tr("EXPEDITE COST"),name,
+            p.selectedMaterial?fmt::format("  #{}",*p.selectedMaterial):""),16);
+        if (p.order && p.expedite.newRemainingMinutes) {
+            const auto clock = [&](std::uint64_t minute) {
+                const auto time = projectWorldClock({minute});
+                return fmt::format("{} {:02}:{:02}",fmt::format(fmt::runtime(tr("DAY {}")),time.day),time.hour,time.minute);
+            };
+            text({464,294,728,32},fmt::format("{}  {} → {}",tr("WORK REMAINING"),duration(p.expedite.remainingMinutes),
+                duration(p.expedite.newRemainingMinutes)),16);
+            text({464,345,728,32},fmt::format("{}  {} → {}",tr("ESTIMATED COMPLETION"),
+                clock(p.expedite.estimatedCompletionBefore),clock(p.expedite.estimatedCompletionAfter)),16);
+        }
+        text({464,433,728,58},p.expedite.canCommit?"EXPEDITE CONSUMES THE SELECTED UNIT":p.expedite.message,14);
+        button(Control::ConfirmExpedite,fmt::format("Enter  {}",tr("CONFIRM EXPEDITE")));
+        scroll(uiWorkshopFeedbackRect(),workshopFeedback_,14,workshopUi_.feedbackScroll,workshopUi_.feedbackMaximum);
+        SDL_SetRenderDrawBlendMode(renderer_,previous);
+        return;
+    }
+    button(Control::Salvage, p.salvageOpen ? "BACK TO PRODUCTION" : "WEAPON SALVAGE", p.salvageOpen);
+    if (p.salvageOpen) {
+        text({80,118,328,20}, fmt::format("{}  ·  {} / {}", tr("STASH WEAPONS"), workshopUi_.salvagePage+1,
+            uiWorkshopPageCount(p.guns.size())), 12);
+        for (std::size_t i = 0; i < kUiWorkshopPageSize; ++i) {
+            const auto index = workshopUi_.salvagePage * kUiWorkshopPageSize + i;
+            if (index >= p.guns.size()) break;
+            const auto &gun = p.guns[index];
+            const auto box = uiWorkshopRecipeRect(i);
+            renderFoundationButton(6100+static_cast<int>(i), box, "", true, false, gun.id == p.selectedGun, gun.name, 14);
+            renderBaseSupplyImage(gun.definition, {box.x+8, box.y+5, 52, 38});
+            text({box.x+72, box.y+5, 250, 20}, fmt::format("{}  #{}", gun.name, gun.id), 14);
+            text({box.x+72, box.y+25, 250, 20}, fmt::format("{}  {:.0f} / {:.0f}", tr("DURABILITY"),
+                 gun.durability/100.0F, gun.maximumDurability/100.0F), 12);
+        }
+        if (p.guns.empty()) text({80,158,328,65}, "NO WEAPONS IN STASH");
+        if (uiWorkshopPageCount(p.guns.size()) > 1) {
+            button(Control::Previous, "PREVIOUS PAGE");
+            button(Control::Next, "NEXT");
+        }
+        const auto selected = std::find_if(p.guns.begin(), p.guns.end(), [&](const auto &gun) { return gun.id == p.selectedGun; });
+        if (selected != p.guns.end()) {
+            renderBaseSupplyImage(selected->definition, {464,154,172,66});
+            text({656,158,536,56}, fmt::format("{}  #{}", selected->name, selected->id), 18);
+            text({464,240,728,36}, "SALVAGE OUTPUT", 16);
+            renderBaseSupplyImage(kWeaponSalvageMaterialId, {464,288,100,64});
+            text({584,300,600,40}, fmt::format("{}  ×{}", tr(publishedContentRegistry().item(kWeaponSalvageMaterialId).displayName), kWeaponSalvageMaterialQuantity));
+            text({464,400,728,64}, workshopUi_.salvageConfirmation ? "CONFIRM DESTROYING THIS WEAPON" :
+                 p.salvage.canCommit ? "SALVAGE REMOVES THE SELECTED WEAPON" : p.salvage.message);
+            if (workshopUi_.salvageConfirmation) {
+                button(Control::Cancel, "KEEP WEAPON");
+                button(Control::ConfirmSalvage, "CONFIRM SALVAGE");
+            } else button(Control::PreviewSalvage, "PREVIEW SALVAGE");
+        } else text({464,158,728,64}, "SELECT A STASH WEAPON");
+        scroll(uiWorkshopFeedbackRect(), workshopFeedback_, 14, workshopUi_.feedbackScroll, workshopUi_.feedbackMaximum);
+        SDL_SetRenderDrawBlendMode(renderer_,previous);
+        return;
+    }
     button(Control::Training, "ENGINEERING TRAINING", p.trainingSelected);
     for(std::size_t i=0;i<6;++i) {
         const auto index=workshopUi_.page*6+i;if(index>=p.recipes.size())break;const auto &row=p.recipes[index];
