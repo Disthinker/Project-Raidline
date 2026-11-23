@@ -145,6 +145,19 @@ ProfileUiSubmission GameSession::requestProfileUiCommand(const ProfileUiCommand 
     auto prepared = prepareProfileUiCommand(candidate, publishedContentRegistry(), command,
                                            {candidate.revision, transaction}, basePlayerWorld_);
     if (!prepared.canCommit) return rejected(prepared.error, std::move(prepared.message));
+    if (std::holds_alternative<ProfileUiExpediteManufacturingCommand>(command) &&
+        profileUiReceiptAlreadyCommitted(prepared.result.receipt))
+    {
+        if (profileUiNextRequestId_ == std::numeric_limits<std::uint64_t>::max())
+            return rejected(DomainErrorCode::RevisionOverflow, "Profile save request IDs exhausted");
+        if (!profileUiPersistence_) profileUiPersistence_ = std::make_shared<ProfileUiPersistenceState>();
+        auto &state = *profileUiPersistence_;
+        const auto id = profileUiNextRequestId_++;
+        state.durableProof = ProfileUiPersistenceState::Proof{id, profileUiEpoch_, ProfileUiCompletionKind::Command,
+            profileStateFingerprint(profile_)};
+        state.completions.push_back({id, true, ProfileUiCompletionKind::Command, {}, std::move(prepared.result)});
+        return {id, true, false, DomainErrorCode::None, {}};
+    }
     if (prepared.result.facts.refreshLoadoutTutorial) {
         advancePreparedTutorial(candidate);
         prepared.result.facts.refreshLoadoutTutorial = false;

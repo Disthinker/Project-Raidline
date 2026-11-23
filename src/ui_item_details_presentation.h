@@ -5,7 +5,7 @@
 
 #include <optional>
 
-enum class UiItemDetailsKind { Weapon, Melee, Decoy, Grenade, Helmet, NightVision, FreightKey, Illumination };
+enum class UiItemDetailsKind { Weapon, Melee, Decoy, Grenade, Helmet, NightVision, FreightKey, Illumination, Smoke, FireZone, Alarm };
 struct UiItemDetailsMetric {
     std::string label;
     std::string value;

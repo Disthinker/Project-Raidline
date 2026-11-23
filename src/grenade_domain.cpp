@@ -19,6 +19,21 @@ bool isThrownIllumination(const ItemDefinition &definition)
     return definition.thrownIlluminationUse && definition.thrownIlluminationUse->valid();
 }
 
+bool isSmoke(const ItemDefinition &definition)
+{
+    return definition.smokeUse && definition.smokeUse->valid();
+}
+
+bool isFireBottle(const ItemDefinition &definition)
+{
+    return definition.fireZoneUse && definition.fireZoneUse->valid();
+}
+
+bool isProximityAlarm(const ItemDefinition &definition)
+{
+    return definition.alarmUse && definition.alarmUse->valid();
+}
+
 bool throwableInChestRig(const ProfileState &profile, const ContentRegistry &content,
     AssetInstanceId id, ValidThrowable valid)
 {
@@ -93,6 +108,45 @@ InventoryReceipt consumeChestRigThrowable(ProfileState &profile, const ContentRe
 bool grenadeInChestRig(const ProfileState &profile, const ContentRegistry &content, AssetInstanceId id)
 {
     return throwableInChestRig(profile, content, id, isGrenade);
+}
+
+bool smokeInChestRig(const ProfileState &profile, const ContentRegistry &content, AssetInstanceId id)
+{
+    return throwableInChestRig(profile, content, id, isSmoke);
+}
+
+InventoryReceipt consumeSmoke(ProfileState &profile, const ContentRegistry &content,
+    AssetInstanceId id, const CommandContext &context)
+{
+    return consumeChestRigThrowable(profile, content, id, context, isSmoke,
+        {"INVALID SMOKE COMMAND", "SMOKE INVENTORY CHANGED", "SMOKE REVISION LIMIT",
+         "NO CHEST RIG SMOKE", "INVALID SMOKE INVENTORY"});
+}
+
+bool fireBottleInChestRig(const ProfileState &profile, const ContentRegistry &content, AssetInstanceId id)
+{
+    return throwableInChestRig(profile, content, id, isFireBottle);
+}
+
+InventoryReceipt consumeFireBottle(ProfileState &profile, const ContentRegistry &content,
+    AssetInstanceId id, const CommandContext &context)
+{
+    return consumeChestRigThrowable(profile, content, id, context, isFireBottle,
+        {"INVALID FIRE BOTTLE COMMAND", "FIRE BOTTLE INVENTORY CHANGED", "FIRE BOTTLE REVISION LIMIT",
+         "NO CHEST RIG FIRE BOTTLE", "INVALID FIRE BOTTLE INVENTORY"});
+}
+
+bool proximityAlarmInChestRig(const ProfileState &profile, const ContentRegistry &content, AssetInstanceId id)
+{
+    return throwableInChestRig(profile, content, id, isProximityAlarm);
+}
+
+InventoryReceipt consumeProximityAlarm(ProfileState &profile, const ContentRegistry &content,
+    AssetInstanceId id, const CommandContext &context)
+{
+    return consumeChestRigThrowable(profile, content, id, context, isProximityAlarm,
+        {"INVALID ALARM COMMAND", "ALARM INVENTORY CHANGED", "ALARM REVISION LIMIT",
+         "NO CHEST RIG ALARM", "INVALID ALARM INVENTORY"});
 }
 
 bool thrownIlluminationInChestRig(

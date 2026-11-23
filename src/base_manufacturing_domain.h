@@ -18,6 +18,22 @@ struct StartBaseManufacturingCommand
     BaseManufacturingRecipeDefinitionId recipeDefinitionId;
 };
 
+struct ExpediteBaseManufacturingCommand
+{
+    BaseServiceJobId jobId{};
+    AssetInstanceId materialId{};
+};
+
+struct BaseManufacturingExpeditePlan
+{
+    bool canCommit{};
+    DomainErrorCode error{DomainErrorCode::None};
+    std::string message;
+    ProfileRevision revision{};
+    std::uint64_t remainingMinutes{}, newRemainingMinutes{}, newCompletionWorldMinute{};
+    std::uint64_t estimatedCompletionBefore{}, estimatedCompletionAfter{};
+};
+
 struct BaseManufacturingInputSelection
 {
     AssetInstanceId assetId{};
@@ -86,6 +102,11 @@ struct BaseManufacturingAdvanceResult
     const ContentRegistry &content,
     const StartBaseManufacturingCommand &command,
     const CommandContext &context);
+
+[[nodiscard]] BaseManufacturingExpeditePlan queryExpediteBaseManufacturing(
+    const ProfileState &, const ContentRegistry &, const ExpediteBaseManufacturingCommand &);
+[[nodiscard]] BaseManufacturingReceipt executeExpediteBaseManufacturing(
+    ProfileState &, const ContentRegistry &, const ExpediteBaseManufacturingCommand &, const CommandContext &);
 
 [[nodiscard]] BaseManufacturingReturnPlan queryCancelBaseManufacturing(
     const ProfileState &profile,

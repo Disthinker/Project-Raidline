@@ -134,10 +134,20 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
         ++recoveryProfile.revision;
     }
     candidate = recoveryProfile;
-    const std::string raidId = candidate.profileId + "-raid-" +
-        std::to_string(number);
-    const std::string settlementId = candidate.profileId + "-settlement-" +
-        std::to_string(number);
+    const std::string ordinal = std::to_string(number);
+    const std::string raidPrefix = candidate.profileId + "-raid-" + ordinal;
+    const std::string settlementPrefix = candidate.profileId + "-settlement-" + ordinal;
+    std::string raidId = raidPrefix;
+    std::string settlementId = settlementPrefix;
+    // Restoring a pending save returns the kit but retains its transaction journal.
+    // A new attempt needs a fresh identity even though the displayed raid number is unchanged.
+    for (std::size_t attempt = 1; candidate.committedTransactions.contains("deploy:" + raidId) ||
+         candidate.committedSettlements.contains(settlementId); ++attempt)
+    {
+        const auto suffix = "-attempt-" + std::to_string(attempt);
+        raidId = raidPrefix + suffix;
+        settlementId = settlementPrefix + suffix;
+    }
     reportRaidDeploymentProgress(
         progress, 0.08F, RaidDeploymentProgressStage::Validating);
     const DeployReceipt receipt = executeDeploy(
@@ -199,6 +209,8 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
                 [&](const auto &entry) { return entry.sourceEnemyId == enemy.sourceEnemyId; });
             if (scavenger != snapshot.armedScavengers.end())
             {
+                if (scavenger->escaped)
+                    continue;
                 const auto *pistol = candidate.assets.find(scavenger->pistolAssetId);
                 const auto installed = installedMagazine(candidate, scavenger->pistolAssetId);
                 if (!pistol || !installed || (*installed != scavenger->firstMagazineId && *installed != scavenger->secondMagazineId))
@@ -209,7 +221,7 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
                 const int spare = reloaded ? 0 : static_cast<int>(magazineRoundCount(candidate, scavenger->secondMagazineId));
                 spawn.armedScavenger = RaidArmedScavengerConfig{
                     npcWeaponConfig(candidate, scavenger->pistolAssetId, ItemDefinitionId{"item.ammunition.9mm_basic"}),
-                    loaded, spare, reloaded};
+                    loaded, spare, reloaded, scavenger->retreatPoint};
             }
             if (group != snapshot.encounterGroups.end())
             {
@@ -308,6 +320,7 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
         worldConfig.deferPlayerDamageResolution = true;
         worldConfig.ballisticBlockers = std::move(blockers);
         worldConfig.outdoorLayout = snapshot.spatialLayout;
+        worldConfig.volatileBarrels = snapshot.volatileBarrels;
         worldConfig.outdoorColumns = map.proceduralOutdoor.columns;
         worldConfig.outdoorRows = map.proceduralOutdoor.rows;
         worldConfig.outdoorChunkSizeCells =
@@ -358,7 +371,8 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
         {
             worldConfig.rescue = RaidWorldConfig::OrdinarySurvivorRescue{
                 snapshot.rescue->transferPoint,
-                snapshot.rescue->interactionDurationSeconds};
+                snapshot.rescue->interactionDurationSeconds,
+                snapshot.rescue->escortStart};
         }
         if (snapshot.nightRendezvous && !snapshot.nightRendezvous->secured)
             worldConfig.nightRendezvous = snapshot.nightRendezvous->transferPoint;
@@ -613,6 +627,9 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     world_->commitNoiseDecoy({});
     world_->commitGrenade({});
     world_->commitThrownIllumination({});
+    world_->commitSmoke({});
+    world_->commitFireZone({});
+    world_->commitProximityAlarms({});
     decoyFireSuppressedUntilRelease_=false;
     raidActionState_.cancel();
     weaponTriggerGate_.reset();

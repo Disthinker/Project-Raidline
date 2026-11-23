@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <algorithm>
 
 #include "alpha_content_ids.h"
 #include "base_manufacturing_domain.h"
@@ -19,6 +20,117 @@ AssetInstanceId findAsset(
     }
     return 0;
 }
+}
+
+class MedicalConsolidationTest : public testing::Test
+{
+protected:
+    const ContentRegistry &content = publishedContentRegistry();
+    ProfileState profile = makeNewAlphaProfile("combine-medicine", content);
+    AssetInstanceId source{}, target{}, backpack{};
+
+    void SetUp() override
+    {
+        source = findAsset(profile, alpha_content::medkit);
+        backpack = findAsset(profile, alpha_content::backpack);
+        ASSERT_TRUE(source && backpack);
+        const auto &item = content.item(alpha_content::medkit);
+        target = profile.assets.create(item, StoredAssetLocation{ProfileContainerId::compartment(backpack, 0), {0, 0}});
+        profile.assets.findMutable(target)->remainingCharges = 1U;
+        ASSERT_TRUE(validateProfileState(profile, content).valid);
+    }
+};
+
+TEST_F(MedicalConsolidationTest, FullSourceFillsOnlyTheAvailableCapacityOfMedicineInAPersonalBag)
+{
+    const auto sourceLocation = profile.assets.find(source)->location;
+    const auto targetLocation = profile.assets.find(target)->location;
+    const auto idsBefore = profile.assets.nextAssetId();
+    const auto plan = queryMedicalConsolidation(profile, content, source, target);
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    EXPECT_EQ(plan.sourceBefore, 3U);
+    EXPECT_EQ(plan.targetBefore, 1U);
+    EXPECT_EQ(plan.transferCharges, 2U);
+    EXPECT_EQ(plan.sourceAfter, 1U);
+    EXPECT_EQ(plan.targetAfter, 3U);
+    const MedicalConsolidationCommand command{source, target, plan.sourceBefore, plan.targetBefore};
+    const CommandContext context{profile.revision, "combine-into-bag"};
+    ASSERT_TRUE(executeMedicalConsolidation(profile, content, command, context).succeeded);
+    EXPECT_EQ(profile.assets.find(source)->remainingCharges, 1U);
+    EXPECT_EQ(profile.assets.find(target)->remainingCharges, 3U);
+    EXPECT_EQ(profile.assets.find(source)->location, sourceLocation);
+    EXPECT_EQ(profile.assets.find(target)->location, targetLocation);
+    EXPECT_EQ(profile.assets.nextAssetId(), idsBefore);
+    const auto after = profileStateFingerprint(profile);
+    EXPECT_TRUE(executeMedicalConsolidation(profile, content, command, context).alreadyCommitted);
+    EXPECT_FALSE(queryMedicalConsolidation(profile, content, source, target).canCommit);
+    EXPECT_EQ(profileStateFingerprint(profile), after);
+}
+
+TEST_F(MedicalConsolidationTest, ExhaustedSourceDisappearsAndCarriedTargetKeepsItsIdentity)
+{
+    ASSERT_TRUE(executeInventory(profile, content, InventoryEquipCommand{backpack, EquipmentSlotKind::Backpack},
+        {profile.revision, "wear-pack"}).succeeded);
+    ASSERT_TRUE(assetIsCarried(profile, target));
+    profile.assets.findMutable(source)->remainingCharges = 1U;
+    profile.currentHealth = 75;
+    const auto location = profile.assets.find(target)->location;
+    const auto funds = profile.currency;
+    const auto minute = profile.worldClock.elapsedWorldMinutes;
+    const auto count = profile.assets.records().size();
+    const auto valid = medicalConsolidationCandidates(profile, content);
+    EXPECT_TRUE(std::ranges::find(valid, source) != valid.end());
+    EXPECT_TRUE(std::ranges::find(valid, target) != valid.end());
+    const auto receipt = executeMedicalConsolidation(profile, content, {source, target, 1U, 1U},
+        {profile.revision, "exhaust-source"});
+    ASSERT_TRUE(receipt.succeeded) << receipt.message;
+    EXPECT_EQ(profile.assets.find(source), nullptr);
+    EXPECT_EQ(profile.assets.records().size(), count - 1U);
+    EXPECT_EQ(profile.assets.find(target)->remainingCharges, 2U);
+    EXPECT_EQ(profile.assets.find(target)->location, location);
+    EXPECT_EQ(profile.currentHealth, 75);
+    EXPECT_EQ(profile.currency, funds);
+    EXPECT_EQ(profile.worldClock.elapsedWorldMinutes, minute);
+    EXPECT_TRUE(validateProfileState(profile, content).valid);
+}
+
+TEST_F(MedicalConsolidationTest, RejectsDifferentDefinitionsStaleDosesAndNonPersonalContainers)
+{
+    const auto bandageRoll = profile.assets.create(content.item(ItemDefinitionId{"item.medical.bandage_roll_basic"}),
+        StoredAssetLocation{ProfileContainerId::compartment(backpack, 0), {3, 0}});
+    profile.assets.findMutable(bandageRoll)->remainingCharges = 1U;
+    const auto before = profileStateFingerprint(profile);
+    EXPECT_FALSE(queryMedicalConsolidation(profile, content, source, source).canCommit);
+    EXPECT_FALSE(queryMedicalConsolidation(profile, content, source, bandageRoll).canCommit);
+    EXPECT_FALSE(queryMedicalConsolidation(profile, content, findAsset(profile, alpha_content::tourniquet), target).canCommit);
+    EXPECT_FALSE(executeMedicalConsolidation(profile, content, {source, target, 2U, 1U},
+        {profile.revision, "stale-doses"}).succeeded);
+    EXPECT_FALSE(executeMedicalConsolidation(profile, content, {source, target, 3U, 1U},
+        {profile.revision + 1U, "stale-revision"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+
+    profile.assets.findMutable(backpack)->location = StoredAssetLocation{ProfileContainerId::baseIntake(), {0, 0}};
+    EXPECT_FALSE(queryMedicalConsolidation(profile, content, source, target).canCommit);
+    const auto eligible = medicalConsolidationCandidates(profile, content);
+    EXPECT_EQ(std::ranges::find(eligible, target), eligible.end());
+    EXPECT_NE(std::ranges::find(eligible, source), eligible.end());
+}
+
+TEST_F(MedicalConsolidationTest, DirectCommandsRequireAnIdleBase)
+{
+    const auto reject = [&](auto activity) {
+        auto busy = profile;
+        activity(busy);
+        const auto before = profileStateFingerprint(busy);
+        EXPECT_TRUE(medicalConsolidationCandidates(busy, content).empty());
+        EXPECT_FALSE(queryMedicalConsolidation(busy, content, source, target).canCommit);
+        EXPECT_FALSE(executeMedicalConsolidation(busy, content, {source, target, 3U, 1U},
+            {busy.revision, "unsafe-combination"}).succeeded);
+        EXPECT_EQ(profileStateFingerprint(busy), before);
+    };
+    reject([](auto &p) { p.pendingRaid.emplace(); });
+    reject([](auto &p) { p.activeBaseDefense.emplace(); });
+    reject([](auto &p) { p.homePerimeter.activeOuting.emplace(); });
 }
 
 TEST(MedicalDomainTest, ScratchChanceBoundaryAppliesOneLightBleed)

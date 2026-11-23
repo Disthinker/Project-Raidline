@@ -11,8 +11,13 @@ UiDormitoryProjection projectUiDormitory(const ProfileState &profile, const Cont
     p.revision = profile.revision;
     p.worldMinute = profile.worldClock.elapsedWorldMinutes;
     p.clock = projectWorldClock(profile.worldClock);
-    p.population = projectBasePopulation(profile.basePopulation);
-    p.dailyDemand = populationAdjustedDailyDemand(profile.basePopulation);
+    p.activePolicy = profile.rationPolicy;
+    p.policies = {previewBaseRationPolicy(profile, BaseRationPolicy::Standard),
+                  previewBaseRationPolicy(profile, BaseRationPolicy::Conserve)};
+    const auto &active = p.policies[p.activePolicy == BaseRationPolicy::Conserve ? 1 : 0];
+    p.population = active.population;
+    p.dailyDemand = active.dailyDemand;
+    p.moraleLimitedLastDay = profile.baseMorale.lastLedger.rationPolicyLimited;
     p.foodStock = profile.baseResources.pool.food;
     p.workforce = projectBaseWorkforce(profile);
     p.autoFill = queryAutoFillBaseWorkers(profile);
@@ -48,8 +53,28 @@ SDL_FRect uiDormitoryControlRect(UiDormitoryControl c) noexcept
     case C::Hour1: return {84, 248, 320, 56};
     case C::Hour6: return {84, 328, 320, 56};
     case C::Hour12: return {84, 408, 320, 56};
+    case C::StandardRations: return {84, 350, 244, 40};
+    case C::ConserveRations: return {344, 350, 248, 40};
+    case C::ApplyRations: return {344, 480, 248, 40};
     }
     return {};
+}
+std::optional<UiDormitoryEvent> uiDormitoryShortcut(const SDL_Event &event)
+{
+    if ((event.type != SDL_EVENT_KEY_DOWN && event.type != SDL_EVENT_KEY_UP) || event.key.repeat)
+        return std::nullopt;
+    using C = UiDormitoryControl;
+    C control;
+    switch (event.key.scancode) {
+    case SDL_SCANCODE_R: control = C::Rations; break;
+    case SDL_SCANCODE_1: control = C::StandardRations; break;
+    case SDL_SCANCODE_2: control = C::ConserveRations; break;
+    case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER: control = C::ApplyRations; break;
+    default: return std::nullopt;
+    }
+    const auto r = uiDormitoryControlRect(control);
+    return UiDormitoryEvent{event.type == SDL_EVENT_KEY_DOWN ? UiDormitoryEventKind::Down :
+        UiDormitoryEventKind::Up, {r.x + r.w / 2, r.y + r.h / 2}, 0, control};
 }
 SDL_FRect uiDormitoryDetailsRect() noexcept { return {652, 318, 544, 206}; }
 SDL_FRect uiDormitoryFeedbackRect() noexcept { return {64, 610, 1152, 50}; }
@@ -64,6 +89,9 @@ std::optional<UiDormitoryControl> hitUiDormitory(Vec2 point, const UiDormitorySt
         for (C c : {C::Hour1, C::Hour6, C::Hour12, C::StartRest})
             if (uiContains(uiDormitoryControlRect(c), point)) return c;
     } else {
+        if (s.rations)
+            for (C c : {C::StandardRations, C::ConserveRations, C::ApplyRations})
+                if (uiContains(uiDormitoryControlRect(c), point)) return c;
         for (C c : {C::AutoFill, C::Rations, C::StartExpansion})
             if (uiContains(uiDormitoryControlRect(c), point)) return c;
         if (p.ownExpansion && uiContains(uiDormitoryControlRect(C::CancelExpansion), point))
@@ -105,6 +133,8 @@ std::string uiDormitoryActionKey(UiDormitoryControl c, const UiDormitoryProjecti
 {
     using C = UiDormitoryControl;
     auto key = fmt::format("{}:{}", p.profileId, static_cast<int>(c));
+    if (c == C::StandardRations || c == C::ConserveRations || c == C::ApplyRations)
+        return fmt::format("{}:{}:{}", key, p.revision, static_cast<int>(p.activePolicy));
     if (c != C::StartRest && c != C::StartExpansion && c != C::CancelExpansion && c != C::AutoFill)
         return key;
     key += fmt::format(":{}:{}:{}", p.revision, p.worldMinute, uiDormitoryEnabled(c, p));

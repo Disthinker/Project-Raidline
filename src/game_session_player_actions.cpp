@@ -8,7 +8,6 @@ float GameSession::preparePlayerActionInput(GameplayInput &input,float deltaTime
 {
     float advance=deltaTime;
     const auto context=playerGameplayContext();
-    if(input.reloadGestureJustPressed) cancelPlayerControlIntent();
     if(input.cycleFireModeJustPressed && context.activeWeapon && !context.controlled && !context.dead && !input.inventoryOpen)
     {
         const auto current=weaponFireMode(*context.activeWeapon);
@@ -46,6 +45,7 @@ float GameSession::preparePlayerActionInput(GameplayInput &input,float deltaTime
         if(!cancelActiveRaidAction()){state_=GameSessionState::SettlementBlocked;return 0;}
         if(medical)presentationEvents_.push_back(GameSessionPresentationEvent::MedicalInterrupted);
     }
+    if(input.reloadGestureJustPressed) cancelPlayerControlIntent();
     if(!interrupted && context.activeWeapon && !context.dead && !context.controlled && !input.inventoryOpen &&
         !input.sprint && !input.firePressed && !input.fireJustPressed && !meleeSuppressed && input.raidReloadIntents.size()<=2)
     {
@@ -117,7 +117,7 @@ void GameSession::advancePlayerAction(const GameplayInput &input, float deltaTim
             lastIncomingDamage_->damageApplied > 0;
         const bool interrupted = controlled || input.inventoryOpen ||
             std::visit(
-                [&input, tookDamage](const auto &action)
+                [this, &input, tookDamage](const auto &action)
                 {
                     using Action = std::decay_t<decltype(action)>;
                     if constexpr (std::is_same_v<Action, ReloadRaidAction> ||
@@ -142,6 +142,12 @@ void GameSession::advancePlayerAction(const GameplayInput &input, float deltaTim
                     else if constexpr (
                         std::is_same_v<Action, MedicalRaidAction>)
                     {
+                        if (action.fireSupportSpace &&
+                            (input.freezeObservationDirection || input.throwableModal || input.meleeJustPressed ||
+                             input.meleeHeavyJustPressed || !world_ || world_->spaceTransitionedLastUpdate() ||
+                             world_->activeRaidSpaceId() != *action.fireSupportSpace ||
+                             !queryActiveFireSupportTreatment(action.medicalAssetId).canCommit))
+                            return true;
                         return input.firePressed || input.fireJustPressed ||
                                (input.reloadJustPressed || input.reloadGestureJustPressed) || input.sprint;
                     }
@@ -204,7 +210,7 @@ void GameSession::advancePlayerAction(const GameplayInput &input, float deltaTim
             if (RaidAction *active = raidActionState_.activeMutable())
             {
                 if (auto *medical = std::get_if<MedicalRaidAction>(active);
-                    medical != nullptr &&
+                    medical != nullptr && !medical->fireSupportSpace &&
                     !advanceContinuousHealing(*medical, deltaTime))
                 {
                     raidActionState_.cancel();
@@ -330,6 +336,25 @@ void GameSession::advancePlayerAction(const GameplayInput &input, float deltaTim
                 else if (const auto *medical =
                              std::get_if<MedicalRaidAction>(&*completed))
                 {
+                    if (medical->fireSupportSpace)
+                    {
+                        ProfileState candidate = profile_;
+                        const auto receipt = executeMedicalUse(candidate, publishedContentRegistry(),
+                            medical->medicalAssetId, MedicalAccess::CarriedOnly,
+                            {profile_.revision, nextRaidTransaction("medical-teammate")},
+                            TeammateMedicalTarget{world_->fireSupportHealth().value_or(0), kFireSupportMaxHealth});
+                        if (receipt.succeeded && !receipt.idempotent && commitProfileCandidate(std::move(candidate), false))
+                        {
+                            world_->restoreFireSupportHealth(receipt.healedAmount);
+                            presentationEvents_.push_back(GameSessionPresentationEvent::MedicalCompleted);
+                        }
+                        else
+                        {
+                            if (!receipt.succeeded) persistenceMessage_ = receipt.message;
+                            presentationEvents_.push_back(GameSessionPresentationEvent::MedicalInterrupted);
+                        }
+                        return;
+                    }
                     if (medical->effect == MedicalUseEffect::RestoreHealth)
                     {
                         presentationEvents_.push_back(

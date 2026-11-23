@@ -160,7 +160,9 @@ TEST(ProfileStateTest, NewPublishedProfileCreatesLegacyCatalogAndExcludesPurchas
             definition.definitionId == kFieldIntelligenceDocumentId ||
             definition.definitionId == kFreightBreachWedgesId ||
             definition.definitionId == kRaidFieldSplintId ||
-            definition.definitionId == kThrownIlluminationItemId) {
+            definition.definitionId == kThrownIlluminationItemId ||
+            definition.definitionId == kRaidSmokeItemId || definition.definitionId == kRaidFireBottleItemId ||
+            definition.definitionId == kRaidAlarmItemId) {
             EXPECT_EQ(stored, profile.assets.records().end()) << definition.definitionId.value();
             continue;
         }

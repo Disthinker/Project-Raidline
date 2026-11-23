@@ -15,6 +15,9 @@ inline constexpr std::string_view kRaidRunnerRulesVersion{"content-frontier-runn
 [[nodiscard]] ProfileValidationResult validateRaidArmedScavengers(const ProfileState &, const ContentRegistry &);
 [[nodiscard]] bool syncRaidArmedScavengerAmmo(ProfileState &, const ContentRegistry &, std::string_view sourceEnemyId,
                                               int shotsFired, bool reloaded);
+[[nodiscard]] bool raidArmedScavengerEscaped(const PendingRaidSnapshot &, std::string_view sourceEnemyId) noexcept;
+[[nodiscard]] bool sealRaidArmedScavengerEscape(ProfileState &, const ContentRegistry &, std::string_view sourceEnemyId,
+                                                Vec2 actorCenter);
 
 struct RaidCorpseDeathFact
 {

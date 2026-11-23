@@ -37,7 +37,7 @@ struct RaidIndoorVisibilityUiTestAccess
     static void paintTacticalMap(App &a) { a.renderRaidTacticalMap(); }
     static bool chalkAvailable(App &a) { return a.raidChalkContext().has_value(); }
     static bool chalkDrawing(App &a) { return a.raidChalkRoutes_.drawing(); }
-    static std::size_t chalkStrokes(App &a, RaidChalkSpace space)
+    static std::size_t chalkStrokes(App &a, const RaidSpaceDefinitionId &space)
     {
         return a.raidChalkRoutes_.strokes(space).size();
     }
@@ -172,11 +172,13 @@ protected:
         std::filesystem::remove_all(path, error);
     }
 
-    void deploy(const MapDefinitionId &map, bool known)
+    void deploy(const MapDefinitionId &map, bool known, bool depotKnown = false)
     {
         auto profile = makeNewAlphaProfile("chalk-route-ui", publishedContentRegistry());
         if (known)
             profile.raidInteriorIntelligence.knownLayouts.insert(kHospitalFloorplanSpaceId);
+        if (depotKnown)
+            profile.raidInteriorIntelligence.knownLayouts.insert(kHospitalDepotSpaceId);
         ASSERT_TRUE(SaveRepository{path}.save(profile, publishedContentRegistry().contentVersion()).succeeded);
         app = std::make_unique<App>();
         A::flow(*app).configurePersistence(path);
@@ -231,16 +233,16 @@ protected:
         pointer(SDL_EVENT_MOUSE_BUTTON_UP, point, SDL_BUTTON_LEFT);
     }
 
-    void crossHospitalDoor()
+    void crossHospitalDoor(const RaidSpaceDefinitionId &id = kHospitalFloorplanSpaceId)
     {
         auto &flow = A::flow(*app);
         const auto &session = flow.gameSession();
         const auto &world = session.world();
         ASSERT_TRUE(session.profile().pendingRaid);
         const auto &interiors = session.profile().pendingRaid->interiors;
-        const auto hospital = std::find_if(interiors.begin(), interiors.end(), [](const auto &room)
+        const auto hospital = std::find_if(interiors.begin(), interiors.end(), [&](const auto &room)
         {
-            return room.id == kHospitalFloorplanSpaceId;
+            return room.id == id;
         });
         ASSERT_NE(hospital, interiors.end());
         const auto door = world.inOutdoorRaidSpace() ? hospital->exteriorEntrance : hospital->interiorExit;
@@ -307,7 +309,7 @@ TEST_F(RaidChalkRouteUiTest, RoutesRenderAcrossWindowSizesAndResetAtRaidEnd)
     key(SDL_SCANCODE_M);
     ASSERT_TRUE(A::chalkAvailable(*app));
     line({300, 220}, {460, 220});
-    ASSERT_EQ(A::chalkStrokes(*app, RaidChalkSpace::Outdoor), 1U);
+    ASSERT_EQ(A::chalkStrokes(*app, outdoorRaidSpaceId()), 1U);
     verifyScaledMap();
 
     pointer(SDL_EVENT_MOUSE_BUTTON_DOWN, {350, 300});
@@ -326,17 +328,17 @@ TEST_F(RaidChalkRouteUiTest, RoutesRenderAcrossWindowSizesAndResetAtRaidEnd)
     ASSERT_TRUE(A::chalkAvailable(*app));
     line({300, 220}, {460, 220});
     line({300, 260}, {460, 260});
-    EXPECT_EQ(A::chalkStrokes(*app, RaidChalkSpace::HospitalInterior), 2U);
+    EXPECT_EQ(A::chalkStrokes(*app, kHospitalFloorplanSpaceId), 2U);
     click({960, 682});
-    EXPECT_EQ(A::chalkStrokes(*app, RaidChalkSpace::HospitalInterior), 1U);
+    EXPECT_EQ(A::chalkStrokes(*app, kHospitalFloorplanSpaceId), 1U);
     click({1080, 682});
-    EXPECT_EQ(A::chalkStrokes(*app, RaidChalkSpace::HospitalInterior), 0U);
-    EXPECT_EQ(A::chalkStrokes(*app, RaidChalkSpace::Outdoor), 1U);
+    EXPECT_EQ(A::chalkStrokes(*app, kHospitalFloorplanSpaceId), 0U);
+    EXPECT_EQ(A::chalkStrokes(*app, outdoorRaidSpaceId()), 1U);
 
     ASSERT_TRUE(A::flow(*app).returnToMainMenu());
     A::frame(*app);
-    EXPECT_EQ(A::chalkStrokes(*app, RaidChalkSpace::Outdoor), 0U);
-    EXPECT_EQ(A::chalkStrokes(*app, RaidChalkSpace::HospitalInterior), 0U);
+    EXPECT_EQ(A::chalkStrokes(*app, outdoorRaidSpaceId()), 0U);
+    EXPECT_EQ(A::chalkStrokes(*app, kHospitalFloorplanSpaceId), 0U);
 }
 
 TEST_F(RaidChalkRouteUiTest, UnknownHospitalLayoutDoesNotAcceptChalk)
@@ -347,7 +349,51 @@ TEST_F(RaidChalkRouteUiTest, UnknownHospitalLayoutDoesNotAcceptChalk)
     key(SDL_SCANCODE_M);
     EXPECT_FALSE(A::chalkAvailable(*app));
     line({300, 220}, {460, 220});
-    EXPECT_EQ(A::chalkStrokes(*app, RaidChalkSpace::HospitalInterior), 0U);
+    EXPECT_EQ(A::chalkStrokes(*app, kHospitalFloorplanSpaceId), 0U);
+}
+
+TEST_F(RaidChalkRouteUiTest, DepotPlanOnlyAllowsDrawingInsideTheDepot)
+{
+    ASSERT_NO_FATAL_FAILURE(deploy(kHospitalFloorplanMapId, false, true));
+    crossHospitalDoor(kHospitalDepotSpaceId);
+    ASSERT_EQ(A::flow(*app).gameSession().world().activeRaidSpaceId(), kHospitalDepotSpaceId);
+    key(SDL_SCANCODE_M);
+    ASSERT_TRUE(A::chalkAvailable(*app));
+    line({350, 260}, {470, 260});
+    EXPECT_EQ(A::chalkStrokes(*app, kHospitalDepotSpaceId), 1U);
+    key(SDL_SCANCODE_M);
+    crossHospitalDoor(kHospitalDepotSpaceId);
+    crossHospitalDoor(kHospitalFloorplanSpaceId);
+    ASSERT_EQ(A::flow(*app).gameSession().world().activeRaidSpaceId(), kHospitalFloorplanSpaceId);
+    key(SDL_SCANCODE_M);
+    EXPECT_FALSE(A::chalkAvailable(*app));
+    line({350, 260}, {470, 260});
+    EXPECT_EQ(A::chalkStrokes(*app, kHospitalFloorplanSpaceId), 0U);
+    EXPECT_EQ(A::chalkStrokes(*app, kHospitalDepotSpaceId), 1U);
+}
+
+TEST_F(RaidChalkRouteUiTest, ClearingOneKnownBuildingPreservesTheOtherBuildingsRoute)
+{
+    ASSERT_NO_FATAL_FAILURE(deploy(kHospitalFloorplanMapId, true, true));
+    crossHospitalDoor(kHospitalFloorplanSpaceId);
+    key(SDL_SCANCODE_M);
+    line({350, 260}, {470, 260});
+    key(SDL_SCANCODE_M);
+    crossHospitalDoor(kHospitalFloorplanSpaceId);
+    crossHospitalDoor(kHospitalDepotSpaceId);
+    key(SDL_SCANCODE_M);
+    ASSERT_TRUE(A::chalkAvailable(*app));
+    EXPECT_EQ(A::chalkStrokes(*app, kHospitalDepotSpaceId), 0U);
+    line({350, 260}, {470, 260});
+    ASSERT_EQ(A::chalkStrokes(*app, kHospitalDepotSpaceId), 1U);
+    click({1080, 682});
+    EXPECT_EQ(A::chalkStrokes(*app, kHospitalDepotSpaceId), 0U);
+    key(SDL_SCANCODE_M);
+    crossHospitalDoor(kHospitalDepotSpaceId);
+    crossHospitalDoor(kHospitalFloorplanSpaceId);
+    key(SDL_SCANCODE_M);
+    ASSERT_TRUE(A::chalkAvailable(*app));
+    EXPECT_EQ(A::chalkStrokes(*app, kHospitalFloorplanSpaceId), 1U);
 }
 
 class RaidIndoorVisibilityUiTest : public testing::Test

@@ -271,6 +271,11 @@ public:
     [[nodiscard]] bool raidFuelExtractionEnabled() const noexcept;
     [[nodiscard]] RaidFieldTradeAccess fieldIntelligenceTradeStatus() const noexcept;
     [[nodiscard]] std::optional<RaidFieldTradeView> fieldIntelligenceTradeView() const;
+    [[nodiscard]] RaidFieldBarterPlan queryFieldBarter(std::size_t offerIndex) const;
+    [[nodiscard]] RaidFieldCacheReadPlan queryFieldCacheClue(AssetInstanceId documentId) const;
+    [[nodiscard]] bool readFieldCacheClue(AssetInstanceId documentId, ProfileRevision expectedRevision);
+    [[nodiscard]] bool searchFieldCache();
+    [[nodiscard]] bool exchangeFieldBarter(std::size_t offerIndex, AssetInstanceId input, ProfileRevision expectedRevision);
     [[nodiscard]] bool sellFieldIntelligenceDocument(AssetInstanceId);
     [[nodiscard]] bool buyFieldIntelligenceOffer(std::size_t);
     [[nodiscard]] bool canCallSignalExtraction(bool inventoryOpen = false) const noexcept;
@@ -384,6 +389,9 @@ public:
         AssetInstanceId magazineAssetId);
     [[nodiscard]] bool startAlphaHeal(AssetInstanceId medkitAssetId);
     [[nodiscard]] bool startAlphaMedical(AssetInstanceId medicalAssetId);
+    [[nodiscard]] std::vector<AssetInstanceId> fireSupportTreatmentKits() const;
+    [[nodiscard]] MedicalUsePlan queryFireSupportTreatment(AssetInstanceId medicalAssetId) const;
+    [[nodiscard]] bool startFireSupportTreatment(AssetInstanceId medicalAssetId);
     [[nodiscard]] bool startAlphaWeaponMaintenance(
         AssetInstanceId kitAssetId,
         AssetInstanceId weaponAssetId);
@@ -407,6 +415,8 @@ public:
 
     [[nodiscard]] bool
     raidLootAccessible(const RaidLootSnapshot &loot) const;
+    [[nodiscard]] const RaidLootSnapshot *fieldClueCacheLoot() const noexcept;
+    [[nodiscard]] bool fieldClueCacheInRange() const;
 
     [[nodiscard]] const ProfileState &profile() const noexcept;
     [[nodiscard]] EquipmentSlotKind activeAlphaWeaponSlot() const noexcept;
@@ -569,6 +579,8 @@ public:
     [[nodiscard]] BaseManufacturingReceipt executeStartBaseManufacturing(
         BaseManufacturingRecipeDefinitionId definitionId,
         std::string transactionId);
+    [[nodiscard]] BaseManufacturingReceipt executeExpediteBaseManufacturing(
+        BaseServiceJobId jobId, AssetInstanceId materialId, ProfileRevision expectedRevision, std::string transactionId);
     [[nodiscard]] BaseManufacturingReceipt executeCancelBaseManufacturing(
         std::string transactionId);
     [[nodiscard]] BaseManufacturingReceipt executeCollectBaseManufacturing(
@@ -625,6 +637,7 @@ public:
     [[nodiscard]] bool beginNoiseDecoySelection();
     [[nodiscard]] InventoryReceipt throwNoiseDecoy(AssetInstanceId, Vec2 aim, const CommandContext &);
     [[nodiscard]] bool canSelectThrowable() const;
+    [[nodiscard]] bool ordinaryRaidThrowablesAllowed() const noexcept;
     [[nodiscard]] bool beginThrowableSelection();
     [[nodiscard]] InventoryReceipt throwThrowable(AssetInstanceId, Vec2 aim, const CommandContext &);
     void noteBaseFacility(BaseFacilityKind facility);
@@ -632,7 +645,8 @@ public:
 private:
     std::optional<MeleeUseDefinition> currentMeleeDefinition() const;
     bool currentMeleeUsable() const;
-    void prepareMeleeInput(GameplayInput &,float seconds,float recovery);
+    bool prepareMeleeInput(GameplayInput &,float seconds,const WorldMeleeRuntime &);
+    void cancelWeaponControlIntent() noexcept;
     bool commitPlayerMelee(GameplayWorld &,bool allow=true);
     bool commitPlayerMelee(BaseWorld &,bool allow=true,ProfileState *privateCandidate=nullptr);
     bool meleeSuppressedUntilRelease_{};
@@ -651,6 +665,9 @@ private:
     friend struct InventoryCheckpointTestAccess;
     friend struct ProfileUiPersistenceTestAccess;
     friend struct RunnerInfectedUiTestAccess;
+    bool commitPendingRaidExplosion();
+    bool commitPendingFireDamage();
+    std::optional<int> applyRaidAreaPlayerDamage(const std::optional<CombatDamageCommand> &damage, const char *transactionKind);
     bool processGrenadeExplosion(std::optional<IncomingDamageCommand> *dailyDamage=nullptr);
     friend struct NoiseDecoyUiTestAccess;
     friend struct BaseDailyCheckpointTestAccess;
@@ -741,6 +758,7 @@ private:
     [[nodiscard]] bool advanceRaidWeaponAction(float deltaTime, bool interrupted);
     [[nodiscard]] float preparePlayerActionInput(GameplayInput &, float deltaTime, bool meleeSuppressed);
     void advancePlayerAction(const GameplayInput &, float deltaTime, float weaponActionDelta);
+    [[nodiscard]] MedicalUsePlan queryActiveFireSupportTreatment(AssetInstanceId medicalAssetId) const;
     void preparePlayerCombatInput(GameplayInput &, const GameplayInput &, float,
         const std::optional<WeaponHandlingParameters> &);
     void gateOpticInteraction(GameplayInput &input, GameplayInput &simulationInput, float deltaTime) noexcept;

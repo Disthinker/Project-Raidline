@@ -256,7 +256,7 @@ namespace
     }
 }
 
-TEST(RaidFireSupportCrossSpaceTest, AllThreePublishedInteriorsHaveLegalRoundTripLandings)
+TEST(RaidFireSupportCrossSpaceTest, AllFourPublishedInteriorsHaveLegalRoundTripLandings)
 {
     std::size_t checked = 0;
     for (const auto &id : {"map.raid.hospital_district", "map.raid.frontier_exchange"})
@@ -301,7 +301,7 @@ TEST(RaidFireSupportCrossSpaceTest, AllThreePublishedInteriorsHaveLegalRoundTrip
             ++checked;
         }
     }
-    EXPECT_EQ(checked, 3U);
+    EXPECT_EQ(checked, 4U);
 }
 
 TEST(RaidFireSupportCrossSpaceTest, WaitingInOneRoomDoesNotExposeActorInIdenticalSiblingRoom)

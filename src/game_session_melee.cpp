@@ -18,17 +18,25 @@ bool GameSession::currentMeleeUsable() const
     return asset && asset->currentDurability>0 && currentMeleeDefinition().has_value();
 }
 
-void GameSession::prepareMeleeInput(GameplayInput &input,float seconds,float recovery)
+bool GameSession::prepareMeleeInput(GameplayInput &input,float seconds,const WorldMeleeRuntime &melee)
 {
-    if(!input.meleePressed && !input.meleeJustPressed)meleeSuppressedUntilRelease_=false;
+    if(!input.meleePressed && !input.meleeJustPressed && !input.meleeHeavyHeld && !input.meleeHeavyJustPressed)
+        meleeSuppressedUntilRelease_=false;
+    if (input.inventoryOpen || input.freezeObservationDirection || input.throwableModal ||
+        input.weaponSlotJustPressed || input.interactJustPressed || input.reloadJustPressed ||
+        input.reloadGestureJustPressed || input.healJustPressed)
+    {
+        input.meleeHeavyHeld = input.meleeHeavyJustPressed = false;
+    }
     if(input.inventoryOpen || input.freezeObservationDirection)
     {
         if(input.meleePressed || input.meleeJustPressed)meleeSuppressedUntilRelease_=true;
         input.meleeJustPressed=false;
     }
-    if(meleeSuppressedUntilRelease_)input.meleeJustPressed=false;
-    const bool requested=input.meleeJustPressed;
-    const bool recovering=recovery>(std::isfinite(seconds) ? std::max(0.0F,seconds):0.0F)+0.000001F;
+    if(meleeSuppressedUntilRelease_)input.meleeJustPressed=input.meleeHeavyJustPressed=false;
+    const bool requested=input.meleeJustPressed || (input.meleeHeavyJustPressed && input.meleeHeavyHeld);
+    const bool winding = melee.chargingHeavy() && input.meleeHeavyHeld;
+    const bool recovering=melee.recoverySeconds()>(std::isfinite(seconds) ? std::max(0.0F,seconds):0.0F)+0.000001F;
     if(requested && !recovering && raidActionState_.active())
     {
         const bool cancelOnly=std::visit([](const auto &a){using A=std::decay_t<decltype(a)>;
@@ -37,15 +45,15 @@ void GameSession::prepareMeleeInput(GameplayInput &input,float seconds,float rec
         if (!cancelActiveRaidAction())
         {
             state_ = GameSessionState::SettlementBlocked;
-            input.meleeJustPressed = false;
+            input.meleeJustPressed = input.meleeHeavyJustPressed = input.meleeHeavyHeld = false;
             meleeSuppressedUntilRelease_ = true;
-            return;
+            return true;
         }
-        if(cancelOnly){input.meleeJustPressed=false;meleeSuppressedUntilRelease_=true;}
+        if(cancelOnly){input.meleeJustPressed=input.meleeHeavyJustPressed=input.meleeHeavyHeld=false;meleeSuppressedUntilRelease_=true;}
     }
-    if(requested || recovering)
+    if(requested || recovering || winding)
     {
-        cancelPlayerControlIntent();
+        cancelWeaponControlIntent();
         fireSuppressedUntilRelease_=fireSuppressedUntilRelease_ || input.firePressed || input.fireJustPressed;
         sprintSuppressedUntilRelease_=sprintSuppressedUntilRelease_ || input.sprint;
         input.firePressed=input.fireJustPressed=input.sprint=false;
@@ -53,9 +61,11 @@ void GameSession::prepareMeleeInput(GameplayInput &input,float seconds,float rec
         input.weaponSlotJustPressed.reset();
         sprintFireIntentPending_=false;sprintFireReadyRemaining_=0;weaponClearGesture_.reset();
         if(requested && !currentMeleeDefinition())persistenceMessage_="EQUIP A UTILITY KNIFE";
+        else if (input.meleeHeavyJustPressed && !currentMeleeUsable())persistenceMessage_="UTILITY KNIFE BROKEN | BASE MAINTENANCE";
     }
-    if(recovering)input.meleeJustPressed=false;
+    if(recovering)input.meleeJustPressed=input.meleeHeavyJustPressed=false;
     if(requested)meleeSuppressedUntilRelease_=true;
+    return requested || recovering || winding;
 }
 
 namespace

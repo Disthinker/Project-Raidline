@@ -88,6 +88,10 @@ protected:
         ASSERT_NO_THROW(saveDirectory.cleanup());
     }
     void control(Control c) { auto point = center(uiWorkshopControlRect(c)); pointer(point, true); pointer(point, false); A::frame(*app); }
+    void chooseVisibleGun(std::size_t index) {
+        const auto point = center(uiWorkshopRecipeRect(index));
+        pointer(point, true); pointer(point, false); A::frame(*app);
+    }
     void down(Control c = Control::Main) { pointer(center(uiWorkshopControlRect(c)), true); A::frame(*app); }
     void up(Control c = Control::Main) { pointer(center(uiWorkshopControlRect(c)), false); A::frame(*app); }
     AssetInstanceId create(const ItemDefinitionId &id, std::uint32_t n) {
@@ -118,6 +122,180 @@ TEST_F(UiBaseWorkshopTest, BrowsingAndHoverNeverReserveAssetsOrAdvanceTime) {
     EXPECT_EQ(A::generation(*app),generation); EXPECT_EQ(profileStateFingerprint(profile()),fp);
     for(std::size_t i=0;i<4;++i){pointer(center(uiWorkshopRecipeRect(i)),true);pointer(center(uiWorkshopRecipeRect(i)),false);A::frame(*app);}
     control(Control::Facilities); A::draw(*app); EXPECT_EQ(profileStateFingerprint(profile()),fp);
+}
+
+TEST_F(UiBaseWorkshopTest, ExpediteSelectsOneSecondPageComponentAndConfirmsVisibleOrderOnce) {
+    supplies();
+    control(Control::Main);
+    ASSERT_TRUE(profile().baseManufacturing.activeOrder);
+    const auto job = profile().baseManufacturing.activeOrder->jobId;
+    const auto oldFinish = profile().baseManufacturing.activeOrder->completionWorldMinute;
+    for (int i=0;i<7;++i) ASSERT_NE(create(alpha_content::lootElectronics,1),0U);
+    const auto original = profileStateFingerprint(profile());
+    const auto beforeQuantity = quantity(alpha_content::lootElectronics);
+    A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+    key(SDL_SCANCODE_X); A::frame(*app);
+    ASSERT_TRUE(A::state(*app).expediteOpen);
+    const auto materials = A::projection(*app).materials;
+    ASSERT_GT(materials.size(),kUiWorkshopPageSize);
+    key(SDL_SCANCODE_PAGEDOWN); A::frame(*app);
+    ASSERT_EQ(A::state(*app).expeditePage,1U);
+    key(SDL_SCANCODE_1); A::frame(*app);
+    const auto selected = materials[kUiWorkshopPageSize].id;
+    ASSERT_EQ(A::state(*app).selectedMaterial,selected);
+    ASSERT_EQ(A::state(*app).expediteJob,job);
+    const auto quote = A::projection(*app).expedite;
+    ASSERT_TRUE(quote.canCommit) << quote.message;
+    EXPECT_LT(quote.newRemainingMinutes,quote.remainingMinutes);
+    EXPECT_EQ(profileStateFingerprint(profile()),original);
+    key(SDL_SCANCODE_ESCAPE); A::frame(*app);
+    EXPECT_TRUE(A::state(*app).expediteOpen);
+    EXPECT_FALSE(A::state(*app).selectedMaterial);
+    control(Control::ConfirmExpedite);
+    EXPECT_EQ(profileStateFingerprint(profile()),original);
+    chooseVisibleGun(0);
+    ASSERT_EQ(A::state(*app).selectedMaterial,selected);
+    if (const char *output=std::getenv("RAIDLINE_EXPEDITE_UI_DIR"); output && *output) {
+        const std::filesystem::path dir(output);
+        ASSERT_TRUE(dir.is_absolute());
+        std::filesystem::create_directories(dir);
+        for (const auto width : {960,1280}) {
+            detach(); attach(width,width*9/16);
+            A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+            ASSERT_TRUE(SDL_SetRenderDrawColor(renderer,10,16,18,255));
+            ASSERT_TRUE(SDL_RenderClear(renderer)); A::draw(*app); ASSERT_TRUE(SDL_RenderPresent(renderer));
+            ASSERT_TRUE(IMG_SavePNG(surface,(dir/("workshop-expedite-"+std::to_string(width)+"-zh.png")).string().c_str()));
+        }
+    }
+    down(Control::ConfirmExpedite);
+    EXPECT_NE(profile().assets.find(selected),nullptr);
+    up(Control::ConfirmExpedite);
+    ASSERT_TRUE(profile().baseManufacturing.activeOrder);
+    EXPECT_EQ(profile().baseManufacturing.activeOrder->jobId,job);
+    EXPECT_EQ(profile().baseManufacturing.activeOrder->completionWorldMinute,
+        oldFinish-(quote.remainingMinutes-quote.newRemainingMinutes));
+    EXPECT_FALSE(A::state(*app).expediteOpen);
+    EXPECT_EQ(profile().assets.find(selected),nullptr);
+    EXPECT_NE(profile().assets.find(materials.front().id),nullptr);
+    EXPECT_EQ(quantity(alpha_content::lootElectronics),beforeQuantity-1);
+    const auto saved = SaveRepository(path).load(content);
+    ASSERT_TRUE(saved.profile);
+    EXPECT_EQ(profileStateFingerprint(*saved.profile),profileStateFingerprint(profile()));
+    const auto after = profileStateFingerprint(profile());
+    control(Control::Expedite);
+    EXPECT_FALSE(A::state(*app).expediteOpen);
+    EXPECT_EQ(profileStateFingerprint(profile()),after);
+}
+
+TEST_F(UiBaseWorkshopTest, ExpediteRejectsAChangedPreviewAndPreservesTheExistingCancelButton) {
+    supplies();
+    control(Control::Main);
+    const auto component = create(alpha_content::lootElectronics,1);
+    control(Control::Expedite);
+    chooseVisibleGun(0);
+    ASSERT_TRUE(A::state(*app).selectedMaterial);
+    ++profile().revision;
+    const auto unchanged = profileStateFingerprint(profile());
+    key(SDL_SCANCODE_RETURN); A::frame(*app);
+    EXPECT_EQ(profileStateFingerprint(profile()),unchanged);
+    EXPECT_FALSE(A::state(*app).selectedMaterial);
+    EXPECT_NE(profile().assets.find(component),nullptr);
+    key(SDL_SCANCODE_ESCAPE); A::frame(*app);
+    EXPECT_FALSE(A::state(*app).expediteOpen);
+    ASSERT_TRUE(profile().baseManufacturing.activeOrder);
+    control(Control::Cancel);
+    EXPECT_FALSE(profile().baseManufacturing.activeOrder);
+    EXPECT_NE(profile().assets.find(component),nullptr);
+}
+
+TEST_F(UiBaseWorkshopTest, SalvagingASecondPageWeaponRequiresASeparateConfirmationAndPersistsOnce) {
+    for (int i = 0; i < 8; ++i) ASSERT_NE(create(alpha_content::pistol, 1), 0U);
+    control(Control::Salvage);
+    const auto guns = A::projection(*app).guns;
+    ASSERT_GT(guns.size(), kUiWorkshopPageSize);
+    const auto target = guns[kUiWorkshopPageSize].id;
+    const auto stock = quantity(kWeaponSalvageMaterialId);
+    control(Control::Next);
+    ASSERT_EQ(A::state(*app).salvagePage, 1U);
+    chooseVisibleGun(0);
+    ASSERT_EQ(A::projection(*app).selectedGun, target);
+    ASSERT_TRUE(A::projection(*app).salvage.canCommit);
+    control(Control::PreviewSalvage);
+    ASSERT_TRUE(A::state(*app).salvageConfirmation);
+    EXPECT_NE(profile().assets.find(target), nullptr);
+    control(Control::Cancel);
+    EXPECT_FALSE(A::state(*app).salvageConfirmation);
+    control(Control::ConfirmSalvage);
+    EXPECT_NE(profile().assets.find(target), nullptr);
+    control(Control::PreviewSalvage);
+    control(Control::ConfirmSalvage);
+    EXPECT_EQ(profile().assets.find(target), nullptr);
+    EXPECT_EQ(quantity(kWeaponSalvageMaterialId), stock + kWeaponSalvageMaterialQuantity);
+    const auto complete = profileStateFingerprint(profile());
+    up(Control::ConfirmSalvage);
+    EXPECT_EQ(profileStateFingerprint(profile()), complete);
+    const auto loaded = SaveRepository(path).load(content);
+    ASSERT_TRUE(loaded.profile);
+    EXPECT_EQ(profileStateFingerprint(*loaded.profile), complete);
+}
+
+TEST_F(UiBaseWorkshopTest, ChangedGunAndPageCannotSpendAnOldSalvageConfirmation) {
+    for (int i = 0; i < 7; ++i) ASSERT_NE(create(alpha_content::pistol, 1), 0U);
+    control(Control::Salvage);
+    chooseVisibleGun(0);
+    control(Control::PreviewSalvage);
+    ASSERT_TRUE(A::state(*app).salvageConfirmation);
+    const auto first = *A::state(*app).selectedGun;
+    chooseVisibleGun(1);
+    EXPECT_FALSE(A::state(*app).salvageConfirmation);
+    ASSERT_NE(*A::state(*app).selectedGun, first);
+    control(Control::PreviewSalvage);
+    ASSERT_TRUE(A::state(*app).salvageConfirmation);
+    wheel(center(uiWorkshopRecipeRect(1)));
+    EXPECT_FALSE(A::state(*app).salvageConfirmation);
+    EXPECT_FALSE(A::state(*app).selectedGun);
+    chooseVisibleGun(0);
+    const auto target = *A::state(*app).selectedGun;
+    control(Control::PreviewSalvage);
+    down(Control::ConfirmSalvage);
+    ++profile().revision;
+    up(Control::ConfirmSalvage);
+    EXPECT_NE(profile().assets.find(target), nullptr);
+    EXPECT_FALSE(A::state(*app).salvageConfirmation);
+    control(Control::PreviewSalvage);
+    key(SDL_SCANCODE_ESCAPE); A::frame(*app);
+    EXPECT_TRUE(A::state(*app).salvageOpen);
+    EXPECT_FALSE(A::state(*app).salvageConfirmation);
+    key(SDL_SCANCODE_ESCAPE); A::frame(*app);
+    EXPECT_FALSE(A::state(*app).salvageOpen);
+    EXPECT_EQ(A::flow(*app).activeBaseFacility(), BaseFacilityKind::Workshop);
+}
+
+TEST_F(UiBaseWorkshopTest, ChineseSalvageConfirmationRendersInAllThreeWindowSizes) {
+    ASSERT_NE(create(alpha_content::pistol, 1), 0U);
+    A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+    control(Control::Salvage);
+    chooseVisibleGun(0);
+    control(Control::PreviewSalvage);
+    ASSERT_TRUE(A::state(*app).salvageConfirmation);
+    const auto fp = profileStateFingerprint(profile());
+    for (const auto size : kUiWindowSizes) {
+        detach(); attach(size.width, size.height);
+        A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+        ASSERT_TRUE(SDL_SetRenderDrawColor(renderer,10,16,18,255));
+        ASSERT_TRUE(SDL_RenderClear(renderer));
+        A::draw(*app);
+        ASSERT_TRUE(SDL_RenderPresent(renderer));
+        EXPECT_TRUE(A::state(*app).salvageConfirmation);
+        EXPECT_EQ(profileStateFingerprint(profile()), fp);
+        if (const char *output = std::getenv("RAIDLINE_SALVAGE_QA_DIR")) {
+            const std::filesystem::path directory(output);
+            ASSERT_TRUE(directory.is_absolute());
+            std::filesystem::create_directories(directory);
+            const auto name = directory / ("salvage-confirm-zh-" + std::to_string(size.width) + ".png");
+            ASSERT_TRUE(IMG_SavePNG(surface, name.string().c_str()));
+        }
+    }
 }
 TEST_F(UiBaseWorkshopTest, NativeStartReservesOnceOnReleaseAndOldRouteIsInert) {
     supplies();const auto plan=queryStartBaseManufacturing(profile(),content,{content.baseManufacturingRecipes().front().id});ASSERT_TRUE(plan.canCommit);

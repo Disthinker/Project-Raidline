@@ -17,6 +17,9 @@ void App::updateThrowableInput(GameplayInput &input)
         ? &publishedContentRegistry().item(selected->definitionId) : nullptr;
     const bool selectingGrenade = selectedDefinition && selectedDefinition->grenadeUse;
     const bool selectingIllumination = selectedDefinition && selectedDefinition->thrownIlluminationUse;
+    const bool selectingSmoke = selectedDefinition && selectedDefinition->smokeUse;
+    const bool selectingFireBottle = selectedDefinition && selectedDefinition->fireZoneUse;
+    const bool selectingAlarm = selectedDefinition && selectedDefinition->alarmUse;
     const bool right=input_.isSecondaryPointerPressed();
     const bool cancel= input_.wasActionJustPressed(GameAction::InventoryCancel) || (right && !throwableRightWasDown_);
     throwableRightWasDown_=right;
@@ -32,12 +35,21 @@ void App::updateThrowableInput(GameplayInput &input)
     }
     else if (wasModal && cancel) {
         cancelThrowableUi();
-        if (selectingIllumination) uiMessage_ = "ILLUMINATION CANCELLED";
+        if (selectingAlarm) uiMessage_ = "ALARM PLACEMENT CANCELLED";
+        else if (selectingFireBottle) uiMessage_ = "FIRE BOTTLE CANCELLED";
+        else if (selectingSmoke) uiMessage_ = "SMOKE CANCELLED";
+        else if (selectingIllumination) uiMessage_ = "ILLUMINATION CANCELLED";
         else uiMessage_ = selectingGrenade ? "GRENADE CANCELLED" : "DECOY CANCELLED";
     }
     else if(input_.wasActionJustPressed(GameAction::SelectThrowable) && !wasModal){
         if(gameSession_.beginThrowableSelection()){
             throwableWheelOptions_=quickWheelCandidates(gameSession_.profile(),publishedContentRegistry(),UiQuickWheelKind::Throwable);
+            if (!gameSession_.ordinaryRaidThrowablesAllowed())
+                std::erase_if(throwableWheelOptions_, [&](AssetInstanceId id) {
+                    const auto &definition = gameSession_.profile().assets.find(id)->definitionId;
+                    return definition == kRaidSmokeItemId || definition == kRaidFireBottleItemId ||
+                        definition == kRaidAlarmItemId;
+                });
             throwableWheelSelected_=0;quickWheelPage_=0;wheelPointerOffset_={};pendingRelativeAimMotion_={};
             throwableWheelOpen_=true;opened=true;uiMessage_.clear();
         }else uiMessage_=gameSession_.persistenceMessage();
@@ -59,6 +71,9 @@ void App::updateThrowableInput(GameplayInput &input)
         const auto receipt=gameSession_.throwThrowable(id,aim,
             {gameSession_.profile().revision,nextProfileTransactionId("throwable-ui")});
         if (!receipt.succeeded) uiMessage_ = receipt.message;
+        else if (selectingAlarm) uiMessage_ = "ALARM DEPLOYED";
+        else if (selectingFireBottle) uiMessage_ = "FIRE BOTTLE THROWN";
+        else if (selectingSmoke) uiMessage_ = "SMOKE THROWN";
         else if (selectingIllumination) uiMessage_ = "ILLUMINATION THROWN";
         else uiMessage_ = selectingGrenade ? "GRENADE THROWN" : "DECOY THROWN";
         cancelThrowableUi();
@@ -70,6 +85,7 @@ void App::updateThrowableInput(GameplayInput &input)
         input.cycleFireModeJustPressed=false;input.raidReloadIntents.clear();
         input.reloadGestureJustPressed=false;
         input.weaponSlotJustPressed.reset();input.meleePressed=input.meleeJustPressed=false;
+        input.meleeHeavyJustPressed = input.meleeHeavyHeld = false;
         input.quitRaidJustPressed=false;input_.suppressPrimaryPointerUntilRelease();
     }
     if(throwableWheelOpen_)input.aimMotionDelta=Vec2{};
@@ -81,7 +97,18 @@ void App::renderThrowableUi()
     if(throwableWheelOpen_)renderQuickWheel(UiQuickWheelKind::Throwable,throwableWheelOptions_,throwableWheelSelected_);
     else if(selectedThrowable_){
         const SDL_FRect panel{434,424,412,46};uiFinalPanel(renderer_,panel);
-        uiFinalText(renderer_,uiTextRenderer_,{446,430,388,38},"LEFT CLICK THROW | RIGHT CLICK / ESC CANCEL",13,2);
+        const auto *asset = gameSession_.profile().assets.find(*selectedThrowable_);
+        const char *hint = "LEFT CLICK THROW | RIGHT CLICK / ESC CANCEL";
+        if (asset && asset->definitionId == kRaidSmokeItemId) hint = "SMOKE · LEFT CLICK THROW | RMB / ESC CANCEL";
+        if (asset && asset->definitionId == kRaidFireBottleItemId) hint = "FIRE BOTTLE · LEFT CLICK THROW | RMB / ESC CANCEL";
+        if (asset && asset->definitionId == kRaidAlarmItemId) {
+            const auto &world=gameSession_.world();
+            const auto &use=publishedContentRegistry().item(asset->definitionId).alarmUse;
+            if (!world.proximityAlarms().canPlace()) hint="ALARM LIMIT REACHED";
+            else hint=world.previewProximityAlarm(world.weaponAimWorldPosition(),*use)
+                ? "ALARM · LEFT CLICK PLACE NEARBY | RMB / ESC CANCEL" : "ALARM · AIM AT CLEAR GROUND NEARBY | RMB / ESC CANCEL";
+        }
+        uiFinalText(renderer_,uiTextRenderer_,{446,430,388,38},hint,13,2);
     }else if(gameFlow_.state()!=GameFlowState::Base && !medicalWheelOpen_ && !magazineWheelOpen_)uiFinalText(renderer_,uiTextRenderer_,{780,666,390,24},"4 THROWABLES | CHEST RIG",12,1);
 }
 void App::renderEmptyPlayerCorpses()
@@ -211,6 +238,7 @@ void App::renderNoiseDecoyWorld()
     } else {
         const auto &world=gameSession_.world();
         draw(world,world.activeRaidSpaceId(),[&](Rect bounds){return world.raidBoundsObservable(bounds);});
+        renderRaidAreaThrows();
     }
 }
 

@@ -9,10 +9,7 @@
 
 namespace
 {
-    constexpr float kFollowDistance = 57.0F;
-    constexpr float kFollowSpeed = 285.0F;
     constexpr float kCatchUpDistance = 170.0F;
-    constexpr float kCatchUpSpeed = 375.0F;
     constexpr float kNavigationRefreshSeconds = 0.20F;
     constexpr float kShotExtent = 8.0F;
     constexpr float kMovementEpsilon = 0.001F;
@@ -42,7 +39,7 @@ namespace
 }
 
 RaidFireSupportRuntime::RaidFireSupportRuntime(FireSupportConfig config, Vec2 spawnPosition)
-    : config_{config}, position_{spawnPosition}
+    : RaidCompanionRuntime{spawnPosition}, config_{config}
 {
     if (config.damage <= 0 || config.penetration < 0 ||
         !std::isfinite(config.projectileSpeed) || config.projectileSpeed <= 0.0F ||
@@ -52,14 +49,20 @@ RaidFireSupportRuntime::RaidFireSupportRuntime(FireSupportConfig config, Vec2 sp
     }
 }
 
-Vec2 RaidFireSupportRuntime::center() const noexcept
+Vec2 RaidCompanionRuntime::center() const noexcept
 {
     return {position_.x + kSize.x * 0.5F, position_.y + kSize.y * 0.5F};
 }
 
 FireSupportView RaidFireSupportRuntime::view() const noexcept
 {
-    return {bounds(), health_.current(), movementOrder_, fireOrder_};
+    return {bounds(), health(), movementOrder_, fireOrder_};
+}
+
+void RaidCompanionRuntime::setMovementOrder(FireSupportMovementOrder movement) noexcept
+{
+    if (movementOrder_ != movement) clearNavigation();
+    movementOrder_ = movement;
 }
 
 void RaidFireSupportRuntime::setOrders(
@@ -67,13 +70,11 @@ void RaidFireSupportRuntime::setOrders(
 {
     if (!alive())
         return;
-    if (movementOrder_ != movement)
-        clearNavigation();
-    movementOrder_ = movement;
+    setMovementOrder(movement);
     fireOrder_ = fire;
 }
 
-void RaidFireSupportRuntime::clearNavigation() noexcept
+void RaidCompanionRuntime::clearNavigation() noexcept
 {
     waypoint_.reset();
     navigationRefresh_ = 0.0F;
@@ -89,23 +90,23 @@ void RaidFireSupportRuntime::clearSpatialTransient() noexcept
 void RaidFireSupportRuntime::leaveSpace() noexcept
 {
     clearSpatialTransient();
-    attackLocks_.clear();
+    clearAttackLocks();
 }
 
-Vec2 RaidFireSupportRuntime::prepareMovement(
+Vec2 RaidCompanionRuntime::prepareMovement(
     Vec2 goal, const RaidSpaceNavigationField *field,
-    const RaidSpaceBlockerIndex &blockers, float seconds)
+    const RaidSpaceBlockerIndex &blockers, float seconds, float stopDistance)
 {
     if (!alive() || !std::isfinite(seconds) || seconds <= 0.0F)
         return position_;
     contactProtection_ = std::max(0.0F, contactProtection_ - seconds);
     controlRemaining_ = std::max(0.0F, controlRemaining_ - seconds);
-    if (controlRemaining_ > 0.0F || movementOrder_ == FireSupportMovementOrder::Hold)
+    if (receivingTreatment_ || controlRemaining_ > 0.0F || movementOrder_ == FireSupportMovementOrder::Hold)
         return position_;
 
     const Vec2 start = center();
     const float goalDistanceSquared = distanceSquared(start, goal);
-    const bool close = goalDistanceSquared <= kFollowDistance * kFollowDistance;
+    const bool close = goalDistanceSquared <= stopDistance * stopDistance;
     if (close && blockers.hasLineOfSight(start, goal))
     {
         clearNavigation();
@@ -132,27 +133,27 @@ Vec2 RaidFireSupportRuntime::prepareMovement(
     if (distance <= kMovementEpsilon)
         return position_;
     const float speed = goalDistanceSquared > kCatchUpDistance * kCatchUpDistance
-        ? kCatchUpSpeed : kFollowSpeed;
+        ? catchUpSpeed_ : followSpeed_;
     const float movement = std::min(distance, speed * seconds) / distance;
     return {position_.x + offset.x * movement, position_.y + offset.y * movement};
 }
 
-bool RaidFireSupportRuntime::hasAttackLock(CombatTargetId id) const noexcept
+bool RaidCompanionRuntime::hasAttackLock(CombatTargetId id) const noexcept
 {
     return std::ranges::find(attackLocks_, id) != attackLocks_.end();
 }
 
-void RaidFireSupportRuntime::lockAttack(CombatTargetId id)
+void RaidCompanionRuntime::lockAttack(CombatTargetId id)
 {
     attackLocks_.push_back(id);
 }
 
-void RaidFireSupportRuntime::forgetAttack(CombatTargetId id) noexcept
+void RaidCompanionRuntime::forgetAttack(CombatTargetId id) noexcept
 {
     std::erase(attackLocks_, id);
 }
 
-void RaidFireSupportRuntime::applyContact(
+void RaidCompanionRuntime::applyContact(
     const PlayerDamageObservation &damage, float controlDuration)
 {
     const auto outcome = resolveCombatDamage({
@@ -162,12 +163,14 @@ void RaidFireSupportRuntime::applyContact(
     {
         static_cast<void>(health_.takeDamage(outcome.damageApplied));
         controlRemaining_ = std::max(controlRemaining_, controlDuration);
+        if (receivingTreatment_ && controlDuration > 0.0F)
+            treatmentInterrupted_ = true;
     }
 }
 
 void RaidFireSupportRuntime::tryFire(
     Rect protectedPlayer, const EnemyLifecycle &targets,
-    const RaidSpaceBlockerIndex &blockerIndex)
+    const RaidSpaceBlockerIndex &blockerIndex, const RaidSmokeSight &smoke)
 {
     const Vec2 origin = center();
     float closestDistanceSquared = kFireSupportRange * kFireSupportRange;
@@ -185,7 +188,7 @@ void RaidFireSupportRuntime::tryFire(
         if (distance <= kMovementEpsilon * kMovementEpsilon ||
             distance > closestDistanceSquared ||
             (selected && distance == closestDistanceSquared) ||
-            !blockerIndex.hasLineOfSight(origin, destination))
+            smoke.blocks(origin, destination) || !blockerIndex.hasLineOfSight(origin, destination))
         {
             continue;
         }
@@ -218,15 +221,15 @@ void RaidFireSupportRuntime::tryFire(
 HitResolutionResult RaidFireSupportRuntime::updateWeapon(
     float seconds, Rect protectedPlayer, EnemyLifecycle &targets,
     const RaidSpaceBlockerIndex &blockerIndex,
-    const std::vector<BallisticBlocker> &blockers)
+    const std::vector<BallisticBlocker> &blockers, const RaidSmokeSight &smoke)
 {
     if (!std::isfinite(seconds) || seconds <= 0.0F)
         return {};
     shotCooldown_ = std::max(0.0F, shotCooldown_ - seconds);
-    if (alive() && controlRemaining_ == 0.0F && fireOrder_ == FireSupportFireOrder::FreeFire &&
+    if (alive() && !receivingTreatment_ && controlRemaining_ == 0.0F && fireOrder_ == FireSupportFireOrder::FreeFire &&
         shotCooldown_ == 0.0F && !flight_)
     {
-        tryFire(protectedPlayer, targets, blockerIndex);
+        tryFire(protectedPlayer, targets, blockerIndex, smoke);
     }
     if (!flight_)
         return {};

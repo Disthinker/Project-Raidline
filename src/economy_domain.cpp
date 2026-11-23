@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "alpha_content_ids.h"
+#include "base_construction_domain.h"
 #include "lost_raid_domain.h"
 
 namespace
@@ -126,6 +127,19 @@ bool createFirstFit(
         quantity,
         reliefBatchId));
     return true;
+}
+
+EconomyReceipt applyWeaponSalvage(ProfileState &candidate, const ContentRegistry &content,
+                                 const SalvageWeaponCommand &command)
+{
+    const auto plan = queryWeaponSalvage(candidate, content, command.instanceId);
+    if (!plan.canCommit)
+        return failure(plan.error, plan.message, candidate.revision);
+    const auto output = candidate.assets.create(content.item(kWeaponSalvageMaterialId),
+        StoredAssetLocation{ProfileContainerId::stash(), *plan.outputPosition}, kWeaponSalvageMaterialQuantity);
+    candidate.assets.findMutable(output)->orientation = plan.outputOrientation;
+    static_cast<void>(candidate.assets.erase(command.instanceId));
+    return {true, false, DomainErrorCode::None, {}, candidate.revision, 0};
 }
 
 EconomyReceipt applyPurchase(
@@ -336,6 +350,10 @@ EconomyReceipt apply(
             {
                 return applyRecycle(candidate, content, typed);
             }
+            else if constexpr (std::is_same_v<Command, SalvageWeaponCommand>)
+            {
+                return applyWeaponSalvage(candidate, content, typed);
+            }
             else
             {
                 return applyRelief(candidate, content, typed);
@@ -343,6 +361,50 @@ EconomyReceipt apply(
         },
         command);
 }
+}
+
+WeaponSalvagePlan queryWeaponSalvage(const ProfileState &profile, const ContentRegistry &content,
+                                    AssetInstanceId weaponId)
+{
+    if (profile.pendingRaid || profile.activeBaseDefense || profile.homePerimeter.activeOuting)
+        return {false, DomainErrorCode::IllegalDestination, "SALVAGE REQUIRES AN IDLE BASE"};
+    if (!baseFacilityInstalled(profile, baseFacilityDefinitionId(BaseFacilityUpgradeTarget::Workshop)))
+        return {false, DomainErrorCode::IllegalDestination, "SALVAGE REQUIRES AN INSTALLED WORKSHOP"};
+    const auto *weapon = profile.assets.find(weaponId);
+    if (!weapon)
+        return {false, DomainErrorCode::MissingAsset, "SALVAGE REQUIRES A WEAPON IN YOUR STASH"};
+    const auto *location = std::get_if<StoredAssetLocation>(&weapon->location);
+    if (weapon->reliefBatchId || lostRaidRecordForAsset(profile, weaponId) ||
+        std::holds_alternative<BaseServiceAssetLocation>(weapon->location) ||
+        (profile.gunsmithMaintenanceJob && profile.gunsmithMaintenanceJob->weaponAssetId == weaponId) ||
+        (profile.baseReloadRecovery && profile.baseReloadRecovery->weaponAssetId == weaponId))
+        return {false, DomainErrorCode::IllegalDestination, "RESERVED WEAPONS CANNOT BE SALVAGED"};
+    if (!location || location->container != ProfileContainerId::stash() || !content.item(weapon->definitionId).weaponUse)
+        return {false, DomainErrorCode::IllegalDestination, "SALVAGE REQUIRES A WEAPON IN YOUR STASH"};
+    if (weapon->chamberedRound || installedMagazine(profile, weaponId))
+        return {false, DomainErrorCode::IllegalDestination, "UNLOAD THE CHAMBER AND REMOVE THE MAGAZINE"};
+    const auto &material = content.item(kWeaponSalvageMaterialId);
+    for (const auto &[id, child] : profile.assets.records())
+    {
+        const auto *mount = std::get_if<InstalledWeaponComponentLocation>(&child.location);
+        if (mount && mount->weaponAssetId == weaponId)
+            return {false, DomainErrorCode::IllegalDestination, "REMOVE ALL WEAPON ATTACHMENTS"};
+        const auto *stored = std::get_if<StoredAssetLocation>(&child.location);
+        if (stored && stored->container.kind == ProfileContainerKind::AssetCompartment &&
+            stored->container.ownerAssetId == weaponId)
+            return {false, DomainErrorCode::IllegalDestination, "RESERVED WEAPONS CANNOT BE SALVAGED"};
+    }
+    // Reserve space for the material before destroying the gun. This also observes page boundaries and loan reservations.
+    for (const auto orientation : {ItemOrientation::Degrees0, ItemOrientation::Degrees90})
+    {
+        if (orientation == ItemOrientation::Degrees90 &&
+            (!material.canRotate || material.inventoryWidthCells == material.inventoryHeightCells))
+            break;
+        const auto origin = findFirstProfileFit(profile, content, ProfileContainerId::stash(), material, orientation);
+        if (origin)
+            return {true, DomainErrorCode::None, {}, origin, orientation};
+    }
+    return {false, DomainErrorCode::Capacity, "STASH CANNOT HOLD THE SALVAGE MATERIAL"};
 }
 
 bool hasMinimumRaidCapability(

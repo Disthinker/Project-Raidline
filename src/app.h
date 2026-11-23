@@ -213,6 +213,7 @@ private:
     SDL_Renderer *renderer_{nullptr};
     Texture indoorInformationLayer_;
     Texture indoorShadowMask_;
+    Texture raidSmokeTerrain_;
 
     InputSystem input_;
     Uint64 lastCounter_{};
@@ -273,6 +274,7 @@ private:
     bool baseToastInBase_{};
     void updateBasePresentation(float deltaTime);
     [[nodiscard]] std::string_view visibleFeedbackMessage() const noexcept;
+    [[nodiscard]] std::string_view raidHudFeedback() const;
     [[nodiscard]] bool baseWorldHudVisible() const;
     [[nodiscard]] bool baseCombatStatusVisible() const;
     struct DeferredWorldLabel { Vec2 position; std::string text; };
@@ -568,6 +570,13 @@ private:
     void cancelThrowableUi();
     void renderThrowableUi();
     void renderNoiseDecoyWorld();
+    [[nodiscard]] bool activeRaidSmoke() const;
+    void renderRaidSmokeCover(Rect visible);
+    void renderRaidAreaThrows();
+    void renderRaidAlarmDevices();
+    void renderRaidFireZones();
+    void renderRaidVolatileBarrels();
+    void renderAreaThrowableIcon(const ItemDefinition &, SDL_FRect, Uint8 alpha);
     void renderEmptyPlayerCorpses();
     void renderProfileDecoyDetails(const AssetRecord &, const ItemDefinition &);
     bool medicalWheelOpen_{};
@@ -584,7 +593,7 @@ private:
     bool tacticalMapOpen_{};
     struct RaidChalkContext
     {
-        RaidChalkSpace space;
+        const RaidSpaceDefinitionId &space;
         RaidTacticalMapChart chart;
     };
     RaidChalkRoutes raidChalkRoutes_;
@@ -596,11 +605,16 @@ private:
         bool closeRequested{};
         std::size_t focusedRow{};
         std::optional<std::size_t> pendingRow;
+        std::array<RaidFieldBarterPlan, 2> barter;
+        std::optional<ProfileRevision> barterRevision;
         UiDiscretePress press;
-        std::string_view feedback;
+        std::string feedback;
     } fieldIntelligenceTradeUi_;
     UiDiscretePress fireSupportPress_;
     bool fireSupportOrdersOpen_{};
+    bool fireSupportTreatmentOpen_{};
+    std::optional<AssetInstanceId> fireSupportTreatmentKit_;
+    bool fireSupportTreatmentStartedThisFrame_{};
     bool fireSupportUiBlocksGameplayThisFrame_{};
     std::string raidChalkRaidId_;
     bool raidChalkAimBlockedUntilRelease_{};
@@ -664,6 +678,7 @@ private:
         const InventoryUiEvent &event,
         bool inRaid);
     void handleProfileRightClick(MousePosition position, bool inRaid);
+    [[nodiscard]] std::vector<UiItemActionEntry> availableProfileItemActions(AssetInstanceId, bool inRaid) const;
     void executeProfileDrop(const ProfileDropRequest &request, bool inRaid);
     void executeProfileContextAction(AssetInstanceId, bool inRaid);
     void cycleProfileFireMode(AssetInstanceId);
@@ -949,14 +964,17 @@ private:
     void closeFireSupportOrders();
     void renderFireSupportWorld();
     void renderFireSupportOrders();
+    void renderHospitalEscortWorld(const HospitalEscortView &);
+    void renderHospitalEscortMap(const HospitalEscortView &, SDL_FRect chart, Vec2 worldSize);
     void renderFieldIntelligenceContact();
     void renderFieldIntelligenceTrade();
+    void refreshFieldBarter();
     void drawFieldIntelligenceTradePanel(const RaidFieldTradeView &);
     [[nodiscard]] std::optional<RaidChalkContext> raidChalkContext() const;
     void syncRaidChalkRoutes();
     [[nodiscard]] bool routeRaidChalkEvent(const SDL_Event &event);
     void renderRaidChalkLines(const RaidChalkContext &context);
-    void renderRaidChalkFooter(RaidChalkSpace space);
+    void renderRaidChalkFooter(const RaidSpaceDefinitionId &space);
     void renderScreenPrimaryButton(
         const char *label);
     void renderBackground(bool drawOutdoorDetails = true, bool terrainOnly = false,
@@ -972,6 +990,8 @@ private:
                                  std::optional<Rect> worldView = std::nullopt);
     void renderGroundItems();
     void renderAlphaRaidLoot();
+    void renderFieldClueCache(const RaidLootSnapshot &);
+    void renderFieldClueCacheMap(SDL_FRect chart, Vec2 worldSize);
     void renderEnemyAttackTelegraphs();
     void renderEnemies();
     void renderPlayer();

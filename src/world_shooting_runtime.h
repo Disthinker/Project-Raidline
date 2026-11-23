@@ -63,7 +63,8 @@ public:
         bool controlsSuppressed,
         Vec2 worldSize,
         EnemyLifecycle &targets,
-        const std::vector<BallisticBlocker> &blockers);
+        const std::vector<BallisticBlocker> &blockers,
+        std::span<const BallisticBlocker> environmentTargets = {});
 
     void configureWeapon(
         const WeaponUseDefinition &definition,

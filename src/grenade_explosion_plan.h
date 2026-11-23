@@ -19,4 +19,5 @@ struct GrenadeExplosionPlan
     std::optional<CombatDamageCommand> playerDamage;
     Vec2 playerPosition{};
     int playerHealth{};
+    std::uint32_t barrelId{}; // zero identifies an ordinary throwable
 };

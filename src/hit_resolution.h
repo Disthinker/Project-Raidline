@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <vector>
 
 #include "enemy_lifecycle.h"
@@ -60,4 +61,5 @@ HitResolutionResult resolveShotHits(
     EnemyLifecycle &enemies,
     const std::vector<BallisticBlocker> &blockers,
     // Hostile human shots also test the player and exclude human shooters.
-    std::optional<Rect> hostilePlayerTarget = std::nullopt);
+    std::optional<Rect> hostilePlayerTarget = std::nullopt,
+    std::span<const BallisticBlocker> environmentTargets = {});

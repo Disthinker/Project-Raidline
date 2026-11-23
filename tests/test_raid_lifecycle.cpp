@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <limits>
 #include <map>
 #include <numeric>
@@ -23,6 +24,7 @@
 #include "raid_fire_support_domain.h"
 #include "raid_corpse_search.h"
 #include "lost_raid_domain.h"
+#include "medical_domain.h"
 #include "recovery_task_domain.h"
 #include "raid_corpse_legacy_fixture.h"
 #include "raid_credential_legacy_fixture.h"
@@ -30,6 +32,37 @@
 #include "raid_runner_legacy_fixture.h"
 #include "raid_rescue_domain.h"
 #include "regional_operations_domain.h"
+
+namespace
+{
+void checkOrdinaryBarrelSites(const MapDefinition &map, const PendingRaidSnapshot &raid)
+{
+    ASSERT_EQ(raid.volatileBarrels.size(), 2U);
+    EXPECT_EQ(raid.volatileBarrels, selectRaidVolatileBarrels(map, raid));
+    const auto &first = raid.volatileBarrels[0];
+    const auto &second = raid.volatileBarrels[1];
+    EXPECT_EQ(first.id, 1U);
+    EXPECT_EQ(second.id, 2U);
+    EXPECT_GT(std::hypot(first.center.x - second.center.x, first.center.y - second.center.y), 480.0F);
+    for (const auto &barrel : raid.volatileBarrels)
+    {
+        EXPECT_TRUE(validRaidVolatileBarrelPlacement(map, raid, barrel.center));
+        for (const auto &wall : raid.spatialLayout.ballisticBlockers)
+        {
+            const float x = std::clamp(barrel.center.x, wall.position.x, wall.position.x + wall.size.x);
+            const float y = std::clamp(barrel.center.y, wall.position.y, wall.position.y + wall.size.y);
+            EXPECT_GT(std::hypot(barrel.center.x - x, barrel.center.y - y), kRaidVolatileBarrelRadius);
+        }
+    }
+    EXPECT_FALSE(validRaidVolatileBarrelPlacement(map, raid, raid.playerSpawn));
+    EXPECT_FALSE(validRaidVolatileBarrelPlacement(map, raid, raid.extractionPoint.position));
+    for (const auto &interior : raid.interiors)
+    {
+        EXPECT_FALSE(validRaidVolatileBarrelPlacement(map, raid, interior.exteriorEntrance.position));
+        EXPECT_FALSE(validRaidVolatileBarrelPlacement(map, raid, interior.exteriorReturn));
+    }
+}
+}
 
 TEST(RaidLifecycleTest, FrontierRoadBlockadeChangesOnlyFirstAdvancedRoll)
 {
@@ -87,6 +120,88 @@ TEST(RaidLifecycleTest, FrontierRoadBlockadeChangesOnlyFirstAdvancedRoll)
     }
 }
 
+TEST(RaidLifecycleTest, FieldClueCacheReusesOneReachableOrdinaryRollWithoutChangingLootOrArmedScavengers)
+{
+    const auto &content = publishedContentRegistry();
+    const auto previous = contentBeforeHospitalLandmarkInteriors();
+    const auto &map = content.map(kFieldIntelligenceSourceMapId);
+    std::set<std::uint32_t> sites;
+    for (std::uint64_t seed = 1; seed <= 48; ++seed)
+    {
+        SCOPED_TRACE(seed);
+        const DeployCommand command{"field-cache-raid", "field-cache-return", seed, map.id};
+        auto current = makeNewAlphaProfile("field-cache-budget", content);
+        auto old = makeNewAlphaProfile("field-cache-budget", previous);
+        const auto now = executeDeploy(current, content, command, {current.revision, "depart"});
+        const auto then = executeDeploy(old, previous, command, {old.revision, "depart"});
+        ASSERT_TRUE(then.succeeded) << then.message;
+        ASSERT_TRUE(now.succeeded) << now.message;
+        auto &raid = *current.pendingRaid;
+        const auto &legacy = *old.pendingRaid;
+        ASSERT_TRUE(raid.fieldClueCache);
+        EXPECT_FALSE(raid.fieldClueCache->decodedDocumentId);
+        EXPECT_FALSE(legacy.fieldClueCache);
+        EXPECT_EQ(raid.loot, legacy.loot);
+        EXPECT_EQ(raid.enemies, legacy.enemies);
+        auto originalEquipment = raid.armedScavengers;
+        for (auto &scavenger : originalEquipment) scavenger.retreatPoint.reset();
+        EXPECT_EQ(originalEquipment, legacy.armedScavengers);
+        EXPECT_EQ(raid.spatialLayout, legacy.spatialLayout);
+        EXPECT_EQ(current.assets.nextAssetId(), old.assets.nextAssetId());
+        EXPECT_TRUE(validRaidFieldClueCache(map, raid));
+        const auto reward = raid.fieldClueCache->rewardAssetId;
+        auto found = std::find_if(raid.loot.begin(), raid.loot.end(),
+            [&](const auto &loot) { return loot.assetId == reward; });
+        ASSERT_NE(found, raid.loot.end());
+        ASSERT_LT(found->slotIndex, map.raidLootSlots.size());
+        sites.insert(found->slotIndex);
+        EXPECT_EQ(found->spaceId, outdoorRaidSpaceId());
+        EXPECT_FALSE(found->collected || found->requiresHighRisk || found->sceneContainerAssetId || found->corpseContainerAssetId);
+        const auto *asset = current.assets.find(reward);
+        ASSERT_NE(asset, nullptr);
+        ASSERT_TRUE(std::holds_alternative<RaidGroundAssetLocation>(asset->location));
+        EXPECT_EQ(asset->location, old.assets.find(reward)->location);
+        const auto &ordinary = content.lootTable(map.raidLootTableId).entries;
+        EXPECT_TRUE(std::any_of(ordinary.begin(), ordinary.end(), [&](const auto &roll) {
+            return roll.itemDefinitionId == found->definitionId && found->quantity >= roll.minimumQuantity &&
+                found->quantity <= roll.maximumQuantity;
+        }));
+
+        // Read-back verifies the original slot even if its item was already collected or used.
+        found->collected = true;
+        EXPECT_TRUE(validRaidFieldClueCache(map, raid));
+        for (const auto &other : raid.loot)
+        {
+            if (other.assetId == reward) continue;
+            raid.fieldClueCache->rewardAssetId = other.assetId;
+            EXPECT_FALSE(validRaidFieldClueCache(map, raid));
+        }
+        raid.fieldClueCache->rewardAssetId = reward;
+        found->position.x += 7.0F;
+        EXPECT_FALSE(validRaidFieldClueCache(map, raid));
+    }
+    EXPECT_GT(sites.size(), 2U);
+}
+
+TEST(RaidLifecycleTest, VolatileBarrelsAreAbsentFromLegacyCatalogsAndRiverside)
+{
+    const auto previous = contentBeforeHospitalLandmarkInteriors();
+    for (const auto &map : {kHospitalFloorplanMapId, kFreightCrateMapId})
+    {
+        auto profile = makeNewAlphaProfile("previous-barrel-layout", previous);
+        const auto deployed = executeDeploy(profile, previous, {"legacy-raid", "legacy-return", 14, map},
+            {profile.revision, "legacy-deploy"});
+        ASSERT_TRUE(deployed.succeeded) << deployed.message;
+        EXPECT_TRUE(profile.pendingRaid->volatileBarrels.empty());
+    }
+    const auto &current = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("current-riverside", current);
+    const auto deployed = executeDeploy(profile, current, {"river-raid", "river-return", 14, kFieldIntelligenceSourceMapId},
+        {profile.revision, "river-deploy"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    EXPECT_TRUE(profile.pendingRaid->volatileBarrels.empty());
+}
+
 TEST(RaidLifecycleTest, FrontierRoadBlockadeSalvageSettlesOnlyWithItsExistingCarriedAsset)
 {
     const auto &content = publishedContentRegistry();
@@ -140,6 +255,9 @@ TEST(RaidLifecycleTest, HospitalRealDeployHasReachableConsumersAcross128Seeds)
 {
     const auto &content = publishedContentRegistry();
     std::set<std::uint64_t> hashes;
+    std::set<std::uint32_t> depotSlots;
+    std::set<ItemDefinitionId> depotMaterials;
+    const auto &map = content.map(kHospitalFloorplanMapId);
     for (std::uint64_t seed=1; seed<=128; ++seed)
     {
         SCOPED_TRACE(seed);
@@ -151,8 +269,42 @@ TEST(RaidLifecycleTest, HospitalRealDeployHasReachableConsumersAcross128Seeds)
         ASSERT_TRUE(receipt.succeeded) << receipt.message;
         ASSERT_TRUE(profile.pendingRaid);
         const auto &raid = *profile.pendingRaid;
-        ASSERT_EQ(raid.interiors.size(), 1U);
+        ASSERT_EQ(raid.interiors.size(), 2U);
+        ASSERT_NO_FATAL_FAILURE(checkOrdinaryBarrelSites(map, raid));
         EXPECT_EQ(raid.interiors.front().worldSize.x, 2400);
+        EXPECT_EQ(raid.interiors.back().id, kHospitalDepotSpaceId);
+        const auto depotLoot = std::find_if(raid.loot.begin(), raid.loot.end(),
+            [](const auto &entry) { return entry.spaceId == kHospitalDepotSpaceId; });
+        ASSERT_NE(depotLoot, raid.loot.end());
+        EXPECT_EQ(std::count_if(raid.loot.begin(), raid.loot.end(), [](const auto &entry)
+            { return entry.spaceId == kHospitalDepotSpaceId; }), 1);
+        EXPECT_EQ(depotLoot->quantity, 1U);
+        const auto &sockets = map.interiors.back().lootSlots;
+        const auto socket = std::find_if(sockets.begin(), sockets.end(),
+            [&](const auto &s) { return s.position.x == depotLoot->position.x && s.position.y == depotLoot->position.y; });
+        ASSERT_NE(socket, sockets.end());
+        depotSlots.insert(static_cast<std::uint32_t>(socket - sockets.begin()));
+        depotMaterials.insert(depotLoot->definitionId);
+        auto baselineCapacity = 0U;
+        for (const auto &point : raid.spatialLayout.resourcePoints)
+        {
+            const auto &archetypes = map.proceduralOutdoor.resourcePointArchetypes;
+            const auto definition = std::find_if(archetypes.begin(), archetypes.end(),
+                [&](const auto &d) { return d.id == point.definitionId; });
+            ASSERT_NE(definition, archetypes.end());
+            baselineCapacity += definition->capacity;
+            EXPECT_EQ(point.capacity, definition->capacity -
+                (point.instanceId == "resource_point.hospital.street_supplies:0" ? 1U : 0U));
+        }
+        EXPECT_EQ(std::count_if(raid.loot.begin(), raid.loot.end(), [](const auto &entry)
+            { return !entry.requiresHighRisk && (entry.spaceId == outdoorRaidSpaceId() || entry.spaceId == kHospitalDepotSpaceId); }),
+            baselineCapacity);
+        EXPECT_EQ(std::count_if(raid.enemies.begin(), raid.enemies.end(), [](const auto &enemy)
+            { return enemy.spaceId == kHospitalDepotSpaceId; }), 1);
+        const auto outdoorEnemies = std::count_if(raid.enemies.begin(), raid.enemies.end(), [](const auto &enemy)
+            { return enemy.spaceId == outdoorRaidSpaceId(); });
+        EXPECT_GE(outdoorEnemies + 1, map.proceduralOutdoor.minimumInitialEnemies);
+        EXPECT_LE(outdoorEnemies + 1, map.proceduralOutdoor.maximumInitialEnemies);
         ASSERT_TRUE(raid.highRiskCrisis);
         EXPECT_FALSE(raid.highRiskCrisis->roadBlockade);
         EXPECT_TRUE(raid.hospitalNightVisionLoot);
@@ -190,6 +342,9 @@ TEST(RaidLifecycleTest, HospitalRealDeployHasReachableConsumersAcross128Seeds)
             ASSERT_NE(findRaidAnchorPlacement(raid.spatialLayout, id), nullptr);
     }
     EXPECT_GT(hashes.size(), 96U);
+    EXPECT_EQ(depotSlots.size(), 2U);
+    EXPECT_EQ(depotMaterials, (std::set<ItemDefinitionId>{
+        ItemDefinitionId{"item.loot.scrap_parts"}, ItemDefinitionId{"item.loot.copper_wire_spool"}}));
 }
 
 namespace
@@ -598,6 +753,7 @@ TEST(RaidLifecycleTest,
         CommandContext{profile.revision, "deploy:perimeter-early"});
     ASSERT_TRUE(deployed.succeeded) << deployed.message;
     ASSERT_TRUE(profile.pendingRaid->basePerimeterSweep.has_value());
+    EXPECT_TRUE(profile.pendingRaid->volatileBarrels.empty());
     EXPECT_FALSE(profile.pendingRaid->basePerimeterSweep->objectiveSecured);
 
     const RaidSettlementReceipt settled = settlePendingRaid(
@@ -1217,6 +1373,7 @@ TEST(RaidLifecycleTest,
         CommandContext{profile.revision, "deploy:restoration"});
     ASSERT_TRUE(deployed.succeeded) << deployed.message;
     ASSERT_TRUE(profile.pendingRaid->outpostRestoration.has_value());
+    EXPECT_TRUE(profile.pendingRaid->volatileBarrels.empty());
     EXPECT_FALSE(profile.pendingRaid->outpostRestoration->objectiveSecured);
 
     ProfileState earlyExtraction = profile;
@@ -1362,6 +1519,7 @@ TEST(RaidLifecycleTest,
         CommandContext{profile.revision, "deploy:base-site-clearance"});
     ASSERT_TRUE(deployed.succeeded) << deployed.message;
     ASSERT_TRUE(profile.pendingRaid->baseSiteClearance.has_value());
+    EXPECT_TRUE(profile.pendingRaid->volatileBarrels.empty());
     EXPECT_TRUE(std::none_of(profile.pendingRaid->loot.begin(), profile.pendingRaid->loot.end(),
         [](const auto &loot) { return loot.definitionId == kArmorRepairBlueprintId; }));
     EXPECT_EQ(
@@ -1863,6 +2021,7 @@ TEST(RaidLifecycleTest,
         ASSERT_TRUE(validation.valid)
             << "seed " << seed << ": " << validation.message;
         EXPECT_GE(raid.spatialLayout.resourcePoints.size(), 15U);
+        ASSERT_NO_FATAL_FAILURE(checkOrdinaryBarrelSites(content.map(mapId), raid));
         EXPECT_LE(raid.spatialLayout.resourcePoints.size(), 18U);
         layoutHashes.insert(raid.spatialLayout.layoutHash);
 
@@ -3111,6 +3270,81 @@ protected:
         return access;
     }
 };
+}
+
+TEST_F(RaidFireSupportTest, TreatingACompanionConsumesOneCarriedChargeAndPreservesThePlayersOwnHealth)
+{
+    const auto carried = ProfileContainerId::compartment(pack, 0U);
+    const auto addCarried = [&](const ItemDefinitionId &id) {
+        const auto &item = content.item(id);
+        const auto fit = findFirstProfileFit(profile, content, carried, item, ItemOrientation::Degrees0);
+        EXPECT_TRUE(fit);
+        return fit ? profile.assets.create(item, StoredAssetLocation{carried, *fit}) : AssetInstanceId{};
+    };
+    const auto kit = addCarried(alpha_content::medkit);
+    const auto bandage = addCarried(alpha_content::bandage);
+    const auto stashKit = addStash(alpha_content::medkit);
+    ASSERT_TRUE(kit && bandage && stashKit);
+    const auto deployed = deploySupport(profile);
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    const auto charges = profile.assets.find(kit)->remainingCharges;
+    const auto ownHealth = profile.currentHealth;
+    const auto status = profile.medicalStatus;
+    const auto loans = *profile.pendingRaid->fireSupport;
+    const auto before = profileStateFingerprint(profile);
+    const auto access = MedicalAccess::CarriedOnly;
+    const TeammateMedicalTarget wounded{93, 100};
+    EXPECT_FALSE(queryMedicalUse(profile, content, kit, access).canCommit);
+    EXPECT_TRUE(queryMedicalUse(profile, content, kit, access, wounded).canCommit);
+    EXPECT_FALSE(queryMedicalUse(profile, content, stashKit, access, wounded).canCommit);
+    EXPECT_FALSE(queryMedicalUse(profile, content, bandage, access, wounded).canCommit);
+    for (const auto target : {TeammateMedicalTarget{0, 100}, TeammateMedicalTarget{100, 100}})
+        EXPECT_FALSE(executeMedicalUse(profile, content, kit, access,
+            {profile.revision, "invalid-patient"}, target).succeeded);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
+    const CommandContext command{profile.revision, "treat-wounded-teammate"};
+    const auto result = executeMedicalUse(profile, content, kit, access, command, wounded);
+    ASSERT_TRUE(result.succeeded && !result.idempotent) << result.message;
+    EXPECT_EQ(result.healedAmount, 7);
+    EXPECT_EQ(profile.currentHealth, ownHealth);
+    EXPECT_EQ(profile.medicalStatus, status);
+    EXPECT_EQ(profile.pendingRaid->fireSupport, loans);
+    EXPECT_EQ(profile.assets.find(kit)->remainingCharges, charges - 1U);
+    const auto after = profileStateFingerprint(profile);
+    const auto replay = executeMedicalUse(profile, content, kit, access, command, wounded);
+    EXPECT_TRUE(replay.succeeded && replay.idempotent);
+    EXPECT_EQ(replay.healedAmount, 0);
+    EXPECT_EQ(profileStateFingerprint(profile), after);
+    static_cast<void>(expose());
+    EXPECT_FALSE(executeMedicalUse(profile, content, kit, access,
+        {profile.revision, "fallen-teammate"}, wounded).succeeded);
+    EXPECT_EQ(profile.assets.find(kit)->remainingCharges, charges - 1U);
+}
+
+TEST_F(RaidFireSupportTest, MedicalConsolidationCannotDrawFromActivePartyLoans)
+{
+    const auto source = addStash(alpha_content::medkit);
+    const auto target = addStash(alpha_content::medkit);
+    ASSERT_TRUE(source && target);
+    profile.assets.findMutable(source)->remainingCharges = 1;
+    profile.assets.findMutable(target)->remainingCharges = 1;
+    ASSERT_TRUE(queryMedicalConsolidation(profile, content, source, target).canCommit);
+    ASSERT_TRUE(deploySupport(profile).succeeded);
+    const auto loans = profile.pendingRaid->fireSupport;
+    ASSERT_TRUE(loans && loans->spareMagazine);
+    ASSERT_EQ(loans->rifle.assetId, rifle);
+    ASSERT_EQ(loans->spareMagazine->assetId, spare);
+    const auto before = profileStateFingerprint(profile);
+    EXPECT_TRUE(medicalConsolidationCandidates(profile, content).empty());
+    for (const auto item : {source, rifle, spare})
+    {
+        const auto *asset = profile.assets.find(item);
+        ASSERT_NE(asset, nullptr);
+        EXPECT_FALSE(executeMedicalConsolidation(profile, content, {item, target, asset->remainingCharges, 1U},
+            {profile.revision, "reject-active-support-consolidation"}).succeeded);
+    }
+    EXPECT_EQ(profile.pendingRaid->fireSupport, loans);
+    EXPECT_EQ(profileStateFingerprint(profile), before);
 }
 
 TEST_F(RaidFireSupportTest, QualificationAndAtomicDeploymentKeepLoansAndPreparationSeparate)

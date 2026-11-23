@@ -6,6 +6,9 @@
 namespace {
 Vec2 grenadeEnemyCenter(const Enemy &e) { return {e.position().x+e.size().x/2,e.position().y+e.size().y/2}; }
 bool samePoint(Vec2 a,Vec2 b) { return a.x==b.x && a.y==b.y; }
+constexpr std::uint64_t barrelExplosionId(std::uint32_t id) noexcept
+{ return (std::uint64_t{1} << 63) | id; }
+static_assert(GrenadeUseDefinition{}.radius == kRaidVolatileBarrelBlastRadius);
 
 const Enemy *findGrenadeHit(const Enemy *first, const Enemy *last,
                            const Enemy *&next, CombatTargetId id)
@@ -28,7 +31,7 @@ const Enemy *findGrenadeHit(const Enemy *first, const Enemy *last,
 std::optional<GrenadeLanding> GameplayWorld::previewGrenade(Vec2 aim,const GrenadeUseDefinition &use) const
 {
     if(!grenadeEnabled_ || !raidSession_.isActive() || player_.isDead() || player_.isControlled() ||
-       grenade_.active() || noiseDecoy_.flight() || thrownIllumination_.flight() || melee_.recoverySeconds()>0)return std::nullopt;
+       grenade_.active() || noiseDecoy_.flight() || thrownIllumination_.flight() || smoke_.flight() || fireZones_.flight() || melee_.recoverySeconds()>0)return std::nullopt;
     const auto p=player_.position();const float s=player_.size();
     return queryGrenadeLanding({p.x+s/2,p.y+s/2},aim,activeRaidSpaceId(),use,activeBlockerIndex());
 }
@@ -37,12 +40,38 @@ std::optional<ThrownIlluminationLanding> GameplayWorld::previewThrownIlluminatio
 {
     if (!grenadeEnabled_ || !raidSession_.isActive() || player_.isDead() ||
         player_.isControlled() || grenade_.active() || noiseDecoy_.flight() ||
-        thrownIllumination_.active() || melee_.recoverySeconds() > 0.0F)
+        thrownIllumination_.active() || smoke_.flight() || fireZones_.flight() || melee_.recoverySeconds() > 0.0F)
         return std::nullopt;
     const Vec2 position = player_.position();
     const float half = player_.size() / 2.0F;
     return queryThrownIlluminationLanding({position.x + half, position.y + half},
         aim, activeRaidSpaceId(), use, activeBlockerIndex());
+}
+
+std::optional<SmokeLanding> GameplayWorld::previewSmoke(Vec2 aim, const SmokeUseDefinition &use) const
+{
+    if (!grenadeEnabled_ || developerRange_ || !raidSession_.isActive() || player_.isDead() ||
+        player_.isControlled() || !use.valid() || !smoke_.canStart() || grenade_.active() ||
+        noiseDecoy_.flight() || thrownIllumination_.flight() || fireZones_.flight() || melee_.recoverySeconds() > 0.0F)
+        return std::nullopt;
+    NoiseDecoyUseDefinition ray;
+    ray.range = use.maximumRange;
+    ray.flightSeconds = use.flightSeconds;
+    const Vec2 player = player_.position();
+    const float half = player_.size() * 0.5F;
+    const auto landing = queryNoiseDecoyLanding({player.x + half, player.y + half}, aim,
+        activeRaidSpaceId(), ray, activeBlockerIndex());
+    if (!landing) return std::nullopt;
+    return SmokeLanding{landing->origin, landing->point, landing->space, use};
+}
+
+void GameplayWorld::refreshSmokeSight() noexcept
+{
+    const auto sight = smoke_.sight(activeRaidSpaceId());
+    if (sight == activeSmokeSight_) return;
+    activeSmokeSight_ = sight;
+    indoorObservationCacheReady_ = false;
+    scavengerSightSamples_.clear();
 }
 
 void GameplayWorld::commitGrenade(RaidGrenadeRuntime prepared) noexcept
@@ -61,10 +90,19 @@ void GameplayWorld::commitGrenade(RaidGrenadeRuntime prepared) noexcept
 }
 std::optional<GrenadeExplosionPlan> GameplayWorld::prepareGrenadeExplosion() const
 {
-    if(!grenadeEnabled_ || !raidSession_.isActive() || !grenade_.pendingExplosion() ||
-       grenade_.pendingExplosion()->landing.space!=activeRaidSpaceId())return std::nullopt;
+    if(!raidSession_.isActive()) return std::nullopt;
     GrenadeExplosionPlan plan;
-    plan.explosion=*grenade_.pendingExplosion();
+    if (grenadeEnabled_ && grenade_.pendingExplosion() && grenade_.pendingExplosion()->landing.space == activeRaidSpaceId())
+        plan.explosion = *grenade_.pendingExplosion();
+    else
+    {
+        if (!inOutdoorRaidSpace() || pendingBarrelIds_.empty()) return std::nullopt;
+        plan.barrelId = pendingBarrelIds_.front();
+        const auto barrel = std::ranges::find(volatileBarrels_, plan.barrelId, &RaidVolatileBarrelSpawn::id);
+        if (barrel == volatileBarrels_.end() || barrel->spent) return std::nullopt;
+        plan.explosion = {barrelExplosionId(barrel->id), {barrel->center, barrel->center,
+            activeRaidSpaceId(), {}, "barrel:" + std::to_string(barrel->id)}};
+    }
     plan.playerPosition=player_.position();plan.playerHealth=player_.health();
     const auto &landing=plan.explosion.landing;
     struct BlastWall { Rect bounds; float left,right,top,bottom; };
@@ -109,14 +147,28 @@ std::optional<GrenadeExplosionPlan> GameplayWorld::prepareGrenadeExplosion() con
 }
 bool GameplayWorld::validatePreparedGrenadeExplosion(const GrenadeExplosionPlan &plan) const
 {
-    if(!grenadeEnabled_ || !raidSession_.isActive() || !grenade_.pendingExplosion() ||
-       grenade_.pendingExplosion()->id!=plan.explosion.id || plan.explosion.landing.space!=activeRaidSpaceId() ||
+    if(!raidSession_.isActive() || plan.explosion.landing.space!=activeRaidSpaceId() ||
        !samePoint(player_.position(),plan.playerPosition) || player_.health()!=plan.playerHealth)return false;
+    if (plan.barrelId)
+    {
+        if (!inOutdoorRaidSpace() || pendingBarrelIds_.empty() || pendingBarrelIds_.front() != plan.barrelId ||
+            plan.explosion.id != barrelExplosionId(plan.barrelId)) return false;
+        const auto barrel = std::ranges::find(volatileBarrels_, plan.barrelId, &RaidVolatileBarrelSpawn::id);
+        if (barrel == volatileBarrels_.end() || barrel->spent || !samePoint(barrel->center, plan.explosion.landing.point) ||
+            plan.explosion.landing.use != GrenadeUseDefinition{}) return false;
+    }
+    else if (!grenadeEnabled_ || !grenade_.pendingExplosion() || grenade_.pendingExplosion()->id != plan.explosion.id)
+        return false;
+    return validateAreaDamageTargets(plan.enemies);
+}
+
+bool GameplayWorld::validateAreaDamageTargets(std::span<const GrenadeEnemyDamage> hits) const
+{
     const auto &actors = activeEnemies().view();
     const auto *const first = actors.data();
     const auto *const last = first + actors.size();
     const auto *next = first;
-    for(const auto &hit:plan.enemies) {
+    for(const auto &hit:hits) {
         const auto *enemy = findGrenadeHit(first, last, next, hit.id);
         if(enemy == last || enemy->isDead() || !samePoint(enemy->position(),hit.position) ||
            enemy->health()!=hit.health || enemy->torsoArmor()!=hit.armor)
@@ -127,12 +179,28 @@ bool GameplayWorld::validatePreparedGrenadeExplosion(const GrenadeExplosionPlan 
 bool GameplayWorld::commitPreparedGrenadeExplosion(const GrenadeExplosionPlan &plan)
 {
     if(!validatePreparedGrenadeExplosion(plan))return false;
+    applyAreaDamageTargets(plan.enemies);
+    emitGrenadeNoise(plan.explosion.landing.point,plan.explosion.landing.use.noiseRadius);
+    lastGrenadeExplosion_=plan.explosion;grenadeFlashSeconds_=0.25F;grenadeExplodedLastUpdate_=true;
+    if (plan.barrelId)
+    {
+        std::ranges::find(volatileBarrels_, plan.barrelId, &RaidVolatileBarrelSpawn::id)->spent = true;
+        std::erase_if(intactBarrelTargets_, [&](const auto &object) { return object.id == plan.barrelId; });
+        pendingBarrelIds_.erase(pendingBarrelIds_.begin());
+    }
+    else
+        grenade_.acknowledgeExplosion();
+    return true;
+}
+
+void GameplayWorld::applyAreaDamageTargets(std::span<const GrenadeEnemyDamage> hits)
+{
     auto &actors=activeEnemies();
     {
         const auto *const first = actors.view().data();
         const auto *const last = first + actors.size();
         const auto *next = first;
-        for(const auto &hit:plan.enemies) {
+        for(const auto &hit:hits) {
             const auto *target = findGrenadeHit(first, last, next, hit.id);
             auto &enemy = actors[static_cast<std::size_t>(target - first)];
             enemy.applyArmorLoss(hit.damage.armorDurabilityLoss);
@@ -142,10 +210,6 @@ bool GameplayWorld::commitPreparedGrenadeExplosion(const GrenadeExplosionPlan &p
     const auto removals=actors.removeDead();
     consumeEnemyRemovals(removals);
     enemyObservationCache_.clear();enemyObservationIndexReady_=false;
-    emitGrenadeNoise(plan.explosion.landing.point,plan.explosion.landing.use.noiseRadius);
-    lastGrenadeExplosion_=plan.explosion;grenadeFlashSeconds_=0.25F;grenadeExplodedLastUpdate_=true;
-    grenade_.acknowledgeExplosion();
-    return true;
 }
 void GameplayWorld::emitGrenadeNoise(Vec2 source,float radius)
 {

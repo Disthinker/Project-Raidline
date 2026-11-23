@@ -2,7 +2,7 @@
 
 #include "raid_tactical_map.h"
 
-#include <array>
+#include <map>
 #include <optional>
 #include <span>
 #include <vector>
@@ -16,8 +16,6 @@ struct RaidTacticalMapChart
     [[nodiscard]] Vec2 screenPoint(Vec2 worldPoint) const noexcept;
     [[nodiscard]] std::optional<Vec2> worldPoint(Vec2 screenPoint) const noexcept;
 };
-
-enum class RaidChalkSpace { Outdoor, HospitalInterior };
 
 struct RaidChalkStroke
 {
@@ -34,20 +32,20 @@ public:
     static constexpr std::size_t kMaximumStrokePoints =
         static_cast<std::size_t>(kLengthLimit / kMinimumSegmentLength) + 2;
 
-    void setSpace(std::optional<RaidChalkSpace> space) noexcept;
+    void setSpace(const RaidSpaceDefinitionId &space);
     void beginStroke(Vec2 point) noexcept;
     void extendStroke(Vec2 point);
     void endStroke() noexcept;
-    void undo(RaidChalkSpace space) noexcept;
-    void clear(RaidChalkSpace space) noexcept;
+    void undo(const RaidSpaceDefinitionId &space) noexcept;
+    void clear(const RaidSpaceDefinitionId &space) noexcept;
 
     [[nodiscard]] bool drawing() const noexcept { return lastPoint_.has_value(); }
-    [[nodiscard]] std::span<const RaidChalkStroke> strokes(RaidChalkSpace space) const noexcept;
+    [[nodiscard]] std::span<const RaidChalkStroke> strokes(const RaidSpaceDefinitionId &space) const noexcept;
     [[nodiscard]] double remainingLength() const noexcept;
 
 private:
-    std::array<std::vector<RaidChalkStroke>, 2> strokes_;
-    std::optional<RaidChalkSpace> space_;
+    std::map<RaidSpaceDefinitionId, std::vector<RaidChalkStroke>> strokes_;
+    RaidSpaceDefinitionId space_;
     std::optional<Vec2> lastPoint_;
     double usedLength_{};
     bool hasSegment_{};

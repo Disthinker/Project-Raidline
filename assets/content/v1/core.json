@@ -346,6 +346,39 @@
         "output": {"item": "item.medical.field_splint", "quantity": 1},
         "worker_count": 1,
         "duration_minutes": 90
+      },
+      {
+        "id": "base_manufacturing.noise_decoy",
+        "display_name": "Noise Decoy Assembly",
+        "inputs": [
+          {"item": "item.loot.scrap_parts", "quantity": 1},
+          {"item": "item.loot.copper_wire_spool", "quantity": 1}
+        ],
+        "output": {"item": "item.throwable.noise_decoy", "quantity": 2},
+        "worker_count": 1,
+        "duration_minutes": 90
+      },
+      {
+        "id": "base_manufacturing.fire_bottle",
+        "display_name": "Fire Zone Contract",
+        "inputs": [
+          {"item": "item.loot.extraction_fuel_can", "quantity": 1},
+          {"item": "item.loot.scrap_parts", "quantity": 1}
+        ],
+        "output": {"item": "item.throwable.fire_bottle", "quantity": 1},
+        "worker_count": 1,
+        "duration_minutes": 120
+      },
+      {
+        "id": "base_manufacturing.proximity_alarm",
+        "display_name": "Proximity Alarm Contract",
+        "inputs": [
+          {"item": "item.loot.copper_wire_spool", "quantity": 1},
+          {"item": "item.loot.scrap_parts", "quantity": 1}
+        ],
+        "output": {"item": "item.utility.proximity_alarm", "quantity": 1},
+        "worker_count": 1,
+        "duration_minutes": 90
       }
     ]
   },
@@ -2038,9 +2071,62 @@
       },
       "inventory_texture": "items/inventory/unpublished_component.png",
       "world_texture": "items/world/unpublished_component.png"
+    },
+    {
+      "id": "item.throwable.smoke_canister",
+      "display_name": "Smoke Canister",
+      "category": "throwable",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 3,
+      "unit_weight_grams": 300,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 24, "y": 24}, "pickup_size": {"x": 24, "y": 24}},
+      "market_buy_price": 60,
+      "market_recycle_price": 15,
+      "smoke_use": {"range": 450, "flight_seconds": 0.5, "radius": 120, "duration_seconds": 8},
+      "inventory_texture": "items/inventory/unpublished_component.png",
+      "world_texture": "items/world/unpublished_component.png"
+    },
+    {
+      "id": "item.throwable.fire_bottle",
+      "display_name": "Fire Bottle",
+      "category": "throwable",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 2,
+      "unit_weight_grams": 320,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 24, "y": 24}, "pickup_size": {"x": 24, "y": 24}},
+      "market_buy_price": 0,
+      "market_recycle_price": 0,
+      "fire_zone_use": {"range": 400, "flight_seconds": 0.45, "radius": 90, "duration_seconds": 6, "damage_per_second": 6},
+      "inventory_texture": "items/inventory/unpublished_component.png",
+      "world_texture": "items/world/unpublished_component.png"
+    },
+    {
+      "id": "item.utility.proximity_alarm",
+      "display_name": "Proximity Alarm",
+      "category": "consumable",
+      "inventory": {"width": 1, "height": 1, "can_rotate": false},
+      "max_stack_size": 2,
+      "unit_weight_grams": 140,
+      "visual_assets_published": false,
+      "world": {"render_size": {"x": 20, "y": 20}, "pickup_size": {"x": 20, "y": 20}},
+      "market_buy_price": 0,
+      "market_recycle_price": 0,
+      "proximity_alarm_use": {"placement_range": 80, "trigger_radius": 100, "minimum_spacing": 24},
+      "inventory_texture": "items/inventory/unpublished_component.png",
+      "world_texture": "items/world/unpublished_component.png"
     }
   ],
   "loot_tables": [
+    {
+      "id": "loot.hospital.depot_materials_v1",
+      "roll_count": 1,
+      "entries": [
+        {"item": "item.loot.scrap_parts", "weight": 6, "minimum_quantity": 1, "maximum_quantity": 1},
+        {"item": "item.loot.copper_wire_spool", "weight": 4, "minimum_quantity": 1, "maximum_quantity": 1}
+      ]
+    },
     {
       "id": "loot.hospital.general_v1",
       "roll_count": 1,
@@ -3068,7 +3154,7 @@
       "display_name": "Hospital District",
       "route_profile": "HOSPITAL CAMPUS | AMBULANCE ACCESS | SERVICE STREETS",
       "procedural_outdoor": {
-        "layout_version": 6,
+        "layout_version": 7,
         "columns": 160,
         "rows": 90,
         "district_columns": 40,
@@ -3365,6 +3451,7 @@
       "interiors": [
         {
           "id": "raid_space.hospital_district.main_building",
+          "landmark_definition_id": "landmark.hospital.main_building",
           "display_name": "District Hospital Interior",
           "room_labels": [
             {"id":"reception","display_name":"RECEPTION / WAITING","bounds":{"position":{"x":840,"y":1175},"size":{"x":300,"y":32}}},
@@ -3670,6 +3757,42 @@
                 "y": 380
               }
             }
+          ]
+        },
+        {
+          "id": "raid_space.hospital_district.transport_depot",
+          "display_name": "Ambulance Service Depot",
+          "landmark_definition_id": "landmark.hospital.transport_depot",
+          "intelligence_price": 120,
+          "world_size": {"x": 1440, "y": 960},
+          "exterior_placements": [
+            {"id": "service_frontage", "entrance": {"position": {"x": 3200, "y": 900}, "size": {"x": 120, "y": 80}}, "return_point": {"x": 3260, "y": 1050}},
+            {"id": "service_alternate", "entrance": {"position": {"x": 3600, "y": 900}, "size": {"x": 120, "y": 80}}, "return_point": {"x": 3660, "y": 1050}}
+          ],
+          "interior_spawn": {"x": 700, "y": 835},
+          "interior_exit": {"position": {"x": 610, "y": 804}, "size": {"x": 210, "y": 130}},
+          "room_labels": [
+            {"id": "receiving", "display_name": "DEPOT RECEIVING", "bounds": {"position": {"x": 550, "y": 736}, "size": {"x": 250, "y": 32}}},
+            {"id": "maintenance", "display_name": "VEHICLE MAINTENANCE", "bounds": {"position": {"x": 180, "y": 270}, "size": {"x": 290, "y": 32}}},
+            {"id": "parts", "display_name": "PARTS STORAGE", "bounds": {"position": {"x": 1100, "y": 175}, "size": {"x": 235, "y": 32}}}
+          ],
+          "ballistic_blockers": [
+            {"id": "receiving_partition_left", "bounds": {"position": {"x": 0, "y": 645}, "size": {"x": 270, "y": 35}}},
+            {"id": "receiving_partition_mid", "bounds": {"position": {"x": 455, "y": 645}, "size": {"x": 168, "y": 35}}},
+            {"id": "receiving_partition_right", "bounds": {"position": {"x": 850, "y": 645}, "size": {"x": 590, "y": 35}}},
+            {"id": "vehicle_lift", "bounds": {"position": {"x": 440, "y": 300}, "size": {"x": 168, "y": 255}}},
+            {"id": "parts_wall_north", "bounds": {"position": {"x": 956, "y": 0}, "size": {"x": 34, "y": 214}}},
+            {"id": "parts_wall_south", "bounds": {"position": {"x": 956, "y": 430}, "size": {"x": 34, "y": 215}}},
+            {"id": "receiving_counter", "bounds": {"position": {"x": 235, "y": 810}, "size": {"x": 230, "y": 62}}},
+            {"id": "parts_shelf", "bounds": {"position": {"x": 1240, "y": 412}, "size": {"x": 124, "y": 150}}}
+          ],
+          "enemies": [
+            {"position": {"x": 810, "y": 338}, "size": {"x": 50, "y": 50}, "enemy_combat_definition": "enemy.infected.basic"}
+          ],
+          "loot_table": "loot.hospital.depot_materials_v1",
+          "loot_slots": [
+            {"id": "lift_bench", "position": {"x": 335, "y": 315}},
+            {"id": "parts_bin", "position": {"x": 1190, "y": 315}}
           ]
         }
       ],

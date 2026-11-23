@@ -137,6 +137,62 @@ TEST_F(UiBaseDormitoryTest, NativeRestRequiresReleaseThenClearsSelectionAndCanno
     EXPECT_EQ(profileStateFingerprint(profile()),after);
 }
 
+TEST_F(UiBaseDormitoryTest, RationPolicyNativeMouseAndKeysPreviewBothPlansAndSaveOnlyOnApply) {
+    A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+    const auto original = profileStateFingerprint(profile());
+    key(SDL_SCANCODE_2); key(SDL_SCANCODE_RETURN); A::frame(*app);
+    EXPECT_EQ(profileStateFingerprint(profile()), original);
+    key(SDL_SCANCODE_R); A::frame(*app);
+    ASSERT_TRUE(A::state(*app).rations);
+    const auto plans = A::projection(*app).policies;
+    ASSERT_EQ(plans[0].policy, BaseRationPolicy::Standard);
+    EXPECT_EQ(plans[0].maximumMoraleTier, BaseMoraleTier::High);
+    EXPECT_LT(plans[1].dailyDemand.food, plans[0].dailyDemand.food);
+    EXPECT_EQ(plans[1].maximumMoraleTier, BaseMoraleTier::Stable);
+    control(Control::ConserveRations);
+    ASSERT_EQ(A::state(*app).selectedPolicy, BaseRationPolicy::Conserve);
+    EXPECT_EQ(profileStateFingerprint(profile()), original);
+    if (const char *output = std::getenv("RAIDLINE_RATION_UI_DIR"); output && *output) {
+        const std::filesystem::path directory(output);
+        ASSERT_TRUE(directory.is_absolute());
+        std::filesystem::create_directories(directory);
+        ASSERT_TRUE(SDL_SetRenderDrawColor(renderer, 10, 16, 18, 255));
+        ASSERT_TRUE(SDL_RenderClear(renderer));
+        A::draw(*app);
+        ASSERT_TRUE(SDL_RenderPresent(renderer));
+        ASSERT_TRUE(IMG_SavePNG(surface, (directory / "ration-policy-1280-zh.png").string().c_str()));
+    }
+    key(SDL_SCANCODE_RETURN); A::frame(*app);
+    ASSERT_EQ(profile().rationPolicy, BaseRationPolicy::Conserve) << A::message(*app);
+    const auto saved = SaveRepository(path).load(content);
+    ASSERT_TRUE(saved.profile);
+    EXPECT_EQ(saved.profile->rationPolicy, BaseRationPolicy::Conserve);
+    EXPECT_EQ(A::projection(*app).dailyDemand.food, plans[1].dailyDemand.food);
+    const auto committed = profileStateFingerprint(profile());
+    control(Control::ApplyRations);
+    EXPECT_EQ(profileStateFingerprint(profile()), committed);
+    key(SDL_SCANCODE_1); A::frame(*app);
+    ASSERT_EQ(A::state(*app).selectedPolicy, BaseRationPolicy::Standard);
+    control(Control::ApplyRations);
+    EXPECT_EQ(profile().rationPolicy, BaseRationPolicy::Standard);
+}
+
+TEST_F(UiBaseDormitoryTest, RationPolicyChangedPreviewOrClosedPageCannotApply) {
+    control(Control::Rations);
+    control(Control::ConserveRations);
+    ++profile().revision;
+    const auto unchanged = profileStateFingerprint(profile());
+    control(Control::ApplyRations);
+    EXPECT_EQ(A::message(*app), "RATION POLICY PREVIEW EXPIRED");
+    EXPECT_FALSE(A::state(*app).selectedPolicy);
+    control(Control::ConserveRations);
+    control(Control::Rest);
+    key(SDL_SCANCODE_RETURN); A::frame(*app);
+    control(Control::Residents);
+    key(SDL_SCANCODE_RETURN); A::frame(*app);
+    EXPECT_EQ(profileStateFingerprint(profile()), unchanged);
+}
+
 TEST_F(UiBaseDormitoryTest, AllThreeRestPresetsKeepTheirOriginalDuration) {
     const auto seed=profile(); const std::array<Control,3> controls{Control::Hour1,Control::Hour6,Control::Hour12};
     const std::array<unsigned,3> hours{1,6,12};

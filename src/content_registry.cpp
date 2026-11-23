@@ -1761,15 +1761,21 @@ ContentRegistry ContentRegistry::fromJson(
                     fail("invalid grenade capability");
                 definition.grenadeUse = use;
             }
-            if (itemValue.contains("thrown_illumination_use"))
+            if (itemValue.contains("thrown_illumination_use") || itemValue.contains("smoke_use") ||
+                itemValue.contains("fire_zone_use"))
             {
-                const auto &flare = requiredObject(itemValue, "thrown_illumination_use");
-                ThrownIlluminationUseDefinition use{
-                    requiredFiniteFloat(flare, "range", true),
-                    requiredFiniteFloat(flare, "flight_seconds", true),
-                    requiredFiniteFloat(flare, "radius", true),
-                    requiredFiniteFloat(flare, "duration_seconds", true)};
-                if (!use.valid() || definition.category != ItemCategory::Throwable ||
+                const bool smoke = itemValue.contains("smoke_use");
+                const bool fire = itemValue.contains("fire_zone_use");
+                const bool illumination = itemValue.contains("thrown_illumination_use");
+                if (static_cast<int>(smoke) + static_cast<int>(fire) + static_cast<int>(illumination) != 1)
+                    fail("a thrown field item must select exactly one effect");
+                const char *effectKey = fire ? "fire_zone_use" : (smoke ? "smoke_use" : "thrown_illumination_use");
+                const auto &effect = requiredObject(itemValue, effectKey);
+                const float range = requiredFiniteFloat(effect, "range", true);
+                const float flight = requiredFiniteFloat(effect, "flight_seconds", true);
+                const float radius = requiredFiniteFloat(effect, "radius", true);
+                const float duration = requiredFiniteFloat(effect, "duration_seconds", true);
+                if (definition.category != ItemCategory::Throwable ||
                     definition.noiseDecoyUse || definition.grenadeUse ||
                     definition.equipmentSlot || !definition.compatibleEquipmentSlots.empty() ||
                     !definition.containerCompartments.empty() || definition.basePlacement ||
@@ -1777,18 +1783,52 @@ ContentRegistry ContentRegistry::fromJson(
                     definition.weaponCondition || definition.weaponMaintenance || definition.armorMaintenance ||
                     definition.maximumCharges || definition.magazineCapacity ||
                     definition.inventoryWidthCells != 1 || definition.inventoryHeightCells != 1 ||
-                    definition.maxStackSize != 2U ||
+                    definition.maxStackSize != (smoke ? 3U : 2U) ||
                     itemValue.contains("melee_use") || itemValue.contains("weapon_component") ||
                     itemValue.contains("weapon_light") || itemValue.contains("night_vision") ||
                     itemValue.contains("ammunition_use") || itemValue.contains("magazine_use") ||
                     itemValue.contains("compatible_ammunition") || itemValue.contains("compatible_magazine") ||
                     itemValue.contains("compatible_magazines") || itemValue.contains("base_contribution") ||
                     itemValue.contains("base_construction_material") || itemValue.value("battery", false))
-                    fail("invalid thrown illumination capability");
-                definition.thrownIlluminationUse = use;
+                    fail("invalid throwable field effect capability");
+                if (fire)
+                {
+                    const FireZoneUseDefinition use{range, flight, radius, duration,
+                        requiredPositiveInt(effect, "damage_per_second")};
+                    if (!use.valid()) fail("invalid fire zone capability");
+                    definition.fireZoneUse = use;
+                }
+                else if (smoke)
+                {
+                    const SmokeUseDefinition use{range, flight, radius, duration};
+                    if (!use.valid()) fail("invalid smoke capability");
+                    definition.smokeUse = use;
+                }
+                else
+                {
+                    const ThrownIlluminationUseDefinition use{range, flight, radius, duration};
+                    if (!use.valid()) fail("invalid thrown illumination capability");
+                    definition.thrownIlluminationUse = use;
+                }
+            }
+            if (itemValue.contains("proximity_alarm_use"))
+            {
+                const auto &alarm = requiredObject(itemValue, "proximity_alarm_use");
+                const ProximityAlarmUseDefinition use{requiredFiniteFloat(alarm, "placement_range", true),
+                    requiredFiniteFloat(alarm, "trigger_radius", true), requiredFiniteFloat(alarm, "minimum_spacing", true)};
+                if (!use.valid() || definition.category != ItemCategory::Consumable ||
+                    definition.inventoryWidthCells != 1 || definition.inventoryHeightCells != 1 ||
+                    definition.maxStackSize != 2 || definition.equipmentSlot || !definition.compatibleEquipmentSlots.empty() ||
+                    !definition.containerCompartments.empty() || definition.basePlacement || definition.maximumCharges)
+                    fail("invalid proximity alarm");
+                for (const auto *otherUse : {"medical_use", "weapon_use", "smoke_use", "fire_zone_use",
+                         "thrown_illumination_use", "grenade_use", "noise_decoy_use", "melee_use", "weapon_component",
+                         "weapon_light", "night_vision", "ammunition_use", "magazine_use", "armor_protection"})
+                    if (itemValue.contains(otherUse)) fail("incompatible proximity alarm capability");
+                definition.alarmUse = use;
             }
             if (definition.category == ItemCategory::Throwable && !definition.noiseDecoyUse &&
-                !definition.grenadeUse && !definition.thrownIlluminationUse)
+                !definition.grenadeUse && !definition.thrownIlluminationUse && !definition.smokeUse && !definition.fireZoneUse)
                 fail("throwable requires exactly one supported capability");
             if (itemValue.contains("melee_use"))
             {
@@ -3055,7 +3095,7 @@ ContentRegistry ContentRegistry::fromJson(
                         maximumCapacity < value.maximumInitialEnemies)
                         fail("encounter groups cannot support every configured enemy population");
                 }
-                if (value.layoutVersion == kHospitalHybridOutdoorLayoutVersion)
+                if (isHospitalHybridLayoutVersion(value.layoutVersion))
                 {
                     // The authored street fronts and landmark footprints use this hospital grid.
                     const std::set<std::string> requiredDistricts{
@@ -3075,7 +3115,7 @@ ContentRegistry ContentRegistry::fromJson(
                     static_cast<std::uint64_t>(value.columns) * value.rows;
                 if ((value.layoutVersion != 3U &&
                      value.layoutVersion != 4U &&
-                     value.layoutVersion != kHospitalHybridOutdoorLayoutVersion) ||
+                     !isHospitalHybridLayoutVersion(value.layoutVersion)) ||
                     value.columns < 8U || value.columns > 512U ||
                     value.rows < 6U || value.rows > 288U ||
                     value.districtColumns < 4U ||
@@ -3105,7 +3145,7 @@ ContentRegistry ContentRegistry::fromJson(
                      (value.maximumInitialEnemies == 0U)) ||
                     value.maximumAttempts > 32U ||
                     value.anchorClearanceCells > 4U ||
-                    (value.layoutVersion != kHospitalHybridOutdoorLayoutVersion &&
+                    (!isHospitalHybridLayoutVersion(value.layoutVersion) &&
                      (districtInstances != 8U || value.landmarkTemplates.size() != 3U)) ||
                     (value.layoutVersion >= 4U &&
                      (value.resourcePointArchetypes.empty() ||
@@ -3532,6 +3572,14 @@ ContentRegistry ContentRegistry::fromJson(
                     }
                     interior.displayName =
                         requiredString(interiorValue, "display_name");
+                    if (interiorValue.contains("landmark_definition_id"))
+                    {
+                        interior.landmarkDefinitionId = requiredString(interiorValue, "landmark_definition_id");
+                        const auto &landmarks = definition.proceduralOutdoor.landmarkTemplates;
+                        if (std::none_of(landmarks.begin(), landmarks.end(), [&](const auto &landmark)
+                            { return landmark.id == interior.landmarkDefinitionId; }))
+                            fail("Raid interior refers to an unknown exterior landmark");
+                    }
                     interior.intelligencePrice = requiredPositiveUint(
                         interiorValue, "intelligence_price");
                     interior.worldSize =
@@ -3645,6 +3693,16 @@ ContentRegistry ContentRegistry::fromJson(
                 if (definition.interiors.size() > 4U)
                 {
                     fail("Raid map has too many interior instances");
+                }
+                if (definition.proceduralOutdoor.layoutVersion == kHospitalLandmarkInteriorLayoutVersion)
+                {
+                    const auto &spaces = definition.interiors;
+                    if (spaces.size() != 2U || spaces[0].id != kHospitalFloorplanSpaceId ||
+                        spaces[0].landmarkDefinitionId != "landmark.hospital.main_building" ||
+                        spaces[1].id != kHospitalDepotSpaceId ||
+                        spaces[1].landmarkDefinitionId != "landmark.hospital.transport_depot" ||
+                        spaces[1].lootSlots.size() != 2U || spaces[1].enemies.size() != 1U)
+                        fail("Hospital landmark interiors require a main building and service depot");
                 }
             }
 

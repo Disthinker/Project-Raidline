@@ -113,6 +113,12 @@ bool overlapped(GridPosition a, InventoryFootprint aSize, GridPosition b, Invent
 }
 }
 
+bool hasLivingRaidFireSupport(const ProfileState &profile) noexcept
+{
+    const auto *corpse = corpseLocation(profile);
+    return corpse && !corpse->deathPosition;
+}
+
 bool isRaidFireSupportMap(const MapDefinitionId &map) noexcept
 {
     return map == kRaidFireSupportMapId || map == kHospitalFloorplanMapId || map == kRaidFireSupportReplacementMapId;
@@ -531,7 +537,7 @@ OrdinarySurvivorAdmissionPlan queryRaidFireSupportReplacementAdmission(const Pro
         ++plan.residentsAfter;
     }
     plan.bedShortfallAfter = plan.residentsAfter > plan.bedCapacity ? plan.residentsAfter - plan.bedCapacity : 0U;
-    plan.dailyRationsAfter = plan.residentsAfter;
+    plan.dailyRationsAfter = dailyRationsForResidents(plan.residentsAfter, profile.rationPolicy);
     return plan;
 }
 

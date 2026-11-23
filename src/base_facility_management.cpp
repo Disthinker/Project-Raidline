@@ -555,10 +555,7 @@ projectBaseResourceFlowWorldStatus(
             kind,
             *socket,
             BaseResourceFlowWorldStatus::Available,
-            projectBaseSupplyReadiness(
-                profile,
-                content,
-                populationAdjustedDailyDemand(profile.basePopulation))};
+            projectBaseSupplyReadiness(profile, content)};
         if (kind == BaseFacilityKind::Storage)
         {
             if (projection.readiness.baseAccessibleStacks == 0U)

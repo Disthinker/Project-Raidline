@@ -149,7 +149,8 @@ ProfileValidationResult validateRaidCorpseBindings(const ProfileState &profile, 
 
 bool revealRaidCorpse(ProfileState &profile, const ContentRegistry &content, const RaidCorpseDeathFact &fact)
 {
-    if (!profile.pendingRaid || !finite(fact.position) || fact.spaceId != outdoorRaidSpaceId()) return false;
+    if (!profile.pendingRaid || !finite(fact.position) || fact.spaceId != outdoorRaidSpaceId() ||
+        raidArmedScavengerEscaped(*profile.pendingRaid, fact.sourceEnemyId)) return false;
     for (const auto &[id, asset] : profile.assets.records())
         if (const auto *corpse = std::get_if<RaidCorpseContainerAssetLocation>(&asset.location);
             corpse && (corpse->sourceKind == RaidCorpseSourceKind::Enemy || corpse->sourceKind == RaidCorpseSourceKind::ArmedScavenger) &&
@@ -174,6 +175,7 @@ bool revealRaidCorpseInSimulation(ProfileState &profile, const ContentRegistry &
     {
         if (!profile.pendingRaid || (!trial(*profile.pendingRaid) && profile.pendingRaid->armedScavengers.empty()) || !finite(fact.position) ||
             fact.spaceId != outdoorRaidSpaceId() || fact.sourceEnemyId.empty() ||
+            raidArmedScavengerEscaped(*profile.pendingRaid, fact.sourceEnemyId) ||
             !validateRaidCorpseBindings(profile, content).valid) return false;
         const auto &raid = *profile.pendingRaid;
         for (const auto &[id, root] : profile.assets.records())

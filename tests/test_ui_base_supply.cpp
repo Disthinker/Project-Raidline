@@ -125,7 +125,8 @@ protected:
 }
 
 TEST_F(UiBaseSupplyTest, EveryCatalogRowReachableAndBrowsingNeverTrades) {
-    const auto before=profileStateFingerprint(profile());const auto ids=content.fixedSupplyItemIds();ASSERT_EQ(ids.size(),30);
+    const auto before=profileStateFingerprint(profile());const auto ids=content.fixedSupplyItemIds();ASSERT_EQ(ids.size(),31);
+    EXPECT_NE(std::find(ids.begin(), ids.end(), kRaidSmokeItemId), ids.end());
     EXPECT_NE(std::find(ids.begin(), ids.end(), ItemDefinitionId{"item.component.suppressor_5_45"}), ids.end());
     EXPECT_NE(std::find(ids.begin(), ids.end(), ItemDefinitionId{"item.throwable.frag_grenade_basic"}), ids.end());
     for(const auto &id:ids) {select(id);draw("catalog");}

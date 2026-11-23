@@ -89,6 +89,9 @@ public:
     [[nodiscard]]
     bool isShiftPressed() const noexcept;
 
+    [[nodiscard]] bool heavyMeleeJustPressed() const noexcept { return heavyMeleeJustPressed_; }
+    [[nodiscard]] bool heavyMeleeHeld() const noexcept { return heavyMeleeHeld_; }
+
     [[nodiscard]]
     bool isPrimaryPointerPressed() const noexcept;
     [[nodiscard]] bool isPrimaryPointerPhysicallyPressed() const noexcept {
@@ -132,6 +135,8 @@ private:
     bool primaryPointerSuppressedUntilRelease_{};
     bool secondaryPointerPressed_{};
     bool secondaryPointerJustPressed_{};
+    bool heavyMeleeJustPressed_{};
+    bool heavyMeleeHeld_{};
     std::vector<ReloadKeyTransition> reloadTransitions_;
 
     [[nodiscard]]

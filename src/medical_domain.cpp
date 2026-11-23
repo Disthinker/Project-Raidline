@@ -1,4 +1,5 @@
 #include "medical_domain.h"
+#include "raid_fire_support_domain.h"
 
 #include <algorithm>
 #include <limits>
@@ -71,6 +72,93 @@ MedicalUseReceipt failure(
         std::move(message),
         revision};
 }
+
+bool medicalConsolidationAvailable(const ProfileState &profile) noexcept
+{
+    return !profile.pendingRaid && !profile.activeBaseDefense && !profile.homePerimeter.activeOuting;
+}
+
+bool isPersonalMultiUseMedicine(
+    const ProfileState &profile, const ContentRegistry &content, const AssetRecord &asset)
+{
+    if (asset.quantity != 1U || asset.remainingCharges == 0U || asset.reliefBatchId ||
+        !std::holds_alternative<StoredAssetLocation>(asset.location) ||
+        (profile.basePlayerEffects && profile.basePlayerEffects->medical &&
+         profile.basePlayerEffects->medical->medicalAssetId == asset.instanceId))
+        return false;
+    const auto &definition = content.item(asset.definitionId);
+    return definition.category == ItemCategory::Medical && definition.medicalUse &&
+        definition.maximumCharges > 1U && asset.remainingCharges <= definition.maximumCharges &&
+        assetIsInStashOrEquipped(profile, asset.instanceId);
+}
+}
+
+std::vector<AssetInstanceId> medicalConsolidationCandidates(const ProfileState &profile, const ContentRegistry &content)
+{
+    std::vector<AssetInstanceId> result;
+    if (!medicalConsolidationAvailable(profile)) return result;
+    for (const auto &[id, asset] : profile.assets.records())
+        if (isPersonalMultiUseMedicine(profile, content, asset))
+            result.push_back(id);
+    return result;
+}
+
+MedicalConsolidationPlan queryMedicalConsolidation(
+    const ProfileState &profile, const ContentRegistry &content, AssetInstanceId sourceId, AssetInstanceId targetId)
+{
+    const auto reject = [&](DomainErrorCode error, const char *message) {
+        return MedicalConsolidationPlan{false, error, message, profile.revision};
+    };
+    if (!medicalConsolidationAvailable(profile))
+        return reject(DomainErrorCode::IllegalDestination, "medical consolidation is only available in Base");
+    if (!sourceId || !targetId || sourceId == targetId)
+        return reject(DomainErrorCode::InvalidQuantity, "select two different medical items");
+    const auto *source = profile.assets.find(sourceId);
+    const auto *target = profile.assets.find(targetId);
+    if (!source || !target || !isPersonalMultiUseMedicine(profile, content, *source) ||
+        !isPersonalMultiUseMedicine(profile, content, *target))
+        return reject(DomainErrorCode::IllegalDestination, "only personal multi-use medicines can be combined");
+    if (source->definitionId != target->definitionId)
+        return reject(DomainErrorCode::IncompatibleEquipment, "select two matching medical items");
+    const auto free = content.item(target->definitionId).maximumCharges - target->remainingCharges;
+    if (!free)
+        return reject(DomainErrorCode::Capacity, "target medical item is full");
+    const auto transfer = std::min(free, source->remainingCharges);
+    return {true, DomainErrorCode::None, {}, profile.revision,
+        source->remainingCharges, target->remainingCharges, transfer,
+        source->remainingCharges - transfer, target->remainingCharges + transfer};
+}
+
+InventoryReceipt executeMedicalConsolidation(ProfileState &profile, const ContentRegistry &content,
+    const MedicalConsolidationCommand &command, const CommandContext &context)
+{
+    if (context.transactionId.empty())
+        return {false, false, DomainErrorCode::InvalidTransaction, "transaction ID must not be empty", profile.revision};
+    if (profile.committedTransactions.contains(context.transactionId))
+        return {true, true, DomainErrorCode::None, {}, profile.revision};
+    if (context.expectedRevision != profile.revision)
+        return {false, false, DomainErrorCode::StaleRevision, "profile revision is stale", profile.revision};
+    if (profile.revision == std::numeric_limits<ProfileRevision>::max())
+        return {false, false, DomainErrorCode::RevisionOverflow, "profile revision cannot advance", profile.revision};
+    const auto plan = queryMedicalConsolidation(profile, content, command.sourceId, command.targetId);
+    if (!plan.canCommit)
+        return {false, false, plan.error, plan.message, profile.revision};
+    if (plan.sourceBefore != command.sourceBefore || plan.targetBefore != command.targetBefore)
+        return {false, false, DomainErrorCode::StaleRevision, "medical charges changed", profile.revision};
+
+    ProfileState candidate = profile;
+    candidate.assets.findMutable(command.targetId)->remainingCharges = plan.targetAfter;
+    if (plan.sourceAfter)
+        candidate.assets.findMutable(command.sourceId)->remainingCharges = plan.sourceAfter;
+    else
+        static_cast<void>(candidate.assets.erase(command.sourceId));
+    candidate.committedTransactions.insert(context.transactionId);
+    ++candidate.revision;
+    const auto validation = validateProfileState(candidate, content);
+    if (!validation.valid)
+        return {false, false, DomainErrorCode::InvalidProfile, validation.message, profile.revision};
+    profile = std::move(candidate);
+    return {true, false, DomainErrorCode::None, {}, profile.revision};
 }
 
 WoundRollResult applyWoundRoll(
@@ -248,7 +336,8 @@ MedicalUsePlan queryMedicalUse(
     const ProfileState &profile,
     const ContentRegistry &content,
     AssetInstanceId medicalAssetId,
-    MedicalAccess access)
+    MedicalAccess access,
+    std::optional<TeammateMedicalTarget> teammate)
 {
     MedicalUsePlan plan;
     plan.revision = profile.revision;
@@ -292,7 +381,12 @@ MedicalUsePlan queryMedicalUse(
     }
     plan.durationMs = definition.medicalUse->actionDurationMs;
     plan.slowMovement = definition.medicalUse->slowMovement;
-    if (!medicalUseApplies(profile, plan.effect))
+    const bool applicable = teammate
+        ? access == MedicalAccess::CarriedOnly && hasLivingRaidFireSupport(profile) &&
+          teammate->health > 0 && teammate->health < teammate->maximumHealth &&
+          plan.effect == MedicalUseEffect::RestoreHealth
+        : medicalUseApplies(profile, plan.effect);
+    if (!applicable)
     {
         plan.error = DomainErrorCode::InvalidQuantity;
         plan.message = "medical effect is not applicable";
@@ -307,7 +401,8 @@ MedicalUseReceipt executeMedicalUse(
     const ContentRegistry &content,
     AssetInstanceId medicalAssetId,
     MedicalAccess access,
-    const CommandContext &context)
+    const CommandContext &context,
+    std::optional<TeammateMedicalTarget> teammate)
 {
     if (context.transactionId.empty())
     {
@@ -344,7 +439,8 @@ MedicalUseReceipt executeMedicalUse(
         profile,
         content,
         medicalAssetId,
-        access);
+        access,
+        teammate);
     if (!plan.canCommit)
     {
         return failure(plan.error, plan.message, profile.revision);
@@ -360,8 +456,9 @@ MedicalUseReceipt executeMedicalUse(
     case MedicalUseEffect::RestoreHealth:
         healed = std::min(
             static_cast<int>(definition.medicalUse->effectMagnitude),
-            100 - candidate.currentHealth);
-        candidate.currentHealth += healed;
+            teammate ? teammate->maximumHealth - teammate->health : 100 - candidate.currentHealth);
+        if (!teammate)
+            candidate.currentHealth += healed;
         break;
     case MedicalUseEffect::StopLightBleeding:
     case MedicalUseEffect::StopAnyBleeding:

@@ -1298,6 +1298,174 @@ TEST(AlphaExtractionSessionTest, HospitalFloorplanFailedWriteRetriesAndPreserves
     EXPECT_TRUE(returned.raidInteriorIntelligence.knows(kHospitalFloorplanSpaceId));
 }
 
+void standAtHospitalPoint(GameSession &session, Vec2 center)
+{
+    auto &player = const_cast<Player &>(session.world().player());
+    const float half = player.size() * 0.5F;
+    ASSERT_TRUE(player.setPosition({center.x - half, center.y - half}));
+}
+
+void accompanyHospitalSurvivorToHandoff(GameSession &session)
+{
+    auto &world = session.world();
+    const auto initial = world.hospitalEscort();
+    ASSERT_TRUE(initial);
+    ASSERT_EQ(initial->state, HospitalEscortState::AwaitingContact);
+    const auto start = initial->position;
+    const auto zone = initial->handoff;
+    const Vec2 goal{zone.position.x + zone.size.x * .5F, zone.position.y + zone.size.y * .5F};
+    const auto residents = session.profile().basePopulation.ordinaryResidents;
+    ASSERT_NO_FATAL_FAILURE(standAtHospitalPoint(session, goal));
+    GameplayInput hold;
+    hold.interactPressed = true;
+    session.update(hold, 2.1F);
+    ASSERT_FALSE(session.profileUiCommitPending());
+    ASSERT_FALSE(session.profile().pendingRaid->rescue->secured);
+    EXPECT_EQ(session.profile().basePopulation.ordinaryResidents, residents);
+
+    ASSERT_NO_FATAL_FAILURE(standAtHospitalPoint(session, start));
+    GameplayInput tap;
+    tap.interactJustPressed = true;
+    session.update(tap, 0.0F);
+    ASSERT_EQ(world.hospitalEscort()->state, HospitalEscortState::Following);
+    session.update({}, 0.0F);
+    session.update(tap, 0.0F);
+    ASSERT_EQ(world.hospitalEscort()->state, HospitalEscortState::Waiting);
+    ASSERT_NO_FATAL_FAILURE(standAtHospitalPoint(session, goal));
+    session.update({}, 0.2F);
+    EXPECT_FLOAT_EQ(world.hospitalEscort()->position.x, start.x);
+    EXPECT_FLOAT_EQ(world.hospitalEscort()->position.y, start.y);
+    ASSERT_NO_FATAL_FAILURE(standAtHospitalPoint(session, start));
+    session.update(tap, 0.0F);
+    ASSERT_EQ(world.hospitalEscort()->state, HospitalEscortState::Following);
+    ASSERT_NO_FATAL_FAILURE(standAtHospitalPoint(session, goal));
+    session.update({}, 0.1F);
+    ASSERT_FALSE(world.hospitalEscort()->atHandoff);
+    EXPECT_LT(std::hypot(world.hospitalEscort()->position.x - start.x,
+                         world.hospitalEscort()->position.y - start.y), 40.0F);
+
+    // Only the player was staged at the handoff. The survivor travels the published
+    // outdoor layout using its own collision and navigation until it enters the zone.
+    for (int frame = 0; frame < 500 && !world.hospitalEscort()->atHandoff; ++frame)
+        session.update({}, 0.1F);
+    const auto arrived = world.hospitalEscort();
+    ASSERT_TRUE(arrived && arrived->atHandoff);
+    EXPECT_GT(std::hypot(arrived->position.x - start.x, arrived->position.y - start.y), 250.0F);
+    EXPECT_FALSE(arrived->threatened);
+    EXPECT_EQ(session.profile().basePopulation.ordinaryResidents, residents);
+    EXPECT_FALSE(session.profile().pendingRaid->rescue->secured);
+}
+
+TEST(AlphaExtractionSessionTest, HospitalEscortThreatBreaksHandoffAndAdmitsOneInjuredMedicEvenWithFullBeds)
+{
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-escort-", "hospital-full-beds-and-threat");
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("hospital-escort-full-beds", content);
+    auto &population = profile.basePopulation;
+    population.professionResidents[baseProfessionIndex(BaseResidentProfession::General)] +=
+        population.bedCapacity - population.ordinaryResidents;
+    population.ordinaryResidents = population.bedCapacity;
+    const auto starting = population;
+    ASSERT_TRUE(SaveRepository(directory.path()).save(profile, content.contentVersion()).succeeded);
+    GameSession session;
+    session.configurePersistence(directory.path());
+    ASSERT_TRUE(session.continueProfile());
+    ASSERT_TRUE(session.deployAlpha(42U, kHospitalFloorplanMapId)) << session.persistenceMessage();
+    const auto admission = session.ordinarySurvivorRescuePlan();
+    ASSERT_TRUE(admission && admission->canCommit);
+    EXPECT_EQ(admission->bedShortfallAfter, 1U);
+    auto &world = session.world();
+    const auto start = *session.profile().pendingRaid->rescue->escortStart;
+    const auto size = content.map(kHospitalFloorplanMapId).worldSize;
+    const Vec2 away{start.x < size.x / 2 ? size.x - 200 : 200, start.y < size.y / 2 ? size.y - 200 : 200};
+    ASSERT_FALSE(world.enemies().empty());
+    for (const auto &enemy : world.enemies())
+        ASSERT_TRUE(const_cast<Enemy &>(enemy).setPosition(away));
+    ASSERT_NO_FATAL_FAILURE(accompanyHospitalSurvivorToHandoff(session));
+    GameplayInput hold;
+    hold.interactPressed = true;
+    session.update(hold, 0.35F);
+    ASSERT_GT(world.ordinarySurvivorRescueProgress(), 0.0F);
+    const auto survivor = world.hospitalEscort()->position;
+    auto &intruder = const_cast<Enemy &>(world.enemies().front());
+    ASSERT_TRUE(intruder.setPosition({survivor.x + 35.0F, survivor.y}));
+    session.update(hold, 0.05F);
+    ASSERT_TRUE(world.hospitalEscort()->threatened);
+    EXPECT_FLOAT_EQ(world.ordinarySurvivorRescueProgress(), 0.0F);
+    EXPECT_EQ(session.profile().basePopulation, starting);
+    EXPECT_FALSE(session.profile().committedRescues.contains(kHospitalMedicalRescueId));
+    ASSERT_TRUE(intruder.takeDamage(10000));
+    session.update({}, 0.1F);
+    ASSERT_FALSE(world.hospitalEscort()->threatened);
+    session.update(hold, 2.1F);
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+    ASSERT_TRUE(session.profile().pendingRaid->rescue->secured);
+    EXPECT_EQ(session.profile().basePopulation.ordinaryResidents, starting.ordinaryResidents + 1);
+    EXPECT_EQ(session.profile().basePopulation.injuredByProfession[baseProfessionIndex(BaseResidentProfession::Medical)],
+        starting.injuredByProfession[baseProfessionIndex(BaseResidentProfession::Medical)] + 1);
+    EXPECT_EQ(session.profile().basePopulation.bedCapacity, starting.bedCapacity);
+    const auto secured = session.profile().basePopulation;
+    session.update(hold, 2.1F);
+    EXPECT_EQ(session.profile().basePopulation, secured);
+}
+
+TEST(AlphaExtractionSessionTest, DownedHospitalEscortCannotAdmitAResidentAndCanBeFoundOnANewSortie)
+{
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-escort-", "lost-before-safe-handoff");
+    GameSession session;
+    session.configurePersistence(directory.path());
+    ASSERT_TRUE(session.startNewProfile("hospital-escort-lost-before-handoff"));
+    const auto starting = session.profile().basePopulation;
+    ASSERT_TRUE(session.deployAlpha(42U, kHospitalFloorplanMapId));
+    auto &world = session.world();
+    const auto before = world.hospitalEscort();
+    ASSERT_TRUE(before);
+    ASSERT_NO_FATAL_FAILURE(standAtHospitalPoint(session, before->position));
+    GameplayInput tap;
+    tap.interactJustPressed = true;
+    session.update(tap, 0.0F);
+    ASSERT_EQ(world.hospitalEscort()->state, HospitalEscortState::Following);
+    session.update({}, 0.0F);
+    session.update(tap, 0.0F);
+    ASSERT_EQ(world.hospitalEscort()->state, HospitalEscortState::Waiting);
+    const auto zone = before->handoff;
+    ASSERT_NO_FATAL_FAILURE(standAtHospitalPoint(session, {zone.position.x + zone.size.x * .5F,
+        zone.position.y + zone.size.y * .5F}));
+    auto &actors = WeaponHandlingTestAccess::actors(world);
+    ASSERT_GE(actors.size(), 4U);
+    const auto position = before->position;
+    const Vec2 offsets[]{{34, 0}, {-34, 0}, {0, 34}, {0, -34}};
+    for (int i = 0; i < 4; ++i)
+    {
+        const auto size = actors[i].size();
+        ASSERT_TRUE(actors[i].setPosition({position.x + offsets[i].x - size.x / 2,
+            position.y + offsets[i].y - size.y / 2}));
+    }
+    for (int frame = 0; frame < 700 && world.hospitalEscort()->state != HospitalEscortState::Down; ++frame)
+        session.update({}, 0.05F);
+    ASSERT_EQ(world.hospitalEscort()->state, HospitalEscortState::Down);
+    EXPECT_EQ(world.hospitalEscort()->health, 0);
+    GameplayInput hold;
+    hold.interactPressed = true;
+    session.update(hold, 2.1F);
+    EXPECT_FALSE(world.ordinarySurvivorRescueReady());
+    EXPECT_FALSE(session.profileUiCommitPending());
+    EXPECT_FALSE(session.profile().pendingRaid->rescue->secured);
+    EXPECT_EQ(session.profile().basePopulation, starting);
+    ASSERT_TRUE(session.activeQuitAlphaRaid()) << session.persistenceMessage();
+    GameSession reopened;
+    reopened.configurePersistence(directory.path());
+    ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+    EXPECT_EQ(reopened.profile().basePopulation, starting);
+    EXPECT_FALSE(reopened.profile().committedRescues.contains(kHospitalMedicalRescueId));
+    ASSERT_TRUE(reopened.deployAlpha(43U, kHospitalFloorplanMapId)) << reopened.persistenceMessage();
+    ASSERT_TRUE(reopened.world().hospitalEscort());
+    EXPECT_EQ(reopened.world().hospitalEscort()->state, HospitalEscortState::AwaitingContact);
+    EXPECT_GT(reopened.world().hospitalEscort()->health, 0);
+}
+
 TEST(AlphaExtractionSessionTest, HospitalRescueAndFloorplanShareCheckpointInEitherOrder)
 {
     const auto &content = publishedContentRegistry();
@@ -1318,7 +1486,9 @@ TEST(AlphaExtractionSessionTest, HospitalRescueAndFloorplanShareCheckpointInEith
             initialFirstAid = assets(session.profile(), kHospitalFirstAidStockId).size();
             ASSERT_TRUE(session.deployAlpha(42U, kHospitalFloorplanMapId)) << session.persistenceMessage();
             ASSERT_TRUE(session.profile().pendingRaid && session.profile().pendingRaid->rescue);
-            const ContentRect transferPoint = session.profile().pendingRaid->rescue->transferPoint;
+            ASSERT_TRUE(session.profile().pendingRaid->rescue->escortStart);
+            for (const auto &enemy : session.world().enemies())
+                ASSERT_TRUE(const_cast<Enemy &>(enemy).takeDamage(1000));
             auto &player = const_cast<Player &>(session.world().player());
             const auto pickUpFloorplanAndStock = [&] {
                 RaidLootSnapshot floorplan;
@@ -1340,10 +1510,7 @@ TEST(AlphaExtractionSessionTest, HospitalRescueAndFloorplanShareCheckpointInEith
                 ASSERT_TRUE(session.world().inOutdoorRaidSpace());
             };
             const auto transfer = [&] {
-                const float half = player.size() * 0.5F;
-                ASSERT_TRUE(player.setPosition({
-                    transferPoint.position.x + transferPoint.size.x * 0.5F - half,
-                    transferPoint.position.y + transferPoint.size.y * 0.5F - half}));
+                ASSERT_NO_FATAL_FAILURE(accompanyHospitalSurvivorToHandoff(session));
                 ASSERT_TRUE(session.world().ordinarySurvivorRescueInteractionInRange());
                 GameplayInput hold;
                 hold.interactPressed = true;
@@ -1369,6 +1536,11 @@ TEST(AlphaExtractionSessionTest, HospitalRescueAndFloorplanShareCheckpointInEith
                 ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
                 EXPECT_TRUE(session.profile().pendingRaid->rescue->secured);
                 EXPECT_TRUE(session.profile().committedRescues.contains(kHospitalMedicalRescueId));
+                ASSERT_EQ(session.world().hospitalEscort()->state, HospitalEscortState::Delivered);
+                const auto admitted = session.profile().basePopulation;
+                session.update(hold, 2.1F);
+                EXPECT_FALSE(session.profileUiCommitPending());
+                EXPECT_EQ(session.profile().basePopulation, admitted);
             };
             if (rescueFirst)
             {
@@ -1484,16 +1656,27 @@ TEST(AlphaExtractionSessionTest, PublishedHospitalDeploysFreezesAndSettlesThroug
 {
     for (const std::uint64_t seed : {1ULL, 42ULL, 910223ULL})
     {
+        SCOPED_TRACE(seed);
+        raidline::test::TemporaryDirectory directory;
+        directory.claim("raidline-hospital-doors-", std::to_string(seed));
         GameSession session;
+        session.configurePersistence(directory.path());
         ASSERT_TRUE(session.startNewProfile("hospital-session"));
+        ASSERT_NO_FATAL_FAILURE(equipHospitalFloorplanPack(session));
         ASSERT_TRUE(session.deployAlpha(seed, MapDefinitionId{"map.raid.hospital_district"}))
             << session.persistenceMessage();
         ASSERT_TRUE(session.profile().pendingRaid.has_value());
         const auto &pending = *session.profile().pendingRaid;
-        ASSERT_EQ(pending.interiors.size(), 1U);
+        ASSERT_EQ(pending.interiors.size(), 2U);
         EXPECT_EQ(pending.interiors.front().id,
                   RaidSpaceDefinitionId{"raid_space.hospital_district.main_building"});
-        EXPECT_EQ(session.world().tacticalMap().specialLocations().size(), 1U);
+        const auto depot = pending.interiors.back();
+        ASSERT_EQ(depot.id, RaidSpaceDefinitionId{"raid_space.hospital_district.transport_depot"});
+        const auto material = std::find_if(pending.loot.begin(), pending.loot.end(),
+            [&](const auto &item) { return item.spaceId == depot.id; });
+        ASSERT_NE(material, pending.loot.end());
+        const auto depotLoot = *material;
+        EXPECT_EQ(session.world().tacticalMap().specialLocations().size(), 2U);
         EXPECT_TRUE(pending.highRiskCrisis.has_value());
         const auto loaded = deserializeProfileEnvelope(
             serializeProfileEnvelope(session.profile(), publishedContentRegistry().contentVersion()),
@@ -1518,6 +1701,30 @@ TEST(AlphaExtractionSessionTest, PublishedHospitalDeploysFreezesAndSettlesThroug
             interior.interiorExit.position));
         session.update(interact, 0.0F);
         ASSERT_TRUE(session.world().inOutdoorRaidSpace());
+        auto &player = const_cast<Player &>(session.world().player());
+        EXPECT_FLOAT_EQ(player.position().x, interior.exteriorReturn.x);
+        EXPECT_FLOAT_EQ(player.position().y, interior.exteriorReturn.y);
+        ASSERT_TRUE(player.setPosition(depot.exteriorEntrance.position));
+        session.update(interact, 0.0F);
+        ASSERT_EQ(session.world().activeRaidSpaceId(), depot.id);
+        ASSERT_EQ(session.world().enemies().size(), 1U);
+        ASSERT_NO_FATAL_FAILURE(pickUpHospitalFloorplan(session, depotLoot));
+        ASSERT_TRUE(assetIsCarried(session.profile(), depotLoot.assetId));
+        ASSERT_TRUE(player.setPosition(depot.interiorExit.position));
+        session.update(interact, 0.0F);
+        ASSERT_TRUE(session.world().inOutdoorRaidSpace());
+        EXPECT_FLOAT_EQ(player.position().x, depot.exteriorReturn.x);
+        EXPECT_FLOAT_EQ(player.position().y, depot.exteriorReturn.y);
+        ASSERT_TRUE(player.setPosition(depot.exteriorEntrance.position));
+        session.update(interact, 0.0F);
+        ASSERT_EQ(session.world().activeRaidSpaceId(), depot.id);
+        const auto &remaining = session.profile().pendingRaid->loot;
+        EXPECT_EQ(std::count_if(remaining.begin(), remaining.end(), [&](const auto &item) {
+            return item.spaceId == depot.id && !item.collected;
+        }), 0);
+        ASSERT_TRUE(player.setPosition(depot.interiorExit.position));
+        session.update(interact, 0.0F);
+        ASSERT_TRUE(session.world().inOutdoorRaidSpace());
         ASSERT_TRUE(const_cast<Player &>(session.world().player()).setPosition(
             interior.exteriorEntrance.position));
         session.update(interact, 0.0F);
@@ -1533,6 +1740,13 @@ TEST(AlphaExtractionSessionTest, PublishedHospitalDeploysFreezesAndSettlesThroug
                 session.world().extractionPoint().bounds().position));
             for (int frame = 0; frame < 40 && session.profile().pendingRaid; ++frame)
                 session.update(GameplayInput{}, 0.1F);
+            ASSERT_TRUE(waitForProfileUiDurability(session));
+            GameSession reopened;
+            reopened.configurePersistence(directory.path());
+            ASSERT_TRUE(reopened.continueProfile()) << reopened.persistenceMessage();
+            ASSERT_TRUE(reopened.profile().lastRaidResult);
+            EXPECT_EQ(reopened.profile().lastRaidResult->outcome, RaidResultOutcome::Extracted);
+            EXPECT_TRUE(assetIsCarried(reopened.profile(), depotLoot.assetId));
         }
         else
         {
@@ -1541,6 +1755,61 @@ TEST(AlphaExtractionSessionTest, PublishedHospitalDeploysFreezesAndSettlesThroug
         EXPECT_FALSE(session.profile().pendingRaid.has_value());
         EXPECT_FALSE(session.activeQuitAlphaRaid());
     }
+}
+
+TEST(AlphaExtractionSessionTest,
+     PurchasedKnifeCanCancelAndCompleteOneHeavySwingInTheHospitalDepot)
+{
+    GameSession session;
+    ASSERT_TRUE(session.startNewProfile("depot-heavy-attack"));
+    const auto bought = session.executeProfileEconomy(PurchaseCommand{alpha_content::utilityKnife, 1},
+                                                       "buy-knife-for-raid");
+    ASSERT_TRUE(bought.succeeded) << bought.message;
+    const auto knives = assets(session.profile(), alpha_content::utilityKnife);
+    ASSERT_FALSE(knives.empty());
+    ASSERT_TRUE(session.executeProfileInventory(
+        InventoryEquipCommand{knives.back(), EquipmentSlotKind::QuickMelee}, "equip-depot-knife").succeeded);
+    ASSERT_TRUE(session.deployAlpha(42, kHospitalFloorplanMapId)) << session.persistenceMessage();
+    const auto &rooms = session.profile().pendingRaid->interiors;
+    const auto depot = std::find_if(rooms.begin(), rooms.end(),
+        [](const auto &room) { return room.id == kHospitalDepotSpaceId; });
+    ASSERT_NE(depot, rooms.end());
+    auto &player = const_cast<Player &>(session.world().player());
+    ASSERT_TRUE(player.setPosition(depot->exteriorEntrance.position));
+    GameplayInput enter;
+    enter.interactJustPressed = true;
+    session.update(enter, 0.0F);
+    ASSERT_EQ(session.world().activeRaidSpaceId(), kHospitalDepotSpaceId);
+
+    GameplayInput heavy;
+    heavy.aimWorldPosition = {player.position().x + 160, player.position().y + 16};
+    heavy.meleePressed = true;
+    heavy.meleeHeavyHeld = true;
+    heavy.meleeHeavyJustPressed = true;
+    session.update(heavy, 0.1F);
+    ASSERT_TRUE(session.world().melee().chargingHeavy());
+    heavy.meleeHeavyJustPressed = false;
+    session.update(heavy, 0.1F);
+    EXPECT_GT(session.world().melee().heavyChargeProgress(), 0.0F);
+    session.update({}, 0.1F);
+    EXPECT_FLOAT_EQ(session.world().melee().heavyChargeProgress(), 0.0F);
+    EXPECT_FALSE(session.world().melee().result().attempted);
+    EXPECT_FLOAT_EQ(session.world().melee().recoverySeconds(), 0.0F);
+
+    heavy.meleeHeavyJustPressed = true;
+    session.update(heavy, 0.1F);
+    heavy.meleeHeavyJustPressed = false;
+    unsigned int attempts{};
+    for (int frame = 0; frame < 25; ++frame)
+    {
+        session.update(heavy, 0.1F);
+        if (session.world().melee().result().attempted)
+        {
+            EXPECT_TRUE(session.world().melee().heavySwing());
+            ++attempts;
+        }
+    }
+    EXPECT_EQ(attempts, 1U);
 }
 
 TEST(AlphaExtractionSessionTest,
@@ -2792,6 +3061,245 @@ TEST(AlphaExtractionSessionTest, EnemyHitAtomicallyUpdatesProfileArmorAndWorldHe
     const std::uint32_t bodyAfter = session.profile().assets.find(bodyArmor)
         ->currentDurability;
     EXPECT_TRUE(helmetAfter < helmetBefore || bodyAfter < bodyBefore);
+}
+
+class FireSupportTreatmentSessionTest : public testing::Test
+{
+protected:
+    raidline::test::TemporaryDirectory directory;
+    const ContentRegistry &content = publishedContentRegistry();
+    GameSession session;
+    AssetInstanceId kit{}, spareKit{};
+    Vec2 spawn{};
+
+    void SetUp() override
+    {
+        auto profile = makeNewAlphaProfile("teammate-medical-session", content);
+        profile.tutorial = TutorialProgress::Complete;
+        ++profile.basePopulation.ordinaryResidents;
+        ++profile.basePopulation.professionResidents[baseProfessionIndex(BaseResidentProfession::Combat)];
+        profile.committedRescues.insert(kRaidFireSupportReplacementRescueId);
+        const auto add = [&](const ItemDefinitionId &id, ProfileContainerId container, unsigned quantity = 1U) {
+            const auto &definition = content.item(id);
+            const auto fit = findFirstProfileFit(profile, content, container, definition, ItemOrientation::Degrees0);
+            if (!fit)
+                throw std::runtime_error("no room in treatment fixture for " + std::string(id.value()));
+            return profile.assets.create(definition, StoredAssetLocation{container, *fit}, quantity);
+        };
+        const auto rifle = add(kRaidFireSupportRifleId, ProfileContainerId::stash());
+        add(kRaidFireSupportAmmunitionId, ProfileContainerId::stash(), 42U);
+        const auto packs = assets(profile, alpha_content::backpack);
+        ASSERT_FALSE(packs.empty());
+        ASSERT_TRUE(executeInventory(profile, content, InventoryEquipCommand{packs.front(), EquipmentSlotKind::Backpack},
+            {profile.revision, "support-medical-backpack"}).succeeded);
+        const auto bag = ProfileContainerId::compartment(packs.front(), 0);
+        const auto startingKits = assets(profile, alpha_content::medkit);
+        ASSERT_FALSE(startingKits.empty());
+        kit = startingKits.front();
+        const auto kitFit = findFirstProfileFit(profile, content, bag, content.item(alpha_content::medkit),
+            ItemOrientation::Degrees0);
+        ASSERT_TRUE(kitFit);
+        ASSERT_TRUE(executeInventory(profile, content, InventoryMoveCommand{kit, 0, {bag, *kitFit}},
+            {profile.revision, "support-medical-carry"}).succeeded);
+        spareKit = add(alpha_content::medkit, bag);
+        directory.claim("raidline-support-treatment-", testing::UnitTest::GetInstance()->current_test_info()->name());
+        ASSERT_TRUE(SaveRepository(directory.path()).save(profile, content.contentVersion()).succeeded);
+        session.configurePersistence(directory.path());
+        ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+        AlphaDeployRequest request;
+        request.seed = 6;
+        request.mapDefinitionId = kHospitalFloorplanMapId;
+        request.fireSupport = RaidFireSupportLoadout{rifle, std::nullopt};
+        const auto deployed = session.requestDeployAlpha(request);
+        ASSERT_TRUE(deployed.accepted) << deployed.message;
+        ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+        ASSERT_TRUE(session.alphaRaidActive());
+        auto &world = session.world();
+        ASSERT_TRUE(world.fireSupport());
+        spawn = world.player().position();
+        auto &support = WeaponHandlingTestAccess::support(world);
+        support.setPosition({spawn.x + 65.0F, spawn.y});
+        ASSERT_TRUE(world.canInteractWithFireSupport());
+        ASSERT_FALSE(session.queryFireSupportTreatment(kit).canCommit);
+        support.applyContact(PlayerDamageObservation{45}, 0.0F);
+        ASSERT_LT(*world.fireSupportHealth(), kFireSupportMaxHealth);
+        ASSERT_GT(*world.fireSupportHealth(), 0);
+        ASSERT_EQ(world.player().health(), 100);
+    }
+
+    std::uint32_t charges(AssetInstanceId id) const { return session.profile().assets.find(id)->remainingCharges; }
+};
+
+TEST_F(FireSupportTreatmentSessionTest, SelectedCarriedKitHealsOnceAtCompletionAndRestoresOrders)
+{
+    auto &world = session.world();
+    ASSERT_TRUE(world.setFireSupportOrders(FireSupportMovementOrder::Follow, FireSupportFireOrder::FreeFire));
+    const auto kits = session.fireSupportTreatmentKits();
+    ASSERT_NE(std::find(kits.begin(), kits.end(), kit), kits.end());
+    ASSERT_NE(std::find(kits.begin(), kits.end(), spareKit), kits.end());
+    const auto selected = spareKit;
+    const auto plan = session.queryFireSupportTreatment(selected);
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    ASSERT_GT(plan.durationMs, 0U);
+    const auto position = world.fireSupport()->bounds.position;
+    const int wounded = *world.fireSupportHealth();
+    const auto before = charges(selected);
+    const auto unselected = charges(kit);
+    ASSERT_TRUE(session.startFireSupportTreatment(selected));
+    EXPECT_FALSE(session.startFireSupportTreatment(kit));
+    // Twenty short updates exercise the live world throughout the treatment.
+    const float step = static_cast<float>(plan.durationMs) / 20000.0F;
+    for (int frame = 0; frame < 19; ++frame)
+    {
+        session.update({}, step);
+        ASSERT_TRUE(session.playerActionState().active()) << frame;
+        const auto current = world.fireSupport();
+        ASSERT_TRUE(current);
+        EXPECT_FLOAT_EQ(current->bounds.position.x, position.x);
+        EXPECT_FLOAT_EQ(current->bounds.position.y, position.y);
+        EXPECT_FALSE(world.fireSupportShotLastUpdate());
+        EXPECT_EQ(current->health, wounded);
+        EXPECT_EQ(charges(selected), before);
+    }
+    for (int frame = 0; frame < 3 && session.playerActionState().active(); ++frame)
+        session.update({}, step);
+    ASSERT_FALSE(session.playerActionState().active());
+    const int healed = std::min(kFireSupportMaxHealth, wounded +
+        static_cast<int>(content.item(alpha_content::medkit).medicalUse->effectMagnitude));
+    EXPECT_EQ(*world.fireSupportHealth(), healed);
+    EXPECT_EQ(charges(selected), before - 1);
+    EXPECT_EQ(charges(kit), unselected);
+    EXPECT_EQ(world.player().health(), 100);
+    session.update({}, 0.1F);
+    const auto resumed = world.fireSupport();
+    ASSERT_TRUE(resumed);
+    EXPECT_EQ(resumed->movementOrder, FireSupportMovementOrder::Follow);
+    EXPECT_EQ(resumed->fireOrder, FireSupportFireOrder::FreeFire);
+    EXPECT_LT(resumed->bounds.position.x, position.x);
+    EXPECT_EQ(resumed->health, healed);
+    EXPECT_EQ(charges(selected), before - 1);
+}
+
+TEST_F(FireSupportTreatmentSessionTest, FireLostRangeLostKitAndDeathCancelWithoutUsingEitherKit)
+{
+    auto &world = session.world();
+    auto &support = WeaponHandlingTestAccess::support(world);
+    ASSERT_TRUE(world.setFireSupportOrders(FireSupportMovementOrder::Hold, FireSupportFireOrder::FreeFire));
+    const auto before = charges(kit);
+    const auto spareBefore = charges(spareKit);
+    const int wounded = *world.fireSupportHealth();
+    GameplayInput fire;
+    fire.fireJustPressed = fire.firePressed = true;
+    ASSERT_TRUE(session.startFireSupportTreatment(kit));
+    session.update({}, 0.4F);
+    auto &enemies = WeaponHandlingTestAccess::actors(world);
+    ASSERT_FALSE(enemies.empty());
+    const auto targetId = enemies.front().combatTargetId();
+    const auto originalTargetPosition = enemies.front().position();
+    ASSERT_TRUE(enemies.front().setPosition({spawn.x + 65.0F, spawn.y + 72.0F}));
+    session.update({}, 1.0F / 60.0F);
+    ASSERT_TRUE(session.playerActionState().active());
+    EXPECT_FALSE(world.fireSupportShotLastUpdate());
+    session.update(fire, 0.0F);
+    EXPECT_FALSE(session.playerActionState().active());
+    EXPECT_EQ(*world.fireSupportHealth(), wounded);
+    EXPECT_EQ(charges(kit), before);
+    EXPECT_EQ(world.fireSupport()->movementOrder, FireSupportMovementOrder::Hold);
+    EXPECT_EQ(world.fireSupport()->fireOrder, FireSupportFireOrder::FreeFire);
+    session.update({}, 1.0F / 60.0F);
+    EXPECT_TRUE(world.fireSupportShotLastUpdate());
+    for (auto &enemy : enemies)
+        if (enemy.combatTargetId() == targetId)
+            ASSERT_TRUE(enemy.setPosition(originalTargetPosition));
+
+    ASSERT_TRUE(session.startFireSupportTreatment(kit));
+    support.setPosition({spawn.x + 180.0F, spawn.y});
+    session.update({}, 0.1F);
+    ASSERT_FALSE(session.playerActionState().active());
+    EXPECT_FALSE(session.queryFireSupportTreatment(kit).canCommit);
+    EXPECT_EQ(*world.fireSupportHealth(), wounded);
+    EXPECT_EQ(charges(kit), before);
+    support.setPosition({spawn.x + 40.0F, spawn.y});
+
+    ASSERT_TRUE(session.startFireSupportTreatment(kit));
+    auto *selected = WeaponHandlingTestAccess::profile(session).assets.findMutable(kit);
+    ASSERT_NE(selected, nullptr);
+    const auto carried = selected->location;
+    const auto stash = ProfileContainerId::stash();
+    const auto fit = findFirstProfileFit(session.profile(), content, stash, content.item(alpha_content::medkit),
+        ItemOrientation::Degrees0);
+    ASSERT_TRUE(fit);
+    selected->location = StoredAssetLocation{stash, *fit};
+    session.update({}, 0.1F);
+    ASSERT_FALSE(session.playerActionState().active());
+    EXPECT_EQ(*world.fireSupportHealth(), wounded);
+    EXPECT_EQ(charges(kit), before);
+    EXPECT_EQ(charges(spareKit), spareBefore);
+    WeaponHandlingTestAccess::profile(session).assets.findMutable(kit)->location = carried;
+
+    ASSERT_TRUE(session.startFireSupportTreatment(kit));
+    session.update({}, 0.05F);
+    support.applyContact(PlayerDamageObservation{5}, 0.3F);
+    const int afterHit = *world.fireSupportHealth();
+    ASSERT_LT(afterHit, wounded);
+    session.update({}, 0.05F);
+    ASSERT_FALSE(session.playerActionState().active());
+    EXPECT_EQ(*world.fireSupportHealth(), afterHit);
+    EXPECT_EQ(charges(kit), before);
+    EXPECT_FALSE(session.queryFireSupportTreatment(kit).canCommit);
+    for (int frame = 0; frame < 8; ++frame)
+        session.update({}, 0.05F);
+
+    ASSERT_TRUE(session.startFireSupportTreatment(kit));
+    support.applyContact(PlayerDamageObservation{1000}, 0.0F);
+    session.update({}, 0.1F);
+    EXPECT_FALSE(session.playerActionState().active());
+    EXPECT_FALSE(session.startFireSupportTreatment(kit));
+    EXPECT_EQ(*world.fireSupportHealth(), 0);
+    EXPECT_EQ(charges(kit), before);
+    EXPECT_EQ(charges(spareKit), spareBefore);
+}
+
+TEST_F(FireSupportTreatmentSessionTest, HospitalWallAndSeparateInteriorPreventTreatment)
+{
+    auto &world = session.world();
+    auto &support = WeaponHandlingTestAccess::support(world);
+    auto &player = const_cast<Player &>(world.player());
+    ASSERT_TRUE(world.setFireSupportOrders(FireSupportMovementOrder::Hold, FireSupportFireOrder::HoldFire));
+    const auto before = charges(kit);
+    const int wounded = *world.fireSupportHealth();
+    const auto &walls = world.ballisticBlockers();
+    const auto wall = std::find_if(walls.begin(), walls.end(), [](const auto &blocker) {
+        return blocker.bounds.position.x > 60 && blocker.bounds.position.y > 60 &&
+            blocker.bounds.size.x > 32 && blocker.bounds.size.y > 32;
+    });
+    ASSERT_NE(wall, walls.end());
+    ASSERT_TRUE(session.startFireSupportTreatment(kit));
+    // Actor footprints lie on different sides of one real corner, within the 72-unit reach.
+    const auto corner = wall->bounds.position;
+    ASSERT_TRUE(player.setPosition({corner.x - 34, corner.y + 7}));
+    support.setPosition({corner.x + 7, corner.y - 34});
+    ASSERT_FALSE(world.canInteractWithFireSupport());
+    session.update({}, 0.0F);
+    EXPECT_FALSE(session.playerActionState().active());
+    EXPECT_FALSE(session.startFireSupportTreatment(kit));
+    EXPECT_EQ(*world.fireSupportHealth(), wounded);
+    EXPECT_EQ(charges(kit), before);
+
+    const auto entrance = session.profile().pendingRaid->interiors.front().exteriorEntrance.position;
+    ASSERT_TRUE(player.setPosition(entrance));
+    support.setPosition(entrance);
+    ASSERT_TRUE(session.startFireSupportTreatment(kit));
+    GameplayInput portal;
+    portal.interactJustPressed = true;
+    session.update(portal, 0.0F);
+    ASSERT_FALSE(world.inOutdoorRaidSpace());
+    ASSERT_FALSE(world.fireSupport()->sameSpace);
+    session.update({}, 0.1F);
+    EXPECT_FALSE(session.playerActionState().active());
+    EXPECT_FALSE(session.startFireSupportTreatment(kit));
+    EXPECT_EQ(*world.fireSupportHealth(), wounded);
+    EXPECT_EQ(charges(kit), before);
 }
 
 TEST(AlphaExtractionSessionTest, MedkitHealsContinuouslyAndFireMustBeRepressed)

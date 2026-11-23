@@ -4,6 +4,7 @@
 #include "base_medical_service_domain.h"
 #include "base_resident_medical_domain.h"
 #include "base_workforce_domain.h"
+#include "medical_domain.h"
 #include "ui_foundation.h"
 
 enum class UiBaseMedicalTab { Personal, Residents };
@@ -11,7 +12,8 @@ enum class UiBaseMedicalControl
 {
     Personal, Residents, Details, Facilities, Staffing, Upgrade, Main, Close,
     ReserveCell, WarehouseRow, PreviousWarehouse, NextWarehouse, ReserveTransfer,
-    Priority, AutoAdmission, MoveEarlier, MoveLater
+    Priority, AutoAdmission, MoveEarlier, MoveLater,
+    Consolidate, DoseSource, DoseTarget, DoseRow, PreviousDosePage, NextDosePage, ConfirmDoses
 };
 enum class UiBaseMedicalEventKind { Down, Up, Move, Wheel };
 struct UiBaseMedicalEvent {
@@ -32,6 +34,17 @@ struct UiBaseMedicalAsset
     InventoryFootprint footprint;
     std::string name;
     std::uint32_t charges{};
+};
+struct UiMedicalDoseItem {
+    AssetInstanceId id{};
+    std::string name;
+    bool inWarehouse{};
+    std::uint32_t charges{}, maximum{};
+};
+struct UiMedicalDoseSelection {
+    bool open{}, choosingTarget{};
+    std::optional<AssetInstanceId> source, target;
+    std::size_t page{};
 };
 
 struct UiBaseMedicalProjection {
@@ -55,9 +68,12 @@ struct UiBaseMedicalProjection {
     ResidentMedicalReservePolicy reservePolicy;
     std::vector<UiBaseMedicalAsset> warehouseMedicine;
     std::vector<UiBaseMedicalAsset> reserveMedicine;
+    std::vector<UiMedicalDoseItem> doseChoices;
+    std::optional<UiMedicalDoseItem> doseSource, doseTarget;
+    MedicalConsolidationPlan dosePlan;
 };
 [[nodiscard]] UiBaseMedicalProjection projectUiBaseMedical(
-    const ProfileState &, const ContentRegistry &, UiLanguage);
+    const ProfileState &, const ContentRegistry &, UiLanguage, const UiMedicalDoseSelection & = {});
 // Bind an explicit press to the semantic action, never a label or vector index.
 [[nodiscard]] std::string uiBaseMedicalActionKey(UiBaseMedicalControl, UiBaseMedicalTab, const UiBaseMedicalProjection &);
 [[nodiscard]] bool uiBaseMedicalEnabled(UiBaseMedicalControl, UiBaseMedicalTab, const UiBaseMedicalProjection &);
@@ -84,6 +100,7 @@ struct UiBaseMedicalState {
     std::size_t warehousePage{};
     std::optional<AssetInstanceId> selectedMedicine;
     std::optional<GridPosition> reserveDestination;
+    UiMedicalDoseSelection doses;
     int detailScroll{}, detailMaximum{}, feedbackScroll{}, feedbackMaximum{};
     std::optional<UiBaseMedicalPress> press;
 };
@@ -108,6 +125,7 @@ struct UiBaseMedicalTransferProjection
 [[nodiscard]] SDL_FRect uiBaseMedicalFeedbackRect() noexcept;
 [[nodiscard]] SDL_FRect uiBaseMedicalReserveRect() noexcept;
 [[nodiscard]] SDL_FRect uiBaseMedicalWarehouseRowRect(std::size_t) noexcept;
+[[nodiscard]] SDL_FRect uiBaseMedicalDoseRowRect(std::size_t) noexcept;
 [[nodiscard]] SDL_FRect uiBaseMedicalPriorityButtonRect(UiBaseMedicalControl, std::size_t) noexcept;
 [[nodiscard]] GridPosition uiBaseMedicalReserveCell(std::size_t) noexcept;
 [[nodiscard]] std::size_t uiBaseMedicalWarehousePageCount(const UiBaseMedicalProjection &) noexcept;

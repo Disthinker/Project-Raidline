@@ -88,7 +88,7 @@ RaidObservationKey RaidVisibilityProjection::key() const
 {
     return {spaceId,         observer,    direction,       angleDegrees,
             maximumDistance, environment, geometryRevision, lightAssetId, lightBatteryId,
-            lightAngleDegrees, lightDistance, illuminationKey};
+            lightAngleDegrees, lightDistance, illuminationKey, smoke};
 }
 
 bool RaidVisibilityProjection::hasSameParameters(
@@ -103,7 +103,7 @@ bool RaidVisibilityProjection::hasSameParameters(
            environment == current.environment &&
            geometryRevision == current.geometryRevision && lightAssetId == current.lightAssetId && lightBatteryId == current.lightBatteryId &&
            lightAngleDegrees == current.lightAngleDegrees && lightDistance == current.lightDistance &&
-           illuminationKey == current.illumination;
+           illuminationKey == current.illumination && smoke == current.smoke;
 }
 
 bool RaidVisibilityProjection::matches(
@@ -149,6 +149,15 @@ namespace
 {
 bool validFanHeader(const RaidVisibilityProjection &view) noexcept
 {
+    if (view.smoke.count > RaidSmokeSight::kCapacity) return false;
+    for (std::size_t i = 0; i < view.smoke.count; ++i)
+    {
+        const auto &circle = view.smoke.circles[i];
+        if (!finite(circle.center) || !std::isfinite(circle.radius) || circle.radius <= 0 ||
+            circle.center.x < 0 || circle.center.y < 0 ||
+            circle.center.x > view.worldSize.x || circle.center.y > view.worldSize.y)
+            return false;
+    }
     if (!view.valid || view.geometryRevision == 0 || view.boundary.size() < 3 ||
         !finite(view.observer) || !finite(view.worldSize) || view.worldSize.x <= 0 ||
         view.worldSize.y <= 0 || view.observer.x < 0 || view.observer.y < 0 ||
@@ -329,7 +338,7 @@ bool RaidVisibilityProjection::pointVisible(Vec2 p) const noexcept
     if (!validGeometry() || !finite(p) || !finite(observer) || p.x < 0 ||
         p.y < 0 || p.x > worldSize.x || p.y > worldSize.y)
         return false;
-    return pointInBoundary(*this, p) || (illumination && illumination->pointVisible(p));
+    return !smoke.blocks(observer, p) && (pointInBoundary(*this, p) || (illumination && illumination->pointVisible(p)));
 }
 
 std::vector<Vec2> clipRaidVisibilityTriangle(Vec2 a, Vec2 b, Vec2 c, Rect rect)
@@ -376,6 +385,7 @@ bool RaidVisibilityProjection::boundsVisible(Rect rect) const
     if (!finite(rect.position) || !finite(rect.size) || rect.size.x <= 0 ||
         rect.size.y <= 0)
         return false;
+    if (smoke.count && smoke.blocks(observer, observationCenter(rect))) return false;
     if (illumination && illumination->pointVisible(observationCenter(rect)) &&
         validGeometry())
         return true;
@@ -532,10 +542,12 @@ RaidVisibilityBoundsQuery::RaidVisibilityBoundsQuery(
                        view.direction.y * c + view.direction.x * s};
     valid_ = true;
     illumination_ = view.illumination;
+    smoke_ = view.smoke;
 }
 
 bool RaidVisibilityBoundsQuery::boundsVisible(Rect rect) const noexcept
 {
+    if (smoke_.count && smoke_.blocks(observer_, observationCenter(rect))) return false;
     return ordinaryBoundsVisible(rect) ||
         (illumination_ && finite(rect.position) && finite(rect.size) &&
             rect.size.x > 0 && rect.size.y > 0 &&
@@ -628,7 +640,7 @@ bool RaidVisibilityBoundsQuery::ordinaryBoundsVisible(Rect rect) const noexcept
 
 bool RaidVisibilityBoundsQuery::pointVisible(Vec2 point) const noexcept
 {
-    if (!valid_ || !finite(point))
+    if (!valid_ || !finite(point) || smoke_.blocks(observer_, point))
         return false;
     const auto contains = [point](Vec2 minimum, Vec2 maximum) {
         return point.x >= minimum.x && point.x <= maximum.x &&

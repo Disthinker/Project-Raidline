@@ -13,6 +13,7 @@
 #include "base_world.h"
 #include "developer_test_range.h"
 #include "game_flow.h"
+#include "test_temp_directory.h"
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -196,6 +197,177 @@ struct MeleeTestAccess {
  }
 };
 namespace {GameplayInput swing(){GameplayInput input;input.aimWorldPosition={800,116};input.meleeJustPressed=input.meleePressed=true;return input;}}
+
+namespace {
+GameplayInput heavyMeleeInput(bool start)
+{
+    GameplayInput input;
+    input.aimWorldPosition = {800, 116};
+    input.meleePressed = input.meleeHeavyHeld = true;
+    input.meleeHeavyJustPressed = start;
+    return input;
+}
+}
+
+TEST(HeavyMeleeTest, WindupHitsOnceWithTwiceTheArmorDamageAndTheSameReach)
+{
+    EnemyRoster<int> enemies;
+    const EnemyArmorState armor{7, 9, 10000};
+    spawn(enemies, 9, {36, 0}, 12, armor);
+    spawn(enemies, 10, {73, 0}, 12);
+    WorldMeleeRuntime melee;
+    melee.configure(use(), true, 91);
+    const auto tick = [&](float seconds, HeavyMeleeInput intent) {
+        melee.beginFrame(seconds);
+        melee.prepare(false, false, {}, {1, 0}, enemies, [](Vec2, Vec2) { return true; }, intent);
+    };
+    tick(0, {true, true});
+    tick(0.4F, {false, true});
+    EXPECT_TRUE(melee.blocksActions());
+    EXPECT_GT(melee.heavyChargeProgress(), 0.8F);
+    EXPECT_FALSE(melee.result().attempted);
+    EXPECT_EQ(enemies[0].torsoArmor()->durability, 9U);
+    tick(0.05F, {false, true});
+    ASSERT_TRUE(melee.result().contact);
+    EXPECT_TRUE(melee.heavySwing());
+    EXPECT_FLOAT_EQ(melee.recoverySeconds(), 1.0F);
+    EXPECT_EQ(melee.result().damage.armorDurabilityLoss, 2U);
+    ASSERT_TRUE(melee.commitPrepared(enemies));
+    EXPECT_FALSE(melee.commitPrepared(enemies));
+    EXPECT_EQ(enemies[0].torsoArmor()->durability, 7U);
+    EXPECT_EQ(enemies[1].health(), 12);
+    tick(1.0F, {false, true});
+    EXPECT_FALSE(melee.result().attempted);
+    EXPECT_FALSE(melee.chargingHeavy());
+}
+
+TEST(HeavyMeleeTest, RaidCommitsOneEightDamageHitAndOneWearThenRequiresANewPress)
+{
+    GameSession session;
+    const auto weapon = MeleeTestAccess::stage(session);
+    auto &enemy = const_cast<Enemy &>(session.world().enemies().front());
+    ASSERT_TRUE(enemy.setPosition({800, 100}));
+    session.update(heavyMeleeInput(true), 0.0F);
+    session.update(heavyMeleeInput(false), 0.43F);
+    ASSERT_FALSE(session.world().melee().result().attempted);
+    EXPECT_EQ(session.profile().assets.find(weapon)->currentDurability, 10000U);
+    ASSERT_TRUE(enemy.setPosition({160, 100}));
+    session.update(heavyMeleeInput(false), 0.02F);
+    ASSERT_TRUE(session.world().melee().result().committed);
+    ASSERT_TRUE(session.world().melee().result().contact);
+    EXPECT_EQ(enemy.health(), 4);
+    EXPECT_EQ(session.profile().assets.find(weapon)->currentDurability, 9950U);
+    ASSERT_TRUE(enemy.setPosition({800, 100}));
+    session.update(heavyMeleeInput(false), 1.01F);
+    EXPECT_FALSE(session.world().melee().result().attempted);
+    EXPECT_EQ(session.profile().assets.find(weapon)->currentDurability, 9950U);
+}
+
+TEST(HeavyMeleeTest, ReleaseControlAndCancelledIntentDiscardWindupWithoutWearOrRecovery)
+{
+    for (int interruption = 0; interruption < 3; ++interruption)
+    {
+        SCOPED_TRACE(interruption);
+        GameSession session;
+        const auto weapon = MeleeTestAccess::stage(session);
+        auto &enemy = const_cast<Enemy &>(session.world().enemies().front());
+        ASSERT_TRUE(enemy.setPosition({800, 100}));
+        session.update(heavyMeleeInput(true), 0);
+        session.update(heavyMeleeInput(false), 0.2F);
+        ASSERT_TRUE(session.world().melee().chargingHeavy());
+        if (interruption == 0)
+        {
+            auto releasedAlt = heavyMeleeInput(false);
+            releasedAlt.meleeHeavyHeld = false;
+            session.update(releasedAlt, 0.3F);
+        }
+        else if (interruption == 1)
+        {
+            ASSERT_TRUE(const_cast<Player &>(session.world().player()).applyControl(0.2F));
+            session.update(heavyMeleeInput(false), 0.3F);
+        }
+        else
+        {
+            session.cancelPlayerControlIntent();
+        }
+        session.update(heavyMeleeInput(false), 0.5F);
+        EXPECT_FALSE(session.world().melee().chargingHeavy());
+        EXPECT_FALSE(session.world().melee().result().attempted);
+        EXPECT_FLOAT_EQ(session.world().melee().recoverySeconds(), 0.0F);
+        EXPECT_EQ(session.profile().assets.find(weapon)->currentDurability, 10000U);
+        session.update({}, 0);
+        ASSERT_TRUE(enemy.setPosition({160, 100}));
+        session.update(swing(), 0);
+        EXPECT_EQ(enemy.health(), 8);
+    }
+}
+
+TEST(HeavyMeleeTest, DoorCrossingAndChangingTheEquippedAssetNeverCarryWindup)
+{
+    RaidWorldConfig config;
+    config.worldSize = {800, 600};
+    config.playerSpawn = {100, 100};
+    config.extractionPoint = {{650, 450}, {100, 100}};
+    RaidInteriorWorldConfig room;
+    room.id = RaidSpaceDefinitionId{"raid_space.test.heavy_melee"};
+    room.displayName = "Room";
+    room.worldSize = {480, 360};
+    room.exteriorEntrance = {{80, 80}, {100, 100}};
+    room.exteriorReturn = {100, 100};
+    room.interiorSpawn = {80, 80};
+    room.interiorExit = {{60, 60}, {120, 120}};
+    config.interiors.push_back(room);
+    GameplayWorld world{config};
+    world.configureMelee(use(), true, 7);
+    world.update(heavyMeleeInput(true), 0);
+    auto portal = heavyMeleeInput(false);
+    portal.interactJustPressed = true;
+    world.update(portal, 0.45F);
+    ASSERT_EQ(world.activeRaidSpaceId(), room.id);
+    EXPECT_FALSE(world.melee().chargingHeavy());
+    EXPECT_FALSE(world.melee().result().attempted);
+    world.update(heavyMeleeInput(true), 0);
+    ASSERT_TRUE(world.melee().chargingHeavy());
+    world.configureMelee(use(), true, 8);
+    world.update(heavyMeleeInput(false), 0.6F);
+    EXPECT_FALSE(world.melee().result().attempted);
+    EXPECT_FLOAT_EQ(world.melee().recoverySeconds(), 0.0F);
+}
+
+TEST(HeavyMeleeTest, BasePerimeterAndDefenseUseTheSameWindupAndRecovery)
+{
+    BaseWorld perimeter;
+    MeleeTestAccess::stagePerimeter(perimeter);
+    perimeter.configureMelee(use(), true, 91);
+    auto input = heavyMeleeInput(true);
+    input.aimWorldPosition = {400, 1026};
+    static_cast<void>(perimeter.update(input, 0.01F));
+    ASSERT_TRUE(perimeter.melee().chargingHeavy());
+    input.meleeHeavyJustPressed = false;
+    static_cast<void>(perimeter.update(input, 0.45F));
+    EXPECT_TRUE(perimeter.melee().heavySwing());
+    EXPECT_FALSE(perimeter.melee().result().contact);
+    EXPECT_FLOAT_EQ(perimeter.melee().recoverySeconds(), 1.0F);
+
+    raidline::test::TemporaryDirectory directory;
+    directory.claim("raidline-heavy-melee-", "defense");
+    GameFlow flow;
+    flow.configurePersistence(directory.path());
+    ASSERT_TRUE(flow.startNewGame("heavy-defense", false));
+    auto &session = flow.gameSession();
+    const auto weapon = MeleeTestAccess::equipKnife(session);
+    ASSERT_TRUE(session.triggerDeveloperBaseSiegeWarning());
+    ASSERT_TRUE(session.startBaseRealtimeDefense(flow.baseWorld()));
+    flow.updateBase(heavyMeleeInput(true), 0.01F);
+    ASSERT_TRUE(flow.baseWorld().melee().chargingHeavy());
+    for (int frame = 0; frame < 5; ++frame)
+        flow.updateBase(heavyMeleeInput(false), 0.09F);
+    EXPECT_TRUE(flow.baseWorld().melee().heavySwing());
+    EXPECT_TRUE(flow.baseWorld().melee().result().committed);
+    EXPECT_FLOAT_EQ(flow.baseWorld().melee().recoverySeconds(), 1.0F);
+    EXPECT_EQ(session.profile().assets.find(weapon)->currentDurability, 10000U);
+}
+
 TEST(MeleeAttackTest, RealRaidConsumerCommitsOneHitAndWearThenRequiresRelease){
  GameSession s;const auto id=MeleeTestAccess::stage(s);auto input=swing();s.update(input,0);
  ASSERT_EQ(s.world().enemies().size(),1U);EXPECT_EQ(s.world().enemies()[0].health(),8);EXPECT_EQ(s.profile().assets.find(id)->currentDurability,9950U);

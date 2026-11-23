@@ -5,10 +5,13 @@
 #include "base_workforce_domain.h"
 #include "ui_base_deployment_presentation.h"
 #include "ui_lost_recovery_presentation.h"
+#include "raid_tactical_map_presentation.h"
+#include "weapon_handling_fixture.h"
 
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -43,14 +46,79 @@ struct UiBaseDeploymentTestAccess {
     static void draw(App &a) { a.renderBaseDeployment(); }
     static void drawFireSupportOrders(App &a) { a.renderFireSupportOrders(); }
     static bool ordersOpen(const App &a) { return a.fireSupportOrdersOpen_; }
+    static bool treatmentOpen(const App &a) { return a.fireSupportTreatmentOpen_; }
+    static auto treatmentKit(const App &a) { return a.fireSupportTreatmentKit_; }
+    static const auto &fieldTrade(const App &a) { return a.fieldIntelligenceTradeUi_; }
+    static void drawFieldTrade(App &a) { a.renderFieldIntelligenceTrade(); }
+    static bool tacticalOpen(const App &a) { return a.tacticalMapOpen_; }
+    static void drawTactical(App &a) { a.renderRaidTacticalMap(); }
+    static const auto &itemMenu(const App &a) { return a.profileContextMenu_; }
+    static bool inventoryOpen(const App &a) { return a.inventoryOverlayState_.isOpen(); }
+    static void drawInventory(App &a) { a.renderProfileInventory(false, true); }
+    static std::vector<std::string> cacheLabels(App &a) {
+        a.deferredWorldLabels_.clear();
+        a.deferWorldLabels_ = true;
+        if (const auto *cache = a.gameSession_.fieldClueCacheLoot()) a.renderFieldClueCache(*cache);
+        a.deferWorldLabels_ = false;
+        std::vector<std::string> labels;
+        for (const auto &label : a.deferredWorldLabels_) labels.push_back(label.text);
+        a.deferredWorldLabels_.clear();
+        return labels;
+    }
+    static void drawRaid(App &a) { a.renderRaidScreen(); }
+    static std::vector<std::string> enemyLabels(App &a) {
+        a.deferredWorldLabels_.clear();
+        a.deferWorldLabels_ = true;
+        a.renderEnemies();
+        a.deferWorldLabels_ = false;
+        std::vector<std::string> labels;
+        for (const auto &label : a.deferredWorldLabels_) labels.push_back(label.text);
+        a.deferredWorldLabels_.clear();
+        return labels;
+    }
+    static std::vector<std::string> drawBarrels(App &a) {
+        a.deferredWorldLabels_.clear();
+        a.deferWorldLabels_ = true;
+        a.renderRaidVolatileBarrels();
+        a.deferWorldLabels_ = false;
+        std::vector<std::string> labels;
+        for (const auto &label : a.deferredWorldLabels_) labels.push_back(label.text);
+        a.deferredWorldLabels_.clear();
+        return labels;
+    }
+    static Vec2 barrelScreen(App &a, Vec2 center) {
+        return raidWorldToScreen(center,a.raidWorldCameraOffset());
+    }
+    static void loadPlayerArt(App &a) {
+        const auto root = std::filesystem::path{__FILE__}.parent_path().parent_path()/"assets";
+        a.playerTexture_ = loadInventoryTexture(a.renderer_,root/"characters/protagonist_left_minimal_256x320.png");
+        a.playerMoveHorizontalTexture_ = loadInventoryTexture(a.renderer_,
+            root/"characters/player/default/player_default_move_horizontal_6f_1536x640.png");
+        ASSERT_TRUE(a.playerTexture_.valid() && a.playerMoveHorizontalTexture_.valid());
+    }
+    static void drawEscortMarkers(App &a, const HospitalEscortView &view) {
+        const auto &r = kRaidTacticalChart;
+        a.renderHospitalEscortMap(view, {r.position.x, r.position.y, r.size.x, r.size.y},
+            a.gameSession_.world().playerWorldSize());
+    }
+    static std::vector<std::string> escortWorldLabels(App &a, const HospitalEscortView &view) {
+        a.deferredWorldLabels_.clear();
+        a.deferWorldLabels_ = true;
+        a.renderHospitalEscortWorld(view);
+        a.deferWorldLabels_ = false;
+        std::vector<std::string> result;
+        for (const auto &label : a.deferredWorldLabels_) result.push_back(label.text);
+        a.deferredWorldLabels_.clear();
+        return result;
+    }
     static bool captured(const App &a) { return a.relativeMouseModeActive_; }
     static bool paused(const App &a) { return a.pauseMenu_.isOpen(); }
     static Vec2 screenAim(const App &a) {
         return raidWorldToScreen(a.gameSession_.world().weaponAimWorldPosition(), a.raidWorldCameraOffset());
     }
     static bool primaryActive(const App &a) { return a.input_.isPrimaryPointerPressed(); }
-    static void frame(App &a) {
-        a.processEvents(); a.update(0); a.syncRaidPointerCapture(); a.pendingRelativeAimMotion_={}; a.input_.endFrame();
+    static void frame(App &a, float seconds = 0) {
+        a.processEvents(); a.update(seconds); a.syncRaidPointerCapture(); a.pendingRelativeAimMotion_={}; a.input_.endFrame();
         ASSERT_TRUE(raidline::test::waitForUiAppPersistence(a.gameSession_,
             [&] { return a.profileUiBusy() || bool(a.pendingInventoryBarrierAction_); },
             [&] { a.processEvents(); a.update(0); a.syncRaidPointerCapture(); a.pendingRelativeAimMotion_={}; a.input_.endFrame(); }));
@@ -67,7 +135,11 @@ struct UiBaseDeploymentTestAccess {
     static void attach(App &a, SDL_Renderer *r, float scale) {
         a.renderer_ = r; ASSERT_TRUE(a.uiTextRenderer_.initialize(r)); a.uiTextRenderer_.setRasterScale(scale);
     }
-    static void detach(App &a) { a.uiTextRenderer_.shutdown(); a.renderer_ = nullptr; }
+    static void detach(App &a) {
+        a.playerTexture_.reset(); a.playerMoveHorizontalTexture_.reset(); a.raidSmokeTerrain_.reset();
+        a.indoorInformationLayer_.reset(); a.indoorShadowMask_.reset();
+        a.uiTextRenderer_.shutdown(); a.renderer_ = nullptr;
+    }
 };
 
 namespace {
@@ -190,6 +262,11 @@ protected:
     void up(Vec2 p) { pointer(p, false); A::frame(*app); }
     void down(C c) { down(center(uiDeploymentControlRect(c))); }
     void up(C c) { up(center(uiDeploymentControlRect(c))); }
+    AssetInstanceId addToStorage(ProfileContainerId location, const ItemDefinitionId &item, std::uint32_t quantity) {
+        const auto &definition = content.item(item);
+        const auto fit = findFirstProfileFit(profile(), content, location, definition, ItemOrientation::Degrees0);
+        return fit ? profile().assets.create(definition, StoredAssetLocation{location, *fit}, quantity) : AssetInstanceId{};
+    }
     void wheel(Vec2 p) {
         SDL_Event e{}; e.type = SDL_EVENT_MOUSE_WHEEL; e.wheel.y = -1;
         e.wheel.mouse_x = p.x; e.wheel.mouse_y = p.y; ASSERT_TRUE(SDL_PushEvent(&e)); A::frame(*app);
@@ -299,18 +376,10 @@ TEST_F(UiBaseDeploymentTest, FireSupportDeploymentAndOrdersPreservePointerAndInv
     auto &residents = profile().basePopulation.professionResidents;
     --residents[baseProfessionIndex(BaseResidentProfession::General)];
     ++residents[baseProfessionIndex(BaseResidentProfession::Combat)];
-    const auto addToStash = [&](const ItemDefinitionId &id, std::uint32_t quantity) -> AssetInstanceId {
-        const auto &definition = content.item(id);
-        for (int y = 0; y < 16; ++y)
-            for (int x = 0; x < 24; ++x)
-                if (profilePlacementFits(profile(), content, ProfileContainerId::stash(),
-                    {x,y}, definition, ItemOrientation::Degrees0))
-                    return profile().assets.create(definition, StoredAssetLocation{ProfileContainerId::stash(), {x,y}}, quantity);
-        return {};
-    };
-    const auto rifle = addToStash(kRaidFireSupportRifleId, 1);
-    const auto rounds = addToStash(kRaidFireSupportAmmunitionId, 30);
-    const auto spare = addToStash(ItemDefinitionId{"item.magazine.5_45x39_30"}, 1);
+    const auto stash = ProfileContainerId::stash();
+    const auto rifle = addToStorage(stash, kRaidFireSupportRifleId, 1);
+    const auto rounds = addToStorage(stash, kRaidFireSupportAmmunitionId, 30);
+    const auto spare = addToStorage(stash, ItemDefinitionId{"item.magazine.5_45x39_30"}, 1);
     ASSERT_NE(rifle, 0U);
     ASSERT_NE(rounds, 0U);
     ASSERT_NE(spare, 0U);
@@ -394,6 +463,665 @@ TEST_F(UiBaseDeploymentTest, FireSupportDeploymentAndOrdersPreservePointerAndInv
     const auto after = world.weaponAimWorldPosition();
     EXPECT_NEAR(after.x, before.x, 0.01F);
     EXPECT_NEAR(after.y, before.y, 0.01F);
+}
+
+TEST_F(UiBaseDeploymentTest, TeammateTreatmentSelectsOneCarriedKitAndKeepsOrdersIndependent)
+{
+    const auto ordinary = std::find_if(content.maps().begin(), content.maps().end(),
+        [](const auto &m) { return m.id == kRaidFireSupportMapId; });
+    ASSERT_NE(ordinary, content.maps().end());
+    auto &residents = profile().basePopulation.professionResidents;
+    --residents[baseProfessionIndex(BaseResidentProfession::General)];
+    ++residents[baseProfessionIndex(BaseResidentProfession::Combat)];
+    const auto stash = ProfileContainerId::stash();
+    ASSERT_NE(addToStorage(stash, kRaidFireSupportRifleId, 1), 0U);
+    ASSERT_NE(addToStorage(stash, kRaidFireSupportAmmunitionId, 30), 0U);
+    const auto backpack = std::find_if(profile().assets.records().begin(), profile().assets.records().end(),
+        [](const auto &entry) { return entry.second.definitionId == alpha_content::backpack; });
+    ASSERT_NE(backpack, profile().assets.records().end());
+    const auto packId = backpack->first;
+    ASSERT_TRUE(executeInventory(profile(), content, InventoryEquipCommand{packId, EquipmentSlotKind::Backpack},
+        {profile().revision, "support-treatment-equip-backpack"}).succeeded);
+    const auto grid = ProfileContainerId::compartment(packId, 0);
+    const auto first = addToStorage(grid, alpha_content::medkit, 1);
+    const auto second = addToStorage(grid, alpha_content::medkit, 1);
+    ASSERT_NE(first, 0U);
+    ASSERT_NE(second, 0U);
+    profile().assets.findMutable(second)->remainingCharges = 2;
+    ++profile().revision;
+    ASSERT_TRUE(validateProfileState(profile(), content).valid) << validateProfileState(profile(), content).message;
+    map(static_cast<std::size_t>(ordinary - content.maps().begin()));
+    control(C::FireSupportToggle);
+    control(C::FireSupportRifle);
+    control(C::Deploy);
+    ASSERT_EQ(A::flow(*app).state(), GameFlowState::Raid);
+    auto &session = A::session(*app);
+    auto &world = session.world();
+    ASSERT_TRUE(world.fireSupport());
+    // This case measures an uninterrupted five-second treatment from the
+    // orders panel. Other ordinary-raid cases cover hostile contact.
+    for (auto &enemy : WeaponHandlingTestAccess::actors(world))
+        static_cast<void>(enemy.takeDamage(enemy.maxHealth()));
+    A::frame(*app, 1.0F / 60.0F);
+    ASSERT_EQ(session.fireSupportTreatmentKits(), (std::vector<AssetInstanceId>{first, second}));
+    key(SDL_SCANCODE_F2);
+    key(SDL_SCANCODE_5);
+    A::frame(*app);
+    ASSERT_TRUE(A::treatmentOpen(*app));
+    ASSERT_EQ(A::treatmentKit(*app), first);
+    key(SDL_SCANCODE_RETURN);
+    A::frame(*app);
+    EXPECT_FALSE(session.playerActionState().active());
+    EXPECT_TRUE(A::treatmentOpen(*app));
+    EXPECT_EQ(session.queryFireSupportTreatment(first).message, "teammate is at full health");
+
+    auto &companion = WeaponHandlingTestAccess::support(world);
+    companion.applyContact(PlayerDamageObservation{40}, 0.0F);
+    companion.setPosition(world.player().position());
+    A::frame(*app);
+    const int injured = world.fireSupportHealth().value();
+    ASSERT_LT(injured, kFireSupportMaxHealth);
+    ASSERT_TRUE(session.queryFireSupportTreatment(second).canCommit) << session.queryFireSupportTreatment(second).message;
+    key(SDL_SCANCODE_2);
+    key(SDL_SCANCODE_4);
+    key(SDL_SCANCODE_RIGHT);
+    A::frame(*app);
+    EXPECT_EQ(A::treatmentKit(*app), second);
+    EXPECT_EQ(world.fireSupport()->movementOrder, FireSupportMovementOrder::Follow);
+    EXPECT_EQ(world.fireSupport()->fireOrder, FireSupportFireOrder::HoldFire);
+    key(SDL_SCANCODE_ESCAPE);
+    A::frame(*app);
+    EXPECT_TRUE(A::ordersOpen(*app));
+    EXPECT_FALSE(A::treatmentOpen(*app));
+    EXPECT_EQ(world.fireSupportHealth(), injured);
+    EXPECT_EQ(profile().assets.find(second)->remainingCharges, 2U);
+
+    click({1090, 168});
+    click({1176, 108});
+    ASSERT_EQ(A::treatmentKit(*app), second);
+    down({1176, 188});
+    companion.applyContact(PlayerDamageObservation{2}, 0.0F);
+    up({1176, 188});
+    EXPECT_TRUE(A::treatmentOpen(*app));
+    EXPECT_FALSE(session.playerActionState().active());
+    A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+    ASSERT_TRUE(SDL_SetRenderDrawColor(renderer, 10, 16, 18, 255));
+    ASSERT_TRUE(SDL_RenderClear(renderer));
+    A::drawFireSupportOrders(*app);
+    ASSERT_TRUE(SDL_RenderPresent(renderer));
+    EXPECT_GT(bright({938, 58, 314, 28}), 20);
+    EXPECT_GT(bright({1100, 173, 152, 34}), 20);
+    if (const char *output = std::getenv("RAIDLINE_TEAMMATE_TREATMENT_UI_DIR"); output && *output) {
+        const std::filesystem::path destination(output);
+        ASSERT_TRUE(destination.is_absolute());
+        std::filesystem::create_directories(destination);
+        ASSERT_TRUE(IMG_SavePNG(surface, (destination / "treatment-1280-zh.png").string().c_str()));
+    }
+
+    const int beforeTreatment = world.fireSupportHealth().value();
+    click({1176, 188});
+    ASSERT_FALSE(A::ordersOpen(*app));
+    ASSERT_TRUE(session.playerActionState().active());
+    const auto *treatment = std::get_if<MedicalRaidAction>(&*session.playerActionState().active());
+    ASSERT_NE(treatment, nullptr);
+    EXPECT_TRUE(treatment->fireSupportSpace);
+    EXPECT_EQ(treatment->medicalAssetId, second);
+    EXPECT_EQ(profile().assets.find(second)->remainingCharges, 2U);
+    int ticks = 0;
+    for (; ticks < 360 && session.playerActionState().active(); ++ticks)
+        A::frame(*app, 1.0F / 60.0F);
+    SCOPED_TRACE(testing::Message() << "ticks=" << ticks << " session=" << session.persistenceMessage()
+        << " panel=" << A::legacyMessage(*app) << " canTreat=" << session.queryFireSupportTreatment(second).message
+        << " player=" << profile().currentHealth << " near=" << world.canInteractWithFireSupport());
+    EXPECT_FALSE(session.playerActionState().active());
+    EXPECT_EQ(world.fireSupportHealth(), std::min(kFireSupportMaxHealth, beforeTreatment + 30));
+    EXPECT_EQ(profile().assets.find(first)->remainingCharges, 3U);
+    EXPECT_EQ(profile().assets.find(second)->remainingCharges, 1U);
+    EXPECT_EQ(world.fireSupport()->movementOrder, FireSupportMovementOrder::Follow);
+    EXPECT_EQ(world.fireSupport()->fireOrder, FireSupportFireOrder::HoldFire);
+}
+
+TEST_F(UiBaseDeploymentTest, RiversideCacheDocumentContextAndMapPreserveFogAndSearchThroughF)
+{
+    const auto backpack = std::find_if(profile().assets.records().begin(), profile().assets.records().end(),
+        [](const auto &entry) { return entry.second.definitionId == alpha_content::backpack; });
+    ASSERT_NE(backpack, profile().assets.records().end());
+    ASSERT_TRUE(executeInventory(profile(), content, InventoryEquipCommand{backpack->first, EquipmentSlotKind::Backpack},
+        {profile().revision, "cache-ui-equip"}).succeeded);
+    const auto river = std::find_if(content.maps().begin(), content.maps().end(),
+        [](const auto &entry) { return entry.id == kFieldIntelligenceSourceMapId; });
+    ASSERT_NE(river, content.maps().end());
+    map(static_cast<std::size_t>(river - content.maps().begin()));
+    control(C::Deploy);
+    ASSERT_EQ(A::flow(*app).state(), GameFlowState::Raid);
+    auto &session = A::session(*app);
+    auto &world = session.world();
+    ASSERT_NE(session.fieldClueCacheLoot(), nullptr);
+    const Vec2 cachePosition = session.fieldClueCacheLoot()->position;
+    const auto rewardId = session.fieldClueCacheLoot()->assetId;
+    const auto &loot = profile().pendingRaid->loot;
+    const auto file = std::find_if(loot.begin(), loot.end(), [](const auto &entry) {
+        return entry.definitionId == kFieldIntelligenceDocumentId;
+    });
+    ASSERT_NE(file, loot.end());
+    const auto fileId = file->assetId;
+    const auto filePosition = file->position;
+    for (auto &enemy : WeaponHandlingTestAccess::actors(world))
+        static_cast<void>(enemy.takeDamage(enemy.maxHealth()));
+    auto &player = const_cast<Player &>(world.player());
+    const float half = player.size() * .5F;
+    ASSERT_TRUE(player.setPosition({cachePosition.x - half, cachePosition.y - half}));
+    A::frame(*app);
+    EXPECT_EQ(A::cacheLabels(*app), (std::vector<std::string>{"F: Search cache"}));
+    EXPECT_FALSE(profile().pendingRaid->fieldClueCache->decodedDocumentId);
+    ASSERT_TRUE(player.setPosition({filePosition.x - half, filePosition.y - half}));
+    A::frame(*app);
+    key(SDL_SCANCODE_F); A::frame(*app);
+    ASSERT_TRUE(assetIsCarried(profile(), fileId)) << session.persistenceMessage();
+    A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+    const auto drawMap = [&] {
+        SDL_SetRenderDrawColor(renderer, 10, 16, 18, 255); SDL_RenderClear(renderer);
+        A::drawTactical(*app); SDL_RenderPresent(renderer);
+    };
+    const auto marker = [&] {
+        const auto size = world.tacticalMap().worldSize();
+        const auto &r = kRaidTacticalChart;
+        const int x = static_cast<int>(r.position.x + r.size.x * cachePosition.x / size.x);
+        const int y = static_cast<int>(r.position.y + r.size.y * cachePosition.y / size.y);
+        int count{};
+        for (int py = y - 7; py <= y + 7; ++py)
+            for (int px = x - 7; px <= x + 7; ++px) {
+                Uint8 red{}, green{}, blue{}, alpha{};
+                if (SDL_ReadSurfacePixel(surface, px, py, &red, &green, &blue, &alpha) &&
+                    red == 242 && green == 201 && blue == 126) ++count;
+            }
+        return count;
+    };
+    const auto knownCells = [&] {
+        const auto &chart = world.tacticalMap();
+        std::vector<bool> cells;
+        for (int row = 0; row < chart.rows(); ++row)
+            for (int col = 0; col < chart.columns(); ++col) cells.push_back(chart.cellRevealed(col, row));
+        return cells;
+    };
+    const auto capture = [&](const char *filename) {
+        if (const char *output = std::getenv("RAIDLINE_FIELD_CACHE_UI_DIR"); output && *output) {
+            const std::filesystem::path dir(output);
+            ASSERT_TRUE(dir.is_absolute());
+            std::filesystem::create_directories(dir);
+            ASSERT_TRUE(IMG_SavePNG(surface, (dir / filename).string().c_str()));
+        }
+    };
+    key(SDL_SCANCODE_M); A::frame(*app);
+    ASSERT_TRUE(A::tacticalOpen(*app));
+    drawMap();
+    EXPECT_EQ(marker(), 0);
+    const auto fog = knownCells();
+    key(SDL_SCANCODE_M); A::frame(*app);
+    key(SDL_SCANCODE_TAB); A::frame(*app);
+    ASSERT_TRUE(A::inventoryOpen(*app));
+    const auto &stored = std::get<StoredAssetLocation>(profile().assets.find(fileId)->location);
+    const auto grids = layoutProfileCarriedGrids(profile(), content, 0);
+    const auto grid = std::find_if(grids.begin(), grids.end(), [&](const auto &g) { return g.container == stored.container; });
+    ASSERT_NE(grid, grids.end());
+    const Vec2 item{grid->bounds.x + (stored.origin.x + .5F)*kProfileItemCell,
+        grid->bounds.y + (stored.origin.y + .5F)*kProfileItemCell};
+    SDL_Event right{};
+    right.type = SDL_EVENT_MOUSE_BUTTON_DOWN; right.button.button = SDL_BUTTON_RIGHT;
+    right.button.down = true; right.button.x = item.x; right.button.y = item.y; ASSERT_TRUE(SDL_PushEvent(&right));
+    right.type = SDL_EVENT_MOUSE_BUTTON_UP; right.button.down = false; ASSERT_TRUE(SDL_PushEvent(&right));
+    A::frame(*app);
+    const auto &menu = A::itemMenu(*app);
+    ASSERT_TRUE(menu);
+    const auto action = std::find_if(menu->actions.begin(), menu->actions.end(), [](const auto &row) {
+        return row.id == UiItemAction::ReadCacheClue;
+    });
+    ASSERT_NE(action, menu->actions.end());
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, action->label), "解读密藏线索");
+    const auto hit = center(menu->layout.rows[static_cast<std::size_t>(action - menu->actions.begin())].bounds);
+    SDL_SetRenderDrawColor(renderer, 10, 16, 18, 255); SDL_RenderClear(renderer);
+    A::drawInventory(*app); SDL_RenderPresent(renderer); capture("field-cache-file-1280-zh.png");
+    down(hit);
+    EXPECT_TRUE(assetIsCarried(profile(), fileId));
+    up(hit);
+    ASSERT_EQ(profile().pendingRaid->fieldClueCache->decodedDocumentId, fileId) << A::legacyMessage(*app);
+    EXPECT_FALSE(profile().assets.find(fileId));
+    EXPECT_EQ(profile().pendingRaid->fieldIntelligenceTrade->balance, 0U);
+    key(SDL_SCANCODE_TAB); A::frame(*app);
+    key(SDL_SCANCODE_M); A::frame(*app);
+    ASSERT_TRUE(A::tacticalOpen(*app));
+    drawMap();
+    EXPECT_GT(marker(), 12);
+    EXPECT_EQ(knownCells(), fog);
+    capture("field-cache-map-1280-zh.png");
+    key(SDL_SCANCODE_M); A::frame(*app);
+    ASSERT_TRUE(player.setPosition({cachePosition.x - half, cachePosition.y - half}));
+    A::frame(*app);
+    ASSERT_TRUE(session.fieldClueCacheInRange());
+    key(SDL_SCANCODE_F); A::frame(*app);
+    ASSERT_TRUE(session.fieldClueCacheLoot()->collected) << A::legacyMessage(*app);
+    EXPECT_TRUE(assetIsCarried(profile(), rewardId));
+    EXPECT_FALSE(session.fieldClueCacheInRange());
+    EXPECT_EQ(A::cacheLabels(*app), (std::vector<std::string>{"Empty field cache"}));
+}
+
+TEST_F(UiBaseDeploymentTest, RiversideRetreatCanBeInterceptedOrLostOutOfSight)
+{
+    const auto river = std::find_if(content.maps().begin(), content.maps().end(),
+        [](const auto &entry) { return entry.id == kFieldIntelligenceSourceMapId; });
+    ASSERT_NE(river, content.maps().end());
+    map(static_cast<std::size_t>(river - content.maps().begin()));
+    control(C::Deploy);
+    ASSERT_EQ(A::flow(*app).state(), GameFlowState::Raid);
+    auto &session = A::session(*app);
+    auto &world = session.world();
+    ASSERT_EQ(world.armedScavengers().size(), 2U);
+    ASSERT_EQ(profile().pendingRaid->armedScavengers.size(), 2U);
+    const auto first = world.armedScavengers()[0].id, second = world.armedScavengers()[1].id;
+    const auto firstLoadout = profile().pendingRaid->armedScavengers[0];
+    const auto secondLoadout = profile().pendingRaid->armedScavengers[1];
+    ASSERT_TRUE(firstLoadout.retreatPoint && secondLoadout.retreatPoint);
+    for (auto &enemy : WeaponHandlingTestAccess::actors(world))
+        if (!enemy.isArmedScavenger()) static_cast<void>(enemy.takeDamage(enemy.maxHealth()));
+    A::frame(*app, .016F);
+    A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+    auto &player = const_cast<Player &>(world.player());
+    const auto actor = [&](CombatTargetId id) -> Enemy * {
+        auto &enemies = WeaponHandlingTestAccess::actors(world);
+        const auto it = std::find_if(enemies.begin(), enemies.end(), [&](const auto &e){return e.combatTargetId() == id;});
+        return it == enemies.end() ? nullptr : &*it;
+    };
+    const auto bodyCenter = [&](CombatTargetId id) {
+        const auto bounds = actor(id)->bounds();
+        return Vec2{bounds.position.x + bounds.size.x * .5F, bounds.position.y + bounds.size.y * .5F};
+    };
+    const auto placeInClearSight = [&](CombatTargetId id) {
+        const auto p = bodyCenter(id);
+        const std::array<Vec2,8> offsets{{{-80,0},{80,0},{0,-80},{0,80},{-56,-56},{56,-56},{-56,56},{56,56}}};
+        for (const auto d : offsets) {
+            if (!player.setPosition({p.x + d.x - player.size()*.5F, p.y + d.y - player.size()*.5F})) continue;
+            GameplayInput aim; aim.aimWorldPosition = p; world.update(aim, 0);
+            const auto probe = world.previewSmoke(p, SmokeUseDefinition{});
+            if (world.raidEnemyObservable(id) && probe && std::hypot(probe->point.x-p.x, probe->point.y-p.y)<1.0F)
+                return true;
+        }
+        return false;
+    };
+    const auto retreatLabel = [&] {
+        const auto labels = A::enemyLabels(*app);
+        return std::find(labels.begin(),labels.end(),"FALLING BACK") != labels.end();
+    };
+    ASSERT_NE(actor(first), nullptr);
+    ASSERT_TRUE(placeInClearSight(first));
+    ASSERT_FALSE(actor(first)->takeDamage(actor(first)->health() - 1));
+    const auto firstCenter = bodyCenter(first);
+    A::anchor(*app) = A::barrelScreen(*app,firstCenter);
+    A::frame(*app, .016F);
+    ASSERT_TRUE(world.armedScavengers()[0].retreating);
+    ASSERT_TRUE(retreatLabel());
+    if (const char *output = std::getenv("RAIDLINE_RETREAT_UI_DIR"); output && *output) {
+        const std::filesystem::path dir(output);
+        ASSERT_TRUE(dir.is_absolute());
+        std::filesystem::create_directories(dir);
+        A::loadPlayerArt(*app); A::drawRaid(*app); SDL_RenderPresent(renderer);
+        ASSERT_TRUE(IMG_SavePNG(surface,(dir / "riverside-retreat-1280-zh.png").string().c_str()));
+    }
+    const auto shot = A::barrelScreen(*app,bodyCenter(first));
+    A::anchor(*app) = shot;
+    pointer(shot,true); A::frame(*app,.016F); pointer(shot,false); A::frame(*app,.016F);
+    for (int i=0; i<24 && world.armedScavengers()[0].alive; ++i) A::frame(*app,.016F);
+    ASSERT_FALSE(world.armedScavengers()[0].alive);
+    EXPECT_FALSE(world.armedScavengers()[0].escaped);
+    const auto *corpse = profile().assets.find(firstLoadout.corpseAssetId);
+    ASSERT_NE(corpse, nullptr);
+    EXPECT_TRUE(std::get<RaidCorpseContainerAssetLocation>(corpse->location).deathPosition);
+    EXPECT_NE(profile().assets.find(firstLoadout.pistolAssetId), nullptr);
+
+    ASSERT_NE(actor(second), nullptr);
+    ASSERT_TRUE(placeInClearSight(second));
+    const auto mapLocations = std::array{bodyCenter(second), *secondLoadout.retreatPoint};
+    const auto mapRegions = [&] {
+        key(SDL_SCANCODE_M); A::frame(*app);
+        EXPECT_TRUE(A::tacticalOpen(*app));
+        SDL_SetRenderDrawColor(renderer,10,16,18,255); SDL_RenderClear(renderer);
+        A::drawTactical(*app); SDL_RenderPresent(renderer);
+        const auto &r = kRaidTacticalChart;
+        const auto size = world.tacticalMap().worldSize();
+        std::vector<Uint32> pixels;
+        for (const auto p : mapLocations) {
+            const int x = static_cast<int>(r.position.x + r.size.x*p.x/size.x);
+            const int y = static_cast<int>(r.position.y + r.size.y*p.y/size.y);
+            for (int py=y-12;py<=y+12;++py) for (int px=x-12;px<=x+12;++px) {
+                Uint8 red{},green{},blue{},alpha{};
+                EXPECT_TRUE(SDL_ReadSurfacePixel(surface,px,py,&red,&green,&blue,&alpha));
+                pixels.push_back(Uint32(red)<<24 | Uint32(green)<<16 | Uint32(blue)<<8 | alpha);
+            }
+        }
+        key(SDL_SCANCODE_M); A::frame(*app);
+        EXPECT_FALSE(A::tacticalOpen(*app));
+        return pixels;
+    };
+    A::anchor(*app) = A::barrelScreen(*app,bodyCenter(second));
+    A::frame(*app);
+    const auto beforeRetreat = mapRegions();
+    ASSERT_FALSE(actor(second)->takeDamage(actor(second)->health()-1));
+    A::anchor(*app) = A::barrelScreen(*app,bodyCenter(second));
+    A::frame(*app,.016F);
+    ASSERT_TRUE(world.armedScavengers()[1].retreating);
+    ASSERT_TRUE(retreatLabel());
+    const auto cover = world.previewSmoke(bodyCenter(second),SmokeUseDefinition{});
+    ASSERT_TRUE(cover);
+    RaidSmokeRuntime smoke; ASSERT_TRUE(smoke.start(*cover)); smoke.advance(.55F);
+    world.commitSmoke(std::move(smoke));
+    EXPECT_FALSE(world.raidEnemyObservable(second));
+    EXPECT_FALSE(retreatLabel());
+    EXPECT_TRUE(mapRegions() == beforeRetreat) << "retreat must not identify a hidden actor or exit on the map";
+    for (int i=0; i<1800 && !world.armedScavengers()[1].escaped; ++i) A::frame(*app,.05F);
+    ASSERT_TRUE(world.armedScavengers()[1].escaped);
+    EXPECT_FALSE(world.armedScavengers()[1].alive);
+    EXPECT_FALSE(retreatLabel());
+    EXPECT_TRUE(profile().pendingRaid->armedScavengers[1].escaped);
+    const auto *escapedRoot = profile().assets.find(secondLoadout.corpseAssetId);
+    ASSERT_NE(escapedRoot, nullptr);
+    EXPECT_FALSE(std::get<RaidCorpseContainerAssetLocation>(escapedRoot->location).deathPosition);
+    EXPECT_EQ(actor(second), nullptr);
+    EXPECT_FALSE(session.canOpenRaidSceneContainer(secondLoadout.corpseAssetId));
+}
+
+TEST_F(UiBaseDeploymentTest, RiversideBarterUsesTheSameContactWithPointerAndKeyboard)
+{
+    const auto riverside = std::find_if(content.maps().begin(), content.maps().end(),
+        [](const auto &m) { return m.id == kFieldIntelligenceSourceMapId; });
+    ASSERT_NE(riverside, content.maps().end());
+    const auto backpack = std::find_if(profile().assets.records().begin(), profile().assets.records().end(),
+        [](const auto &entry) { return entry.second.definitionId == alpha_content::backpack; });
+    ASSERT_NE(backpack, profile().assets.records().end());
+    const auto packId = backpack->first;
+    ASSERT_TRUE(executeInventory(profile(), content, InventoryEquipCommand{packId, EquipmentSlotKind::Backpack},
+        {profile().revision, "barter-ui-equip-pack"}).succeeded);
+    const auto carried = ProfileContainerId::compartment(packId, 0);
+    const auto electronics = addToStorage(carried, ItemDefinitionId{"item.loot.electronics"}, 1);
+    const auto scrap = addToStorage(carried, ItemDefinitionId{"item.loot.scrap_parts"}, 1);
+    ASSERT_NE(electronics, 0U);
+    ASSERT_NE(scrap, 0U);
+    ++profile().revision;
+    map(static_cast<std::size_t>(riverside - content.maps().begin()));
+    control(C::Deploy);
+    ASSERT_EQ(A::flow(*app).state(), GameFlowState::Raid);
+    auto &session = A::session(*app);
+    auto &world = session.world();
+    ASSERT_TRUE(profile().pendingRaid->fieldIntelligenceTrade);
+    for (auto &enemy : WeaponHandlingTestAccess::actors(world))
+        static_cast<void>(enemy.takeDamage(enemy.maxHealth()));
+    const auto contact = profile().pendingRaid->fieldIntelligenceTrade->position;
+    auto &player = const_cast<Player &>(world.player());
+    const auto half = player.size() * .5F;
+    ASSERT_TRUE(player.setPosition({contact.x - half, contact.y - half}));
+    A::frame(*app);
+    ASSERT_EQ(session.fieldIntelligenceTradeStatus(), RaidFieldTradeAccess::Available);
+    key(SDL_SCANCODE_E);
+    A::frame(*app);
+    ASSERT_TRUE(A::fieldTrade(*app).open);
+    ASSERT_TRUE(session.queryFieldBarter(0).canCommit) << session.queryFieldBarter(0).message;
+    ASSERT_TRUE(session.queryFieldBarter(1).canCommit) << session.queryFieldBarter(1).message;
+    const auto before = *session.fieldIntelligenceTradeView();
+    const auto baseCurrency = profile().currency;
+    const auto carriedQuantity = [&](const ItemDefinitionId &item) {
+        std::uint32_t total = 0;
+        for (const auto &[id, asset] : profile().assets.records())
+            if (asset.definitionId == item && assetIsCarried(profile(), id)) total += asset.quantity;
+        return total;
+    };
+    const auto ammo = session.queryFieldBarter(0).outputDefinitionId;
+    const auto lure = session.queryFieldBarter(1).outputDefinitionId;
+    const auto ammoBefore = carriedQuantity(ammo), luresBefore = carriedQuantity(lure);
+
+    // A document-free Enter still addresses the original first row.
+    key(SDL_SCANCODE_RETURN);
+    A::frame(*app);
+    EXPECT_EQ(A::fieldTrade(*app).feedback, "Carry a document to sell it");
+    down({1200, 390});
+    ++profile().revision; // A separate inventory edit invalidates this quote.
+    up({1200, 390});
+    EXPECT_NE(profile().assets.find(electronics), nullptr);
+    EXPECT_EQ(carriedQuantity(ammo), ammoBefore);
+    click({1200, 390});
+    EXPECT_TRUE(session.queryFieldBarter(0).exchanged);
+    EXPECT_EQ(profile().assets.find(electronics), nullptr);
+    EXPECT_EQ(carriedQuantity(ammo), ammoBefore + 12U);
+    click({1200, 390});
+    EXPECT_EQ(A::fieldTrade(*app).feedback, "barter already claimed this Raid");
+    EXPECT_EQ(carriedQuantity(ammo), ammoBefore + 12U);
+
+    A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+    ASSERT_TRUE(SDL_SetRenderDrawColor(renderer, 10, 16, 18, 255));
+    ASSERT_TRUE(SDL_RenderClear(renderer));
+    A::drawFieldTrade(*app);
+    ASSERT_TRUE(SDL_RenderPresent(renderer));
+    EXPECT_GT(bright({841, 370, 240, 40}), 20);
+    EXPECT_GT(bright({841, 422, 240, 40}), 20);
+    if (const char *out = std::getenv("RAIDLINE_BARTER_UI_DIR"); out && *out) {
+        const std::filesystem::path directory(out);
+        ASSERT_TRUE(directory.is_absolute());
+        std::filesystem::create_directories(directory);
+        ASSERT_TRUE(IMG_SavePNG(surface, (directory / "riverside-barter-1280-zh.png").string().c_str()));
+    }
+    key(SDL_SCANCODE_DOWN); // from the clicked fifth row to the sixth
+    key(SDL_SCANCODE_RETURN);
+    A::frame(*app);
+    ASSERT_TRUE(session.queryFieldBarter(1).exchanged);
+    EXPECT_EQ(profile().assets.find(scrap), nullptr);
+    EXPECT_EQ(carriedQuantity(lure), luresBefore + 1U);
+    EXPECT_EQ(session.fieldIntelligenceTradeView()->balance, before.balance);
+    EXPECT_EQ(session.fieldIntelligenceTradeView()->fileSold, before.fileSold);
+    EXPECT_EQ(profile().currency, baseCurrency);
+    for (std::size_t index = 0; index < before.offers.size(); ++index)
+        EXPECT_EQ(session.fieldIntelligenceTradeView()->offers[index].purchased, before.offers[index].purchased);
+    key(SDL_SCANCODE_ESCAPE);
+    A::frame(*app);
+    EXPECT_FALSE(A::fieldTrade(*app).open);
+    EXPECT_FALSE(A::paused(*app));
+}
+
+TEST_F(UiBaseDeploymentTest, HospitalBarrelIsVisibleCanBeShotAndLeavesOnlyOneVisibleWreck)
+{
+    const auto hospital = std::find_if(content.maps().begin(),content.maps().end(),
+        [](const auto &m){return m.id==kHospitalFloorplanMapId;});
+    ASSERT_NE(hospital,content.maps().end());
+    map(static_cast<std::size_t>(hospital-content.maps().begin()));
+    control(C::Deploy);
+    ASSERT_EQ(A::flow(*app).state(),GameFlowState::Raid);
+    auto &session = A::session(*app);
+    auto &world = session.world();
+    for (auto &enemy : WeaponHandlingTestAccess::actors(world))
+        static_cast<void>(enemy.takeDamage(enemy.maxHealth()));
+    ASSERT_FALSE(world.volatileBarrels().empty());
+    const auto barrel = world.volatileBarrels().front();
+    const auto center = barrel.center;
+    ASSERT_FALSE(barrel.spent);
+    A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+    auto &player = const_cast<Player &>(world.player());
+    GameplayInput aim{}; aim.aimWorldPosition = center;
+    const std::array<Vec2,8> offsets{{{-92,0},{92,0},{0,-92},{0,92},{-70,-70},{70,-70},{-70,70},{70,70}}};
+    bool clear = false;
+    for (const auto delta : offsets) {
+        if (!player.setPosition({center.x+delta.x-player.size()*.5F,center.y+delta.y-player.size()*.5F})) continue;
+        world.update(aim,.016F);
+        if (!world.raidBoundsObservable(volatileBarrelBounds(center))) continue;
+        const auto probe = world.previewSmoke(center,SmokeUseDefinition{});
+        if (probe && std::hypot(probe->point.x-center.x,probe->point.y-center.y)<1.0F) { clear=true; break; }
+    }
+    ASSERT_TRUE(clear);
+    const auto chart = [&] {
+        const SDL_Rect viewport{640-static_cast<int>(std::round(center.x)),360-static_cast<int>(std::round(center.y)),9999,9999};
+        SDL_SetRenderViewport(renderer,&viewport);
+        SDL_SetRenderDrawColor(renderer,10,16,18,255);
+        SDL_RenderClear(renderer);
+        const auto labels = A::drawBarrels(*app);
+        SDL_SetRenderViewport(renderer,nullptr);
+        SDL_RenderPresent(renderer);
+        return labels;
+    };
+    const auto pixels = [&](SDL_Color color) {
+        unsigned count = 0;
+        for (int y=344; y<377; ++y) for(int x=624; x<657; ++x) {
+            Uint8 r{},g{},b{},a{};
+            if (SDL_ReadSurfacePixel(surface,x,y,&r,&g,&b,&a) &&
+                r==color.r && g==color.g && b==color.b) ++count;
+        }
+        return count;
+    };
+    const auto snapshot = [&](const char *filename) {
+        if (const char *folder = std::getenv("RAIDLINE_BARREL_UI_DIR")) {
+            std::filesystem::create_directories(folder);
+            A::loadPlayerArt(*app); A::drawRaid(*app); SDL_RenderPresent(renderer);
+            const auto path = (std::filesystem::path(folder)/filename).u8string();
+            EXPECT_TRUE(IMG_SavePNG(surface,reinterpret_cast<const char *>(path.c_str())));
+        }
+    };
+    const SDL_Color band{222,182,114,255}, wreck{143,127,105,255};
+    const auto intact = chart();
+    EXPECT_NE(std::find(intact.begin(),intact.end(),"Fuel barrel"),intact.end());
+    EXPECT_GT(pixels(band),20U);
+    snapshot("hospital-barrel-intact-1280-zh.png");
+
+    const auto landing = world.previewSmoke(center, SmokeUseDefinition{});
+    ASSERT_TRUE(landing);
+    RaidSmokeRuntime smoke;
+    ASSERT_TRUE(smoke.start(*landing)); smoke.advance(.55F);
+    world.commitSmoke(std::move(smoke));
+    EXPECT_TRUE(chart().empty());
+    EXPECT_EQ(pixels(band),0U);
+    world.update(aim,8.1F);
+    ASSERT_TRUE(world.smoke().clouds().empty());
+    const auto screen = A::barrelScreen(*app,center);
+    A::anchor(*app) = screen;
+    pointer(screen,true); A::frame(*app,.016F);
+    pointer(screen,false); A::frame(*app,.016F);
+    ASSERT_TRUE(world.volatileBarrels().front().spent) << session.persistenceMessage();
+    const auto labels = chart();
+    EXPECT_NE(std::find(labels.begin(),labels.end(),"Spent fuel barrel"),labels.end());
+    EXPECT_EQ(pixels(band),0U);
+    EXPECT_GT(pixels(wreck),8U);
+    snapshot("hospital-barrel-spent-1280-zh.png");
+
+    // An older world with no frozen barrel entries must draw exactly nothing.
+    RaidWorldConfig old; old.worldSize={1600,1000}; old.playerSpawn={320,250};
+    old.extractionPoint={{1250,720},{120,100}};
+    WeaponHandlingTestAccess::world(session,std::move(old));
+    ASSERT_TRUE(session.world().volatileBarrels().empty());
+    EXPECT_TRUE(chart().empty());
+    EXPECT_EQ(pixels(wreck),0U); EXPECT_EQ(pixels(band),0U);
+}
+
+TEST_F(UiBaseDeploymentTest, HospitalEscortMapShowsPickupAndHandoffAndFCommandsTheSameSurvivor)
+{
+    const auto hospital = std::find_if(content.maps().begin(), content.maps().end(),
+        [](const auto &m) { return m.id == kHospitalFloorplanMapId; });
+    ASSERT_NE(hospital, content.maps().end());
+    map(static_cast<std::size_t>(hospital-content.maps().begin()));
+    control(C::Deploy);
+    ASSERT_EQ(A::flow(*app).state(), GameFlowState::Raid);
+    auto &world = A::session(*app).world();
+    ASSERT_TRUE(world.hospitalEscort());
+    for (auto &enemy : WeaponHandlingTestAccess::actors(world))
+        static_cast<void>(enemy.takeDamage(enemy.maxHealth()));
+    const auto initial = *world.hospitalEscort();
+    ASSERT_EQ(initial.state, HospitalEscortState::AwaitingContact);
+    const auto &zone = initial.handoff;
+    const Vec2 goal{zone.position.x + zone.size.x/2, zone.position.y + zone.size.y/2};
+    key(SDL_SCANCODE_M); A::frame(*app);
+    ASSERT_TRUE(A::tacticalOpen(*app));
+    A::text(*app).setLanguage(UiLanguage::SimplifiedChinese);
+    SDL_SetRenderDrawColor(renderer, 10, 16, 18, 255);
+    ASSERT_TRUE(SDL_RenderClear(renderer));
+    A::drawTactical(*app);
+    ASSERT_TRUE(SDL_RenderPresent(renderer));
+    const auto markerPixels = [&](Vec2 position, SDL_Color expected) {
+        const auto extent = world.playerWorldSize();
+        const auto &chart = kRaidTacticalChart;
+        const int cx = static_cast<int>(chart.position.x + position.x / extent.x * chart.size.x);
+        const int cy = static_cast<int>(chart.position.y + position.y / extent.y * chart.size.y);
+        int count = 0;
+        for (int y = cy - 8; y <= cy + 8; ++y) for (int x = cx - 8; x <= cx + 8; ++x) {
+            Uint8 r{}, g{}, b{}, alpha{};
+            if (SDL_ReadSurfacePixel(surface,x,y,&r,&g,&b,&alpha) &&
+                r==expected.r && g==expected.g && b==expected.b) ++count;
+        }
+        return count;
+    };
+    EXPECT_GT(markerPixels(initial.position, {247,199,111,255}), 6);
+    EXPECT_GT(markerPixels(goal, {116,228,190,255}), 8);
+    if (const char *out = std::getenv("RAIDLINE_ESCORT_UI_DIR"); out && *out) {
+        const std::filesystem::path directory(out);
+        ASSERT_TRUE(directory.is_absolute());
+        std::filesystem::create_directories(directory);
+        ASSERT_TRUE(IMG_SavePNG(surface, (directory / "hospital-escort-map-1280-zh.png").string().c_str()));
+    }
+    auto downView = initial;
+    downView.state = HospitalEscortState::Down;
+    const auto extent = world.playerWorldSize();
+    downView.position = {extent.x * (goal.x < extent.x * .5F ? .85F : .15F),
+                         extent.y * (goal.y < extent.y * .5F ? .85F : .15F)};
+    for (const bool visible : {false, true}) {
+        downView.visible = visible;
+        ASSERT_TRUE(SDL_SetRenderDrawColor(renderer, 10, 16, 18, 255));
+        ASSERT_TRUE(SDL_RenderClear(renderer));
+        A::drawEscortMarkers(*app, downView);
+        ASSERT_TRUE(SDL_RenderPresent(renderer));
+        EXPECT_GT(markerPixels(goal, {213,141,132,255}), 8);
+        if (visible) EXPECT_GT(markerPixels(downView.position, {213,141,132,255}), 6);
+        else EXPECT_EQ(markerPixels(downView.position, {213,141,132,255}), 0);
+    }
+    key(SDL_SCANCODE_M); A::frame(*app);
+    ASSERT_FALSE(A::tacticalOpen(*app));
+    auto &player = const_cast<Player &>(world.player());
+    const auto place = [&](Vec2 center) {
+        const float half = player.size() * .5F;
+        return player.setPosition({center.x-half,center.y-half});
+    };
+    ASSERT_TRUE(place(initial.position));
+    for (const auto state : {HospitalEscortState::Following, HospitalEscortState::Waiting, HospitalEscortState::Following}) {
+        keyEvent(SDL_SCANCODE_F, true); A::frame(*app);
+        ASSERT_EQ(world.hospitalEscort()->state, state);
+        keyEvent(SDL_SCANCODE_F, false); A::frame(*app);
+    }
+    ASSERT_TRUE(place(goal));
+    for (int tick=0; tick<600 && !world.hospitalEscort()->atHandoff; ++tick) A::frame(*app,0.1F);
+    ASSERT_TRUE(world.hospitalEscort()->atHandoff);
+    ASSERT_FALSE(world.hospitalEscort()->threatened);
+    auto &population = profile().basePopulation;
+    ASSERT_LE(population.ordinaryResidents, population.bedCapacity);
+    population.professionResidents[baseProfessionIndex(BaseResidentProfession::General)] +=
+        population.bedCapacity - population.ordinaryResidents;
+    population.ordinaryResidents = population.bedCapacity;
+    ++profile().revision;
+    const auto residents = population.ordinaryResidents;
+    const auto admission = A::session(*app).ordinarySurvivorRescuePlan();
+    ASSERT_TRUE(admission && admission->canCommit && admission->bedShortfallAfter == 1U);
+    const auto labels = A::escortWorldLabels(*app, *world.hospitalEscort());
+    const auto estimate = std::string("居民 ") + std::to_string(admission->residentsBefore) + "→" +
+        std::to_string(admission->residentsAfter) + " · 床位 " + std::to_string(admission->bedCapacity) +
+        " · 口粮 " + std::to_string(admission->dailyRationsAfter) + "/日";
+    EXPECT_NE(std::find(labels.begin(), labels.end(), estimate), labels.end());
+    EXPECT_NE(std::find(labels.begin(), labels.end(), "交接后缺 1 个床位"), labels.end());
+    if (const char *out = std::getenv("RAIDLINE_ESCORT_UI_DIR"); out && *out) {
+        A::drawRaid(*app);
+        ASSERT_TRUE(SDL_RenderPresent(renderer));
+        ASSERT_TRUE(IMG_SavePNG(surface, (std::filesystem::path(out) / "hospital-escort-handoff-1280-zh.png").string().c_str()));
+    }
+    keyEvent(SDL_SCANCODE_F, true);
+    A::frame(*app, .5F);
+    EXPECT_FALSE(profile().pendingRaid->rescue->secured);
+    EXPECT_GT(world.ordinarySurvivorRescueProgress(), 0.0F);
+    keyEvent(SDL_SCANCODE_F, false); A::frame(*app);
+    EXPECT_FLOAT_EQ(world.ordinarySurvivorRescueProgress(), 0.0F);
+    keyEvent(SDL_SCANCODE_F, true);
+    for (int tick=0; tick<25 && !profile().pendingRaid->rescue->secured; ++tick) A::frame(*app, .1F);
+    keyEvent(SDL_SCANCODE_F, false); A::frame(*app);
+    EXPECT_TRUE(profile().pendingRaid->rescue->secured);
+    EXPECT_EQ(world.hospitalEscort()->state, HospitalEscortState::Delivered);
+    EXPECT_EQ(profile().basePopulation.ordinaryResidents, residents+1U);
 }
 
 TEST_F(UiBaseDeploymentTest, BrowsingTabsDetailsAndMapsDoesNotMutateOrGenerateRaid) {
@@ -503,6 +1231,30 @@ TEST_F(UiBaseDeploymentTest, PaidIntelligenceSurvivesClosingWithoutAnAutomaticRe
     control(C::Close); EXPECT_FALSE(A::flow(*app).activeBaseFacility());
     const auto loaded = SaveRepository(path).load(content); ASSERT_TRUE(loaded.profile);
     EXPECT_EQ(loaded.profile->currency, money); EXPECT_EQ(loaded.profile->raidIntelligence.count(content.maps().front().id, RaidIntelligenceCategory::Enemy), 1U);
+}
+
+TEST_F(UiBaseDeploymentTest, PurchasingTheDepotPlanLeavesTheDistrictHospitalPlanUnknown) {
+    const auto &maps = content.maps();
+    const auto hospital = std::find_if(maps.begin(), maps.end(),
+        [](const auto &entry) { return entry.id == kHospitalFloorplanMapId; });
+    ASSERT_NE(hospital, maps.end());
+    map(static_cast<std::size_t>(hospital - maps.begin()));
+    intelligence();
+    const auto rows = A::projection(*app).interiors;
+    const auto depot = std::find_if(rows.begin(), rows.end(),
+        [](const auto &row) { return row.id == kHospitalDepotSpaceId; });
+    ASSERT_NE(depot, rows.end());
+    EXPECT_EQ(depot->price, 120U);
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, depot->name), "救护车保障站");
+    const auto visibleRow = static_cast<std::size_t>(depot - rows.begin());
+    ASSERT_LT(visibleRow, uiDeploymentInteriorPageSize());
+    const auto funds = profile().currency;
+    click(center(uiDeploymentInteriorRect(visibleRow, true)));
+    const auto loaded = SaveRepository(path).load(content);
+    ASSERT_TRUE(loaded.profile);
+    EXPECT_EQ(loaded.profile->currency, funds - 120U);
+    EXPECT_TRUE(loaded.profile->raidInteriorIntelligence.knows(kHospitalDepotSpaceId));
+    EXPECT_FALSE(loaded.profile->raidInteriorIntelligence.knows(kHospitalFloorplanSpaceId));
 }
 
 TEST_F(UiBaseDeploymentTest, InsufficientCurrencyKeepsRealPricesAndNeverFakesSelection) {

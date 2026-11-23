@@ -57,10 +57,6 @@ namespace
     constexpr int kRaidChalkUndoAction = 23101;
     constexpr int kRaidChalkClearAction = 23102;
 
-    constexpr std::string_view raidChalkContextKey(RaidChalkSpace space) noexcept
-    {
-        return space == RaidChalkSpace::Outdoor ? "outdoor" : "hospital";
-    }
     constexpr float kBaseBuildCameraPanSpeed{720.0F};
     constexpr float kBaseOperationNoticeLifetimeSeconds{9.0F};
     constexpr std::size_t kBaseBuildCardsPerPage{4U};
@@ -1904,7 +1900,9 @@ GameplayInput App::makeGameplayControls() const
     input.lightJustPressed = input_.wasActionJustPressed(GameAction::WeaponLight);
     input.lightJustReleased = input_.wasActionJustReleased(GameAction::WeaponLight);
     input.lightPressed = input_.isActionPressed(GameAction::WeaponLight);
-    input.meleeJustPressed = input_.wasActionJustPressed(GameAction::QuickMelee);
+    input.meleeHeavyJustPressed = input_.heavyMeleeJustPressed();
+    input.meleeHeavyHeld = input_.heavyMeleeHeld();
+    input.meleeJustPressed = input_.wasActionJustPressed(GameAction::QuickMelee) && !input.meleeHeavyJustPressed;
     input.meleePressed = input_.isActionPressed(GameAction::QuickMelee);
     if (input_.wasActionJustPressed(GameAction::SelectWeapon1))
     {
@@ -2906,6 +2904,37 @@ void App::updateBase(float deltaTime)
         }
         if (input_.wasActionJustPressed(GameAction::InventoryCancel))
         {
+            if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Medical && medicalUi_.doses.open) {
+                medicalUi_.doses = {};
+                medicalUi_.press.reset();
+                pendingMedicalEvents_.clear();
+                medicalFeedback_.clear();
+                uiMessage_.clear();
+                refreshBaseMedicalUi(true);
+                return;
+            }
+            if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Workshop && workshopUi_.expediteOpen) {
+                if (workshopUi_.selectedMaterial) workshopUi_.selectedMaterial.reset();
+                else workshopUi_.expediteOpen = false;
+                workshopUi_.press.reset();
+                pendingWorkshopEvents_.clear();
+                workshopFeedback_.clear();
+                uiMessage_.clear();
+                refreshBaseWorkshopUi(true);
+                return;
+            }
+            if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Workshop && workshopUi_.salvageOpen) {
+                if (workshopUi_.salvageConfirmation) workshopUi_.salvageConfirmation.reset();
+                else {
+                    workshopUi_.salvageOpen = false;
+                    workshopUi_.selectedGun.reset();
+                }
+                workshopUi_.press.reset();
+                pendingWorkshopEvents_.clear();
+                workshopFeedback_.clear();
+                refreshBaseWorkshopUi(true);
+                return;
+            }
             if (gameFlow_.activeBaseFacility() == BaseFacilityKind::RaidGate &&
                 regionalOperationsOpen_)
             {
@@ -3783,6 +3812,18 @@ void App::handleProfileInventoryUiEvent(
     }
 }
 
+std::vector<UiItemActionEntry> App::availableProfileItemActions(AssetInstanceId id, bool inRaid) const
+{
+    const auto &profile = gameSession_.profileForInventoryPresentation();
+    auto actions = projectUiItemActions(profile, publishedContentRegistry(), id, inRaid,
+        gameSession_.playerGameplayContext().available ? MedicalAccess::CarriedOnly : MedicalAccess::AnyOwned);
+    const auto *asset = profile.assets.find(id);
+    if (inRaid && asset && asset->definitionId == kFieldIntelligenceDocumentId &&
+        gameSession_.queryFieldCacheClue(id).canCommit)
+        actions.push_back({UiItemAction::ReadCacheClue, "DECODE CACHE CLUE"});
+    return actions;
+}
+
 void App::handleProfileRightClick(MousePosition position, bool inRaid)
 {
     if (inventoryWeaponComponentsOpen_ || profileDetailsAsset_ || profileMenuReleaseGuard_) return;
@@ -3820,9 +3861,7 @@ void App::handleProfileRightClick(MousePosition position, bool inRaid)
             return;
         }
     }
-    const auto actions = projectUiItemActions(gameSession_.profileForInventoryPresentation(),
-        publishedContentRegistry(), hit->asset->instanceId, inRaid,
-        gameSession_.playerGameplayContext().available?MedicalAccess::CarriedOnly:MedicalAccess::AnyOwned);
+    const auto actions = availableProfileItemActions(hit->asset->instanceId, inRaid);
     if (actions.empty())
     {
         if(gameSession_.playerGameplayContext().available &&
@@ -4750,6 +4789,7 @@ void App::processEvents()
     raidResultInputCancelledThisFrame_ = false;
     fieldIntelligenceTradeUi_.interactRequested = false;
     fireSupportUiBlocksGameplayThisFrame_ = fireSupportOrdersOpen_;
+    fireSupportTreatmentStartedThisFrame_ = false;
     homeFoundingInputBlockedThisFrame_ = homeFoundingPrompt_.has_value();
     developerWeaponPanelBlocksGameplayThisFrame_ =
         developerWeaponPanelOpen_;
@@ -4817,7 +4857,7 @@ void App::processEvents()
             pendingGeneratorEvents_.clear();
         }
         if (event.type == SDL_EVENT_WINDOW_RESIZED || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
-            medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear(); allocationUi_.press.reset(); pendingAllocationEvents_.clear();
+            medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.cancelInteraction(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear(); allocationUi_.press.reset(); pendingAllocationEvents_.clear();
             generatorPress_.cancel();
             pendingGeneratorEvents_.clear();
         }
@@ -4859,7 +4899,7 @@ void App::processEvents()
             supplyUi_.press.reset();
             generatorPress_.cancel();
             pendingGeneratorEvents_.clear();
-            medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear(); allocationUi_.press.reset(); pendingAllocationEvents_.clear();
+            medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.cancelInteraction(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear(); allocationUi_.press.reset(); pendingAllocationEvents_.clear();
             componentPress_.reset();
             if (inventoryWeaponComponentsOpen_) pendingInventoryUiEvents_.clear();
             pendingSupplyEvents_.clear();
@@ -5502,7 +5542,9 @@ void App::processEvents()
             }
             else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Dormitory)
             {
-                if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT) {
+                if (const auto shortcut = uiDormitoryShortcut(event)) {
+                    pendingDormitoryEvents_.push_back(*shortcut);
+                } else if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT) {
                     input_.suppressPrimaryPointerUntilRelease();
                     pendingDormitoryEvents_.push_back({event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? UiDormitoryEventKind::Down : UiDormitoryEventKind::Up, {event.button.x, event.button.y}});
                 } else if (event.type == SDL_EVENT_MOUSE_MOTION)
@@ -5515,7 +5557,9 @@ void App::processEvents()
             }
             else if (gameFlow_.activeBaseFacility() == BaseFacilityKind::Workshop)
             {
-                if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT) {
+                if (const auto shortcut = uiWorkshopExpediteShortcut(event,workshopUi_)) {
+                    pendingWorkshopEvents_.push_back(*shortcut);
+                } else if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) && event.button.button == SDL_BUTTON_LEFT) {
                     input_.suppressPrimaryPointerUntilRelease();
                     pendingWorkshopEvents_.push_back({event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? UiWorkshopEventKind::Down : UiWorkshopEventKind::Up, {event.button.x, event.button.y}});
                 } else if (event.type == SDL_EVENT_MOUSE_MOTION)
@@ -5895,7 +5939,7 @@ void App::update(float deltaTime)
         if (workshopProjectionRevision_ || workshopUi_.press || !pendingWorkshopEvents_.empty()) resetBaseWorkshopUi();
     }
     if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || inventoryOverlayState_.isOpen() || !windowHasInputFocus_) {
-        workshopUi_.press.reset(); pendingWorkshopEvents_.clear();
+        workshopUi_.cancelInteraction(); pendingWorkshopEvents_.clear();
     }
     if (gameFlow_.state() != GameFlowState::Base || gameFlow_.activeBaseFacility() != BaseFacilityKind::Generator) {
         resetBaseGeneratorUi();
@@ -5910,7 +5954,7 @@ void App::update(float deltaTime)
         if (medicalProjectionRevision_ || medicalUi_.press || !pendingMedicalEvents_.empty()) resetBaseMedicalUi();
     }
     if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || inventoryOverlayState_.isOpen() || !windowHasInputFocus_) {
-        medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.press.reset(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear(); allocationUi_.press.reset(); pendingAllocationEvents_.clear();
+        medicalUi_.press.reset(); pendingMedicalEvents_.clear(); workshopUi_.cancelInteraction(); pendingWorkshopEvents_.clear(); dormitoryUi_.press.reset(); pendingDormitoryEvents_.clear(); allocationUi_.press.reset(); pendingAllocationEvents_.clear();
     }
     if (pauseMenu_.isOpen() || developerWeaponPanelOpen_ || !windowHasInputFocus_ ||
         (!inventoryWeaponComponentsOpen_ && !weaponComponentsOpen_)) componentPress_.reset();
@@ -6255,7 +6299,10 @@ void App::update(float deltaTime)
         ? gameSession_.world().nightRendezvousView() : std::nullopt;
     const bool rendezvousUsesInteract = rendezvous && rendezvous->inRange && !rendezvous->secured &&
         (rendezvous->ready || (!rendezvous->inProgress && rendezvous->visible));
-    if (gameplayInput.interactJustPressed && !opticsBlocksInteraction && !rendezvousUsesInteract &&
+    const auto &raid = gameSession_.profile().pendingRaid;
+    const bool escortUsesInteract = gameplayInput.interactJustPressed && raid && raid->rescue &&
+        raid->rescue->escortStart && gameSession_.world().ordinarySurvivorRescueInteractionInRange();
+    if (gameplayInput.interactJustPressed && !opticsBlocksInteraction && !rendezvousUsesInteract && !escortUsesInteract &&
         !inventoryOverlayState_.isOpen() && !tacticalMapOpen_ &&
         !medicalWheelOpen_ && !developerWeaponPanelOpen_ && !developerWeaponPanelBlocksGameplayThisFrame_ &&
         inputDecision.controlAction == InventoryFrameControlAction::None)
@@ -6268,6 +6315,12 @@ void App::update(float deltaTime)
             gameplayInput.fireJustPressed = gameplayInput.firePressed = false;
             gameplayInput.reloadJustPressed = gameplayInput.healJustPressed = false;
             gameplayInput.weaponSlotJustPressed.reset();
+        }
+        else if (gameSession_.fieldClueCacheInRange())
+        {
+            static_cast<void>(gameSession_.searchFieldCache());
+            uiMessage_ = gameSession_.persistenceMessage();
+            gameplayInput.interactJustPressed = gameplayInput.interactPressed = false;
         }
         else if(const auto corpse=gameSession_.nearbyBaseCorpse())
         {
@@ -6817,7 +6870,7 @@ void App::renderDebugText()
             ? static_cast<std::uint64_t>(vision.remainingCharges) * 100 / vision.capacityCharges : 0;
         p.nightVision = fmt::format("{} · {}%{}", uiNightVisionStateLabel(vision), percent, tapVision ? " · U" : "");
     }
-    p.feedback=raidSaveProtectionVisible()?std::string_view{}:visibleFeedbackMessage();
+    p.feedback=raidHudFeedback();
     renderUiRaidHud(renderer_,uiTextRenderer_,p);
     const RaidSession &raidSession=raid;
     if (raidSession.isTerminal() &&
@@ -8419,7 +8472,11 @@ void App::renderExtractionPoint()
         }
     }
 
-    if (const auto &rescuePoint =
+    if (const auto escort = gameSession_.world().hospitalEscort())
+    {
+        renderHospitalEscortWorld(*escort);
+    }
+    else if (const auto &rescuePoint =
             gameSession_.world().ordinarySurvivorRescuePoint();
         rescuePoint.has_value())
     {
@@ -9024,7 +9081,7 @@ void App::renderBallisticBlockers(bool terrainOnly, std::optional<Rect> worldVie
             }
         }
         const auto &pending = *gameSession_.profile().pendingRaid;
-        const bool hospitalStreets = pending.spatialLayout.layoutVersion == 6U &&
+        const bool hospitalStreets = isHospitalHybridLayoutVersion(pending.spatialLayout.layoutVersion) &&
             pending.mapDefinitionId == kHospitalFloorplanMapId;
         if (hospitalStreets && hospitalFacadeLayout_ != pending.spatialLayout.layoutHash)
         {
@@ -9576,6 +9633,7 @@ void App::updatePlayerActionInput(GameplayInput &gameplayInput)
     gameplayInput.allowWeaponOptics = !opticAimBlockedUntilRelease_ && !gameplayInput.throwableModal;
     if(gameplayInput.throwableModal || medicalWheelOpen_ || inventoryOverlayState_.isOpen() || tacticalMapOpen_) {
         gameSession_.cancelPlayerControlIntent();
+        gameplayInput.meleeHeavyJustPressed = gameplayInput.meleeHeavyHeld = false;
         gameplayInput.cycleFireModeJustPressed=false;gameplayInput.raidReloadIntents.clear();
         gameplayInput.reloadGestureJustPressed=false;
     }
@@ -9590,6 +9648,7 @@ void App::updateRaidReloadInput(GameplayInput &input)
     const auto suppressWheelInput=[&] {
         input.fireJustPressed=input.firePressed=false;input.interactJustPressed=input.interactPressed=false;
         input.reloadJustPressed=input.healJustPressed=input.meleeJustPressed=input.meleePressed=false;
+        input.meleeHeavyJustPressed = input.meleeHeavyHeld = false;
         input.sprint=false;input.cycleFireModeJustPressed=false;input.weaponSlotJustPressed.reset();
         input.aimMotionDelta=Vec2{};input.quitRaidJustPressed=false;
         input_.suppressPrimaryPointerUntilRelease();
@@ -9612,7 +9671,7 @@ void App::updateRaidReloadInput(GameplayInput &input)
         return;
     }
     if(reloadGestureWeapon_ && reloadGestureWeapon_!=weapon)cancelMagazineWheel();
-    if(input.weaponSlotJustPressed || input.meleeJustPressed || input.sprint ||
+    if(input.weaponSlotJustPressed || input.meleeJustPressed || input.meleeHeavyJustPressed || input.sprint ||
         context.controlled) {
         cancelMagazineWheel();return;
     }
@@ -9941,20 +10000,25 @@ void App::renderEnemies()
         {
             const auto &scavengers = world.armedScavengers();
             const auto found = std::ranges::find(scavengers, enemy.combatTargetId(), &RaidArmedScavengerView::id);
-            if (found == scavengers.end() || !found->alive) continue;
+            if (found == scavengers.end() || !found->alive || found->escaped) continue;
 
-            const Vec2 facing = found->aiming ? found->aimDirection : Vec2{-1.0F, 0.0F};
-            renderPlayerAvatar(bounds.position, bounds.size, facing, false, 0);
+            const Vec2 facing = found->retreating ? found->retreatDirection :
+                found->aiming ? found->aimDirection : Vec2{-1.0F, 0.0F};
+            const bool running = found->retreating && (facing.x != 0 || facing.y != 0);
+            const auto frame = running ? static_cast<std::size_t>(
+                std::fmod(uiClockSeconds_ * 8.0F, static_cast<float>(kPlayerMoveFrameCount))) : 0U;
+            renderPlayerAvatar(bounds.position, bounds.size, facing, running, frame);
             const float x = bounds.position.x + bounds.size.x * 0.5F;
             const float y = bounds.position.y + bounds.size.y * 0.5F;
             // The warning stays on the figure; its short stroke shows the raised pistol.
             SDL_SetRenderDrawColor(renderer_, 255, 163, 94, 255);
-            if (found->aiming)
+            if (found->aiming && !found->retreating)
             {
                 SDL_RenderLine(renderer_, x + facing.x * 10, y + facing.y * 10,
                     x + facing.x * 28, y + facing.y * 28);
             }
-            renderWorldLabel(enemyRect.x, enemyRect.y - 18.0F, found->aiming ? "SCAVENGER AIMING" :
+            renderWorldLabel(enemyRect.x, enemyRect.y - (found->retreating ? 38.0F : 18.0F), found->retreating ? "FALLING BACK" :
+                found->aiming ? "SCAVENGER AIMING" :
                 found->reloading ? "SCAVENGER RELOADING" : "ARMED SCAVENGER");
             continue;
         }
@@ -12244,7 +12308,14 @@ void App::renderProfileAsset(const AssetRecord &asset, const SDL_FRect &bounds,
             static_cast<std::size_t>(ItemId::Medkit)];
     }
 
-    if (texture != nullptr && texture->valid())
+    if (definition.smokeUse || definition.fireZoneUse || definition.alarmUse)
+    {
+        renderAreaThrowableIcon(definition,{bounds.x,bounds.y,bounds.w,bounds.h*.66F}, alpha);
+        SDL_SetRenderDrawColor(renderer_, 214,229,222,alpha);
+        uiTextRenderer_.renderBox(renderer_, {bounds.x,bounds.y+bounds.h*.62F,bounds.w,bounds.h*.38F},
+            compactUiItemName(definition,uiTextRenderer_.language()), {11,UiTextAlign::Center,1});
+    }
+    else if (texture != nullptr && texture->valid())
     {
         SDL_SetTextureAlphaMod(texture->get(), alpha);
         if (fitImage)
@@ -13165,7 +13236,10 @@ void App::renderAlphaRaidLoot()
     {
         return;
     }
+    renderRaidVolatileBarrels();
     renderRaidCredentialDocuments();
+    const auto *clueCache = gameSession_.fieldClueCacheLoot();
+    if (clueCache) renderFieldClueCache(*clueCache);
     const std::optional<RaidSelfRecoveryProjection> recovery =
         gameSession_.raidSelfRecoveryProjection();
     if (recovery.has_value() && !recovery->opened &&
@@ -13318,6 +13392,7 @@ void App::renderAlphaRaidLoot()
     }
     for (const RaidLootSnapshot &loot : profile.pendingRaid->loot)
     {
+        if (clueCache && loot.assetId == clueCache->assetId) continue;
         if (!gameSession_.raidLootAccessible(loot))
         {
             continue;
@@ -13777,12 +13852,12 @@ std::optional<App::RaidChalkContext> App::raidChalkContext() const
     if (world.inOutdoorRaidSpace())
     {
         if (world.tacticalMap().configured())
-            return RaidChalkContext{RaidChalkSpace::Outdoor, {world.tacticalMap().worldSize()}};
+            return RaidChalkContext{world.activeRaidSpaceId(), {world.tacticalMap().worldSize()}};
     }
     else if (const auto room = world.activeInteriorMapProjection();
-             room && room->id == kHospitalFloorplanSpaceId && room->layoutKnown)
+             room && room->layoutKnown)
     {
-        return RaidChalkContext{RaidChalkSpace::HospitalInterior, {room->worldSize}};
+        return RaidChalkContext{world.activeRaidSpaceId(), {room->worldSize}};
     }
     return std::nullopt;
 }
@@ -13806,7 +13881,7 @@ void App::syncRaidChalkRoutes()
     if (!context || !windowHasInputFocus_ || pauseMenu_.isOpen() ||
         raidSaveProtectionVisible() || developerWeaponPanelOpen_ || quickWheelOpen())
     {
-        raidChalkRoutes_.setSpace(std::nullopt);
+        raidChalkRoutes_.setSpace({});
         raidChalkPress_.cancel();
         return;
     }
@@ -13814,7 +13889,7 @@ void App::syncRaidChalkRoutes()
     if (raidChalkRaidId_.empty())
         raidChalkRaidId_ = raid->raidId;
     raidChalkRoutes_.setSpace(context->space);
-    if (raidChalkPress_.context != raidChalkContextKey(context->space))
+    if (raidChalkPress_.context != context->space.value())
         raidChalkPress_.cancel();
     if (input_.isSecondaryPointerPressed())
         raidChalkAimBlockedUntilRelease_ = true;
@@ -13874,7 +13949,7 @@ bool App::routeRaidChalkEvent(const SDL_Event &event)
         action = kRaidChalkUndoAction;
     if (canEdit && uiContains(kRaidChalkClear, position))
         action = kRaidChalkClearAction;
-    const auto key = raidChalkContextKey(context->space);
+    const auto key = context->space.value();
     if (press)
         raidChalkPress_.begin(action, key);
     else if (raidChalkPress_.release(action, key))
@@ -13903,7 +13978,7 @@ void App::renderRaidChalkLines(const RaidChalkContext &context)
     }
 }
 
-void App::renderRaidChalkFooter(RaidChalkSpace space)
+void App::renderRaidChalkFooter(const RaidSpaceDefinitionId &space)
 {
     const bool canEdit = !raidChalkRoutes_.strokes(space).empty() &&
         !input_.isSecondaryPointerPressed();
@@ -13968,6 +14043,19 @@ void App::renderRaidTacticalMap()
                 SDL_SetRenderDrawColor(renderer_, 124, 146, 140, 245);
                 SDL_RenderRect(renderer_, &bounds);
             }
+            const auto &pending = gameSession_.profile().pendingRaid;
+            if (pending && interior->layoutKnown && pending->mapDefinitionId == kHospitalFloorplanMapId)
+            {
+                const auto &map = publishedContentRegistry().map(pending->mapDefinitionId);
+                for (const auto &sign : raidRoomSigns(map, interior->id, interior->worldSize))
+                {
+                    if (sign.id == "exit")
+                        continue;
+                    const auto bounds = screenRect(sign.bounds);
+                    uiFinalTextAt(renderer_, uiTextRenderer_, bounds.x, bounds.y, sign.displayName,
+                                  bounds.w, 12, 1);
+                }
+            }
             if (chalk)
                 renderRaidChalkLines(*chalk);
             const SDL_FRect exit = screenRect(interior->exit);
@@ -13995,6 +14083,9 @@ void App::renderRaidTacticalMap()
                 uiTextRenderer_.language(),interior->displayName,interior->layoutKnown);
             uiFinalTextAt(renderer_,uiTextRenderer_,144.0F,76.0F,title.c_str(),570,15,1);
             uiFinalTextAt(renderer_,uiTextRenderer_,740.0F,76.0F,"M/ESC CLOSE | WORLD CONTINUES | MOVE 45%",396,11,1);
+            if (const auto escort = gameSession_.world().hospitalEscort(); escort &&
+                (escort->state == HospitalEscortState::Following || escort->state == HospitalEscortState::Waiting))
+                uiFinalTextAt(renderer_,uiTextRenderer_,144.0F,98.0F,"Survivor stays on the street",412,11,1);
             if (chalk)
                 renderRaidChalkFooter(chalk->space);
             SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
@@ -14005,6 +14096,9 @@ void App::renderRaidTacticalMap()
         uiFinalTextAt(renderer_,uiTextRenderer_,322.0F,246.0F,"INTERIOR LAYOUT INTELLIGENCE REQUIRED",630,15,2);
         uiFinalTextAt(renderer_,uiTextRenderer_,322.0F,298.0F,"BUY THE BUILDING PLAN AT THE RAID GATE",630,15,2);
         uiFinalTextAt(renderer_,uiTextRenderer_,322.0F,350.0F,"M/ESC CLOSE | WORLD CONTINUES | MOVE 45%",630,15,2);
+        if (const auto escort = gameSession_.world().hospitalEscort(); escort &&
+            (escort->state == HospitalEscortState::Following || escort->state == HospitalEscortState::Waiting))
+            uiFinalTextAt(renderer_,uiTextRenderer_,322.0F,398.0F,"Survivor stays on the street",630,14,1);
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
         return;
     }
@@ -14375,10 +14469,11 @@ void App::renderRaidTacticalMap()
         uiFinalTextAt(renderer_,uiTextRenderer_,marker.x + 5.0F,marker.y + 4.0F,"SPECIAL SITE",std::max(40.0F, 1136.0F-(marker.x + 5.0F)),11,1);
     }
 
+    const auto hospitalEscort = gameSession_.world().hospitalEscort();
     for (const RaidTacticalObjective &objective : map.objectives())
     {
         if (objective.kind == RaidTacticalObjectiveKind::Rescue &&
-            (!gameSession_.profile().pendingRaid.has_value() ||
+            (hospitalEscort || !gameSession_.profile().pendingRaid.has_value() ||
              !gameSession_.profile().pendingRaid->rescue.has_value() ||
              gameSession_.profile().pendingRaid->rescue->secured))
         {
@@ -14484,6 +14579,8 @@ void App::renderRaidTacticalMap()
         // header so the badge doesn't compete with their map labels.
         uiFinalTextAt(renderer_, uiTextRenderer_, 978.0F, 95.0F, label, 158.0F, 11, 1);
     }
+    if (hospitalEscort) renderHospitalEscortMap(*hospitalEscort, chart, worldSize);
+    renderFieldClueCacheMap(chart, worldSize);
     const Player &player = gameSession_.world().player();
     const Vec2 playerMarker = screenPoint(Vec2{
         player.position().x + player.size() * 0.5F,
@@ -14715,6 +14812,8 @@ bool App::renderIndoorInformationLayer(const SDL_Rect &worldViewport)
     renderNightRendezvousWorld();
     renderRaidSpacePortal();
     renderBallisticBlockers();
+    renderRaidFireZones();
+    renderRaidAlarmDevices();
     renderAlphaRaidLoot();
     renderEnemyAttackTelegraphs();
     renderEnemies();
@@ -14729,6 +14828,7 @@ bool App::renderIndoorInformationLayer(const SDL_Rect &worldViewport)
                           label.position.y, label.text);
     deferredWorldLabels_.clear();
     deferWorldLabels_ = previouslyDeferred;
+    renderRaidSmokeCover(screenWorld);
 
     if (!SDL_SetRenderTarget(renderer_, originalTarget))
         return false;
@@ -14794,15 +14894,16 @@ void App::renderUnscopedRaidWorld()
         renderBackground(false);
         static_cast<void>(SDL_SetRenderViewport(renderer_, &worldViewport));
     }
-    renderBackground();
+    const bool smoke = activeRaidSmoke();
+    renderBackground(true, smoke);
     const auto &world = gameSession_.world();
     const Rect visible{{-static_cast<float>(worldViewport.x), -static_cast<float>(worldViewport.y)},
         {static_cast<float>(kWindowWidth), static_cast<float>(kWindowHeight)}};
     drawUiThrownIllumination(renderer_, world.thrownIlluminationBackgroundObservations(), visible,
         world.thrownIlluminationGlareSeconds());
-    renderExtractionPoint();
+    if (!smoke) renderExtractionPoint();
     renderRaidSpacePortal();
-    renderBallisticBlockers();
+    renderBallisticBlockers(smoke);
     if (!gameSession_.world().isAlphaRaidWorld())
     {
         renderStorageCabinet();
@@ -14822,6 +14923,8 @@ void App::renderUnscopedRaidWorld()
     else
     {
         // 地面物品位于角色与敌人下层。
+        renderRaidFireZones();
+        renderRaidAlarmDevices();
         if (gameSession_.world().isAlphaRaidWorld())
         {
             renderNightRendezvousWorld();
@@ -14838,7 +14941,11 @@ void App::renderUnscopedRaidWorld()
         renderShotPresentations();
         renderShotFeedbackPresentations();
         renderParticles();
-    renderNoiseDecoyWorld();
+        renderNoiseDecoyWorld();
+        if (smoke) {
+            renderRaidSmokeCover(visible);
+            renderPlayer();
+        }
     }
 
     if (indoorVisibility) renderPlayer(); // Own avatar is never hidden by its observation cone.
@@ -15001,6 +15108,7 @@ void App::shutdown()
     quickWheelBackdrop_.reset();
     indoorInformationLayer_.reset();
     indoorShadowMask_.reset();
+    raidSmokeTerrain_.reset();
     playerMoveHorizontalTexture_.reset();
     playerTexture_.reset();
     backgroundTexture_.reset();
@@ -15291,7 +15399,10 @@ void App::renderProfileWeaponDetails()
     const auto &definition = content.item(asset.definitionId);
     if (model->kind == UiItemDetailsKind::Melee) { renderProfileMeleeDetails(asset, definition); return; }
     if (model->kind == UiItemDetailsKind::Decoy || model->kind == UiItemDetailsKind::Grenade ||
-        model->kind == UiItemDetailsKind::Illumination) { renderProfileDecoyDetails(asset, definition); return; }
+        model->kind == UiItemDetailsKind::Illumination || model->kind == UiItemDetailsKind::Smoke ||
+        model->kind == UiItemDetailsKind::FireZone || model->kind == UiItemDetailsKind::Alarm) {
+        renderProfileDecoyDetails(asset, definition); return;
+    }
     const auto choose = [&](const char *zh, const char *en) { return uiTextRenderer_.language() == UiLanguage::SimplifiedChinese ? zh : en; };
     const bool inRaid = gameSession_.alphaRaidActive();
     const bool helmet = model->kind == UiItemDetailsKind::Helmet;
@@ -15925,14 +16036,13 @@ void App::handleProfileContextMenuClick(MousePosition position, bool inRaid) {
     const auto chosen = profileContextMenu_->press.up(released);
     if (!chosen) return;
     const AssetInstanceId id = profileContextMenu_->instanceId;
+    const auto previewRevision = profileContextMenu_->source.expectedRevision;
     const auto sourcePoint = profileContextMenu_->position;
     const auto external = inRaid ? openedRaidSceneContainerId_ : openedBaseGroundContainerId_;
     const bool stash = !inRaid && inventoryOverlayState_.showsExternalContainer() && !external;
     const auto hit = profileAssetHitAt(gameSession_.profileForInventoryPresentation(), sourcePoint, stash,
                                      external, &profilePresentation_);
-    const auto actions = projectUiItemActions(gameSession_.profileForInventoryPresentation(),
-        publishedContentRegistry(), id, inRaid,
-        gameSession_.playerGameplayContext().available?MedicalAccess::CarriedOnly:MedicalAccess::AnyOwned);
+    const auto actions = availableProfileItemActions(id, inRaid);
     const bool stillAvailable = hit && hit->asset && hit->asset->instanceId == id &&
         std::any_of(actions.begin(), actions.end(),
             [&](const auto &entry) { return entry.id == *chosen; });
@@ -15979,6 +16089,10 @@ void App::handleProfileContextMenuClick(MousePosition position, bool inRaid) {
         uiMessage_ = result.succeeded ? "BACKPACK DROPPED" : result.message;
         return;
     }
+    case UiItemAction::ReadCacheClue:
+        static_cast<void>(gameSession_.readFieldCacheClue(id, previewRevision));
+        uiMessage_ = gameSession_.persistenceMessage();
+        return;
     }
 }
 

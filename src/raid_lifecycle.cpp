@@ -699,6 +699,203 @@ bool raidNightRendezvousPlacementValid(
     return fixedRaidPlayerPaths(map, raid, center, std::nullopt);
 }
 
+namespace
+{
+bool nearRaidRect(Vec2 center, ContentRect rect, float radius) noexcept
+{
+    const float dx = std::max({0.0F, rect.position.x - center.x, center.x - (rect.position.x + rect.size.x)});
+    const float dy = std::max({0.0F, rect.position.y - center.y, center.y - (rect.position.y + rect.size.y)});
+    return dx * dx + dy * dy <= radius * radius;
+}
+
+bool ordinaryBarrelMap(const MapDefinition &map, const PendingRaidSnapshot &raid) noexcept
+{
+    return raid.mapDefinitionId == map.id && (map.id == kHospitalFloorplanMapId || map.id == kFreightCrateMapId) &&
+        !raid.selfRecovery && !raid.outpostRestoration && !raid.baseSiteClearance && !raid.basePerimeterSweep;
+}
+
+// Each starting point is an actual door approach or resource socket already reached by the
+// generator's path proof. A short clear passage from one of these keeps the barrel accessible.
+template<class Visitor>
+bool visitBarrelApproaches(const PendingRaidSnapshot &raid, Visitor visitor)
+{
+    for (const auto &landmark : raid.spatialLayout.landmarks)
+    {
+        if (landmark.definitionId != "landmark.hospital.transport_depot" &&
+            landmark.definitionId != "landmark.frontier.freight_exchange") continue;
+        for (const Vec2 socket : landmark.roadSockets)
+            if (visitor(socket)) return true;
+    }
+    for (const auto &point : raid.spatialLayout.resourcePoints)
+        if ((point.definitionId == "resource_point.hospital.service_stock" ||
+             point.definitionId == "resource_point.frontier.fabrication_stock") &&
+            visitor(raidResourcePointLootPosition(point, 0))) return true;
+    for (const auto &point : raid.spatialLayout.resourcePoints)
+        if (visitor(raidResourcePointLootPosition(point, 0))) return true;
+    return false;
+}
+}
+
+bool validRaidVolatileBarrelPlacement(const MapDefinition &map, const PendingRaidSnapshot &raid, Vec2 center) noexcept
+{
+    constexpr float clearance = 25.0F;
+    constexpr float safe = kRaidVolatileBarrelBlastRadius + kRaidVolatileBarrelRadius;
+    if (!ordinaryBarrelMap(map, raid) || !pursuitPointWithin(center, map.walkableBounds, {clearance, clearance}) ||
+        nearRaidRect(center, {raid.playerSpawn, {50, 50}}, safe) || nearRaidRect(center, raid.extractionPoint, safe))
+        return false;
+    if (raid.rescue && (nearRaidRect(center, raid.rescue->transferPoint, safe) ||
+        (raid.rescue->escortStart && nearRaidRect(center, {*raid.rescue->escortStart, {}}, safe)))) return false;
+    if (raid.fieldIntelligenceTrade && nearRaidRect(center, {raid.fieldIntelligenceTrade->position, {}}, safe)) return false;
+    for (const auto &room : raid.interiors)
+        if (nearRaidRect(center, room.exteriorEntrance, safe) || nearRaidRect(center, {room.exteriorReturn, {50, 50}}, safe))
+            return false;
+    if (raid.highRiskCrisis && raid.highRiskCrisis->roadBlockade &&
+        nearRaidRect(center, raid.highRiskCrisis->roadBlockade->bounds, clearance)) return false;
+    for (const auto &anchor : raid.spatialLayout.anchorPlacements)
+    {
+        float protectedRadius = clearance;
+        switch (anchor.kind)
+        {
+        case RaidMapAnchorKind::PlayerSpawn:
+        case RaidMapAnchorKind::NormalExtraction:
+        case RaidMapAnchorKind::EmergencyExtraction:
+        case RaidMapAnchorKind::ConditionalExtraction:
+        case RaidMapAnchorKind::CredentialExtraction:
+        case RaidMapAnchorKind::InteriorEntrance:
+        case RaidMapAnchorKind::Rescue:
+        case RaidMapAnchorKind::HighRiskControl: protectedRadius = safe; break;
+        default: break;
+        }
+        if (nearRaidRect(center, anchor.bounds, protectedRadius)) return false;
+    }
+    for (const auto &blocker : raid.spatialLayout.ballisticBlockers)
+        if (nearRaidRect(center, blocker, clearance)) return false;
+    return visitBarrelApproaches(raid, [&](Vec2 approach) {
+        return nearRaidRect(center, {approach, {}}, 740.0F) &&
+            pursuitSegmentClear(approach, center, {clearance, clearance}, raid.spatialLayout);
+    });
+}
+
+std::vector<RaidVolatileBarrelSpawn> selectRaidVolatileBarrels(const MapDefinition &map, const PendingRaidSnapshot &raid)
+{
+    std::vector<RaidVolatileBarrelSpawn> result;
+    if (!ordinaryBarrelMap(map, raid)) return result;
+    constexpr std::array<Vec2, 8> directions{{{1,0},{1,1},{0,1},{-1,1},{-1,0},{-1,-1},{0,-1},{1,-1}}};
+    Pcg32 layoutRandom{raid.seed, 0x62617272656c7331ULL};
+    const auto tryLocation = [&](Vec2 reference)
+    {
+        const auto first = layoutRandom.bounded(static_cast<std::uint32_t>(directions.size()));
+        for (const float step : {208.0F, 320.0F, 496.0F})
+            for (std::size_t i = 0; i < directions.size(); ++i)
+            {
+                const auto direction = directions[(first + i) % directions.size()];
+                const Vec2 center{reference.x + direction.x * step, reference.y + direction.y * step};
+                if (!result.empty() && nearRaidRect(center, {result.front().center, {}}, 480)) continue;
+                if (!validRaidVolatileBarrelPlacement(map, raid, center)) continue;
+                if (std::any_of(raid.enemies.begin(), raid.enemies.end(), [&](const auto &enemy) {
+                        return enemy.spaceId == outdoorRaidSpaceId() && nearRaidRect(center, {enemy.position, enemy.size}, 32);
+                    }) || std::any_of(raid.loot.begin(), raid.loot.end(), [&](const auto &item) {
+                        return item.spaceId == outdoorRaidSpaceId() && nearRaidRect(center, {item.position, {}}, 48);
+                    })) continue;
+                result.push_back({static_cast<std::uint32_t>(result.size() + 1), center});
+                return result.size() == 2;
+            }
+        return false;
+    };
+    visitBarrelApproaches(raid, tryLocation);
+    return result;
+}
+
+namespace
+{
+const RaidLootSnapshot *selectFieldClueReward(const MapDefinition &map, const PendingRaidSnapshot &raid)
+{
+    if (raid.mapDefinitionId != kFieldIntelligenceSourceMapId || map.id != raid.mapDefinitionId ||
+        map.proceduralOutdoor.enabled || !raid.fieldIntelligenceTrade || raid.selfRecovery ||
+        raid.outpostRestoration || raid.baseSiteClearance || raid.basePerimeterSweep ||
+        raid.nightRendezvous || raid.loot.empty())
+        return {};
+
+    // The two scavengers have already received their rolls. Rotate among the remaining
+    // frozen slots without consuming randomness or changing any item, position or identity.
+    const auto first = static_cast<std::size_t>(raid.seed % raid.loot.size());
+    for (std::size_t i = 0; i < raid.loot.size(); ++i)
+    {
+        const auto &loot = raid.loot[(first + i) % raid.loot.size()];
+        if (!loot.assetId || !loot.quantity || loot.requiresHighRisk || loot.spaceId != outdoorRaidSpaceId() ||
+            loot.slotIndex >= map.raidLootSlots.size() || loot.corpseContainerAssetId || loot.sceneContainerAssetId ||
+            loot.definitionId == kFieldIntelligenceDocumentId || loot.definitionId == kFreightCrateKeyId ||
+            !samePoint(loot.position, map.raidLootSlots[loot.slotIndex].position))
+            continue;
+        constexpr float clearance = 24.0F;
+        const Vec2 point = loot.position;
+        if (nearRaidRect(point, raid.extractionPoint, clearance) ||
+            nearRaidRect(point, {raid.playerSpawn, {kPursuitPlayerHalfSize * 2, kPursuitPlayerHalfSize * 2}}, clearance) ||
+            nearRaidRect(point, map.highRisk.emergencyExtractionPoint, clearance) ||
+            nearRaidRect(point, map.highRisk.conditionalExtractionPoint, clearance) ||
+            nearRaidRect(point, map.highRisk.activationControlPoint, clearance) ||
+            nearRaidRect(point, {raid.fieldIntelligenceTrade->position, {}}, clearance) ||
+            (raid.rescue && nearRaidRect(point, raid.rescue->transferPoint, clearance)))
+            continue;
+        constexpr Vec2 bodyClearance{kPursuitPlayerClearance, kPursuitPlayerClearance};
+        if (pursuitPointWithin(point, map.walkableBounds, bodyClearance) &&
+            pursuitSegmentClear(point, point, bodyClearance, raid.spatialLayout))
+            return &loot;
+    }
+    return {};
+}
+}
+
+bool validRaidFieldClueCache(const MapDefinition &map, const PendingRaidSnapshot &raid)
+{
+    if (!raid.fieldClueCache || !raid.fieldClueCache->rewardAssetId)
+        return false;
+    const auto *expected = selectFieldClueReward(map, raid);
+    return expected && raid.fieldClueCache->rewardAssetId == expected->assetId;
+}
+
+namespace
+{
+std::optional<Vec2> scavengerRetreatPoint(const MapDefinition &map, const PendingRaidSnapshot &raid,
+    const RaidArmedScavengerSnapshot &actor) noexcept
+{
+    if (map.id != kFieldIntelligenceSourceMapId || raid.mapDefinitionId != map.id || map.proceduralOutdoor.enabled ||
+        !raid.fieldIntelligenceTrade || raid.selfRecovery || raid.outpostRestoration || raid.baseSiteClearance ||
+        raid.basePerimeterSweep || raid.nightRendezvous || raid.fireSupport)
+        return {};
+    const bool west = actor.sourceEnemyId == "riverside-scavenger:0";
+    if (!west && actor.sourceEnemyId != "riverside-scavenger:1") return {};
+    const std::size_t ordinal = west ? 0 : 1;
+    if (raid.enemies.size() <= ordinal) return {};
+    const auto &spawn = raid.enemies[ordinal];
+    if (spawn.sourceEnemyId != actor.sourceEnemyId || spawn.spaceId != outdoorRaidSpaceId()) return {};
+    const Vec2 origin = pursuitCentre({spawn.position, spawn.size});
+    const Vec2 clearance{spawn.size.x * 0.5F + 2, spawn.size.y * 0.5F + 2};
+    const auto &bounds = map.walkableBounds;
+    const bool north = origin.y < raid.fieldIntelligenceTrade->position.y;
+    const Vec2 exit{
+        west ? bounds.position.x + clearance.x + 2 : bounds.position.x + bounds.size.x - clearance.x - 2,
+        north ? bounds.position.y + clearance.y + 48.0F + static_cast<float>(raid.seed % 3) * 24.0F
+              : bounds.position.y + bounds.size.y - clearance.y - 2};
+    // Both sides of the bus have a foot-width clear lane to the outer street.
+    // Prove the two legs with this actor's entire body before exposing the route.
+    const Vec2 corner{exit.x, origin.y};
+    if (!pursuitPointWithin(origin, bounds, clearance) || !pursuitPointWithin(exit, bounds, clearance) ||
+        !pursuitSegmentClear(origin, corner, clearance, raid.spatialLayout) ||
+        !pursuitSegmentClear(corner, exit, clearance, raid.spatialLayout) ||
+        nearRaidRect(exit, raid.extractionPoint, std::max(clearance.x, clearance.y)))
+        return {};
+    return exit;
+}
+}
+
+bool validRaidScavengerRetreatPoint(const MapDefinition &map, const PendingRaidSnapshot &raid,
+    const RaidArmedScavengerSnapshot &actor, Vec2 point) noexcept
+{
+    const auto expected = scavengerRetreatPoint(map, raid, actor);
+    return expected && samePoint(point, *expected);
+}
+
 DeployReceipt executeDeploy(
     ProfileState &profile,
     const ContentRegistry &content,
@@ -799,11 +996,12 @@ DeployReceipt executeDeploy(
     // Regional recovery and settlement missions retain their published outdoor geometry.
     std::optional<MapDefinition> historicalHospital;
     if (map->id == kHospitalFloorplanMapId &&
-        map->proceduralOutdoor.layoutVersion == kHospitalHybridOutdoorLayoutVersion &&
+        isHospitalHybridLayoutVersion(map->proceduralOutdoor.layoutVersion) &&
         (regionalMissionCount != 0U || content.contentVersion() != kHospitalHybridOutdoorContentVersion))
     {
         historicalHospital.emplace(*map);
         historicalHospital->proceduralOutdoor.layoutVersion = kHospitalLegacyOutdoorLayoutVersion;
+        std::erase_if(historicalHospital->interiors, [](const auto &space) { return space.id == kHospitalDepotSpaceId; });
         map = &*historicalHospital;
     }
 
@@ -986,7 +1184,8 @@ DeployReceipt executeDeploy(
                 resourcePointRequests.push_back({
                     archetype.id + ":" + std::to_string(ordinal),
                     &archetype});
-                regularLootSlotCount += archetype.capacity;
+                regularLootSlotCount += raidResourcePointCapacity(map->proceduralOutdoor.layoutVersion,
+                    archetype, resourcePointRequests.back().instanceId);
             }
         }
     }
@@ -1118,12 +1317,14 @@ DeployReceipt executeDeploy(
             map->rescue->profession,
             false};
     }
+    const bool hospitalDepot = map->id == kHospitalFloorplanMapId &&
+        map->proceduralOutdoor.layoutVersion == kHospitalLandmarkInteriorLayoutVersion;
     const std::size_t outdoorEnemyTarget = resourceEcologyRules
         ? static_cast<std::size_t>(
               map->proceduralOutdoor.minimumInitialEnemies +
               enemyPopulationRandom.bounded(
                   map->proceduralOutdoor.maximumInitialEnemies -
-                      map->proceduralOutdoor.minimumInitialEnemies + 1U))
+                      map->proceduralOutdoor.minimumInitialEnemies + 1U)) - (hospitalDepot ? 1U : 0U)
         : deployment.enemies.size();
     if (encounterEcologyRules)
     {
@@ -1433,14 +1634,21 @@ DeployReceipt executeDeploy(
             map->interiors[interiorIndex];
         const LootTableDefinition &interiorLootTable =
             content.lootTable(interior.lootTableId);
-        for (const RaidLootSlotDefinition &slot : interior.lootSlots)
+        Pcg32 depotLootRandom{command.seed, 0x6465706f742d6c74ULL};
+        const bool depot = hospitalDepot && interior.id == kHospitalDepotSpaceId;
+        const auto depotSlot = depot ? depotLootRandom.bounded(static_cast<std::uint32_t>(interior.lootSlots.size())) : 0U;
+        Pcg32 &slotRandom = depot ? depotLootRandom : interiorLootRandom;
+        for (std::size_t slotOrdinal{}; slotOrdinal < interior.lootSlots.size(); ++slotOrdinal, ++interiorSlotIndex)
         {
+            if (depot && slotOrdinal != depotSlot)
+                continue;
+            const RaidLootSlotDefinition &slot = interior.lootSlots[slotOrdinal];
             const LootContentEntry &entry =
-                rollLoot(interiorLootTable, interiorLootRandom);
+                rollLoot(interiorLootTable, slotRandom);
             const std::uint32_t range =
                 entry.maximumQuantity - entry.minimumQuantity + 1U;
             std::uint32_t quantity = entry.minimumQuantity +
-                interiorLootRandom.bounded(range);
+                slotRandom.bounded(range);
             // Keep both original random draws for fixed rewards.
             const bool nightVisionSlot = nightVisionLootRules &&
                 isHospitalNightVisionLootSlot(map->id, interior.id, slot.id);
@@ -1485,7 +1693,6 @@ DeployReceipt executeDeploy(
                 interior.id});
             if (sealedFreightSlot) freightSupplyAssetId = assetId;
             if (fuelSlot) snapshot.fuelExtractionLootAssetId = assetId;
-            ++interiorSlotIndex;
         }
     }
     if (fuelExtractionRules && !snapshot.fuelExtractionLootAssetId)
@@ -1746,6 +1953,8 @@ DeployReceipt executeDeploy(
             addRequest(raidIndexedAnchorId("interior", index),
                        RaidMapAnchorKind::InteriorEntrance,
                        snapshot.interiors[index].exteriorEntrance.size);
+            if (hospitalDepot)
+                generationAnchors.requests.back().landmarkDefinitionId = map->interiors[index].landmarkDefinitionId;
         }
         if (snapshot.credentialExtraction)
             addRequest(std::string{kRaidAnchorCredentialExtraction},
@@ -1882,6 +2091,13 @@ DeployReceipt executeDeploy(
                     "generated Raid omitted rescue anchor",
                     profile.revision);
             snapshot.rescue->transferPoint = anchor->bounds;
+            if (hospitalDepot && regionalMissionCount == 0U && snapshot.rescue->definitionId == kHospitalMedicalRescueId)
+            {
+                snapshot.rescue->escortStart = selectHospitalEscortStart(*map, snapshot.spatialLayout, anchor->bounds);
+                if (!snapshot.rescue->escortStart)
+                    return deployFailure(RaidLifecycleError::InvalidCommand,
+                        "generated hospital lacks a walkable survivor escort route", profile.revision);
+            }
         }
         if (encounterEcologyRules)
         {
@@ -2042,13 +2258,7 @@ DeployReceipt executeDeploy(
                     profile.revision);
             RaidInteriorSnapshot &interior = snapshot.interiors[index];
             interior.exteriorEntrance = anchor->bounds;
-            const Vec2 entranceCenter = center(anchor->bounds);
-            interior.exteriorReturn = {
-                entranceCenter.x,
-                std::min(map->walkableBounds.position.y +
-                             map->walkableBounds.size.y - 50.0F,
-                         anchor->bounds.position.y +
-                             anchor->bounds.size.y + 70.0F)};
+            interior.exteriorReturn = raidExteriorReturnPoint(*map, anchor->bounds);
         }
         if (resourceEcologyRules)
         {
@@ -2071,15 +2281,14 @@ DeployReceipt executeDeploy(
                     request.definition->kind,
                     request.definition->lootTableId,
                     request.definition->riskTier,
-                    request.definition->capacity,
+                    raidResourcePointCapacity(map->proceduralOutdoor.layoutVersion, *request.definition, request.instanceId),
                     anchor->bounds,
                     anchor->districtInstanceId,
                     request.definition->landmarkDefinitionId};
                 const LootTableDefinition &resourceTable =
                     content.lootTable(resourcePoint.lootTableId);
                 for (std::uint32_t localSlot{};
-                     localSlot < resourcePoint.capacity;
-                     ++localSlot, ++globalSlot)
+                     localSlot < request.definition->capacity; ++localSlot)
                 {
                     const LootContentEntry &entry = rollLoot(
                         resourceTable, resourceLootRandom);
@@ -2087,6 +2296,9 @@ DeployReceipt executeDeploy(
                         entry.minimumQuantity + 1U;
                     const std::uint32_t rolledQuantity = entry.minimumQuantity +
                         resourceLootRandom.bounded(range);
+                    // Consume the original draw for the slot transferred to the depot, preserving subsequent rolls.
+                    if (localSlot >= resourcePoint.capacity)
+                        continue;
                     // Keep both original draws so only this slot changes.
                     const bool fixedOptic = hasFixedRaidResourceOptic(
                         content, snapshot, resourcePoint, localSlot);
@@ -2109,6 +2321,7 @@ DeployReceipt executeDeploy(
                         outdoorRaidSpaceId(),
                         resourcePoint.instanceId,
                         localSlot});
+                    ++globalSlot;
                 }
                 snapshot.spatialLayout.resourcePoints.push_back(
                     std::move(resourcePoint));
@@ -2349,6 +2562,39 @@ DeployReceipt executeDeploy(
     }
     const auto corpseFreeze = freezeRaidCorpseLoot(candidate, content);
     if (!corpseFreeze.valid) return deployFailure(RaidLifecycleError::InvalidProfile, corpseFreeze.message, profile.revision);
+    const bool currentOutdoorContent = std::any_of(content.maps().begin(), content.maps().end(), [](const auto &district) {
+            return district.id == kHospitalFloorplanMapId &&
+                district.proceduralOutdoor.layoutVersion == kHospitalLandmarkInteriorLayoutVersion;
+        });
+    const bool ordinaryRiverside = regionalMissionCount == 0U && currentOutdoorContent &&
+        map->id == kFieldIntelligenceSourceMapId && candidate.pendingRaid->fieldIntelligenceTrade &&
+        !candidate.pendingRaid->nightRendezvous;
+    if (ordinaryRiverside && supportsFieldClueCacheContent(content.contentVersion()))
+    {
+        auto &raid = *candidate.pendingRaid;
+        const auto *reward = selectFieldClueReward(*map, raid);
+        if (!reward || !fixedRaidPlayerPaths(*map, raid, reward->position, std::nullopt))
+            return deployFailure(RaidLifecycleError::InvalidProfile, "no reachable ordinary field cache roll", profile.revision);
+        raid.fieldClueCache = RaidFieldCacheSnapshot{reward->assetId, std::nullopt};
+    }
+    if (ordinaryRiverside && supportsRaidScavengerRetreatContent(content.contentVersion()))
+    {
+        auto &raid = *candidate.pendingRaid;
+        for (auto &actor : raid.armedScavengers)
+        {
+            actor.retreatPoint = scavengerRetreatPoint(*map, raid, actor);
+            if (!actor.retreatPoint)
+                return deployFailure(RaidLifecycleError::InvalidProfile, "no reachable armed scavenger exit", profile.revision);
+        }
+    }
+    if (regionalMissionCount == 0U && supportsRaidVolatileBarrelsContent(content.contentVersion()) &&
+        (map->id == kHospitalFloorplanMapId || map->id == kFreightCrateMapId) && currentOutdoorContent)
+    {
+        auto &raid = *candidate.pendingRaid;
+        raid.volatileBarrels = selectRaidVolatileBarrels(*map, raid);
+        if (raid.volatileBarrels.size() != 2)
+            return deployFailure(RaidLifecycleError::InvalidCommand, "no safe outdoor barrel sites", profile.revision);
+    }
     if (sealedFreightRules)
     {
         // Allocate after both existing scene and corpse containers to keep
@@ -3106,15 +3352,22 @@ InventoryReceipt pickupRaidBackpack(
     return moveBackpack(profile, *asset, EquippedAssetLocation{EquipmentSlotKind::Backpack}, context);
 }
 
-InventoryReceipt pickupRaidLoot(
+namespace
+{
+InventoryReceipt pickupRaidLootImpl(
     ProfileState &profile,
     const ContentRegistry &content,
     AssetInstanceId assetId,
     const CommandContext &context,
     const RaidVisibilityProjection *observation,
     const RaidObservationKey *currentObservation,
-    const RaidReloadWorldAccess *reloadAccess)
+    const RaidReloadWorldAccess *reloadAccess,
+    bool searchingFieldCache)
 {
+    const bool cached = profile.pendingRaid && profile.pendingRaid->fieldClueCache &&
+        profile.pendingRaid->fieldClueCache->rewardAssetId == assetId;
+    if (cached != searchingFieldCache)
+        return {false, false, DomainErrorCode::IllegalDestination, "FIELD CACHE UNAVAILABLE", profile.revision};
     if (const auto *backpack = profile.assets.find(assetId);
         backpack && std::holds_alternative<RaidDroppedBackpackLocation>(backpack->location))
     {
@@ -3192,6 +3445,18 @@ InventoryReceipt pickupRaidLoot(
         }
         return receipt;
     };
+    if (searchingFieldCache)
+    {
+        // A search transfers the entire frozen instance. A partial merge would
+        // destroy its identity or leave part of a supposedly empty cache behind.
+        for (auto slot : {EquipmentSlotKind::Backpack, EquipmentSlotKind::ChestRig})
+            for (const auto &container : carriedContainers(profile, content, slot))
+                for (auto orientation : {ItemOrientation::Degrees0, ItemOrientation::Degrees90})
+                    if (canUseItemOrientation(definition, orientation))
+                        if (const auto cell = findFirstProfileFit(profile, content, container, definition, orientation))
+                            return commitMove(InventoryMoveCommand{assetId, 0, {container, *cell}, orientation});
+        return {false, false, DomainErrorCode::Capacity, "FIELD CACHE STORAGE FULL", profile.revision};
+    }
     for (EquipmentSlotKind slot : {
              EquipmentSlotKind::PrimaryWeapon,
              EquipmentSlotKind::SecondaryWeapon,
@@ -3256,4 +3521,23 @@ InventoryReceipt pickupRaidLoot(
     }
     return {false, false, DomainErrorCode::Capacity,
             "equipped containers cannot hold this Loot", profile.revision};
+}
+}
+
+InventoryReceipt pickupRaidLoot(
+    ProfileState &profile, const ContentRegistry &content, AssetInstanceId assetId,
+    const CommandContext &context, const RaidVisibilityProjection *observation,
+    const RaidObservationKey *currentObservation, const RaidReloadWorldAccess *reloadAccess)
+{
+    return pickupRaidLootImpl(profile, content, assetId, context, observation, currentObservation, reloadAccess, false);
+}
+
+InventoryReceipt collectRaidFieldCache(ProfileState &profile, const ContentRegistry &content,
+    const CommandContext &context, const RaidVisibilityProjection &observation, const RaidObservationKey &key)
+{
+    if (!profile.pendingRaid || !profile.pendingRaid->fieldClueCache ||
+        profile.committedTransactions.contains(context.transactionId))
+        return {false, false, DomainErrorCode::IllegalDestination, "FIELD CACHE UNAVAILABLE", profile.revision};
+    return pickupRaidLootImpl(profile, content, profile.pendingRaid->fieldClueCache->rewardAssetId,
+        context, &observation, &key, nullptr, true);
 }

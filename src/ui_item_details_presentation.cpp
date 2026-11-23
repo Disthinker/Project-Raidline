@@ -30,7 +30,8 @@ std::optional<UiItemDetailsProjection> projectUiItemDetails(
     const bool helmet = supportsUiNightVisionMount(content, definition);
     const bool freightKey = definition.definitionId == kFreightCrateKeyId;
     if (!definition.weaponUse && !definition.meleeUse && !definition.noiseDecoyUse &&
-        !definition.grenadeUse && !definition.thrownIlluminationUse && !definition.nightVision && !helmet && !freightKey)
+        !definition.grenadeUse && !definition.thrownIlluminationUse && !definition.smokeUse && !definition.fireZoneUse &&
+        !definition.alarmUse && !definition.nightVision && !helmet && !freightKey)
         return std::nullopt;
     UiItemDetailsProjection result;
     result.instanceId = id;
@@ -44,17 +45,58 @@ std::optional<UiItemDetailsProjection> projectUiItemDetails(
         result.kind = UiItemDetailsKind::Melee;
         result.title = label(language, "近战详情", "MELEE DETAILS");
         metric("耐久", "Durability", fmt::format("{:.1f} / {:.1f}", asset->currentDurability / 100.0F, asset->currentMaximumDurability / 100.0F));
-        metric("伤害", "Damage", fmt::format("{}", use.damage));
+        metric("快击伤害", "Quick damage", fmt::format("{}", use.damage));
         metric("距离 / 角度", "Reach / arc", fmt::format("{:.0f} / {:.0f}°", use.range, use.angleDegrees));
-        metric("恢复", "Recovery", fmt::format("{:.2f} s", use.recoverySeconds));
+        metric("快击收招", "Quick recovery", fmt::format("{:.2f} s", use.recoverySeconds));
         metric("重量", "Weight", fmt::format("{} g", definition.unitWeightGrams));
         metric("尺寸", "Size", fmt::format("{} × {}", definition.inventoryWidthCells, definition.inventoryHeightCells));
         result.warning = asset->currentDurability == 0;
         result.status = label(language, result.warning ? "刀具已损坏 · 回基地维护" : "可用于贴身自卫", result.warning ? "Broken · service at base" : "Ready for close self-defense");
         result.notes = {
-            label(language, "装备到快速近战栏，按 V 使用；保留当前枪械。", "Equip in Quick Melee; press V without switching firearms."),
+            label(language, "装备后点按 V 快击。按住 Alt + V 重击，蓄力时松开即可取消。", "Tap V for a quick strike. Hold Alt + V for a heavy strike. Release during windup to cancel."),
             label(language, "单次命中一个目标；墙体阻挡，护甲减伤。", "One target per swing; walls block and armor reduces damage."),
             label(language, "命中才磨损；局内不能维护，不造成连续硬直。", "Wear on contact only; no raid repairs or stun lock.")};
+    } else if (definition.alarmUse) {
+        result.kind = UiItemDetailsKind::Alarm;
+        result.title = localizeUiText(language, "ALARM DETAILS");
+        metric("数量", "Quantity", fmt::format("{}",asset->quantity));
+        metric("单件重量", "Unit weight", fmt::format("{} g",definition.unitWeightGrams));
+        metric("布设距离", "Placement range", fmt::format("{:.0f}",definition.alarmUse->maximumRange));
+        metric("警戒半径", "Detection radius", fmt::format("{:.0f}",definition.alarmUse->triggerRadius));
+        result.status = label(language, "普通出击 · 敌人接近时提醒一次", "Ordinary raids · alerts once when a hostile approaches");
+        result.notes = {
+            label(language, "放入胸挂，按住 4 选择，松开后左键布设在近处。",
+                "Carry in the rig. Hold 4 to select, release and click nearby to place."),
+            label(language, "最多同时布设两台，仅提示触发。",
+                "Up to two can be armed. A trigger gives a brief alert.")};
+    } else if (definition.fireZoneUse) {
+        const auto &use = *definition.fireZoneUse;
+        result.kind = UiItemDetailsKind::FireZone;
+        result.title = localizeUiText(language, "FIRE BOTTLE DETAILS");
+        metric("数量", "Quantity", fmt::format("{}", asset->quantity));
+        metric("投掷距离", "Throw range", fmt::format("{:.0f}", use.maximumRange));
+        metric("火区半径", "Fire radius", fmt::format("{:.0f}", use.radius));
+        metric("持续时间", "Duration", fmt::format("{:.0f} s", use.durationSeconds));
+        result.status = label(language, "普通出击 · 火区会伤及自己", "Ordinary raids · the fire can hurt you");
+        result.notes = {
+            label(language, "放入胸挂，按住 4 选择，松开后左键投出。",
+                "Carry in the rig. Hold 4 to select, release and click to throw."),
+            label(language, "离开火区即可避开之后的伤害；实体墙能挡住火势。",
+                "Leave the zone to avoid further damage. Solid walls block the fire.")};
+    } else if (definition.smokeUse) {
+        const auto &use = *definition.smokeUse;
+        result.kind = UiItemDetailsKind::Smoke;
+        result.title = localizeUiText(language, "SMOKE DETAILS");
+        metric("数量", "Quantity", fmt::format("{}", asset->quantity));
+        metric("投掷距离", "Throw range", fmt::format("{:.0f}", use.maximumRange));
+        metric("烟幕半径", "Smoke radius", fmt::format("{:.0f}", use.radius));
+        metric("持续时间", "Duration", fmt::format("{:.0f} s", use.durationSeconds));
+        result.status = label(language, "普通出击 · 烟幕后仍可能中弹", "Ordinary raids · bullets can pass through smoke");
+        result.notes = {
+            label(language, "放入胸挂，按住 4 选择，松开后左键投出。",
+                "Carry in the rig. Hold 4 to select, release and click to throw."),
+            label(language, "烟幕遮住双方视线，贴身仍可发现目标。",
+                "Smoke screens both sides. Targets remain visible at contact distance.")};
     } else if (definition.thrownIlluminationUse) {
         const auto &use = *definition.thrownIlluminationUse;
         result.kind = UiItemDetailsKind::Illumination;
@@ -141,7 +183,9 @@ std::optional<UiItemDetailsProjection> projectUiItemDetails(
 SDL_FRect uiItemDetailsPanel() noexcept { return {40, 48, 1200, 656}; }
 SDL_FRect uiItemDetailsBack() noexcept { return {860, 92, 340, 32}; }
 SDL_FRect uiItemDetailsImage(UiItemDetailsKind kind) noexcept {
-    if (kind == UiItemDetailsKind::Decoy || kind == UiItemDetailsKind::Grenade || kind == UiItemDetailsKind::Illumination) return {80, 190, 490, 102};
+    if (kind == UiItemDetailsKind::Decoy || kind == UiItemDetailsKind::Grenade ||
+        kind == UiItemDetailsKind::Illumination || kind == UiItemDetailsKind::Smoke ||
+        kind == UiItemDetailsKind::FireZone || kind == UiItemDetailsKind::Alarm) return {80, 190, 490, 102};
     return kind == UiItemDetailsKind::Melee
         ? SDL_FRect{80, 190, 490, 246}
         : SDL_FRect{80, 190, 490, 124};

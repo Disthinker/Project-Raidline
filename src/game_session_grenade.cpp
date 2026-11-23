@@ -5,17 +5,21 @@
 #include "thrown_illumination_domain.h"
 #include <exception>
 
+bool GameSession::ordinaryRaidThrowablesAllowed() const noexcept
+{
+    return alphaRaidActive_ && !developerRange_ && profile_.pendingRaid && world_ &&
+        state_ == GameSessionState::InRaid && world_->raidSession().isActive() && world_->grenadeEnabled();
+}
+
 bool GameSession::canSelectThrowable() const
 {
     if(profileUiCommitPending())return false;
     const auto context=playerGameplayContext();
-    if(!context.available || context.dead || context.controlled)return false;
+    if(!context.available || context.dead || context.controlled || playerThrowFlightActive())return false;
     if (alphaRaidActive_)
         return world_->grenadeEnabled() && !world_->grenade().active() &&
-            !world_->noiseDecoy().flight() && !world_->thrownIllumination().flight() &&
             world_->melee().recoverySeconds() <= 0;
     return basePlayerWorld_ && !basePlayerWorld_->grenade().active() &&
-        !basePlayerWorld_->noiseDecoy().flight() && !basePlayerWorld_->thrownIllumination().flight() &&
         basePlayerWorld_->melee().recoverySeconds() <= 0;
 }
 bool GameSession::beginThrowableSelection()
@@ -41,6 +45,10 @@ InventoryReceipt GameSession::throwThrowable(AssetInstanceId id, Vec2 aim, const
         persistenceMessage_ = message;
         return InventoryReceipt{false, false, DomainErrorCode::IllegalDestination, message, profile_.revision};
     };
+    if (definition && (definition->smokeUse || definition->fireZoneUse) && !ordinaryRaidThrowablesAllowed())
+        return reject(definition->smokeUse ? "SMOKE UNAVAILABLE HERE" : "FIRE BOTTLE UNAVAILABLE HERE");
+    if (definition && definition->alarmUse && !ordinaryRaidThrowablesAllowed())
+        return reject("ALARM UNAVAILABLE HERE");
     if (!canSelectThrowable() || raidActionState_.active())
         return reject("THROWABLE UNAVAILABLE HERE");
     if (inventoryPersistencePending())
@@ -63,6 +71,51 @@ InventoryReceipt GameSession::throwThrowable(AssetInstanceId id, Vec2 aim, const
         else if (!receipt.succeeded)
             persistenceMessage_ = receipt.message;
     };
+    if (definition && definition->alarmUse)
+    {
+        if (!proximityAlarmInChestRig(profile_, content, id)) return reject("NO CHEST RIG ALARM");
+        if (!world_->proximityAlarms().canPlace()) return reject("ALARM LIMIT REACHED");
+        auto placement = world_->previewProximityAlarm(aim, *definition->alarmUse);
+        if (!placement) return reject("INVALID ALARM PLACEMENT");
+        auto prepared = world_->proximityAlarms();
+        if (!prepared.place(std::move(*placement))) return reject("INVALID ALARM PLACEMENT");
+        auto receipt = consumeProximityAlarm(profile_, content, id, context);
+        if (receipt.succeeded && !receipt.alreadyCommitted)
+            world_->commitProximityAlarms(std::move(prepared));
+        finish(receipt, "ALARM DEPLOYED");
+        return receipt;
+    }
+    if (definition && definition->smokeUse)
+    {
+        if (!smokeInChestRig(profile_, content, id))
+            return reject("NO CHEST RIG SMOKE");
+        if (!world_->smoke().canStart())
+            return reject("SMOKE LIMIT REACHED");
+        auto landing = world_->previewSmoke(aim, *definition->smokeUse);
+        if (!landing) return reject("INVALID SMOKE LANDING");
+        auto prepared = world_->smoke();
+        if (!prepared.start(std::move(*landing))) return reject("INVALID SMOKE LANDING");
+        auto receipt = consumeSmoke(profile_, content, id, context);
+        if (receipt.succeeded && !receipt.alreadyCommitted)
+            world_->commitSmoke(std::move(prepared));
+        finish(receipt, "SMOKE THROWN");
+        return receipt;
+    }
+    if (definition && definition->fireZoneUse)
+    {
+        if (!fireBottleInChestRig(profile_, content, id))
+            return reject("NO CHEST RIG FIRE BOTTLE");
+        if (!world_->fireZones().canStart()) return reject("FIRE ZONE LIMIT REACHED");
+        auto landing = world_->previewFireZone(aim, *definition->fireZoneUse);
+        if (!landing) return reject("INVALID FIRE BOTTLE LANDING");
+        auto prepared = world_->fireZones();
+        if (!prepared.start(std::move(*landing))) return reject("INVALID FIRE BOTTLE LANDING");
+        auto receipt = consumeFireBottle(profile_, content, id, context);
+        if (receipt.succeeded && !receipt.alreadyCommitted)
+            world_->commitFireZone(std::move(prepared));
+        finish(receipt, "FIRE BOTTLE THROWN");
+        return receipt;
+    }
     if (definition && definition->thrownIlluminationUse)
     {
         if (!thrownIlluminationInChestRig(profile_, content, id))
@@ -133,28 +186,67 @@ bool GameSession::processGrenadeExplosion(std::optional<IncomingDamageCommand> *
         worldClockDirty_=true;persistenceMessage_="GRENADE EXPLODED";return true;
     }
     if(!world_->raidSession().isActive()){world_->commitGrenade({});return true;}
-    if(!world_->grenade().pendingExplosion())return true;
+    while (world_->raidSession().isActive() && world_->hasPendingRaidExplosion())
+    {
+        if (!commitPendingRaidExplosion()) return false;
+    }
+    while (world_->raidSession().isActive() && world_->hasPendingFireDamage())
+    {
+        if (!commitPendingFireDamage()) return false;
+    }
+    return true;
+}
+
+std::optional<int> GameSession::applyRaidAreaPlayerDamage(const std::optional<CombatDamageCommand> &damage,
+    const char *transactionKind)
+{
+    if (!damage) return 0;
+    const auto receipt = executeIncomingDamageInSimulation(profile_, publishedContentRegistry(),
+        {damage->baseDamage, damage->region, damage->penetration, damage->armorDamage, false, {}},
+        {profile_.revision, nextRaidTransaction(transactionKind)});
+    if (!receipt.succeeded) return std::nullopt;
+    lastIncomingDamage_ = receipt.resolution;
+    return receipt.resolution.damageApplied;
+}
+
+bool GameSession::commitPendingFireDamage()
+{
+    const auto tick = world_->prepareFireDamageTick();
+    if (!tick || !world_->validatePreparedFireDamageTick(*tick))
+    {
+        persistenceMessage_ = "FIRE ZONE RESOLUTION BLOCKED";
+        state_ = GameSessionState::SettlementBlocked;
+        return false;
+    }
+    const auto damage = applyRaidAreaPlayerDamage(tick->playerDamage, "fire-zone-damage");
+    if (!damage)
+    {
+        persistenceMessage_ = "FIRE ZONE RESOLUTION BLOCKED";
+        state_ = GameSessionState::SettlementBlocked;
+        return false;
+    }
+    if (!world_->commitPreparedFireDamageTick(*tick)) std::terminate();
+    if (*damage > 0) static_cast<void>(world_->damagePlayer(*damage));
+    return true;
+}
+
+bool GameSession::commitPendingRaidExplosion()
+{
     const auto plan=world_->prepareGrenadeExplosion();
     if(!plan || !world_->validatePreparedGrenadeExplosion(*plan)) {
         persistenceMessage_="GRENADE RESOLUTION BLOCKED";state_=GameSessionState::SettlementBlocked;return false;
     }
-    int playerDamage{};
-    if(plan->playerDamage) {
-        const auto &damage=*plan->playerDamage;
-        // The deployed Profile is already validated. This command checks every
-        // changed participant and allocates its ledger entry before no-throw
-        // mutations; copying the unrelated frozen megamap is not a damage step.
-        const auto receipt=executeIncomingDamageInSimulation(profile_,publishedContentRegistry(),
-            {damage.baseDamage,damage.region,damage.penetration,damage.armorDamage,false,{}},
-            {profile_.revision,nextRaidTransaction("grenade-damage")});
-        if(!receipt.succeeded) {
-            persistenceMessage_="GRENADE RESOLUTION BLOCKED";state_=GameSessionState::SettlementBlocked;return false;
-        }
-        playerDamage=receipt.resolution.damageApplied;lastIncomingDamage_=receipt.resolution;
+    const auto playerDamage = applyRaidAreaPlayerDamage(plan->playerDamage,
+        plan->barrelId ? "barrel-damage" : "grenade-damage");
+    if (!playerDamage)
+    {
+        persistenceMessage_ = "GRENADE RESOLUTION BLOCKED";
+        state_ = GameSessionState::SettlementBlocked;
+        return false;
     }
     // No world update/callback intervenes between validation and this commit.
     if(!world_->commitPreparedGrenadeExplosion(*plan))std::terminate();
-    if(playerDamage>0)static_cast<void>(world_->damagePlayer(playerDamage));
-    persistenceMessage_="GRENADE EXPLODED";
+    if (*playerDamage > 0) static_cast<void>(world_->damagePlayer(*playerDamage));
+    persistenceMessage_ = plan->barrelId ? "VOLATILE BARREL DESTROYED" : "GRENADE EXPLODED";
     return true;
 }

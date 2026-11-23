@@ -22,17 +22,18 @@ std::optional<Vec2> RaidTacticalMapChart::worldPoint(Vec2 point) const noexcept
                 y / kRaidTacticalChart.size.y * worldSize.y};
 }
 
-void RaidChalkRoutes::setSpace(std::optional<RaidChalkSpace> space) noexcept
+void RaidChalkRoutes::setSpace(const RaidSpaceDefinitionId &space)
 {
-    if (space_ != space)
-        endStroke();
+    if (space_ == space)
+        return;
+    endStroke();
     space_ = space;
 }
 
 void RaidChalkRoutes::beginStroke(Vec2 point) noexcept
 {
     endStroke();
-    if (space_ && remainingLength() > 0.0)
+    if (space_.valid() && remainingLength() > 0.0)
         lastPoint_ = point;
 }
 
@@ -54,7 +55,7 @@ void RaidChalkRoutes::extendStroke(Vec2 point)
     const Vec2 end{static_cast<float>(lastPoint_->x + dx * ratio),
                    static_cast<float>(lastPoint_->y + dy * ratio)};
 
-    auto &route = strokes_[static_cast<std::size_t>(*space_)];
+    auto &route = strokes_[space_];
     if (!hasSegment_)
     {
         route.push_back({{*lastPoint_}, 0.0});
@@ -74,29 +75,34 @@ void RaidChalkRoutes::endStroke() noexcept
     hasSegment_ = false;
 }
 
-void RaidChalkRoutes::undo(RaidChalkSpace space) noexcept
+void RaidChalkRoutes::undo(const RaidSpaceDefinitionId &space) noexcept
 {
     endStroke();
-    auto &route = strokes_[static_cast<std::size_t>(space)];
-    if (!route.empty())
+    const auto it = strokes_.find(space);
+    if (it != strokes_.end() && !it->second.empty())
     {
-        usedLength_ = std::max(0.0, usedLength_ - route.back().length);
-        route.pop_back();
+        usedLength_ = std::max(0.0, usedLength_ - it->second.back().length);
+        it->second.pop_back();
     }
 }
 
-void RaidChalkRoutes::clear(RaidChalkSpace space) noexcept
+void RaidChalkRoutes::clear(const RaidSpaceDefinitionId &space) noexcept
 {
     endStroke();
-    auto &route = strokes_[static_cast<std::size_t>(space)];
-    for (const auto &stroke : route)
+    const auto it = strokes_.find(space);
+    if (it == strokes_.end())
+        return;
+    for (const auto &stroke : it->second)
         usedLength_ = std::max(0.0, usedLength_ - stroke.length);
-    route.clear();
+    strokes_.erase(it);
 }
 
-std::span<const RaidChalkStroke> RaidChalkRoutes::strokes(RaidChalkSpace space) const noexcept
+std::span<const RaidChalkStroke> RaidChalkRoutes::strokes(const RaidSpaceDefinitionId &space) const noexcept
 {
-    return strokes_[static_cast<std::size_t>(space)];
+    const auto it = strokes_.find(space);
+    if (it == strokes_.end())
+        return {};
+    return it->second;
 }
 
 double RaidChalkRoutes::remainingLength() const noexcept

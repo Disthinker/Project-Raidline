@@ -125,6 +125,12 @@ std::vector<UiItemActionEntry> projectUiItemActions(
         result = {{UiItemAction::DecoyDetails, "GRENADE DETAILS"}};
     if (definition.thrownIlluminationUse)
         result = {{UiItemAction::DecoyDetails, "ILLUMINATION DETAILS"}};
+    if (definition.smokeUse)
+        result = {{UiItemAction::DecoyDetails, "SMOKE DETAILS"}};
+    if (definition.fireZoneUse)
+        result = {{UiItemAction::DecoyDetails, "FIRE BOTTLE DETAILS"}};
+    if (definition.alarmUse)
+        result = {{UiItemAction::DecoyDetails, "ALARM DETAILS"}};
     if (definition.nightVision)
         result = {{UiItemAction::NightVisionDetails, "NIGHT VISION DETAILS"}};
     else if (supportsUiNightVisionMount(content, definition))

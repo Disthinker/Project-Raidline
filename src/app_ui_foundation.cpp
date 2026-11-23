@@ -309,7 +309,7 @@ void App::renderFoundationSettings(bool paused) {
   uiTextRenderer_.renderBox(renderer_, {320, 160, 640, 28},
                             "WASD MOVE  SHIFT SPRINT  E INTERACT", {16});
   uiTextRenderer_.renderBox(renderer_, {320, 190, 640, 28},
-                            "LMB FIRE | RMB AIM | R RELOAD | V MELEE | B RAID MODE", {16});
+                            "LMB FIRE | RMB AIM | R RELOAD | V QUICK | ALT+V HEAVY | B MODE", {16});
   uiTextRenderer_.renderBox(
       renderer_, {320, 220, 640, 28},
       "TAB INVENTORY | M MAP | 4 THROWABLES | 5 MED | U LIGHT", {16});

@@ -410,6 +410,58 @@ struct ThrownIlluminationUseDefinition
                            const ThrownIlluminationUseDefinition &) = default;
 };
 
+struct ProximityAlarmUseDefinition
+{
+    float maximumRange{80.0F};
+    float triggerRadius{100.0F};
+    float minimumSpacing{24.0F};
+
+    [[nodiscard]] bool valid() const noexcept
+    {
+        return std::isfinite(maximumRange) && maximumRange > 0 && maximumRange <= 80 &&
+            std::isfinite(triggerRadius) && triggerRadius > 0 && triggerRadius <= 100 &&
+            std::isfinite(minimumSpacing) && minimumSpacing >= 24 && minimumSpacing <= maximumRange;
+    }
+
+    friend bool operator==(const ProximityAlarmUseDefinition &, const ProximityAlarmUseDefinition &) = default;
+};
+
+struct FireZoneUseDefinition
+{
+    float maximumRange{400.0F};
+    float flightSeconds{0.45F};
+    float radius{90.0F};
+    float durationSeconds{6.0F};
+    int damagePerSecond{6};
+
+    [[nodiscard]] bool valid() const noexcept
+    {
+        return std::isfinite(maximumRange) && maximumRange > 0 && maximumRange <= 450 &&
+            std::isfinite(flightSeconds) && flightSeconds > 0 && flightSeconds <= 2 &&
+            std::isfinite(radius) && radius > 0 && radius <= 100 &&
+            std::isfinite(durationSeconds) && durationSeconds >= 1 && durationSeconds <= 6 &&
+            damagePerSecond > 0 && damagePerSecond <= 6;
+    }
+
+    friend bool operator==(const FireZoneUseDefinition &, const FireZoneUseDefinition &) = default;
+};
+
+struct SmokeUseDefinition
+{
+    float maximumRange{450.0F};
+    float flightSeconds{0.5F};
+    float radius{120.0F};
+    float durationSeconds{8.0F};
+
+    [[nodiscard]] bool valid() const noexcept
+    {
+        return std::isfinite(maximumRange) && maximumRange > 0 && maximumRange <= 450.0F &&
+            std::isfinite(flightSeconds) && flightSeconds > 0 && flightSeconds <= 5.0F &&
+            std::isfinite(radius) && radius > 0 && radius <= 240.0F &&
+            std::isfinite(durationSeconds) && durationSeconds > 0 && durationSeconds <= 30.0F;
+    }
+};
+
 struct GrenadeUseDefinition
 {
     float range{450.0F};
@@ -509,6 +561,9 @@ struct ItemDefinition
     std::optional<NoiseDecoyUseDefinition> noiseDecoyUse;
     std::optional<GrenadeUseDefinition> grenadeUse;
     std::optional<ThrownIlluminationUseDefinition> thrownIlluminationUse;
+    std::optional<SmokeUseDefinition> smokeUse;
+    std::optional<FireZoneUseDefinition> fireZoneUse;
+    std::optional<ProximityAlarmUseDefinition> alarmUse;
 };
 
 [[nodiscard]] bool itemCanEquipInSlot(

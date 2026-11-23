@@ -25,6 +25,7 @@ void App::refreshBaseDormitoryUi(bool force)
         resetBaseDormitoryUi();
     if (dormitoryProjectionRevision_ && dormitoryProjectionLanguage_ != language) {
         dormitoryUi_.press.reset();
+        dormitoryUi_.selectedPolicy.reset();
         dormitoryUi_.detailsScroll = dormitoryUi_.feedbackScroll = 0;
         dormitoryFeedback_.clear();
     }
@@ -57,19 +58,23 @@ void App::handleBaseDormitoryEvent(const UiDormitoryEvent &event)
         return;
     }
     const auto hit = hitUiDormitory(event.position, dormitoryUi_, dormitoryProjection_);
+    if (event.shortcut && event.shortcut != hit) return;
     if (event.kind == Kind::Move) {
-        if (dormitoryUi_.press && hit != dormitoryUi_.press->control) dormitoryUi_.press.reset();
+        if (dormitoryUi_.press && !dormitoryUi_.press->fromKeyboard && hit != dormitoryUi_.press->control)
+            dormitoryUi_.press.reset();
         return;
     }
     const auto language = uiTextRenderer_.language();
     if (event.kind == Kind::Down) {
         dormitoryUi_.press.reset();
-        if (hit) dormitoryUi_.press = UiDormitoryPress{*hit, language, uiDormitoryActionKey(*hit, dormitoryProjection_)};
+        if (hit) dormitoryUi_.press = UiDormitoryPress{*hit, language,
+            uiDormitoryActionKey(*hit, dormitoryProjection_), event.shortcut.has_value()};
         return;
     }
     const auto press = dormitoryUi_.press;
     dormitoryUi_.press.reset();
-    if (!press || !hit || *hit != press->control || press->language != language) return;
+    if (!press || !hit || *hit != press->control || press->language != language ||
+        press->fromKeyboard != event.shortcut.has_value()) return;
     const auto tr = [language](std::string_view text) { return localizeUiText(language, text); };
     const auto feedback = [&](std::string text) {
         dormitoryFeedback_ = std::move(text);
@@ -77,6 +82,7 @@ void App::handleBaseDormitoryEvent(const UiDormitoryEvent &event)
         dormitoryUi_.feedbackScroll = 0;
     };
     if (press->action != uiDormitoryActionKey(*hit, dormitoryProjection_)) {
+        dormitoryUi_.selectedPolicy.reset();
         feedback(tr("DORMITORY PLAN CHANGED - CHECK AND CLICK AGAIN"));
         return;
     }
@@ -92,6 +98,7 @@ void App::handleBaseDormitoryEvent(const UiDormitoryEvent &event)
         const auto tab = control == Control::Residents ? UiDormitoryTab::Residents : UiDormitoryTab::Rest;
         if (dormitoryUi_.tab != tab) {
             dormitoryUi_.tab = tab;
+            dormitoryUi_.selectedPolicy.reset();
             dormitoryUi_.restHours.reset();
             dormitoryUi_.detailsScroll = 0;
             dormitoryFeedback_.clear();
@@ -101,6 +108,16 @@ void App::handleBaseDormitoryEvent(const UiDormitoryEvent &event)
     }
     if (control == Control::Rations) {
         dormitoryUi_.rations = !dormitoryUi_.rations;
+        dormitoryUi_.selectedPolicy.reset();
+        dormitoryFeedback_.clear();
+        return;
+    }
+    if (control == Control::StandardRations || control == Control::ConserveRations) {
+        const auto policy = control == Control::StandardRations ? BaseRationPolicy::Standard : BaseRationPolicy::Conserve;
+        if (policy == dormitoryProjection_.activePolicy) dormitoryUi_.selectedPolicy.reset();
+        else dormitoryUi_.selectedPolicy = policy;
+        dormitoryUi_.policyRevision = dormitoryProjection_.revision;
+        dormitoryFeedback_.clear();
         return;
     }
     if (control == Control::Hour1 || control == Control::Hour6 || control == Control::Hour12) {
@@ -117,7 +134,20 @@ void App::handleBaseDormitoryEvent(const UiDormitoryEvent &event)
     const auto finish=[this,feedback](bool succeeded,std::string message){
         feedback(std::move(message));gameAudio_.play(succeeded?SoundEventId::UiConfirm:SoundEventId::UiDeny);refreshBaseDormitoryUi(true);
     };
-    if(control==Control::StartRest && dormitoryProjection_.restHours) {
+    if (control == Control::ApplyRations) {
+        if (!dormitoryUi_.selectedPolicy) return;
+        if (dormitoryUi_.policyRevision != dormitoryProjection_.revision) {
+            dormitoryUi_.selectedPolicy.reset();
+            feedback(tr("RATION POLICY PREVIEW EXPIRED"));
+            return;
+        }
+        const auto command = SetBaseRationPolicyCommand{*dormitoryUi_.selectedPolicy, dormitoryUi_.policyRevision};
+        dormitoryUi_.selectedPolicy.reset();
+        submitProfileUi<InventoryReceipt>(command, nextProfileTransactionId("ration-policy"),
+            [finish,tr](const auto &r) {
+                finish(r.succeeded, tr(r.succeeded ? "RATION POLICY SAVED" : r.message));
+            });
+    } else if(control==Control::StartRest && dormitoryProjection_.restHours) {
         const auto hours=*dormitoryProjection_.restHours;
         submitProfileUi<BaseRestReceipt>(BaseRestCommand{hours},nextProfileTransactionId("dormitory-rest"),
             [this,finish,tr,hours](const auto &r){if(r.succeeded)dormitoryUi_.restHours.reset();
@@ -156,7 +186,8 @@ void App::renderBaseDormitory()
     };
     const auto button = [&](Control c, std::string_view label, bool selected = false) {
         renderFoundationButton(6100 + static_cast<int>(c), uiDormitoryControlRect(c), label,
-            uiDormitoryEnabled(c, p), c == Control::CancelExpansion, selected, {}, 14);
+            uiDormitoryEnabled(c, p) && (c != Control::ApplyRations || dormitoryUi_.selectedPolicy.has_value()),
+            c == Control::CancelExpansion, selected, {}, 14);
     };
     const auto duration = [&](std::uint64_t m) {
         return fmt::format("{}{} {}{}", m / 60, language == UiLanguage::English ? "h" : "小时",
@@ -201,13 +232,30 @@ void App::renderBaseDormitory()
         }
         fill({64, 276, 548, 258}, {27, 38, 40, 255});
         fill({632, 276, 584, 258}, {27, 38, 40, 255});
-        text({84, 286, 508, 24}, dormitoryUi_.rations ? "FOOD AND DAILY NEEDS" : "RESIDENTS AND JOBS", 16);
         if (dormitoryUi_.rations) {
-            text({84, 322, 508, 24}, fmt::format("{}  {}", tr("PUBLIC FOOD STOCK"), p.foodStock));
-            text({84, 350, 508, 24}, fmt::format("{}  {}", tr("DAILY RATIONS"), p.dailyDemand.food));
-            text({84, 378, 508, 24}, fmt::format("{}  {}", tr("NEXT DAILY SETTLEMENT"), duration(p.clock.minutesUntilNextDay)));
-            text({84, 407, 508, 34}, "FOOD SUMMARY IS NOT A SURVIVAL FORECAST", 12);
+            const bool conserving = p.activePolicy == BaseRationPolicy::Conserve;
+            text({84, 286, 508, 24}, fmt::format("{}  ·  {} {}", tr("RATION POLICY"),
+                tr("CURRENT POLICY"), tr(conserving ? "CONSERVE RATIONS" : "STANDARD RATIONS")), 16);
+            text({84, 318, 508, 24}, fmt::format("{} {}  ·  {} {}", tr("PUBLIC FOOD STOCK"), p.foodStock,
+                tr("NEXT DAILY SETTLEMENT"), duration(p.clock.minutesUntilNextDay)));
+            for (const auto &policy : p.policies) {
+                const bool standard = policy.policy == BaseRationPolicy::Standard;
+                const auto control = standard ? Control::StandardRations : Control::ConserveRations;
+                const auto x = uiDormitoryControlRect(control).x;
+                const auto choice = dormitoryUi_.selectedPolicy.value_or(p.activePolicy);
+                button(control, fmt::format("{}  {}", standard ? 1 : 2, tr(standard ? "STANDARD RATIONS" : "CONSERVE RATIONS")),
+                    choice == policy.policy);
+                text({x+8, 400, 230, 24}, fmt::format("{}  {}", tr("DAILY RATIONS"), policy.dailyDemand.food));
+                const bool high = policy.maximumMoraleTier == BaseMoraleTier::High;
+                text({x+8, 428, 230, 24}, fmt::format("{}  {}", tr("MORALE CAP"),
+                    high && language == UiLanguage::SimplifiedChinese ? tr("ALLOCATION MORALE HIGH") :
+                    tr(baseMoraleTierName(policy.maximumMoraleTier))));
+            }
+            text({84, 455, 508, 20}, "FOOD SUMMARY IS NOT A SURVIVAL FORECAST", 12);
+            if (p.moraleLimitedLastDay) text({84, 481, 248, 36}, "LAST SETTLEMENT CAPPED MORALE", 12);
+            button(Control::ApplyRations, fmt::format("Enter  {}", tr("APPLY RATIONS")));
         } else {
+            text({84, 286, 508, 24}, "RESIDENTS AND JOBS", 16);
             text({84, 318, 240, 20}, "RESIDENT PROFESSIONS", 12);
             text({354, 318, 100, 20}, language == UiLanguage::English ? "TOTAL" : tr("RESIDENT TOTAL"), 12);
             text({476, 318, 110, 20}, "INJURED", 12);
@@ -217,12 +265,12 @@ void App::renderBaseDormitory()
                 text({354, y, 100, 22}, fmt::format("{}", p.workforce.residentsByProfession[i]));
                 text({476, y, 110, 22}, fmt::format("{}", p.workforce.injuredByProfession[i]));
             }
+            text({84, 444, 508, 24}, fmt::format("{}: {}", tr("WORKSHOP JOB"),
+                p.workforce.workshopWorker ? tr(baseResidentProfessionName(*p.workforce.workshopWorker)) : tr("EMPTY")));
+            text({84, 472, 508, 24}, fmt::format("{}: {}", tr("MEDICAL JOB"),
+                p.workforce.medicalWorker ? tr(baseResidentProfessionName(*p.workforce.medicalWorker)) : tr("EMPTY")));
+            text({84, 503, 508, 22}, "FILLS ONLY ELIGIBLE VACANT JOBS", 12);
         }
-        text({84, 444, 508, 24}, fmt::format("{}: {}", tr("WORKSHOP JOB"),
-            p.workforce.workshopWorker ? tr(baseResidentProfessionName(*p.workforce.workshopWorker)) : tr("EMPTY")));
-        text({84, 472, 508, 24}, fmt::format("{}: {}", tr("MEDICAL JOB"),
-            p.workforce.medicalWorker ? tr(baseResidentProfessionName(*p.workforce.medicalWorker)) : tr("EMPTY")));
-        text({84, 503, 508, 22}, "FILLS ONLY ELIGIBLE VACANT JOBS", 12);
         text({652, 286, 544, 24}, p.ownExpansion ? "EXPANSION IN PROGRESS" : p.expansionComplete ?
             "DORMITORY EXPANSION COMPLETE" : p.activeProject ? "CONSTRUCTION SLOT OCCUPIED" : "DORMITORY EXPANSION", 16);
         std::string details;
@@ -253,7 +301,7 @@ void App::renderBaseDormitory()
         } else details = tr("NO DORMITORY PROJECT");
         scroll(uiDormitoryDetailsRect(), details, dormitoryUi_.detailsScroll, dormitoryUi_.detailsMaximum);
         button(Control::AutoFill, "AUTO FILL JOBS");
-        button(Control::Rations, dormitoryUi_.rations ? "HIDE FOOD SUMMARY" : "FOOD SUMMARY", dormitoryUi_.rations);
+        button(Control::Rations, fmt::format("R  {}", tr(dormitoryUi_.rations ? "CLOSE RATION POLICY" : "RATION POLICY")), dormitoryUi_.rations);
         if (p.ownExpansion) button(Control::CancelExpansion, "CANCEL & REFUND");
         button(Control::StartExpansion, p.ownExpansion ? "EXPANSION IN PROGRESS" :
             p.expansionComplete ? "DORMITORY EXPANSION COMPLETE" : "START DORMITORY EXPANSION");

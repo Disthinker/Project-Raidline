@@ -4,7 +4,10 @@
 #include "base_defense_preparation.h"
 #include "base_emergency_power_domain.h"
 #include "base_facility_layout_domain.h"
+#include "base_morale_domain.h"
 #include "game_flow.h"
+#include "medical_domain.h"
+#include "recovery_task_domain.h"
 #include "test_temp_directory.h"
 #include <algorithm>
 #include <atomic>
@@ -78,6 +81,18 @@ AssetInstanceId uiFirst(const ProfileState &profile,const ItemDefinitionId &defi
 {
     for(const auto &[id,asset]:profile.assets.records())if(asset.definitionId==definition)return id;
     return 0;
+}
+AssetInstanceId addPartiallyUsedItem(ProfileState &profile, const ItemDefinitionId &type,
+    ProfileContainerId container, std::uint32_t charges, std::optional<std::string> relief = {})
+{
+    const auto &content = publishedContentRegistry();
+    const auto &definition = content.item(type);
+    const auto cell = findFirstProfileFit(profile, content, container, definition, ItemOrientation::Degrees0);
+    if (!cell)
+        throw std::runtime_error("fixture cannot fit partially used item");
+    const auto id = profile.assets.create(definition, StoredAssetLocation{container, *cell}, 1U, std::move(relief));
+    profile.assets.findMutable(id)->remainingCharges = charges;
+    return id;
 }
 class ProfileUiPersistenceTest : public testing::Test
 {
@@ -192,6 +207,96 @@ TEST_F(ProfileUiPersistenceTest, PurchaseAuthorityChangesOnlyAfterDurabilityAndT
     EXPECT_EQ(profileStateFingerprint(*saved.profile),profileStateFingerprint(session().profile()));
 }
 
+TEST_F(ProfileUiPersistenceTest, RationPolicyConfirmsAfterDurabilityAndAppliesOnlyAtTheNextMidnight)
+{
+    auto fixture = makeNewAlphaProfile("ration-midnight", content);
+    fixture.tutorial = TutorialProgress::Complete;
+    fixture.worldClock.elapsedWorldMinutes = kWorldMinutesPerDay - 1;
+    fixture.baseMorale.tier = BaseMoraleTier::High;
+    ASSERT_NO_FATAL_FAILURE(loadFixture(std::move(fixture)));
+    const auto &profile = session().profile();
+    ASSERT_EQ(profile.rationPolicy, BaseRationPolicy::Standard);
+    const auto before = profileStateFingerprint(profile);
+    const auto resources = profile.baseResources;
+    const auto morale = profile.baseMorale;
+    const auto ids = profile.assets.nextAssetId();
+    const auto reserve = previewBaseRationPolicy(profile, BaseRationPolicy::Conserve);
+    ASSERT_EQ(reserve.dailyDemand.food, 6U);
+    const SetBaseRationPolicyCommand change{BaseRationPolicy::Conserve, profile.revision};
+    store->fail = true;
+    const auto submitted = session().requestProfileUiCommand(change, "adopt-conservation");
+    ASSERT_TRUE(submitted.accepted) << submitted.message;
+    EXPECT_FALSE(session().requestProfileUiCommand(change, "double-click").accepted);
+    EXPECT_EQ(profile.rationPolicy, BaseRationPolicy::Standard);
+    ASSERT_NO_FATAL_FAILURE(failAndRetryRuntimeCandidate(before, ProfileUiCompletionKind::Command));
+    EXPECT_EQ(profile.rationPolicy, BaseRationPolicy::Conserve);
+    EXPECT_EQ(profile.baseResources, resources);
+    EXPECT_EQ(profile.baseMorale, morale);
+    EXPECT_EQ(profile.assets.nextAssetId(), ids);
+    EXPECT_EQ(profile.worldClock.elapsedWorldMinutes, kWorldMinutesPerDay - 1);
+    const auto settled = profileStateFingerprint(profile);
+    auto duplicate = profile;
+    EXPECT_TRUE(executeBaseRationPolicy(duplicate, content, change, {0, "adopt-conservation"}).alreadyCommitted);
+    EXPECT_EQ(profileStateFingerprint(duplicate), settled);
+    const auto stale = session().requestProfileUiCommand(SetBaseRationPolicyCommand{BaseRationPolicy::Standard, change.previewRevision}, "late-confirm");
+    EXPECT_FALSE(stale.accepted);
+    EXPECT_EQ(stale.error, DomainErrorCode::StaleRevision);
+    EXPECT_FALSE(session().requestProfileUiCommand(SetBaseRationPolicyCommand{BaseRationPolicy::Conserve, profile.revision},
+        "repeat-same-policy").accepted);
+    EXPECT_EQ(profileStateFingerprint(profile), settled);
+
+    store->release(); ProfileUiPersistenceTestAccess::stop(session());
+    ASSERT_TRUE(flow.returnToMainMenu());
+    ASSERT_TRUE(flow.continueGame()) << session().persistenceMessage();
+    attach(false);
+    store->release();
+    ASSERT_EQ(profile.rationPolicy, BaseRationPolicy::Conserve);
+    EXPECT_EQ(profile.baseResources, resources);
+    EXPECT_EQ(profile.baseMorale, morale);
+    session().advanceBaseWorldClock(1.0F);
+    ASSERT_TRUE(settle()) << session().persistenceMessage();
+    ASSERT_EQ(projectWorldClock(profile.worldClock).completedDays, 1U);
+    EXPECT_EQ(profile.baseResources.resolvedDemandCycleCount, 1U);
+    EXPECT_EQ(profile.baseResources.pool.food, resources.pool.food - reserve.dailyDemand.food);
+    EXPECT_EQ(profile.baseMorale.tier, BaseMoraleTier::Stable);
+    EXPECT_TRUE(profile.baseMorale.lastLedger.rationPolicyLimited);
+    const auto dayResources = profile.baseResources;
+    const auto dayMorale = profile.baseMorale;
+    const auto standard = session().requestProfileUiCommand(SetBaseRationPolicyCommand{BaseRationPolicy::Standard, profile.revision}, "standard-tomorrow");
+    ASSERT_TRUE(standard.accepted) << standard.message;
+    ASSERT_TRUE(settle());
+    EXPECT_EQ(profile.rationPolicy, BaseRationPolicy::Standard);
+    EXPECT_EQ(profile.baseResources, dayResources);
+    EXPECT_EQ(profile.baseMorale, dayMorale);
+    const auto disk = SaveRepository(directory.path()).load(content);
+    ASSERT_TRUE(disk.profile) << disk.message;
+    EXPECT_EQ(disk.profile->rationPolicy, BaseRationPolicy::Standard);
+    EXPECT_EQ(disk.profile->baseResources, dayResources);
+    EXPECT_EQ(disk.profile->baseMorale, dayMorale);
+}
+
+TEST_F(ProfileUiPersistenceTest, RationPolicyRejectsOutingsAndCannotRewriteOverdueRations)
+{
+    auto away = outingFixture();
+    const auto before = profileStateFingerprint(away);
+    EXPECT_FALSE(executeBaseRationPolicy(away, content, {BaseRationPolicy::Conserve, away.revision},
+        {away.revision, "outing-policy"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(away), before);
+    auto delayed = makeNewAlphaProfile("overdue-policy", content);
+    delayed.worldClock.elapsedWorldMinutes = kWorldMinutesPerDay;
+    const auto overdue = profileStateFingerprint(delayed);
+    const auto result = executeBaseRationPolicy(delayed, content, {BaseRationPolicy::Conserve, delayed.revision},
+        {delayed.revision, "retroactive-policy"});
+    EXPECT_FALSE(result.succeeded);
+    EXPECT_EQ(result.message, "DAILY RATION SETTLEMENT PENDING");
+    EXPECT_EQ(profileStateFingerprint(delayed), overdue);
+    const auto food = delayed.baseResources.pool.food;
+    static_cast<void>(synchronizeBaseDailySystemsThrough(delayed, content));
+    EXPECT_EQ(delayed.baseResources.pool.food, food - 8U);
+    EXPECT_TRUE(executeBaseRationPolicy(delayed, content, {BaseRationPolicy::Conserve, delayed.revision},
+        {delayed.revision, "future-policy"}).succeeded);
+}
+
 TEST_F(ProfileUiPersistenceTest, FailureKeepsFullAuthorityAndExplicitRetryUsesTheSameCandidateWithANewAttemptId)
 {
     store->fail=true;const auto before=profileStateFingerprint(session().profile());const auto money=session().profile().currency;
@@ -255,6 +360,214 @@ TEST_F(ProfileUiPersistenceTest, FailedGeneratorStartRetriesTheSameBatchWithoutD
     EXPECT_EQ(profile.assets.find(fuel), nullptr);
     EXPECT_NE(profile.assets.find(otherFuel), nullptr);
     EXPECT_EQ(store->snapshot().size(), 2U);
+}
+
+TEST_F(ProfileUiPersistenceTest, FailedWeaponSalvageKeepsTheGunUntilOneDurableExchange)
+{
+    auto fixture = session().profile();
+    const auto &weapon = content.item(alpha_content::rifle);
+    const auto destination = findFirstProfileFit(fixture, content, ProfileContainerId::stash(),
+                                                  weapon, ItemOrientation::Degrees0);
+    ASSERT_TRUE(destination);
+    const auto gun = fixture.assets.create(weapon, StoredAssetLocation{ProfileContainerId::stash(), *destination});
+    ASSERT_NO_FATAL_FAILURE(loadFixture(std::move(fixture)));
+    const auto materialInStash = [&](const ProfileState &profile) {
+        unsigned int count{};
+        for (const auto *asset : assetsInContainer(profile, ProfileContainerId::stash()))
+            if (asset->definitionId == kWeaponSalvageMaterialId)
+                count += asset->quantity;
+        return count;
+    };
+    const auto before = profileStateFingerprint(session().profile());
+    const auto oldMaterial = materialInStash(session().profile());
+    const EconomyCommand salvage = SalvageWeaponCommand{gun};
+    const auto plan = queryWeaponSalvage(session().profile(), content, gun);
+    ASSERT_TRUE(plan.canCommit) << plan.message;
+    store->fail = true;
+    const auto request = session().requestProfileUiCommand(salvage, "strip-warehouse-rifle");
+    ASSERT_TRUE(request.accepted) << request.message;
+    ASSERT_TRUE(store->waitCalls());
+    EXPECT_FALSE(session().requestProfileUiCommand(salvage, "double-click-strip").accepted);
+    EXPECT_NE(session().profile().assets.find(gun), nullptr);
+    EXPECT_EQ(materialInStash(session().profile()), oldMaterial);
+    ASSERT_NO_FATAL_FAILURE(failAndRetryRuntimeCandidate(before, ProfileUiCompletionKind::Command));
+    EXPECT_EQ(session().profile().assets.find(gun), nullptr);
+    EXPECT_EQ(materialInStash(session().profile()), oldMaterial + kWeaponSalvageMaterialQuantity);
+
+    const auto reopened = SaveRepository{directory.path()}.load(content);
+    ASSERT_TRUE(reopened.profile) << reopened.message;
+    auto replay = *reopened.profile;
+    const auto frozen = profileStateFingerprint(replay);
+    const auto duplicate = executeEconomy(replay, content, salvage, {replay.revision, "strip-warehouse-rifle"});
+    EXPECT_TRUE(duplicate.succeeded && duplicate.alreadyCommitted);
+    EXPECT_FALSE(executeEconomy(replay, content, salvage, {replay.revision, "strip-again"}).succeeded);
+    EXPECT_EQ(profileStateFingerprint(replay), frozen);
+}
+
+TEST_F(ProfileUiPersistenceTest, MedicalConsolidationKeepsIdentityAndDosesAcrossFailedWriteRetryAndManualLoad)
+{
+    auto fixture = session().profile();
+    const auto stash = ProfileContainerId::stash();
+    const auto pack = uiFirst(fixture, alpha_content::backpack);
+    ASSERT_NE(pack, 0U);
+    ASSERT_TRUE(executeInventory(fixture, content, InventoryEquipCommand{pack, EquipmentSlotKind::Backpack},
+        {fixture.revision, "consolidate-equip-pack"}).succeeded);
+    const auto source = addPartiallyUsedItem(fixture, alpha_content::medkit, stash, 2);
+    const auto target = addPartiallyUsedItem(fixture, alpha_content::medkit, ProfileContainerId::compartment(pack, 0), 2);
+    const auto other = addPartiallyUsedItem(fixture, alpha_content::medkit, stash, 1);
+    const auto sourceLocation = fixture.assets.find(source)->location;
+    const auto targetLocation = fixture.assets.find(target)->location;
+    const auto otherLocation = fixture.assets.find(other)->location;
+    const auto nextId = fixture.assets.nextAssetId();
+    ASSERT_NO_FATAL_FAILURE(loadFixture(std::move(fixture)));
+    const auto &base = session().profile();
+    const auto quote = queryMedicalConsolidation(base, content, source, target);
+    ASSERT_TRUE(quote.canCommit) << quote.message;
+    EXPECT_EQ(quote.transferCharges, 1U);
+    EXPECT_EQ(quote.sourceAfter, 1U);
+    EXPECT_EQ(quote.targetAfter, 3U);
+    const MedicalConsolidationCommand cmd{source, target, quote.sourceBefore, quote.targetBefore};
+    const auto before = profileStateFingerprint(base);
+    store->fail = true;
+    const auto submitted = session().requestProfileUiCommand(cmd, "consolidate-part");
+    ASSERT_TRUE(submitted.accepted) << submitted.message;
+    EXPECT_FALSE(session().requestProfileUiCommand(cmd, "duplicate-first-confirmation").accepted);
+    EXPECT_EQ(base.assets.find(source)->remainingCharges, 2U);
+    EXPECT_EQ(base.assets.find(target)->remainingCharges, 2U);
+    ASSERT_NO_FATAL_FAILURE(failAndRetryRuntimeCandidate(before, ProfileUiCompletionKind::Command));
+
+    const auto &after = session().profile();
+    ASSERT_TRUE(after.assets.find(source));
+    ASSERT_TRUE(after.assets.find(target));
+    EXPECT_EQ(after.assets.find(source)->remainingCharges, 1U);
+    EXPECT_EQ(after.assets.find(source)->location, sourceLocation);
+    EXPECT_EQ(after.assets.find(target)->remainingCharges, 3U);
+    EXPECT_EQ(after.assets.find(target)->location, targetLocation);
+    EXPECT_EQ(after.assets.find(other)->remainingCharges, 1U);
+    EXPECT_EQ(after.assets.nextAssetId(), nextId);
+    EXPECT_TRUE(after.committedTransactions.contains("consolidate-part"));
+    EXPECT_FALSE(after.committedTransactions.contains("duplicate-first-confirmation"));
+    EXPECT_FALSE(session().requestProfileUiCommand(cmd, "stale-after-partial").accepted);
+
+    // Reopen through the same menu path a player uses; none of the original quote remains in memory.
+    store->release();
+    ProfileUiPersistenceTestAccess::stop(session());
+    ASSERT_TRUE(flow.returnToMainMenu());
+    ASSERT_TRUE(flow.continueGame()) << session().persistenceMessage();
+    attach(false);
+    const auto reopened = queryMedicalConsolidation(session().profile(), content, source, other);
+    ASSERT_TRUE(reopened.canCommit) << reopened.message;
+    EXPECT_EQ(reopened.sourceBefore, 1U);
+    EXPECT_EQ(reopened.targetBefore, 1U);
+    EXPECT_EQ(reopened.sourceAfter, 0U);
+    EXPECT_EQ(reopened.targetAfter, 2U);
+    const MedicalConsolidationCommand finish{source, other, reopened.sourceBefore, reopened.targetBefore};
+    const auto completion = session().requestProfileUiCommand(finish, "consolidate-empty-source");
+    ASSERT_TRUE(completion.accepted) << completion.message;
+    EXPECT_FALSE(session().requestProfileUiCommand(finish, "duplicate-second-confirmation").accepted);
+    store->release();
+    ASSERT_TRUE(settle()) << session().persistenceMessage();
+    const auto done = session().takeProfileUiCompletions();
+    ASSERT_EQ(done.size(), 1U);
+    ASSERT_TRUE(done.front().succeeded);
+    ASSERT_TRUE(done.front().commandResult);
+    EXPECT_TRUE(std::holds_alternative<InventoryReceipt>(done.front().commandResult->receipt));
+    EXPECT_FALSE(session().requestProfileUiCommand(finish, "repeat-spent-source").accepted);
+    const auto disk = SaveRepository(directory.path()).load(content);
+    ASSERT_TRUE(disk.profile) << disk.message;
+    EXPECT_FALSE(disk.profile->assets.find(source));
+    ASSERT_TRUE(disk.profile->assets.find(target));
+    ASSERT_TRUE(disk.profile->assets.find(other));
+    EXPECT_EQ(disk.profile->assets.find(target)->location, targetLocation);
+    EXPECT_EQ(disk.profile->assets.find(other)->location, otherLocation);
+    EXPECT_EQ(disk.profile->assets.find(target)->remainingCharges, 3U);
+    EXPECT_EQ(disk.profile->assets.find(other)->remainingCharges, 2U);
+    EXPECT_EQ(disk.profile->assets.nextAssetId(), nextId);
+    EXPECT_EQ(profileStateFingerprint(*disk.profile), profileStateFingerprint(session().profile()));
+}
+
+TEST_F(ProfileUiPersistenceTest, MedicalConsolidationRejectsPublicProvenancePowerAndRecoveryTaskInEitherDirection)
+{
+    auto fixture = session().profile();
+    const auto stash = ProfileContainerId::stash();
+    const auto own = addPartiallyUsedItem(fixture, alpha_content::medkit, stash, 1);
+    const auto cabinet = addPartiallyUsedItem(fixture, alpha_content::medkit, ProfileContainerId::medicalReserve(), 1);
+    const auto aid = addPartiallyUsedItem(fixture, alpha_content::medkit, stash, 1, "relief-consolidation-test");
+    const ItemDefinitionId batteryType{"item.battery.universal"};
+    const auto battery = addPartiallyUsedItem(fixture, batteryType, stash, 1000);
+    const auto spareBattery = addPartiallyUsedItem(fixture, batteryType, stash, 2000);
+    const auto pack = uiFirst(fixture, alpha_content::backpack);
+    ASSERT_NE(pack, 0U);
+    ASSERT_TRUE(executeInventory(fixture, content, InventoryEquipCommand{pack, EquipmentSlotKind::Backpack},
+        {fixture.revision, "consolidate-loss-pack"}).succeeded);
+    const auto tasked = addPartiallyUsedItem(fixture, alpha_content::medkit, ProfileContainerId::compartment(pack, 0), 1);
+    const auto deployed = executeDeploy(fixture, content, {"consolidate-loss-raid", "consolidate-loss", 42U,
+        kFieldIntelligenceSourceMapId}, {fixture.revision, "consolidate-loss-deploy"});
+    ASSERT_TRUE(deployed.succeeded) << deployed.message;
+    const auto lost = settlePendingRaid(fixture, content, "consolidate-loss", RaidResultOutcome::PlayerDead);
+    ASSERT_TRUE(lost.succeeded) << lost.message;
+    ASSERT_TRUE(fixture.lastRaidResult->lostRaidRecordId);
+    const auto recovery = executeStartRecoveryTask(fixture, content, *fixture.lastRaidResult->lostRaidRecordId,
+        {fixture.revision, "consolidate-hire-recovery"});
+    ASSERT_TRUE(recovery.succeeded) << recovery.message;
+    ASSERT_TRUE(recoveryTaskForAsset(fixture, tasked));
+    ASSERT_NO_FATAL_FAILURE(loadFixture(std::move(fixture)));
+    const auto &base = session().profile();
+    const auto offered = medicalConsolidationCandidates(base, content);
+    EXPECT_NE(std::find(offered.begin(), offered.end(), own), offered.end());
+    for (const auto excluded : {cabinet, aid, battery, spareBattery, tasked})
+        EXPECT_EQ(std::find(offered.begin(), offered.end(), excluded), offered.end());
+    const auto before = profileStateFingerprint(base);
+    const auto reject = [&](AssetInstanceId source, AssetInstanceId target) {
+        EXPECT_FALSE(queryMedicalConsolidation(base, content, source, target).canCommit);
+        const MedicalConsolidationCommand cmd{source, target,
+            base.assets.find(source)->remainingCharges, base.assets.find(target)->remainingCharges};
+        EXPECT_FALSE(session().requestProfileUiCommand(cmd, "reject-ineligible-repack").accepted);
+        EXPECT_EQ(profileStateFingerprint(base), before);
+    };
+    for (const auto excluded : {cabinet, aid, tasked})
+    {
+        reject(excluded, own);
+        reject(own, excluded);
+    }
+    reject(battery, spareBattery);
+    EXPECT_TRUE(store->snapshot().empty());
+}
+
+TEST_F(ProfileUiPersistenceTest, MedicalConsolidationIsUnavailableDuringPerimeterOutingsAndRealtimeDefense)
+{
+    auto normal = session().profile();
+    const auto stash = ProfileContainerId::stash();
+    const auto source = addPartiallyUsedItem(normal, alpha_content::medkit, stash, 1U);
+    const auto target = addPartiallyUsedItem(normal, alpha_content::medkit, stash, 1U);
+    ASSERT_TRUE(queryMedicalConsolidation(normal, content, source, target).canCommit);
+    ASSERT_NO_FATAL_FAILURE(loadFixture(normal));
+    const MedicalConsolidationCommand cmd{source, target, 1U, 1U};
+    const auto rejected = [&] {
+        const auto before = profileStateFingerprint(session().profile());
+        EXPECT_TRUE(medicalConsolidationCandidates(session().profile(), content).empty());
+        EXPECT_FALSE(queryMedicalConsolidation(session().profile(), content, source, target).canCommit);
+        EXPECT_FALSE(session().requestProfileUiCommand(cmd, "reject-active-medical-consolidation").accepted);
+        EXPECT_EQ(profileStateFingerprint(session().profile()), before);
+        EXPECT_FALSE(session().profileUiCommitPending());
+    };
+    auto outing = outingFixture();
+    ASSERT_TRUE(outing.homePerimeter.activeOuting);
+    ASSERT_NO_FATAL_FAILURE(loadFixture(std::move(outing)));
+    ASSERT_TRUE(session().profile().homePerimeter.activeOuting);
+    rejected();
+
+    ASSERT_NO_FATAL_FAILURE(loadFixture(std::move(normal)));
+    store->release();
+    ASSERT_TRUE(session().triggerDeveloperBaseSiegeWarning()) << session().persistenceMessage();
+    attach(false);
+    store->release();
+    const auto defense = session().requestStartBaseRealtimeDefense(flow.baseWorld());
+    ASSERT_TRUE(defense.accepted) << defense.message;
+    ASSERT_TRUE(settle()) << session().persistenceMessage();
+    ASSERT_TRUE(session().baseDefenseActive());
+    ASSERT_TRUE(session().profile().activeBaseDefense);
+    rejected();
 }
 
 TEST_F(ProfileUiPersistenceTest, MenuTicketRejectsEarlyNavigationAndCompletionPerformsNoSecondSave)

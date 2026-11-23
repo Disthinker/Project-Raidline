@@ -53,6 +53,7 @@ struct MedicalRaidAction
     int maximumHealing{};
     float elapsedSeconds{};
     float durationSeconds{};
+    std::optional<RaidSpaceDefinitionId> fireSupportSpace;
 };
 
 struct UnloadMagazineRaidAction

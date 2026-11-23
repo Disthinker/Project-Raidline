@@ -246,6 +246,7 @@ struct RaidGeneratedMapLayout
 };
 
 inline constexpr float kRaidRoadBlockadeMinimumDetour{320.0F};
+[[nodiscard]] Vec2 raidExteriorReturnPoint(const MapDefinition &map, ContentRect entrance) noexcept;
 inline constexpr float kRaidRoadBlockadeMaximumDetour{960.0F};
 
 struct RaidRoadBlockadeSnapshot
@@ -310,6 +311,11 @@ inline constexpr std::string_view kRaidAnchorSelfRecovery{"self_recovery"};
 
 [[nodiscard]] std::optional<RaidAnchorPlacementSnapshot> selectHospitalRescueAnchor(
     const MapDefinition &map, const RaidGeneratedMapLayout &layout, Vec2 size);
+
+[[nodiscard]] std::optional<Vec2> selectHospitalEscortStart(
+    const MapDefinition &, const RaidGeneratedMapLayout &, ContentRect transfer);
+[[nodiscard]] bool validHospitalEscortStart(
+    const MapDefinition &, const RaidGeneratedMapLayout &, ContentRect transfer, Vec2 start) noexcept;
 
 [[nodiscard]] Vec2 raidResourcePointLootPosition(
     const RaidResourcePointSnapshot &resourcePoint,

@@ -15,6 +15,26 @@ struct RecycleCommand
     AssetInstanceId instanceId{};
 };
 
+inline const ItemDefinitionId kWeaponSalvageMaterialId{"item.loot.scrap_parts"};
+inline constexpr std::uint32_t kWeaponSalvageMaterialQuantity = 1U;
+
+struct SalvageWeaponCommand
+{
+    AssetInstanceId instanceId{};
+};
+
+struct WeaponSalvagePlan
+{
+    bool canCommit{};
+    DomainErrorCode error{DomainErrorCode::None};
+    std::string message;
+    std::optional<GridPosition> outputPosition;
+    ItemOrientation outputOrientation{ItemOrientation::Degrees0};
+};
+
+[[nodiscard]] WeaponSalvagePlan queryWeaponSalvage(
+    const ProfileState &, const ContentRegistry &, AssetInstanceId);
+
 struct ClaimReliefCommand
 {
     std::string batchId;
@@ -23,6 +43,7 @@ struct ClaimReliefCommand
 using EconomyCommand = std::variant<
     PurchaseCommand,
     RecycleCommand,
+    SalvageWeaponCommand,
     ClaimReliefCommand>;
 
 struct EconomyReceipt

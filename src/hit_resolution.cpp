@@ -105,7 +105,8 @@ HitResolutionResult resolveShotEnemyHits(
 HitResolutionResult resolveShotHits(
     const std::vector<ShotCollisionCandidate> &shots,
     EnemyLifecycle &enemies,
-    const std::vector<BallisticBlocker> &blockers, std::optional<Rect> hostilePlayerTarget)
+    const std::vector<BallisticBlocker> &blockers, std::optional<Rect> hostilePlayerTarget,
+    std::span<const BallisticBlocker> environmentTargets)
 {
     HitResolutionResult result{};
 
@@ -128,26 +129,24 @@ HitResolutionResult resolveShotHits(
         }
 
         std::optional<std::size_t> enemyIndex;
-        std::optional<std::size_t> blockerIndex;
+        const BallisticBlocker *hitObstacle{};
+        BallisticBlockerId environmentId{};
         float targetFraction = std::numeric_limits<float>::infinity();
 
         // Blockers are considered first and therefore win an exact tie. This
         // prevents an enemy whose bounds touch a wall from being hit through it.
-        for (std::size_t index = 0; index < blockers.size(); ++index)
-        {
-            const std::optional<float> fraction = firstIntersectionFraction(
-                shot.start,
-                shot.end,
-                blockers[index].bounds,
-                shot.collisionExtent);
-            if (!fraction.has_value() || *fraction >= targetFraction)
+        const auto considerObstacles = [&](std::span<const BallisticBlocker> objects, bool environmental) {
+            for (const auto &object : objects)
             {
-                continue;
+                const auto fraction = firstIntersectionFraction(shot.start, shot.end, object.bounds, shot.collisionExtent);
+                if (!fraction || *fraction >= targetFraction) continue;
+                targetFraction = *fraction;
+                hitObstacle = &object;
+                environmentId = environmental ? object.id : 0;
             }
-            blockerIndex = index;
-            enemyIndex.reset();
-            targetFraction = *fraction;
-        }
+        };
+        considerObstacles(blockers, false);
+        considerObstacles(environmentTargets, true);
 
         bool hitsPlayer = false;
         if (hostilePlayerTarget)
@@ -157,7 +156,7 @@ HitResolutionResult resolveShotHits(
             if (fraction && *fraction < targetFraction)
             {
                 targetFraction = *fraction;
-                blockerIndex.reset();
+                hitObstacle = nullptr;
                 hitsPlayer = true;
             }
         }
@@ -181,11 +180,11 @@ HitResolutionResult resolveShotHits(
 
             hitsPlayer = false;
             enemyIndex = index;
-            blockerIndex.reset();
+            hitObstacle = nullptr;
             targetFraction = *fraction;
         }
 
-        if (!hitsPlayer && !enemyIndex.has_value() && !blockerIndex.has_value())
+        if (!hitsPlayer && !enemyIndex.has_value() && !hitObstacle)
         {
             continue;
         }
@@ -208,7 +207,7 @@ HitResolutionResult resolveShotHits(
             result.playerImpact = region == HitRegion::Legs ? HitRegion::Legs : HitRegion::Torso;
             continue;
         }
-        if (blockerIndex.has_value())
+        if (hitObstacle)
         {
             result.hits.push_back(HitResult{
                 shot.shotId,
@@ -218,6 +217,7 @@ HitResolutionResult resolveShotHits(
                 false,
                 HitRegion::Torso,
                 HitSemantic::Normal});
+            result.hits.back().environmentObjectId = environmentId;
             continue;
         }
 

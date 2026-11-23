@@ -4,7 +4,8 @@
 #include <fmt/format.h>
 #include <tuple>
 
-UiBaseMedicalProjection projectUiBaseMedical(const ProfileState &p, const ContentRegistry &c, UiLanguage language) {
+UiBaseMedicalProjection projectUiBaseMedical(const ProfileState &p, const ContentRegistry &c,
+    UiLanguage language, const UiMedicalDoseSelection &doses) {
     UiBaseMedicalProjection result;
     result.profileId = p.profileId; result.revision = p.revision;
     result.worldMinute = p.worldClock.elapsedWorldMinutes;
@@ -58,6 +59,21 @@ UiBaseMedicalProjection projectUiBaseMedical(const ProfileState &p, const Conten
         return std::tuple{y / 8, x / 8, y, x, item.id};
     };
     std::ranges::sort(result.warehouseMedicine, {}, warehouseOrder);
+    if (doses.open) {
+        const auto *source = doses.source ? p.assets.find(*doses.source) : nullptr;
+        for (const auto id : medicalConsolidationCandidates(p, c)) {
+            const auto &asset = *p.assets.find(id);
+            const auto &definition = c.item(asset.definitionId);
+            const auto *stored = std::get_if<StoredAssetLocation>(&asset.location);
+            const UiMedicalDoseItem item{id, localizeUiText(language, definition.displayName),
+                stored && stored->container == ProfileContainerId::stash(), asset.remainingCharges, definition.maximumCharges};
+            if (id == doses.source) result.doseSource = item;
+            if (id == doses.target) result.doseTarget = item;
+            if (!doses.choosingTarget || (source && id != doses.source && source->definitionId == asset.definitionId &&
+                item.charges < item.maximum)) result.doseChoices.push_back(item);
+        }
+        result.dosePlan = queryMedicalConsolidation(p, c, doses.source.value_or(0), doses.target.value_or(0));
+    }
     return result;
 }
 
@@ -105,6 +121,13 @@ std::string uiBaseMedicalDuration(std::uint64_t minutes, UiLanguage language) {
 }
 SDL_FRect uiBaseMedicalControlRect(UiBaseMedicalControl control, UiBaseMedicalTab tab) noexcept {
     switch (control) {
+    case UiBaseMedicalControl::Consolidate: return {64, 552, 360, 40};
+    case UiBaseMedicalControl::DoseSource: return {80, 237, 328, 38};
+    case UiBaseMedicalControl::DoseTarget: return {80, 333, 328, 38};
+    case UiBaseMedicalControl::PreviousDosePage: return {464, 474, 76, 32};
+    case UiBaseMedicalControl::NextDosePage: return {1116, 474, 76, 32};
+    case UiBaseMedicalControl::ConfirmDoses: return {916, 552, 300, 40};
+    case UiBaseMedicalControl::DoseRow: return {};
     case UiBaseMedicalControl::Personal: return {64, 132, 200, 34};
     case UiBaseMedicalControl::Residents: return {276, 132, 200, 34};
     case UiBaseMedicalControl::Details:
@@ -134,6 +157,9 @@ SDL_FRect uiBaseMedicalFeedbackRect() noexcept { return {76, 616, 1128, 44}; }
 SDL_FRect uiBaseMedicalReserveRect() noexcept { return {464, 234, 224, 224}; }
 SDL_FRect uiBaseMedicalWarehouseRowRect(std::size_t index) noexcept {
     return {720, 234 + 32.0F * static_cast<float>(index), 472, 30};
+}
+SDL_FRect uiBaseMedicalDoseRowRect(std::size_t index) noexcept {
+    return {464, 231 + 38.0F * static_cast<float>(index), 728, 34};
 }
 SDL_FRect uiBaseMedicalPriorityButtonRect(UiBaseMedicalControl control, std::size_t index) noexcept {
     return {control == UiBaseMedicalControl::MoveEarlier ? 952.0F : 1076.0F,
@@ -188,8 +214,18 @@ UiBaseMedicalTransferProjection projectUiBaseMedicalTransfer(
 }
 std::optional<UiBaseMedicalHit> hitUiBaseMedical(Vec2 position, const UiBaseMedicalState &state) noexcept {
     using Control = UiBaseMedicalControl;
-    for (auto c : {Control::Personal, Control::Residents, Control::Main, Control::Close})
+    for (auto c : {Control::Personal, Control::Residents, Control::Close})
         if (uiContains(uiBaseMedicalControlRect(c, state.tab), position)) return UiBaseMedicalHit{c};
+    if (state.tab == UiBaseMedicalTab::Personal &&
+        uiContains(uiBaseMedicalControlRect(Control::Consolidate), position)) return UiBaseMedicalHit{Control::Consolidate};
+    if (state.doses.open) {
+        for (auto c : {Control::DoseSource, Control::DoseTarget, Control::PreviousDosePage, Control::NextDosePage, Control::ConfirmDoses})
+            if (uiContains(uiBaseMedicalControlRect(c), position)) return UiBaseMedicalHit{c};
+        for (std::size_t i = 0; i < kUiBaseMedicalWarehouseRows; ++i)
+            if (uiContains(uiBaseMedicalDoseRowRect(i), position)) return UiBaseMedicalHit{Control::DoseRow, i};
+        return std::nullopt;
+    }
+    if (uiContains(uiBaseMedicalControlRect(Control::Main, state.tab), position)) return UiBaseMedicalHit{Control::Main};
     if (state.tab == UiBaseMedicalTab::Personal || !state.facilities)
         if (uiContains(uiBaseMedicalControlRect(Control::Details, state.tab), position))
             return UiBaseMedicalHit{Control::Details};

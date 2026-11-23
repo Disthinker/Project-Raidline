@@ -29,6 +29,7 @@ struct GameplayInput
     bool moveRight{};
     bool sprint{};
     bool meleeJustPressed{}, meleePressed{};
+    bool meleeHeavyJustPressed{}, meleeHeavyHeld{};
 
     bool fireJustPressed{};
     bool firePressed{};
@@ -93,4 +94,5 @@ struct GameplayInput
     // Service arbitration preserves portal/container/loot priority for F.
     bool credentialInvestigationAllowed{true};
     bool nightRendezvousInteractionBlocked{};
+    bool treatingFireSupport{};
 };

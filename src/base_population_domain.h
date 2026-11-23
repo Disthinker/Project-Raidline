@@ -22,9 +22,24 @@ struct BasePopulationProjection
 
 [[nodiscard]] BasePopulationProjection projectBasePopulation(
     const BasePopulationState &state) noexcept;
+[[nodiscard]] std::uint32_t dailyRationsForResidents(std::uint32_t residentCount, BaseRationPolicy) noexcept;
 
 [[nodiscard]] BaseResourceBundle populationAdjustedDailyDemand(
     const BasePopulationState &state) noexcept;
+
+struct BaseRationPolicyPreview
+{
+    BaseRationPolicy policy;
+    BasePopulationProjection population;
+    BaseResourceBundle dailyDemand;
+    std::uint32_t standardFoodDemand{};
+    BaseMoraleTier maximumMoraleTier;
+};
+
+[[nodiscard]] BaseRationPolicyPreview previewBaseRationPolicy(
+    const ProfileState &, BaseRationPolicy) noexcept;
+[[nodiscard]] inline BaseRationPolicyPreview previewBaseRationPolicy(const ProfileState &profile) noexcept
+{ return previewBaseRationPolicy(profile, profile.rationPolicy); }
 
 struct BaseRestCommand
 {

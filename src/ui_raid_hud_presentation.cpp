@@ -36,6 +36,7 @@ std::string_view uiPlayerActionLabel(const RaidAction &action) noexcept {
         if constexpr(std::is_same_v<T,ArmorMaintenanceRaidAction>)return "REPAIRING ARMOR";
         if constexpr(std::is_same_v<T,WeaponSwitchRaidAction>)return "SWITCHING WEAPON";
         if constexpr(std::is_same_v<T,MedicalRaidAction>) {
+            if (a.fireSupportSpace) return "TREATING TEAMMATE";
             switch(a.effect) {
             case MedicalUseEffect::StopLightBleeding:return "BANDAGING";
             case MedicalUseEffect::StopAnyBleeding:return "APPLYING TOURNIQUET";

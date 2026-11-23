@@ -24,7 +24,10 @@ struct UiRaidHudTestAccess {
     static void clearPanels(App &a){a.developerWeaponPanelOpen_=false;a.developerRangePanelOpen_=false;a.developerPerformanceOverlayOpen_=false;a.tacticalMapOpen_=false;}
     static void hud(App &a){a.renderDebugText();a.renderMeleeStatus();a.renderThrowableUi();}
     static void raid(App &a){a.renderRaidScreen();}
-    static void fieldTrade(App &a, const RaidFieldTradeView &view) { a.drawFieldIntelligenceTradePanel(view); }
+    static void fieldTrade(App &a, const RaidFieldTradeView &view) {
+        a.refreshFieldBarter();
+        a.drawFieldIntelligenceTradePanel(view);
+    }
     static void range(App &a){a.developerRangePanelOpen_=true;a.renderDeveloperRangePanel();a.developerRangePanelOpen_=false;}
     static void developer(App &a){a.developerWeaponPanelOpen_=true;a.renderDeveloperWeaponPanel();a.developerWeaponPanelOpen_=false;}
     static void performance(App &a){a.developerPerformanceOverlayOpen_=true;a.framePerformance_.record({.21F,2.40F,3.20F,10.86F,16.67F});a.refreshDeveloperPerformanceOverlay();a.renderDeveloperPerformanceOverlay();a.developerPerformanceOverlayOpen_=false;}
@@ -250,6 +253,8 @@ TEST_F(UiRaidHudTest, FieldIntelligenceTradePanelKeepsAimAreaClearAtEveryWindowS
             EXPECT_GT(bright(physical({838, 108, 248, 24})), 30U);
             EXPECT_GT(bright(physical({838, 266, 248, 38})), 30U);
             EXPECT_GT(bright(physical({1160, 269, 80, 24})), 10U);
+            EXPECT_GT(bright(physical({838, 370, 248, 39})), 30U);
+            EXPECT_GT(bright(physical({838, 422, 248, 39})), 30U);
             if (reviewPath)
             {
                 const auto name = "field-trade-" + std::to_string(size.width) + "-" + uiLanguageCode(language) + ".png";

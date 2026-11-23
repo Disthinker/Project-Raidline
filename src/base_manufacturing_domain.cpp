@@ -1,4 +1,5 @@
 #include "base_manufacturing_domain.h"
+#include "alpha_content_ids.h"
 
 #include "base_construction_domain.h"
 #include "base_emergency_power_domain.h"
@@ -488,6 +489,78 @@ BaseManufacturingReceipt executeStartBaseManufacturing(
     profile = std::move(candidate);
     return {true, false, DomainErrorCode::None, {}, profile.revision,
             jobId, outputId};
+}
+
+BaseManufacturingExpeditePlan queryExpediteBaseManufacturing(const ProfileState &profile,
+    const ContentRegistry &content, const ExpediteBaseManufacturingCommand &command)
+{
+    BaseManufacturingExpeditePlan plan;
+    plan.revision = profile.revision;
+    const auto fail = [&](DomainErrorCode error, const char *message) {
+        plan.error = error;
+        plan.message = message;
+        return plan;
+    };
+    if (!supportsWorkshopExpediteContent(content.contentVersion()) || profile.pendingRaid ||
+        profile.homePerimeter.activeOuting || profile.activeBaseDefense || profile.activeEngineeringTraining)
+        return fail(DomainErrorCode::IllegalDestination, "EXPEDITE UNAVAILABLE");
+    if (!baseFacilityInstalled(profile, BaseFacilityDefinitionId{"base_facility.workshop"}))
+        return fail(DomainErrorCode::IllegalDestination, "WORKSHOP IN RESERVE");
+    const auto &order = profile.baseManufacturing.activeOrder;
+    if (!order || !command.jobId || order->jobId != command.jobId || order->outputReady)
+        return fail(DomainErrorCode::IllegalDestination, "MANUFACTURING ORDER CHANGED");
+    if (order->recipeDefinitionId == kArmorRepairResearchId)
+        return fail(DomainErrorCode::IllegalDestination, "RESEARCH CANNOT BE EXPEDITED");
+    const auto now = profile.worldClock.elapsedWorldMinutes;
+    plan.remainingMinutes = remainingBaseEmergencyPowerWork(order->completionWorldMinute, order->emergencyPowerBonusMinutes, now);
+    const auto &power = profile.emergencyPower;
+    const std::uint64_t fuel = power && power->target == BaseEmergencyPowerTarget::Workshop &&
+        power->activeJobId == order->jobId && baseFacilityInstalled(profile, kBaseGeneratorFacilityId)
+        ? power->remainingMinutes : 0;
+    const auto estimatedFinish = [&](std::uint64_t work) {
+        return now + (work - std::min(fuel, work / 2));
+    };
+    plan.estimatedCompletionBefore = estimatedFinish(plan.remainingMinutes);
+    if (order->expediteMinutesSaved)
+        return fail(DomainErrorCode::IllegalDestination, "ORDER ALREADY EXPEDITED");
+    if (plan.remainingMinutes <= 1)
+        return fail(DomainErrorCode::IllegalDestination, "ORDER TOO NEAR COMPLETION");
+    const auto saved = plan.remainingMinutes / 2;
+    if (saved > std::numeric_limits<std::uint32_t>::max())
+        return fail(DomainErrorCode::InvalidProfile, "EXPEDITE UNAVAILABLE");
+    plan.newRemainingMinutes = plan.remainingMinutes - saved;
+    plan.newCompletionWorldMinute = now + plan.newRemainingMinutes;
+    plan.estimatedCompletionAfter = estimatedFinish(plan.newRemainingMinutes);
+    const auto *material = profile.assets.find(command.materialId);
+    const auto *stored = material ? std::get_if<StoredAssetLocation>(&material->location) : nullptr;
+    if (!stored || stored->container.kind != ProfileContainerKind::Stash || material->reliefBatchId ||
+        material->definitionId != alpha_content::lootElectronics || material->quantity == 0)
+        return fail(DomainErrorCode::MissingAsset, "SELECT STASH ELECTRONICS");
+    plan.canCommit = true;
+    return plan;
+}
+
+BaseManufacturingReceipt executeExpediteBaseManufacturing(ProfileState &profile,
+    const ContentRegistry &content, const ExpediteBaseManufacturingCommand &command, const CommandContext &context)
+{
+    if (!context.transactionId.empty() && profile.committedTransactions.contains(context.transactionId))
+        return {true, true, DomainErrorCode::None, {}, profile.revision};
+    BaseManufacturingReceipt failure;
+    if (!validContext(profile, context, failure)) return failure;
+    const auto plan = queryExpediteBaseManufacturing(profile, content, command);
+    if (!plan.canCommit) return receiptFailure(plan.error, plan.message, profile);
+    ProfileState candidate = profile;
+    auto &order = *candidate.baseManufacturing.activeOrder;
+    order.expediteMinutesSaved = static_cast<std::uint32_t>(plan.remainingMinutes - plan.newRemainingMinutes);
+    order.completionWorldMinute -= order.expediteMinutesSaved;
+    auto *material = candidate.assets.findMutable(command.materialId);
+    if (--material->quantity == 0) static_cast<void>(candidate.assets.erase(command.materialId));
+    candidate.committedTransactions.insert(context.transactionId);
+    ++candidate.revision;
+    const auto valid = validateProfileState(candidate, content);
+    if (!valid.valid) return receiptFailure(DomainErrorCode::InvalidProfile, valid.message, profile);
+    profile = std::move(candidate);
+    return {true, false, DomainErrorCode::None, {}, profile.revision, command.jobId};
 }
 
 BaseManufacturingReturnPlan queryCancelBaseManufacturing(

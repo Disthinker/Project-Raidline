@@ -918,6 +918,12 @@ bool sceneCommandAllowed(const ProfileState &profile, const ContentRegistry &con
                          const InventoryCommand &command, const RaidSceneContainerAccess *access)
 {
     const auto sourceId = std::visit([](const auto &value) { return value.instanceId; }, command);
+    if (profile.pendingRaid && profile.pendingRaid->fieldClueCache &&
+        profile.pendingRaid->fieldClueCache->rewardAssetId == sourceId &&
+        std::any_of(profile.pendingRaid->loot.begin(), profile.pendingRaid->loot.end(), [&](const auto &loot) {
+            return loot.assetId == sourceId && !loot.collected;
+        }))
+        return false;
     if (profile.pendingRaid && assetIsLegacyOverflowAsset(profile, sourceId)) return false;
     if (raidDroppedBackpackRoot(profile, sourceId)) return false;
     const auto sourceRoot = raidSceneContainerRoot(profile, sourceId);

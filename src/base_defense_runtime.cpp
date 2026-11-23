@@ -500,7 +500,8 @@ void BaseDefenseRuntime::advance(const GameplayInput &input, float dt, Vec2 play
                 state_.killedIds.push_back(fact.id);
         if(melee) melee->prepare(input.meleeJustPressed,input.inventoryOpen || controlLastUpdate_ > 0,
             playerCenter,shooting.aimDirection(),enemies_,
-            [&](Vec2 a,Vec2 b){return blockerIndex_->hasLineOfSight(a,b) && fortifications_.lineOfSight(a,b);});
+            [&](Vec2 a,Vec2 b){return blockerIndex_->hasLineOfSight(a,b) && fortifications_.lineOfSight(a,b);},
+            HeavyMeleeInput::from(input));
         // Hearing does not replace the wave objective or replay enemy movement.
         if (shooting.shotFiredLastUpdate() && playerExposed(playerCenter))
         {

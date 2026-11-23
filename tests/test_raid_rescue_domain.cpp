@@ -36,6 +36,23 @@ TEST(RaidRescueDomainTest, QueryProjectsResidentsBedsAndDailyRations)
     EXPECT_EQ(profileStateFingerprint(profile), fingerprint);
 }
 
+TEST(RaidRescueDomainTest, RationPolicyProjectsTheNewHouseholdBeforeAdmissionAndOnRetry)
+{
+    const auto &content = publishedContentRegistry();
+    auto profile = makeNewAlphaProfile("ration-rescue", content);
+    profile.rationPolicy = BaseRationPolicy::Conserve;
+    const auto plan = queryOrdinarySurvivorAdmission(profile, kAshworksRescue);
+    ASSERT_TRUE(plan.canCommit);
+    EXPECT_EQ(plan.residentsAfter, 9U);
+    EXPECT_EQ(plan.dailyRationsAfter, 7U);
+    const auto saved = executeOrdinarySurvivorAdmission(profile, content, kAshworksRescue,
+        {profile.revision, "ration-rescue-admit"});
+    ASSERT_TRUE(saved.succeeded) << saved.message;
+    EXPECT_EQ(saved.dailyRationsAfter, 7U);
+    EXPECT_EQ(previewBaseRationPolicy(profile).dailyDemand.food, 7U);
+    EXPECT_EQ(queryOrdinarySurvivorAdmission(profile, kAshworksRescue).dailyRationsAfter, 7U);
+}
+
 TEST(RaidRescueDomainTest, ExecuteCommitsExactlyOnceWithStableRescueId)
 {
     ProfileState profile = makeNewAlphaProfile(
