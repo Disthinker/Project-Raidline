@@ -222,6 +222,16 @@ protected:
 };
 }
 
+TEST(SquadLostGearLabels, SpecialistGearNamesIdentifyTheOwnerInBothLanguages) {
+    const auto medic = uiLostRecoverySquadGearLabel(LostRaidRecordKind::SpecialistSupport);
+    const auto sniper = uiLostRecoverySquadGearLabel(LostRaidRecordKind::SpecialistSniper);
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, medic), "支援干员遗物");
+    EXPECT_EQ(localizeUiText(UiLanguage::SimplifiedChinese, sniper), "狙击干员遗物");
+    EXPECT_NE(medic, sniper);
+    EXPECT_FALSE(medic.empty());
+    EXPECT_TRUE(uiLostRecoverySquadGearLabel(LostRaidRecordKind::Player).empty());
+}
+
 TEST_F(UiLostRecoveryTest, EmptyRecordsAndEmptyTaskRemainNavigableWithoutMutatingTheProfile) {
     const auto fp = profileStateFingerprint(profile()); const auto minute = profile().worldClock.elapsedWorldMinutes;
     const auto *world = &A::session(*app).world(); const auto nextId = A::session(*app).nextItemInstanceId();

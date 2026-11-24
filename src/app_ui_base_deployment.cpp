@@ -68,6 +68,9 @@ void App::refreshBaseDeploymentUi(bool force) {
         s.interiorPage = 0;
         s.selectedInterior.reset();
         s.fireSupport.reset();
+        s.squad.clear();
+        s.specialistRescue.reset();
+        s.squadOpen = false;
         s.briefingScroll = s.readinessScroll = 0;
         s.press.reset();
     }
@@ -76,7 +79,12 @@ void App::refreshBaseDeploymentUi(bool force) {
         s.briefingScroll = s.readinessScroll = s.feedbackScroll = 0;
         deploymentFeedback_.clear();
     }
-    if (selectedRaidSelfRecoveryRecordId_) s.fireSupport.reset();
+    if (selectedRaidSelfRecoveryRecordId_) {
+        s.fireSupport.reset();
+        s.squad.clear();
+        s.specialistRescue.reset();
+        s.squadOpen = false;
+    }
     const auto viewKey = uiDeploymentViewKey(s) + deploymentSelectionKey(
         mapId, selectedRaidIntelligence_, selectedRaidSelfRecoveryRecordId_, selectedLoadoutArchetypeIndex_);
     if (!force && deploymentProjectionRevision_ &&
@@ -116,6 +124,7 @@ bool App::handleBaseDeploymentConfirm() {
     refreshBaseDeploymentUi(true);
     auto &s = deploymentUi_;
     s.press.reset();
+    if (s.squadOpen) return false;
     if (!uiDeploymentEnabled(C::Deploy, s, deploymentProjection_)) {
         deploymentFeedback_ = uiDeploymentUnavailable({C::Deploy}, s, deploymentProjection_);
         uiMessage_ = deploymentFeedback_;
@@ -134,7 +143,7 @@ bool App::handleBaseDeploymentConfirm() {
         gameSession_.lostRaidAgingPreview().recordsExpiringOnNextSettlement > 0U;
     const bool confirmed = s.confirmationKey && *s.confirmationKey == context;
     deploymentWarningArmed_ = risk && confirmed;
-    const bool transitioned = tryDeployFromBase({}, {}, {}, s.fireSupport);
+    const bool transitioned = tryDeployFromBase({}, {}, {}, s.fireSupport, s.squad, s.specialistRescue);
     if (transitioned) {
         resetBaseDeploymentUi();
         profileAssetSelection_.reset();
@@ -172,6 +181,7 @@ void App::handleBaseDeploymentEvent(const UiDeploymentEvent &event) {
     };
     if (event.kind == K::Wheel) {
         s.press.reset();
+        if (s.squadOpen) return;
         if (uiContains(uiDeploymentFeedbackRect(), event.position))
             s.feedbackScroll = std::clamp(s.feedbackScroll + event.delta * 2, 0, s.feedbackMaximum);
         else if (uiContains(uiDeploymentReadinessRect(p.fireSupport.mapEligible), event.position))
@@ -202,6 +212,10 @@ void App::handleBaseDeploymentEvent(const UiDeploymentEvent &event) {
         return;
     }
     const auto control = hit->control;
+    if (control >= C::Squad) {
+        if (uiDeploymentEnabled(control, s, p)) handleSquadDeployment(control);
+        return;
+    }
     if (control == C::Close) {
         resetBaseDeploymentUi();
         gameFlow_.closeBaseFacility();
@@ -539,7 +553,7 @@ void App::renderBaseDeployment() {
     if (p.expiryRisk) append(readiness, fmt::format("{} {}", tr("RECORDS EXPIRING AFTER THIS RAID"), p.aging.recordsExpiringOnNextSettlement));
     scroll(uiDeploymentReadinessRect(p.fireSupport.mapEligible), readiness,
         s.readinessScroll, s.readinessMaximum);
-    if (p.fireSupport.mapEligible) {
+    if (p.fireSupport.mapEligible && s.squad.empty()) {
         const auto &plan = p.fireSupport;
         button(C::FireSupportToggle, fmt::format("{} · {} {}", tr(s.fireSupport ? "FIRE SUPPORT TEAM" : "SOLO DEPLOYMENT"),
             tr("FIGHTERS READY"), plan.availableCombatResidents), s.fireSupport.has_value());
@@ -586,5 +600,6 @@ void App::renderBaseDeployment() {
     if (!deploymentFeedback_.empty()) append(reasons, tr(deploymentFeedback_));
     if (reasons.empty()) reasons = tr("ENTER DEPLOY | TAB INVENTORY | ESC CLOSE");
     scroll(uiDeploymentFeedbackRect(), reasons, s.feedbackScroll, s.feedbackMaximum);
+    if (p.fireSupport.mapEligible || p.recruitable) renderSquadDeployment();
     SDL_SetRenderDrawBlendMode(renderer_, previous);
 }

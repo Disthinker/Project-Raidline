@@ -38,6 +38,23 @@ void addClock(Key &key, const WorldClockProjection &clock) {
 std::string contextKey(const ProfileState &profile, const UiDeploymentProjection &p, const UiDeploymentState &state) {
     Key key;
     key.add(p.profileId);
+    key.number(state.squad.size());
+    for (const auto &member : state.squad) {
+        key.number(member.role);
+        key.number(member.weaponAssetId);
+        for (auto id : member.cargoAssetIds) key.number(id);
+    }
+    key.number(state.specialistRescue.has_value());
+    if (state.specialistRescue) key.number(*state.specialistRescue);
+    key.number(p.ordinaryRescueAvailable);
+    key.number(p.fireReplacementAvailable);
+    key.number(p.squadReady);
+    for (const auto &options : p.squadOptions) {
+        key.number(options.residentAvailable);
+        key.number(options.preparationRounds);
+        for (auto id : options.weapons) key.number(id);
+        for (auto id : options.cargo) key.number(id);
+    }
     key.number(p.revision);
     key.number(p.worldMinute);
     key.number(p.language);
@@ -234,6 +251,10 @@ UiDeploymentProjection projectUiDeployment(
         lastPage(result.maps.size(), uiDeploymentMapPageSize()));
     if (selectedMap) {
         result.mapValid = true;
+        result.ordinaryRescueAvailable = !recoveryRecordId && selectedMap->rescue &&
+            !profile.committedRescues.contains(selectedMap->rescue->id);
+        result.fireReplacementAvailable = !recoveryRecordId &&
+            readyRaidFireSupportReplacement(profile, content, selectedMap->id).has_value();
         result.mapName = selectedMap->displayName;
         result.difficulty = selectedMap->operationBriefing.difficulty;
         result.warning = selectedMap->operationBriefing.warning;
@@ -301,6 +322,34 @@ UiDeploymentProjection projectUiDeployment(
     result.aging = queryLostRaidAging(profile);
     if (!recoveryRecordId)
         result.fireSupport = queryRaidFireSupportLoadout(profile, content, mapId, state.fireSupport);
+    if (!recoveryRecordId && result.mapValid) {
+        for (const auto role : {RaidSquadRole::Support, RaidSquadRole::Sniper})
+            if (canRecruitRaidSpecialist(profile, mapId, role)) result.recruitable = role;
+        if (state.squadOpen || !state.squad.empty()) {
+            for (const auto role : {RaidSquadRole::Fire, RaidSquadRole::Support, RaidSquadRole::Sniper}) {
+                auto &choices = result.squadOptions[static_cast<std::size_t>(role)];
+                choices = queryRaidSquadLoadout(profile, content, mapId, role);
+                const auto &rounds = role == RaidSquadRole::Fire ? kRaidFireSupportAmmunitionId :
+                    role == RaidSquadRole::Support ? kRaidSquadSupportAmmoId : kRaidSquadSniperAmmoId;
+                for (const auto &member : state.squad) {
+                    for (const auto id : member.cargoAssetIds) {
+                        const auto *asset = profile.assets.find(id);
+                        if (asset && asset->definitionId == rounds)
+                            choices.preparationRounds -= std::min(choices.preparationRounds, asset->quantity);
+                    }
+                }
+            }
+            for (const auto &member : state.squad) {
+                const auto &choices = result.squadOptions[static_cast<std::size_t>(member.role)];
+                const auto has = [](const auto &ids, auto id) { return std::find(ids.begin(), ids.end(), id) != ids.end(); };
+                result.squadReady &= choices.residentAvailable && choices.preparationRounds >= choices.requiredRounds &&
+                    has(choices.weapons, member.weaponAssetId) &&
+                    std::all_of(member.cargoAssetIds.begin(), member.cargoAssetIds.end(),
+                        [&](auto id) { return has(choices.cargo, id); });
+            }
+        }
+        if (state.specialistRescue && state.specialistRescue != result.recruitable) result.squadReady = false;
+    }
     if (recoveryRecordId) {
         // The established query walks lost ownership, never a frozen Raid
         // layout. Only the explicitly chosen target is retained by this page.
@@ -343,6 +392,16 @@ std::string_view uiFireSupportLoadoutFailure(RaidFireSupportLoadoutFailure failu
 std::string uiDeploymentViewKey(const UiDeploymentState &state) {
     Key key;
     key.number(state.tab);
+    key.number(state.squadOpen);
+    key.number(state.editingRole);
+    if (state.specialistRescue) key.number(*state.specialistRescue);
+    key.number(state.squad.size());
+    for (const auto &member : state.squad) {
+        key.number(member.role);
+        key.number(member.weaponAssetId);
+        key.number(member.cargoAssetIds.size());
+        for (auto id : member.cargoAssetIds) key.number(id);
+    }
     key.number(state.mapPage);
     key.number(state.interiorPage);
     key.number(state.selectedIntelligence.has_value());
@@ -397,14 +456,16 @@ bool uiDeploymentEnabled(C control, const UiDeploymentState &state,
             projection.interiorPage < lastPage(projection.interiors.size(), uiDeploymentInteriorPageSize());
     case C::LoadoutPrevious: case C::LoadoutNext: return projection.loadouts.size() > 1U;
     case C::RecoveryClear: return projection.recoveryRecordId.has_value();
-    case C::FireSupportToggle: return projection.fireSupport.mapEligible;
+    case C::Squad: return projection.fireSupport.mapEligible || projection.recruitable.has_value();
+    case C::SquadRecruit: return projection.recruitable.has_value() || state.specialistRescue.has_value();
+    case C::FireSupportToggle: return projection.fireSupport.mapEligible && state.squad.empty();
     case C::FireSupportRifle:
         return state.fireSupport && !projection.fireSupport.rifleAssetIds.empty();
     case C::FireSupportMagazine:
         return state.fireSupport && (!projection.fireSupport.spareMagazines.empty() ||
             state.fireSupport->spareMagazineAssetId);
     case C::Deploy:
-        return projection.mapValid && (!state.fireSupport ||
+        return projection.mapValid && projection.squadReady && (!state.fireSupport ||
             (projection.fireSupport.mapEligible &&
              projection.fireSupport.failure == RaidFireSupportLoadoutFailure::None));
     default: return true;
@@ -420,6 +481,8 @@ std::string uiDeploymentUnavailable(const UiDeploymentHit &hit,
         return projection.interiors[hit.index].known ? "PERMANENTLY KNOWN" :
             projection.interiors[hit.index].purchase.message;
     if (hit.control == C::Deploy) {
+        if (!projection.squadReady) return projection.language == UiLanguage::English
+            ? "Review squad weapons, cargo and preparation rounds." : "请在编队中检查人员、借装与准备弹药。";
         if (state.fireSupport && !projection.fireSupport.mapEligible)
             return "FIRE SUPPORT IS UNAVAILABLE FOR THIS RAID";
         if (state.fireSupport)
@@ -438,6 +501,16 @@ SDL_FRect uiDeploymentPanelRect() noexcept { return {40, 50, 1200, 620}; }
 SDL_FRect uiDeploymentControlRect(C control) noexcept {
     switch (control) {
     case C::MapPrevious: return {62, 528, 92, 28};
+    case C::Squad: return {650, 63, 192, 34};
+    case C::SquadDone: return {892, 523, 144, 36};
+    case C::SquadRecruit: return {246, 207, 790, 38};
+    case C::SquadFire: return {246, 270, 242, 38};
+    case C::SquadSupport: return {505, 270, 248, 38};
+    case C::SquadSniper: return {771, 270, 265, 38};
+    case C::SquadToggle: return {246, 342, 246, 36};
+    case C::SquadWeapon: return {510, 342, 526, 36};
+    case C::SquadCargoOne: return {246, 421, 383, 36};
+    case C::SquadCargoTwo: return {648, 421, 388, 36};
     case C::MapNext: return {168, 528, 92, 28};
     case C::Briefing: return {310, 108, 180, 36};
     case C::Intelligence: return {498, 108, 180, 36};
@@ -478,12 +551,20 @@ SDL_FRect uiDeploymentFeedbackRect() noexcept { return {310, 572, 760, 32}; }
 
 std::optional<UiDeploymentHit> hitUiDeployment(Vec2 point,
     const UiDeploymentState &state, const UiDeploymentProjection &projection) {
+    if (state.squadOpen) {
+        for (auto control : {C::SquadDone, C::SquadRecruit, C::SquadFire, C::SquadSupport,
+            C::SquadSniper, C::SquadToggle, C::SquadWeapon, C::SquadCargoOne, C::SquadCargoTwo})
+            if (uiContains(uiDeploymentControlRect(control), point)) return UiDeploymentHit{control};
+        return {};
+    }
+    if (uiDeploymentEnabled(C::Squad, state, projection) && uiContains(uiDeploymentControlRect(C::Squad), point))
+        return UiDeploymentHit{C::Squad};
     for (auto control : {C::Close, C::Deploy, C::Regional, C::LostRecords,
         C::Briefing, C::Intelligence, C::MapPrevious, C::MapNext,
         C::LoadoutPrevious, C::LoadoutNext, C::ReadinessDetails})
         if (uiContains(uiDeploymentControlRect(control), point))
             return UiDeploymentHit{control};
-    if (projection.fireSupport.mapEligible) {
+    if (projection.fireSupport.mapEligible && state.squad.empty()) {
         for (auto control : {C::FireSupportToggle, C::FireSupportRifle, C::FireSupportMagazine})
             if (uiContains(uiDeploymentControlRect(control), point))
                 return UiDeploymentHit{control};

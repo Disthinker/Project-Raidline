@@ -21,9 +21,8 @@ namespace
         return x * x + y * y;
     }
 
-    float clippedShotDistance(Vec2 origin, Vec2 direction, Vec2 size) noexcept
+    float clippedShotDistance(Vec2 origin, Vec2 direction, Vec2 size, float range) noexcept
     {
-        float range = kFireSupportRange;
         if (direction.x != 0.0F)
         {
             const float boundary = direction.x > 0.0F ? size.x : 0.0F;
@@ -41,6 +40,7 @@ namespace
 RaidFireSupportRuntime::RaidFireSupportRuntime(FireSupportConfig config, Vec2 spawnPosition)
     : RaidCompanionRuntime{spawnPosition}, config_{config}
 {
+    observerPosition_ = center();
     if (config.damage <= 0 || config.penetration < 0 ||
         !std::isfinite(config.projectileSpeed) || config.projectileSpeed <= 0.0F ||
         !std::isfinite(config.noiseRadius) || config.noiseRadius <= 0.0F)
@@ -56,7 +56,11 @@ Vec2 RaidCompanionRuntime::center() const noexcept
 
 FireSupportView RaidFireSupportRuntime::view() const noexcept
 {
-    return {bounds(), health(), movementOrder_, fireOrder_};
+    FireSupportView result{bounds(), health(), movementOrder_, fireOrder_};
+    result.sniperReport = report_;
+    result.sniperOutcome = sniperOutcome_;
+    result.treating = receivingTreatment_;
+    return result;
 }
 
 void RaidCompanionRuntime::setMovementOrder(FireSupportMovementOrder movement) noexcept
@@ -83,6 +87,11 @@ void RaidCompanionRuntime::clearNavigation() noexcept
 void RaidFireSupportRuntime::clearSpatialTransient() noexcept
 {
     clearNavigation();
+    report_.reset();
+    reportedTarget_.reset();
+    authorizedTarget_.reset();
+    sniperOutcome_ = SniperShotOutcome::None;
+    observerPosition_ = center();
     flight_.reset();
     shotEvent_.reset();
 }
@@ -163,22 +172,85 @@ void RaidCompanionRuntime::applyContact(
     {
         static_cast<void>(health_.takeDamage(outcome.damageApplied));
         controlRemaining_ = std::max(controlRemaining_, controlDuration);
-        if (receivingTreatment_ && controlDuration > 0.0F)
+        if (receivingTreatment_ && (performingTreatment_ || controlDuration > 0.0F))
             treatmentInterrupted_ = true;
     }
 }
 
-void RaidFireSupportRuntime::tryFire(
-    Rect protectedPlayer, const EnemyLifecycle &targets,
-    const RaidSpaceBlockerIndex &blockerIndex, const RaidSmokeSight &smoke)
+void RaidFireSupportRuntime::observeSniperTargets(
+    const EnemyLifecycle &targets, const RaidSpaceBlockerIndex &blockers, const RaidSmokeSight &smoke,
+    RaidSightParameters ambient, float seconds, std::span<const RaidIlluminationCoverage *const> lights)
 {
     const Vec2 origin = center();
-    float closestDistanceSquared = kFireSupportRange * kFireSupportRange;
+    const float dx = origin.x - observerPosition_.x, dy = origin.y - observerPosition_.y;
+    if (dx * dx + dy * dy > .01F) watchHeading_ = std::atan2(dy, dx);
+    else if (!reportedTarget_ && std::isfinite(seconds))
+        watchHeading_ = std::remainder(watchHeading_ + std::clamp(seconds, 0.F, 1.F) * .75F, 6.2831853F);
+    observerPosition_ = origin;
+    const Vec2 facing{std::cos(watchHeading_), std::sin(watchHeading_)};
+    const float coneCosine = std::cos(ambient.angleDegrees * .00872664626F);
+    const float ambientSquared = ambient.maximumDistance * ambient.maximumDistance;
+    sniperRange_ = lights.empty() ? ambient.maximumDistance : raidSightParameters(RaidLightEnvironment::DayOutdoor).maximumDistance;
+    float nearest = sniperRange_ * sniperRange_;
+    Vec2 reportPoint{};
+    std::optional<CombatTargetId> selected;
+    report_.reset();
+    if (alive()) for (const Enemy &enemy : targets)
+    {
+        if (enemy.isDead()) continue;
+        const Rect box = enemy.bounds();
+        const Vec2 point{box.position.x + box.size.x * .5F, box.position.y + box.size.y * .5F};
+        const float distance = distanceSquared(origin, point);
+        if (distance <= .001F || distance > nearest || (selected && distance == nearest) ||
+            (point.x - origin.x) * facing.x + (point.y - origin.y) * facing.y < std::sqrt(distance) * coneCosine)
+            continue;
+        if (distance > ambientSquared && std::ranges::none_of(lights, [&](const RaidIlluminationCoverage *light) {
+            return light->queries[0].pointVisible(point) || light->queries[1].pointVisible(point);
+        })) continue;
+        if (smoke.blocks(origin, point) || !blockers.hasLineOfSight(origin, point)) continue;
+        nearest = distance;
+        reportPoint = point;
+        selected = enemy.combatTargetId();
+        auto kind = SniperTargetKind::Infected;
+        if (enemy.isArmedScavenger()) kind = SniperTargetKind::Scavenger;
+        else if (enemy.torsoArmor()) kind = SniperTargetKind::Armored;
+        else if (enemy.variant() && enemy.variant()->kind == EnemyVariantKind::Runner) kind = SniperTargetKind::Runner;
+        constexpr float eighthTurn = 0.7853981634F;
+        const int direction = static_cast<int>(std::lround(std::atan2(point.y - origin.y, point.x - origin.x) / eighthTurn));
+        report_ = SniperReport{kind, static_cast<unsigned>((direction + 8) % 8)};
+    }
+    if (selected != reportedTarget_)
+    {
+        authorizedTarget_.reset();
+        ++reportGeneration_;
+    }
+    if (report_)
+    {
+        report_->token = reportGeneration_;
+        watchHeading_ = std::atan2(reportPoint.y - origin.y, reportPoint.x - origin.x);
+    }
+    reportedTarget_ = selected;
+}
+
+bool RaidFireSupportRuntime::authorizeSniperShot(std::uint64_t token) noexcept
+{
+    if (!alive() || !reportedTarget_ || !report_ || token != report_->token || authorizedTarget_ || flight_) return false;
+    authorizedTarget_ = reportedTarget_;
+    return true;
+}
+
+void RaidFireSupportRuntime::tryFire(
+    Rect protectedPlayer, const EnemyLifecycle &targets,
+    const RaidSpaceBlockerIndex &blockerIndex, const RaidSmokeSight &smoke, bool sniper)
+{
+    const Vec2 origin = center();
+    const float range = sniper ? sniperRange_ : kFireSupportRange;
+    float closestDistanceSquared = range * range;
     std::optional<ShotResolution> selected;
     for (std::size_t i{}; i < targets.size(); ++i)
     {
         const Enemy &target = targets[i];
-        if (target.isDead())
+        if (target.isDead() || (sniper && target.combatTargetId() != authorizedTarget_))
             continue;
         const Rect targetBounds = target.bounds();
         const Vec2 destination{
@@ -197,7 +269,7 @@ void RaidFireSupportRuntime::tryFire(
             (destination.x - origin.x) * inverseDistance,
             (destination.y - origin.y) * inverseDistance};
         const float maximumDistance = clippedShotDistance(
-            origin, direction, blockerIndex.worldSize());
+            origin, direction, blockerIndex.worldSize(), range);
         const auto shot = resolveShotCommand({
             nextShotId_, origin, direction, config_.projectileSpeed, kShotExtent,
             config_.damage, maximumDistance, std::nullopt, config_.penetration});
@@ -211,6 +283,11 @@ void RaidFireSupportRuntime::tryFire(
     }
     if (selected)
     {
+        if (sniper)
+        {
+            authorizedTarget_.reset();
+            sniperOutcome_ = SniperShotOutcome::Fired;
+        }
         flight_.emplace(*selected);
         shotEvent_ = FireSupportShotEvent{origin, selected->direction, config_.noiseRadius};
         shotCooldown_ = kFireSupportShotInterval;
@@ -221,15 +298,16 @@ void RaidFireSupportRuntime::tryFire(
 HitResolutionResult RaidFireSupportRuntime::updateWeapon(
     float seconds, Rect protectedPlayer, EnemyLifecycle &targets,
     const RaidSpaceBlockerIndex &blockerIndex,
-    const std::vector<BallisticBlocker> &blockers, const RaidSmokeSight &smoke)
+    const std::vector<BallisticBlocker> &blockers, const RaidSmokeSight &smoke, bool sniper)
 {
     if (!std::isfinite(seconds) || seconds <= 0.0F)
         return {};
     shotCooldown_ = std::max(0.0F, shotCooldown_ - seconds);
-    if (alive() && !receivingTreatment_ && controlRemaining_ == 0.0F && fireOrder_ == FireSupportFireOrder::FreeFire &&
+    if (alive() && !receivingTreatment_ && controlRemaining_ == 0.0F &&
+        (sniper ? authorizedTarget_.has_value() : fireOrder_ == FireSupportFireOrder::FreeFire) &&
         shotCooldown_ == 0.0F && !flight_)
     {
-        tryFire(protectedPlayer, targets, blockerIndex, smoke);
+        tryFire(protectedPlayer, targets, blockerIndex, smoke, sniper);
     }
     if (!flight_)
         return {};
@@ -246,6 +324,10 @@ HitResolutionResult RaidFireSupportRuntime::updateWeapon(
             flight.shotId(), segment.start, segment.end, flight.collisionExtent(),
             flight.damage(), flight.aimIntent(), flight.penetration(), flight.origin()}},
         targets, blockers);
+    if (sniper)
+        for (const auto &hit : result.hits)
+            if (hit.damageApplied > 0)
+                sniperOutcome_ = hit.targetKilled ? SniperShotOutcome::Killed : SniperShotOutcome::Hit;
     if (segment.reachedImpact || !result.consumedShotIds.empty())
         flight_.reset();
     return result;

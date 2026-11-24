@@ -1,5 +1,6 @@
 #include "developer_test_range.h"
 #include "gameplay_world.h"
+#include "profile_state.h"
 #include "raid_camera.h"
 #include "enemy_attack_contact.h"
 #include "navigation_refresh_selection.h"
@@ -298,7 +299,7 @@ namespace
     // Never place a companion on the player or an occupied landing when passing a door.
     // Only the original outdoor deployment permits the player's tile as a last resort.
     std::optional<Vec2> fireSupportLanding(Rect player, const RaidSpaceBlockerIndex &blockers,
-        std::span<const Enemy> enemies, bool atPortal)
+        std::span<const Enemy> enemies, bool atPortal, std::span<const Rect> companions = {})
     {
         constexpr float offset = 56.0F;
         constexpr float diagonal = 40.0F;
@@ -321,6 +322,7 @@ namespace
             if (!pointInside(world, initial.position) ||
                 !pointInside(world, {center.x + half.x, center.y + half.y}) ||
                 !blockers.hasLineOfSight(playerOrigin, center) ||
+                std::ranges::any_of(companions, [&](Rect actor) { return isCollision(initial, actor); }) ||
                 (atPortal && (isCollision(initial, player) || !fireSupportCanPass(playerOrigin, center, blockers) ||
                     std::ranges::any_of(enemies,
                     [&](const Enemy &occupant) { return !occupant.isDead() && isCollision(initial, occupant.bounds()); }))) ||
@@ -952,16 +954,23 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
         worldSize_,
         ballisticBlockers_,
         enemies_.view());
-    if (config.fireSupport)
+    std::array<Rect, 3> occupied{};
+    std::size_t occupiedCount{};
+    for (std::size_t slot{}; slot < squad_.size(); ++slot)
     {
-        const auto landing = fireSupportLanding(playerBounds(player_), *outdoorBlockerIndex_, {}, false);
-        if (!landing)
-            throw std::invalid_argument{"RaidWorldConfig fire support spawn is blocked"};
-        fireSupport_.emplace(*config.fireSupport, *landing);
-        cacheNavigationFieldForSpace(
-            navigationFieldCache_, outdoorRaidSpaceId(), RaidFireSupportRuntime::kSize,
-            worldSize_, ballisticBlockers_);
+        const auto &weapon = slot == 0 && config.fireSupport ? config.fireSupport : config.squadWeapons[slot];
+        if (!weapon) continue;
+        const auto landing = fireSupportLanding(playerBounds(player_), *outdoorBlockerIndex_, {}, false,
+            std::span{occupied}.first(occupiedCount));
+        if (!landing) throw std::invalid_argument{"RaidWorldConfig squad spawn is blocked"};
+        auto &actor = squad_[slot].emplace(*weapon, *landing);
+        actor.setDeploymentHealth(config.squadInitialHealth[slot]);
+        occupied[occupiedCount++] = actor.bounds();
+        squadPresent_ = true;
     }
+    if (squadPresent_)
+        cacheNavigationFieldForSpace(navigationFieldCache_, outdoorRaidSpaceId(), RaidFireSupportRuntime::kSize,
+            worldSize_, ballisticBlockers_);
     for (const InteriorRuntime &interior : interiors_)
     {
         cacheNavigationFieldsForSpace(
@@ -969,7 +978,7 @@ GameplayWorld::GameplayWorld(RaidWorldConfig config)
             interior.worldSize,
             interior.ballisticBlockers,
             interior.enemies.view());
-        if (fireSupport_)
+        if (squadPresent_)
             cacheNavigationFieldForSpace(navigationFieldCache_, interior.id, RaidFireSupportRuntime::kSize,
                 interior.worldSize, interior.ballisticBlockers);
     }
@@ -1316,8 +1325,9 @@ void GameplayWorld::update(
     enemiesAlertedLastUpdate_ = 0U;
     navigationQueriesLastUpdate_ = 0U;
     simulationWorkloadLastUpdate_ = RaidSimulationWorkload{};
-    if (fireSupport_)
-        fireSupport_->beginFrame(input.treatingFireSupport);
+    if (squadPresent_)
+        for (std::size_t i{}; i < squad_.size(); ++i)
+            if (squad_[i]) squad_[i]->beginFrame(i == 0 && input.treatingFireSupport, i == 1 && medicWorking_);
     if (!raidSession_.isActive())
     {
         melee_.cancelHeavyCharge();
@@ -1526,16 +1536,21 @@ void GameplayWorld::update(
     if(hasPendingRaidExplosion() && commitGrenade && !commitGrenade())return;
     if(!raidSession_.isActive())return;
 
-    RaidFireSupportRuntime *support = fireSupport_ && fireSupportInteriorIndex_ == activeInteriorIndex_
-        ? &*fireSupport_ : nullptr;
+    std::array<RaidFireSupportRuntime *, 3> activeSquad{};
+    std::size_t memberCount{};
+    if (squadPresent_)
+        for (std::size_t i{}; i < squad_.size(); ++i)
+            if (squad_[i] && squadInteriors_[i] == activeInteriorIndex_)
+                activeSquad[memberCount++] = &*squad_[i];
+    const auto members = std::span{activeSquad}.first(memberCount);
     RaidCompanionRuntime *escort = hospitalEscortActor_ && inOutdoorRaidSpace() && !ordinarySurvivorRescueSecured_ &&
         hospitalEscortOrder_ != HospitalEscortState::AwaitingContact ? &*hospitalEscortActor_ : nullptr;
     const bool activeScavengers = !scavengerViews_.empty() && !activeInteriorIndex_;
-    const bool enemiesAdvanced = activeScavengers
-        ? advanceRaidEnemies<false, true>(deltaTime, nullptr)
-        : support || escort
-        ? advanceRaidEnemies<true>(deltaTime, support, escort)
-        : advanceRaidEnemies<false>(deltaTime, nullptr);
+    const bool enemiesAdvanced = memberCount || escort
+        ? (activeScavengers ? advanceRaidEnemies<true, true>(deltaTime, members, escort)
+                            : advanceRaidEnemies<true>(deltaTime, members, escort))
+        : (activeScavengers ? advanceRaidEnemies<false, true>(deltaTime, {})
+                            : advanceRaidEnemies<false>(deltaTime, {}));
     if (!enemiesAdvanced)
         return;
     if (hasPendingFireDamage() && commitGrenade && !commitGrenade()) return;
@@ -1586,10 +1601,26 @@ void GameplayWorld::update(
         if (!pendingBarrelIds_.empty() && commitGrenade && !commitGrenade()) return;
         if (!raidSession_.isActive()) return;
     }
-    if (support)
+    for (auto *support : members)
     {
+        const bool sniper = squad_[2] && support == &*squad_[2];
+        if (sniper)
+        {
+            const auto environment = activeInteriorIndex_ ? interiors_[*activeInteriorIndex_].lightEnvironment :
+                (raidDaylight_ ? RaidLightEnvironment::DayOutdoor : RaidLightEnvironment::NightOutdoor);
+            std::array<const RaidIlluminationCoverage *, 1 + RaidFireZoneRuntime::kCapacity> lights{};
+            std::size_t lightCount{};
+            if (environment != RaidLightEnvironment::DayOutdoor)
+            {
+                if (const auto &flare = activeThrownIlluminationCoverage()) lights[lightCount++] = flare.get();
+                for (const auto &zone : fireZones_.zones())
+                    if (const auto fire = fireZoneCoverage(zone)) lights[lightCount++] = fire.get();
+            }
+            support->observeSniperTargets(activeEnemySet, activeBlockerIndex(), activeSmokeSight_,
+                raidSightParameters(environment), deltaTime, std::span{lights}.first(lightCount));
+        }
         const auto advance = support->updateWeapon(
-            deltaTime, playerBounds(player_), activeEnemySet, activeBlockerIndex(), activeBlockerSet, activeSmokeSight_);
+            deltaTime, playerBounds(player_), activeEnemySet, activeBlockerIndex(), activeBlockerSet, activeSmokeSight_, sniper);
         consumeEnemyRemovals(advance.removals);
         if (const auto &shot = support->shotEvent())
             emitRaidNoise(shot->origin, shot->noiseRadius);
@@ -1674,7 +1705,7 @@ void GameplayWorld::advanceScavengerRetreats(std::span<Enemy *const> actors, flo
 }
 
 template <bool CompanionsEnabled, bool ScavengersEnabled>
-bool GameplayWorld::advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *support, RaidCompanionRuntime *escort)
+bool GameplayWorld::advanceRaidEnemies(float deltaTime, std::span<RaidFireSupportRuntime *const> squad, RaidCompanionRuntime *escort)
 {
     // Bounded substeps keep attack phase transitions and one-shot hit
     // opportunities observable even when a render frame is long.
@@ -1778,20 +1809,34 @@ bool GameplayWorld::advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *
         if constexpr (ScavengersEnabled) advanceScavengerRetreats(guardActors, enemyStepTime);
         if constexpr (CompanionsEnabled)
         {
-            const auto moveCompanion = [&](RaidCompanionRuntime &actor, float stopDistance, bool following) {
+            const auto moveCompanion = [&](RaidCompanionRuntime &actor, Vec2 goal, float stopDistance, bool following) {
                 const Rect before = actor.bounds();
                 const auto *field = following ? activeNavigationField(before.size) : nullptr;
                 const Vec2 requested = actor.prepareMovement(
-                    playerPosition, field, activeStaticBlockers, enemyStepTime, stopDistance);
+                    goal, field, activeStaticBlockers, enemyStepTime, stopDistance);
                 if (requested.x != before.position.x || requested.y != before.position.y)
                     actor.setPosition(resolveMovementAgainstBlockers(before.position, before.size, requested,
                         activeStaticBlockers, blockerQueryScratch_, &simulationWorkloadLastUpdate_.movementBlockersExamined));
             };
-            if (support) moveCompanion(*support, 57.0F, true);
+            for (auto *actor : squad)
+            {
+                const auto order = actor->view().movementOrder;
+                Vec2 goal = playerPosition;
+                if (order == FireSupportMovementOrder::Spread || (order == FireSupportMovementOrder::Follow && squad.size() > 1))
+                {
+                    const float spacing = order == FireSupportMovementOrder::Spread ? 80.0F : 34.0F;
+                    if (squad_[0] && actor == &*squad_[0]) goal.x += spacing;
+                    else if (squad_[1] && actor == &*squad_[1]) goal.x -= spacing;
+                    else goal.y += spacing;
+                    if (!activeStaticBlockers.hasLineOfSight(playerPosition, goal)) goal = playerPosition;
+                }
+                const float stop = order == FireSupportMovementOrder::Regroup ? 28.0F : 57.0F;
+                moveCompanion(*actor, goal, stop, order != FireSupportMovementOrder::Hold);
+            }
             if (escort)
             {
                 const float stopDistance = pointInside(*ordinarySurvivorRescuePoint_, playerPosition) ? 12.0F : 40.0F;
-                moveCompanion(*escort, stopDistance, hospitalEscortOrder_ == HospitalEscortState::Following);
+                moveCompanion(*escort, playerPosition, stopDistance, hospitalEscortOrder_ == HospitalEscortState::Following);
             }
         }
         std::vector<EnemySquadMemberSnapshot> enemySnapshots;
@@ -1823,8 +1868,9 @@ bool GameplayWorld::advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *
                 choice = {};
                 if (attackPhase != EnemyAttackPhase::Idle)
                 {
-                    if (support && support->hasAttackLock(enemy.combatTargetId())) choice.actor = support;
-                    else if (escort && escort->hasAttackLock(enemy.combatTargetId())) choice.actor = escort;
+                    for (auto *actor : squad)
+                        if (actor->hasAttackLock(enemy.combatTargetId())) { choice.actor = actor; break; }
+                    if (!choice.actor && escort && escort->hasAttackLock(enemy.combatTargetId())) choice.actor = escort;
                 }
                 else if (!enemy.isDead())
                 {
@@ -1842,7 +1888,7 @@ bool GameplayWorld::advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *
                             closest = distance;
                         }
                     };
-                    consider(support);
+                    for (auto *actor : squad) consider(actor);
                     if (escort) consider(escort);
                 }
                 if (choice.actor) targetPosition = choice.actor->center();
@@ -3001,7 +3047,7 @@ void GameplayWorld::prepareRoadBlockade(const RaidRoadBlockadeSnapshot &snapshot
         prepareFootprint(enemy.size());
     for (const EnemySpawn &spawn : highRiskPressureSpawns_)
         prepareFootprint(spawn.size);
-    if (fireSupport_) prepareFootprint(RaidFireSupportRuntime::kSize);
+    if (squadPresent_) prepareFootprint(RaidFireSupportRuntime::kSize);
     roadBlockade_ = std::move(blockade);
 }
 
@@ -3012,8 +3058,8 @@ bool GameplayWorld::roadBlockadeOccupied() const noexcept
     if (inOutdoorRaidSpace() && !player_.isDead() && isCollision(playerBounds(player_), blockade))
         return true;
 
-    if (fireSupport_ && !fireSupportInteriorIndex_ && isCollision(fireSupport_->bounds(), blockade))
-        return true;
+    for (std::size_t i{}; i < squad_.size(); ++i)
+        if (squad_[i] && !squadInteriors_[i] && isCollision(squad_[i]->bounds(), blockade)) return true;
     return std::any_of(enemies_.begin(), enemies_.end(), [&](const Enemy &enemy)
     {
         return !enemy.isDead() && isCollision(enemy.bounds(), blockade);
@@ -4004,73 +4050,137 @@ void GameplayWorld::emitPlayerNoise(float radius) noexcept
     emitRaidNoise(playerCenter(player_), radius);
 }
 
-bool GameplayWorld::setFireSupportOrders(
-    FireSupportMovementOrder movement, FireSupportFireOrder fire) noexcept
+bool GameplayWorld::setSquadOrders(RaidSquadRole role, FireSupportMovementOrder movement, FireSupportFireOrder fire) noexcept
 {
-    if (!fireSupport_ || fireSupportInteriorIndex_ != activeInteriorIndex_ ||
-        !fireSupport_->alive() || !raidSession_.isActive())
-        return false;
-    fireSupport_->setOrders(movement, fire);
+    const auto slot = static_cast<std::size_t>(role);
+    if (slot >= squad_.size() || !squad_[slot] || squadInteriors_[slot] != activeInteriorIndex_ ||
+        !squad_[slot]->alive() || !raidSession_.isActive()) return false;
+    squad_[slot]->setOrders(movement, role == RaidSquadRole::Sniper ? FireSupportFireOrder::HoldFire : fire);
     return true;
 }
 
-std::optional<FireSupportView> GameplayWorld::fireSupport() const
+bool GameplayWorld::setAllSquadOrders(FireSupportMovementOrder movement, FireSupportFireOrder fire) noexcept
 {
-    if (!fireSupport_)
-        return std::nullopt;
-    auto result = fireSupport_->view();
+    bool applied = false;
+    for (const auto role : {RaidSquadRole::Fire, RaidSquadRole::Support, RaidSquadRole::Sniper})
+        applied |= setSquadOrders(role, movement, fire);
+    return applied;
+}
+
+bool GameplayWorld::authorizeSniperShot(std::uint64_t token) noexcept
+{
+    return raidSession_.isActive() && squad_[2] && squadInteriors_[2] == activeInteriorIndex_ &&
+        squad_[2]->authorizeSniperShot(token);
+}
+
+void GameplayWorld::cancelSniperAuthorization() noexcept
+{
+    if (squad_[2]) squad_[2]->cancelSniperAuthorization();
+}
+
+std::optional<FireSupportView> GameplayWorld::squadMember(RaidSquadRole role) const
+{
+    const auto slot = static_cast<std::size_t>(role);
+    if (slot >= squad_.size() || !squad_[slot]) return std::nullopt;
+    auto result = squad_[slot]->view();
     result.outdoor = inOutdoorRaidSpace();
-    result.sameSpace = fireSupportInteriorIndex_ == activeInteriorIndex_;
-    result.inInteractionRange = canInteractWithFireSupport();
-    result.visible = result.sameSpace &&
-        (result.inInteractionRange || raidBoundsObservable(result.bounds));
+    result.sameSpace = squadInteriors_[slot] == activeInteriorIndex_;
+    result.inInteractionRange = canInteractWithSquad(role);
+    result.visible = result.sameSpace && (result.inInteractionRange || raidBoundsObservable(result.bounds));
+    if (!result.sameSpace || !result.alive()) result.sniperReport.reset();
     return result;
 }
 
-std::optional<int> GameplayWorld::fireSupportHealth() const noexcept
+std::optional<int> GameplayWorld::squadHealth(RaidSquadRole role) const noexcept
 {
-    return fireSupport_ ? std::optional{fireSupport_->view().health} : std::nullopt;
+    const auto i = static_cast<std::size_t>(role);
+    return i < squad_.size() && squad_[i] ? std::optional{squad_[i]->health()} : std::nullopt;
 }
 
-bool GameplayWorld::fireSupportTreatmentBlocked() const noexcept
+const RaidSpaceDefinitionId &GameplayWorld::squadSpaceId(RaidSquadRole role) const noexcept
 {
-    return !fireSupport_ || fireSupport_->treatmentBlocked();
+    const auto i = static_cast<std::size_t>(role);
+    return i < squad_.size() && squadInteriors_[i] ? interiors_[*squadInteriors_[i]].id : outdoorRaidSpaceId();
 }
 
-void GameplayWorld::restoreFireSupportHealth(int amount)
+std::optional<Vec2> GameplayWorld::squadDeathPosition(RaidSquadRole role) const noexcept
 {
-    if (fireSupport_)
-        fireSupport_->restoreHealth(amount);
+    const auto i = static_cast<std::size_t>(role);
+    return i < squad_.size() && squad_[i] && !squad_[i]->alive() ? std::optional{squad_[i]->center()} : std::nullopt;
 }
 
-const RaidSpaceDefinitionId &GameplayWorld::fireSupportSpaceId() const noexcept
+bool GameplayWorld::canInteractWithSquad(RaidSquadRole role) const noexcept
 {
-    return fireSupportInteriorIndex_ ? interiors_[*fireSupportInteriorIndex_].id : outdoorRaidSpaceId();
-}
-
-std::optional<Vec2> GameplayWorld::fireSupportDeathPosition() const noexcept
-{
-    return fireSupport_ && !fireSupport_->alive()
-        ? std::optional{fireSupport_->center()} : std::nullopt;
-}
-
-bool GameplayWorld::canInteractWithFireSupport() const noexcept
-{
-    if (!fireSupport_ || !raidSession_.isActive() || fireSupportInteriorIndex_ != activeInteriorIndex_ ||
-        player_.isDead() || player_.isControlled())
-    {
-        return false;
-    }
+    const auto i = static_cast<std::size_t>(role);
+    if (i >= squad_.size() || !squad_[i] || squadInteriors_[i] != activeInteriorIndex_ || !raidSession_.isActive() ||
+        player_.isDead() || player_.isControlled()) return false;
     const Vec2 center = playerCenter(player_);
-    const Vec2 target = fireSupport_->center();
+    const Vec2 target = squad_[i]->center();
     constexpr float reach = RaidFireSupportRuntime::kInteractionReach;
     return distanceSquared(center, target) <= reach * reach && !smokeBlocksSight(center, target) &&
         activeBlockerIndex().hasLineOfSight(center, target);
 }
 
+bool GameplayWorld::medicCanReach(std::optional<RaidSquadRole> patient) const noexcept
+{
+    constexpr auto medic = static_cast<std::size_t>(RaidSquadRole::Support);
+    if (!squad_[medic] || !squad_[medic]->alive() || squad_[medic]->treatmentBlocked() ||
+        squadInteriors_[medic] != activeInteriorIndex_ || !raidSession_.isActive()) return false;
+    const auto origin = squad_[medic]->center();
+    Vec2 target = playerCenter(player_);
+    if (patient)
+    {
+        const auto i = static_cast<std::size_t>(*patient);
+        if (i >= squad_.size() || !squad_[i] || !squad_[i]->alive() || squad_[i]->treatmentBlocked() ||
+            squadInteriors_[i] != activeInteriorIndex_) return false;
+        target = squad_[i]->center();
+    }
+    else if (player_.isDead() || player_.isControlled()) return false;
+    constexpr float reach = RaidFireSupportRuntime::kInteractionReach;
+    return distanceSquared(origin, target) <= reach * reach && !smokeBlocksSight(origin, target) &&
+        activeBlockerIndex().hasLineOfSight(origin, target);
+}
+
+bool GameplayWorld::squadMedicalThreat() const noexcept
+{
+    if (!squad_[1] || squadInteriors_[1] != activeInteriorIndex_) return true;
+    const auto origin = squad_[1]->center();
+    for (const auto &enemy : activeEnemies())
+    {
+        if (enemy.isDead()) continue;
+        const auto center = enemyCenter(enemy);
+        if (distanceSquared(origin, center) < kFireSupportRange * kFireSupportRange &&
+            !smokeBlocksSight(origin, center) && activeBlockerIndex().hasLineOfSight(origin, center)) return true;
+    }
+    return false;
+}
+
+void GameplayWorld::restoreSquadHealth(RaidSquadRole role, int amount)
+{
+    const auto i = static_cast<std::size_t>(role);
+    if (i < squad_.size() && squad_[i]) squad_[i]->restoreHealth(amount);
+}
+
+std::optional<FireSupportShotEvent> GameplayWorld::squadShotLastUpdate(RaidSquadRole role) const noexcept
+{
+    const auto i = static_cast<std::size_t>(role);
+    return i < squad_.size() && squad_[i] ? squad_[i]->shotEvent() : std::nullopt;
+}
+
+bool GameplayWorld::setFireSupportOrders(FireSupportMovementOrder movement, FireSupportFireOrder fire) noexcept
+{
+    return setSquadOrders(RaidSquadRole::Fire, movement, fire);
+}
+std::optional<FireSupportView> GameplayWorld::fireSupport() const { return squadMember(RaidSquadRole::Fire); }
+std::optional<int> GameplayWorld::fireSupportHealth() const noexcept { return squadHealth(RaidSquadRole::Fire); }
+bool GameplayWorld::fireSupportTreatmentBlocked() const noexcept { return !squad_[0] || squad_[0]->treatmentBlocked(); }
+void GameplayWorld::restoreFireSupportHealth(int amount) { restoreSquadHealth(RaidSquadRole::Fire, amount); }
+const RaidSpaceDefinitionId &GameplayWorld::fireSupportSpaceId() const noexcept { return squadSpaceId(RaidSquadRole::Fire); }
+std::optional<Vec2> GameplayWorld::fireSupportDeathPosition() const noexcept { return squadDeathPosition(RaidSquadRole::Fire); }
+bool GameplayWorld::canInteractWithFireSupport() const noexcept { return canInteractWithSquad(RaidSquadRole::Fire); }
 std::optional<FireSupportShotEvent> GameplayWorld::fireSupportShotLastUpdate() const noexcept
 {
-    return fireSupport_ ? fireSupport_->shotEvent() : std::nullopt;
+    return squadShotLastUpdate(RaidSquadRole::Fire);
 }
 
 void GameplayWorld::emitRaidNoise(Vec2 source, float radius) noexcept
@@ -4666,28 +4776,34 @@ bool GameplayWorld::tryTransitionRaidSpace(
     const auto transferSupport = [&](ContentRect entrance, std::optional<std::size_t> destination,
         Vec2 playerLanding, const RaidSpaceBlockerIndex &destinationBlockers, std::span<const Enemy> occupants)
     {
-        if (!fireSupport_ || fireSupportInteriorIndex_ != activeInteriorIndex_ || !fireSupport_->alive() ||
-            fireSupport_->view().movementOrder != FireSupportMovementOrder::Follow)
-            return;
-        constexpr float reach = 96.0F;
-        const auto companion = fireSupport_->center();
-        const auto gate = nearestPointOnRect(entrance, companion);
-        const auto &walls = activeBlockerIndex();
-        if (distanceSquared(companion, gate) > reach * reach ||
-            !fireSupportCanPass(companion, gate, walls) || !walls.hasLineOfSight(companion, center))
-            return;
-        const auto landing = fireSupportLanding({playerLanding, {player_.size(), player_.size()}},
-            destinationBlockers, occupants, true);
-        if (!landing) return;
-
-        // A windup already aimed at this actor must never strike a different
-        // target after the old space is re-entered. Held actors keep their locks.
-        for (Enemy &enemy : activeEnemies())
-            if (fireSupport_->hasAttackLock(enemy.combatTargetId()))
-                enemy.cancelAttackOnDepartedTarget();
-        fireSupport_->leaveSpace();
-        fireSupport_->setPosition(*landing);
-        fireSupportInteriorIndex_ = destination;
+        std::array<Rect, 3> occupied{};
+        std::size_t count{};
+        for (std::size_t i{}; i < squad_.size(); ++i)
+            if (squad_[i] && squadInteriors_[i] == destination)
+                occupied[count++] = squad_[i]->bounds();
+        for (std::size_t i{}; i < squad_.size(); ++i)
+        {
+            auto &actor = squad_[i];
+            if (!actor || squadInteriors_[i] != activeInteriorIndex_ || !actor->alive()) continue;
+            // A report remains valid only within one continuous observation in one space.
+            if (i == 2) actor->clearSpatialTransient();
+            if (actor->view().movementOrder == FireSupportMovementOrder::Hold) continue;
+            constexpr float reach = 96.0F;
+            const auto companion = actor->center();
+            const auto gate = nearestPointOnRect(entrance, companion);
+            const auto &walls = activeBlockerIndex();
+            if (distanceSquared(companion, gate) > reach * reach ||
+                !fireSupportCanPass(companion, gate, walls) || !walls.hasLineOfSight(companion, center)) continue;
+            const auto landing = fireSupportLanding({playerLanding, {player_.size(), player_.size()}},
+                destinationBlockers, occupants, true, std::span{occupied}.first(count));
+            if (!landing) continue;
+            for (Enemy &enemy : activeEnemies())
+                if (actor->hasAttackLock(enemy.combatTargetId())) enemy.cancelAttackOnDepartedTarget();
+            actor->setPosition(*landing);
+            actor->leaveSpace();
+            squadInteriors_[i] = destination;
+            occupied[count++] = actor->bounds();
+        }
     };
     if (activeInteriorIndex_.has_value())
     {
@@ -5135,8 +5251,8 @@ void GameplayWorld::consumeEnemyRemovals(std::span<const EnemyRemovalFact> death
 {
     for (const auto &death:deaths)
     {
-        if (fireSupport_)
-            fireSupport_->forgetAttack(death.id);
+        if (squadPresent_)
+            for (auto &actor : squad_) if (actor) actor->forgetAttack(death.id);
         if (hospitalEscortActor_)
             hospitalEscortActor_->forgetAttack(death.id);
         for (std::size_t i{}; i < scavengerViews_.size(); ++i)

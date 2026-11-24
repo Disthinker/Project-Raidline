@@ -5,14 +5,16 @@
 #include <tuple>
 
 UiBaseMedicalProjection projectUiBaseMedical(const ProfileState &p, const ContentRegistry &c,
-    UiLanguage language, const UiMedicalDoseSelection &doses) {
+    UiLanguage language, const UiMedicalDoseSelection &doses, std::optional<RaidSquadRole> selectedPatient) {
     UiBaseMedicalProjection result;
     result.profileId = p.profileId; result.revision = p.revision;
     result.worldMinute = p.worldClock.elapsedWorldMinutes;
     result.currency = p.currency; result.level = p.baseConstruction.medicalLevel;
     result.health = p.currentHealth; result.medical = p.medicalStatus;
     result.player = queryBaseMedicalService(p, c);
-    result.resident = queryStartResidentTreatment(p, c);
+    result.squadRoster = p.squadRoster;
+    result.selectedPatient = selectedPatient;
+    result.resident = queryStartResidentTreatment(p, c, {{}, {}, selectedPatient});
     result.population = projectBaseResidentMedical(p);
     result.workforce = projectBaseWorkforce(p);
     result.reservePolicy = p.residentMedicalReservePolicy;
@@ -79,6 +81,11 @@ UiBaseMedicalProjection projectUiBaseMedical(const ProfileState &p, const Conten
 
 std::string uiBaseMedicalActionKey(UiBaseMedicalControl control, UiBaseMedicalTab tab, const UiBaseMedicalProjection &p) {
     std::string key = fmt::format("{}:{}", p.profileId, static_cast<int>(control));
+    if (tab == UiBaseMedicalTab::Residents && (control == UiBaseMedicalControl::Main || control == UiBaseMedicalControl::SquadPatient)) {
+        key += fmt::format(":patient:{}", p.selectedPatient ? static_cast<int>(*p.selectedPatient) : -1);
+        for (const auto &[role, person] : p.squadRoster)
+            key += fmt::format(":{}:{}:{}", static_cast<int>(role), person.generation, static_cast<int>(person.status));
+    }
     if (control == UiBaseMedicalControl::Main) {
         // The caller binds the selected tab too. Do not bind elapsed time or
         // unrelated revisions: ordinary world-clock ticks do not change a quote.
@@ -130,6 +137,7 @@ SDL_FRect uiBaseMedicalControlRect(UiBaseMedicalControl control, UiBaseMedicalTa
     case UiBaseMedicalControl::DoseRow: return {};
     case UiBaseMedicalControl::Personal: return {64, 132, 200, 34};
     case UiBaseMedicalControl::Residents: return {276, 132, 200, 34};
+    case UiBaseMedicalControl::SquadPatient: return {495, 132, 718, 34};
     case UiBaseMedicalControl::Details:
         return tab == UiBaseMedicalTab::Personal ? SDL_FRect{464, 306, 236, 32} : SDL_FRect{80, 394, 328, 32};
     case UiBaseMedicalControl::Facilities: return {64, 552, 360, 40};
@@ -216,6 +224,8 @@ std::optional<UiBaseMedicalHit> hitUiBaseMedical(Vec2 position, const UiBaseMedi
     using Control = UiBaseMedicalControl;
     for (auto c : {Control::Personal, Control::Residents, Control::Close})
         if (uiContains(uiBaseMedicalControlRect(c, state.tab), position)) return UiBaseMedicalHit{c};
+    if (state.tab == UiBaseMedicalTab::Residents &&
+        uiContains(uiBaseMedicalControlRect(Control::SquadPatient), position)) return UiBaseMedicalHit{Control::SquadPatient};
     if (state.tab == UiBaseMedicalTab::Personal &&
         uiContains(uiBaseMedicalControlRect(Control::Consolidate), position)) return UiBaseMedicalHit{Control::Consolidate};
     if (state.doses.open) {

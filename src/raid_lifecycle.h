@@ -48,6 +48,8 @@ struct DeployCommand
     std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId;
     std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId;
     std::optional<RaidFireSupportLoadout> fireSupport;
+    std::vector<RaidSquadLoadout> squad;
+    std::optional<RaidSquadRole> specialistRescue;
 };
 
 enum class RaidDeploymentProgressStage

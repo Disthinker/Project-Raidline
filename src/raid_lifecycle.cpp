@@ -24,7 +24,7 @@
 #include "base_population_domain.h"
 #include "base_resident_medical_domain.h"
 #include "lost_raid_domain.h"
-#include "raid_fire_support_domain.h"
+#include "raid_squad_domain.h"
 #include "raid_map_generation.h"
 #include "stable_random.h"
 
@@ -989,9 +989,13 @@ DeployReceipt executeDeploy(
             "regional mission modes cannot be combined",
             profile.revision);
     }
-    if (command.fireSupport && regionalMissionCount != 0U)
+    if ((command.fireSupport || !command.squad.empty() || command.specialistRescue) && regionalMissionCount != 0U)
         return deployFailure(RaidLifecycleError::InvalidCommand,
             "FIRE SUPPORT REQUIRES AN ELIGIBLE ORDINARY RAID", profile.revision);
+
+    if (command.specialistRescue && (!supportsRaidFireSupportContent(content.contentVersion()) ||
+        !map->rescue || !canRecruitRaidSpecialist(profile,map->id,*command.specialistRescue)))
+        return deployFailure(RaidLifecycleError::InvalidCommand,"specialist rescue unavailable",profile.revision);
 
     // Regional recovery and settlement missions retain their published outdoor geometry.
     std::optional<MapDefinition> historicalHospital;
@@ -1219,7 +1223,7 @@ DeployReceipt executeDeploy(
         snapshot.fieldIntelligenceTrade = RaidFieldIntelligenceTrade{
             map->fieldIntelligenceTradePositions[positionIndex], extraCategory};
     }
-    if (snapshot.backpackRecoveryEnabled || command.fireSupport)
+    if (snapshot.backpackRecoveryEnabled || command.fireSupport || !command.squad.empty())
         snapshot.startingAssets = profile.assets;
     const bool corpseTrial = command.mapDefinitionId == MapDefinitionId{"map.raid.frontier_exchange"} &&
         std::any_of(map->proceduralOutdoor.encounterArchetypes.begin(), map->proceduralOutdoor.encounterArchetypes.end(),
@@ -1301,11 +1305,12 @@ DeployReceipt executeDeploy(
     {
         candidate.raidIntelligence.counts.erase(found);
     }
-    if (regionalMissionCount == 0U)
+    snapshot.specialistRescue = command.specialistRescue;
+    if (regionalMissionCount == 0U && !snapshot.specialistRescue)
         snapshot.fireSupportReplacementSource = readyRaidFireSupportReplacement(candidate, content, command.mapDefinitionId);
     if (map->rescue.has_value() &&
         (map->rescue->id != kHospitalMedicalRescueId || snapshot.hospitalMedicalReserveEnabled) &&
-        (!candidate.committedRescues.contains(map->rescue->id) || snapshot.fireSupportReplacementSource))
+        (!candidate.committedRescues.contains(map->rescue->id) || snapshot.fireSupportReplacementSource || snapshot.specialistRescue))
     {
         snapshot.rescue = RaidRescueSnapshot{
             map->rescue->id,
@@ -2627,6 +2632,11 @@ DeployReceipt executeDeploy(
         if (!prepared.valid)
             return deployFailure(RaidLifecycleError::InvalidCommand, prepared.message, profile.revision);
     }
+    if (!command.squad.empty())
+    {
+        const auto prepared = prepareRaidSquadInCandidate(candidate,content,command.squad);
+        if (!prepared.valid) return deployFailure(RaidLifecycleError::InvalidCommand,prepared.message,profile.revision);
+    }
     if (!advanceProfileWorldTime(
             candidate,
             content,
@@ -2741,7 +2751,7 @@ RaidSettlementReceipt settlePendingRaid(
     const PendingRaidSnapshot raidSnapshot = *candidate.pendingRaid;
     if (raidSnapshot.credentialExtraction || fuel || hasDroppedBackpacks ||
         raidSnapshot.fieldIntelligenceTrade || raidSnapshot.nightRendezvous ||
-        raidSnapshot.fireSupport || raidSnapshot.fireSupportReplacementSource ||
+        raidSnapshot.fireSupport || raidSnapshot.fireSupportReplacementSource || !raidSnapshot.squadMembers.empty() || raidSnapshot.specialistRescue ||
         (raidSnapshot.selfRecovery && raidSnapshot.selfRecovery->pursuit))
     {
         // Validate pending-only facts before settlement removes their sources.
@@ -2809,6 +2819,13 @@ RaidSettlementReceipt settlePendingRaid(
         const auto support = settleRaidFireSupportLoansInCandidate(candidate, content, outcome, *fireSupportResult);
         if (!support.valid)
             return settlementFailure(RaidLifecycleError::InvalidProfile, support.message, profile.revision, outcome);
+    }
+    std::map<RaidSquadRole,RaidFireSupportResult> squadResults;
+    if (!raidSnapshot.squadMembers.empty() || !raidSnapshot.fireSupportCargo.empty())
+    {
+        const auto result = settleRaidSquadLoansInCandidate(candidate,content,outcome,squadResults,
+            fireSupportResult ? &*fireSupportResult : nullptr);
+        if (!result.valid) return settlementFailure(RaidLifecycleError::InvalidProfile,result.message,profile.revision,outcome);
     }
     std::set<AssetInstanceId> eraseIds;
     for (const auto &[assetId, asset] : candidate.assets.records())
@@ -2953,6 +2970,13 @@ RaidSettlementReceipt settlePendingRaid(
             candidate.worldClock.elapsedWorldMinutes;
     }
     candidate.pendingRaid.reset();
+    // Enrol the selected individual only on settlement. An abandoned first
+    // deployment restores the original, still-unnamed combat resident.
+    if (fireSupportResult && std::ranges::find(raidSnapshot.squadOrder,RaidSquadRole::Fire) != raidSnapshot.squadOrder.end())
+    {
+        const auto enrolled = candidate.squadRoster.try_emplace(RaidSquadRole::Fire).second;
+        if (enrolled) candidate.fireSupportReplacement.reset();
+    }
     if (fireSupportResult && fireSupportResult->died)
     {
         if (fireSupportResult->lostRecordId)
@@ -2962,6 +2986,9 @@ RaidSettlementReceipt settlePendingRaid(
         if (!casualty.valid)
             return settlementFailure(RaidLifecycleError::InvalidProfile, casualty.message, profile.revision, outcome);
     }
+    const auto squadReturn = applyRaidSquadReturnInCandidate(candidate,raidSnapshot,squadResults,
+        fireSupportResult ? &*fireSupportResult : nullptr);
+    if (!squadReturn.valid) return settlementFailure(RaidLifecycleError::InvalidProfile,squadReturn.message,profile.revision,outcome);
     for (const auto &permission : newlyUnlockedPermissions)
         candidate.raidExtractionPermissions.insert(permission);
     static_cast<void>(applyBaseManufacturingThrough(candidate, content));
@@ -2977,8 +3004,9 @@ RaidSettlementReceipt settlePendingRaid(
     {
         if (*rescue && (*rescue)->secured)
         {
-            rescuedOrdinary += (*rescue)->ordinaryResidentCount;
-            rescuedInjured += (*rescue)->injuredResidentCount;
+            const bool specialist = raidSnapshot.specialistRescue && rescue == &raidSnapshot.rescue;
+            rescuedOrdinary += specialist ? 1U : (*rescue)->ordinaryResidentCount;
+            rescuedInjured += specialist ? 0U : (*rescue)->injuredResidentCount;
         }
     }
     candidate.committedSettlements.insert(id);
@@ -2996,6 +3024,7 @@ RaidSettlementReceipt settlePendingRaid(
         std::move(newlyUnlockedPermissions);
     candidate.lastRaidResult->fuelExtractionPaid = fuel.has_value();
     candidate.lastRaidResult->fireSupport = std::move(fireSupportResult);
+    candidate.lastRaidResult->squadResults = std::move(squadResults);
     if (raidSnapshot.wishFocus)
         candidate.lastRaidResult->wishReturn = summarizeBaseWishReturn(
             candidate, content, *raidSnapshot.wishFocus,
@@ -3169,6 +3198,13 @@ RaidRollbackReceipt rollbackPendingRaidToBase(
     candidate.basePopulation.injuredByProfession =
         startingInjuredByProfession;
     candidate.residentMedical = startingResidentMedical;
+    if (const auto &treatment = startingResidentMedical.activeTreatment; treatment && treatment->squadPatient)
+    {
+        auto patient = candidate.squadRoster.find(*treatment->squadPatient);
+        if (patient == candidate.squadRoster.end())
+            return {false,RaidLifecycleError::InvalidProfile,"missing patient during raid rollback",profile.revision};
+        patient->second.status = RaidSquadResidentStatus::Wounded;
+    }
     candidate.raidIntelligence = startingRaidIntelligence;
     if (restoreRegionalOperations)
     {

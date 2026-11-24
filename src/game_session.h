@@ -73,6 +73,8 @@ struct RaidFreightBreachProjection
     float progress{};
 };
 
+enum class MedicOrderStatus { Ready, Busy, NoSupplies, NoReachablePatient, NoSuitableSupply, Unavailable, NoPatient };
+
 enum class GameSessionState
 {
     InRaid,
@@ -630,6 +632,10 @@ public:
     [[nodiscard]] std::optional<OrdinarySurvivorAdmissionPlan>
     nightRendezvousAdmissionPlan() const;
 
+    [[nodiscard]] bool orderMedicTreatment();
+    [[nodiscard]] MedicOrderStatus medicOrderStatus() const;
+    [[nodiscard]] std::vector<AssetInstanceId> squadCargo(RaidSquadRole) const;
+    [[nodiscard]] InventoryReceipt takeSquadCargo(RaidSquadRole, AssetInstanceId, std::string transactionId);
     [[nodiscard]] bool canTakeFireSupportMagazine() const;
     [[nodiscard]] InventoryReceipt takeFireSupportMagazine(std::string transactionId);
 
@@ -898,7 +904,21 @@ private:
         float deltaTime);
     [[nodiscard]] bool settleAlphaRaid(RaidResultOutcome outcome);
     [[nodiscard]] bool secureOrdinarySurvivorRescue();
-    [[nodiscard]] bool recordFireSupportDeath(ProfileState &);
+    [[nodiscard]] bool recordSquadCondition(ProfileState &);
+    struct MedicTreatment
+    {
+        RaidSpaceDefinitionId space;
+        std::optional<RaidSquadRole> patient;
+        AssetInstanceId medicine{};
+        float remaining{};
+        bool ordered{};
+        int patientHealth{};
+    };
+    std::optional<MedicTreatment> medicTreatment_;
+    float medicSearchDelay_{};
+    [[nodiscard]] MedicOrderStatus planMedicTreatment(bool ordered, MedicTreatment &) const;
+    [[nodiscard]] bool beginMedicTreatment(bool ordered);
+    void advanceMedicTreatment(float seconds);
     [[nodiscard]] std::string nextRaidTransaction(std::string_view prefix);
     [[nodiscard]] std::optional<AssetInstanceId> nearbyRaidLoot() const;
     [[nodiscard]] RaidSceneContainerAccess raidSceneAccess(AssetInstanceId) const;

@@ -9,6 +9,7 @@
 #include "loadout_progression.h"
 #include "lost_raid_domain.h"
 #include "raid_fire_support_domain.h"
+#include "raid_squad_domain.h"
 #include "raid_intelligence_domain.h"
 #include "raid_lifecycle.h"
 #include "ui_foundation.h"
@@ -20,7 +21,9 @@ enum class UiDeploymentControl {
     IntelligenceRow, IntelligenceAction, Interior, InteriorAction,
     InteriorPrevious, InteriorNext, LoadoutPrevious, LoadoutNext,
     ReadinessDetails, RecoveryClear, Deploy, Close, Regional, LostRecords,
-    FireSupportToggle, FireSupportRifle, FireSupportMagazine
+    FireSupportToggle, FireSupportRifle, FireSupportMagazine,
+    Squad, SquadDone, SquadRecruit, SquadFire, SquadSupport, SquadSniper,
+    SquadToggle, SquadWeapon, SquadCargoOne, SquadCargoTwo
 };
 enum class UiDeploymentEventKind { Down, Up, Move, Wheel };
 struct UiDeploymentEvent {
@@ -50,6 +53,10 @@ struct UiDeploymentState {
     std::optional<UiDeploymentPress> press;
     std::optional<std::string> confirmationKey;
     std::optional<RaidFireSupportLoadout> fireSupport;
+    std::vector<RaidSquadLoadout> squad;
+    std::optional<RaidSquadRole> specialistRescue;
+    RaidSquadRole editingRole{RaidSquadRole::Fire};
+    bool squadOpen{};
     int briefingScroll{}, briefingMaximum{}, readinessScroll{}, readinessMaximum{};
     int feedbackScroll{}, feedbackMaximum{};
 };
@@ -97,6 +104,10 @@ struct UiDeploymentProjection {
     std::optional<LoadoutReadinessProjection> selectedLoadout;
     WeaponSupplyProjection weaponSupply;
     RaidFireSupportLoadoutAvailability fireSupport;
+    std::array<RaidSquadOptions, 3> squadOptions;
+    std::optional<RaidSquadRole> recruitable;
+    bool squadReady{true};
+    bool ordinaryRescueAvailable{}, fireReplacementAvailable{};
     LostRaidAgingPreview aging;
     std::optional<std::string> recoveryRecordId;
     std::optional<LostRaidRecordProjection> recovery;

@@ -5,6 +5,16 @@
 #include <type_traits>
 #include <utility>
 
+std::string_view uiLostRecoverySquadGearLabel(LostRaidRecordKind kind) noexcept {
+    switch (kind) {
+    case LostRaidRecordKind::FireSupport: return "FIRE SUPPORT TEAMMATE LOST GEAR";
+    case LostRaidRecordKind::SpecialistSupport: return "Field medic lost gear";
+    case LostRaidRecordKind::SpecialistSniper: return "Scout sniper lost gear";
+    case LostRaidRecordKind::Player: return {};
+    }
+    return {};
+}
+
 namespace {
 using C = UiLostRecoveryControl;
 using T = UiLostRecoveryTab;

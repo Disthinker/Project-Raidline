@@ -13,7 +13,8 @@ enum class UiBaseMedicalControl
     Personal, Residents, Details, Facilities, Staffing, Upgrade, Main, Close,
     ReserveCell, WarehouseRow, PreviousWarehouse, NextWarehouse, ReserveTransfer,
     Priority, AutoAdmission, MoveEarlier, MoveLater,
-    Consolidate, DoseSource, DoseTarget, DoseRow, PreviousDosePage, NextDosePage, ConfirmDoses
+    Consolidate, DoseSource, DoseTarget, DoseRow, PreviousDosePage, NextDosePage, ConfirmDoses,
+    SquadPatient
 };
 enum class UiBaseMedicalEventKind { Down, Up, Move, Wheel };
 struct UiBaseMedicalEvent {
@@ -56,6 +57,8 @@ struct UiBaseMedicalProjection {
     MedicalStatusState medical;
     BaseMedicalServicePlan player;
     ResidentTreatmentPlan resident;
+    std::map<RaidSquadRole, RaidSquadResident> squadRoster;
+    std::optional<RaidSquadRole> selectedPatient;
     BaseResidentMedicalProjection population;
     BaseWorkforceProjection workforce;
     BaseWorkforcePlan staffing;
@@ -73,7 +76,8 @@ struct UiBaseMedicalProjection {
     MedicalConsolidationPlan dosePlan;
 };
 [[nodiscard]] UiBaseMedicalProjection projectUiBaseMedical(
-    const ProfileState &, const ContentRegistry &, UiLanguage, const UiMedicalDoseSelection & = {});
+    const ProfileState &, const ContentRegistry &, UiLanguage, const UiMedicalDoseSelection & = {},
+    std::optional<RaidSquadRole> selectedPatient = {});
 // Bind an explicit press to the semantic action, never a label or vector index.
 [[nodiscard]] std::string uiBaseMedicalActionKey(UiBaseMedicalControl, UiBaseMedicalTab, const UiBaseMedicalProjection &);
 [[nodiscard]] bool uiBaseMedicalEnabled(UiBaseMedicalControl, UiBaseMedicalTab, const UiBaseMedicalProjection &);
@@ -101,6 +105,7 @@ struct UiBaseMedicalState {
     std::optional<AssetInstanceId> selectedMedicine;
     std::optional<GridPosition> reserveDestination;
     UiMedicalDoseSelection doses;
+    std::optional<RaidSquadRole> selectedPatient;
     int detailScroll{}, detailMaximum{}, feedbackScroll{}, feedbackMaximum{};
     std::optional<UiBaseMedicalPress> press;
 };

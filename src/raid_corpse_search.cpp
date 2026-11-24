@@ -105,8 +105,9 @@ ProfileValidationResult validateRaidCorpseBindings(const ProfileState &profile, 
         {
             if (corpse->sourceKind == RaidCorpseSourceKind::FireSupport)
             {
-                if (!profile.pendingRaid || !profile.pendingRaid->fireSupport ||
-                    profile.pendingRaid->fireSupport->containerAssetId != id)
+                if (!profile.pendingRaid ||
+                    ((!profile.pendingRaid->fireSupport || profile.pendingRaid->fireSupport->containerAssetId != id) &&
+                     std::ranges::none_of(profile.pendingRaid->squadMembers, [id](const auto &m) { return m.containerAssetId == id; })))
                     return {false, "unexpected fire support corpse"};
                 continue;
             }

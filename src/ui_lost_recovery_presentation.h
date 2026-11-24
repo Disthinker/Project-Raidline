@@ -106,5 +106,6 @@ struct UiLostRecoveryProjection {
 [[nodiscard]] SDL_FRect uiLostRecoveryPlanRect() noexcept;
 [[nodiscard]] SDL_FRect uiLostRecoveryTaskRect() noexcept;
 [[nodiscard]] SDL_FRect uiLostRecoveryFeedbackRect() noexcept;
+[[nodiscard]] std::string_view uiLostRecoverySquadGearLabel(LostRaidRecordKind) noexcept;
 [[nodiscard]] std::optional<UiLostRecoveryHit> hitUiLostRecovery(
     Vec2, const UiLostRecoveryState &, const UiLostRecoveryProjection &);

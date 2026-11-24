@@ -44,7 +44,9 @@ public:
         std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId = std::nullopt,
         std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId = std::nullopt,
         const RaidDeploymentProgressCallback &progress = {},
-        std::optional<RaidFireSupportLoadout> fireSupport = std::nullopt);
+        std::optional<RaidFireSupportLoadout> fireSupport = std::nullopt,
+        std::vector<RaidSquadLoadout> squad = {},
+        std::optional<RaidSquadRole> specialistRescue = std::nullopt);
     [[nodiscard]] bool completeDeploy(std::uint64_t requestId);
     [[nodiscard]] bool completeReturnToMainMenu(std::uint64_t requestId);
     [[nodiscard]] bool completeReturnToBase(std::uint64_t requestId);

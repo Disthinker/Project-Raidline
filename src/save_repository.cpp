@@ -1,4 +1,5 @@
 #include "save_repository.h"
+#include "raid_squad_save.h"
 #include "player_effects_serialization.h"
 #include "chest_rig_layout_migration.h"
 #include "alpha_content_ids.h"
@@ -1779,7 +1780,12 @@ SaveLoadResult parseAssetRegistry(AssetRegistry &registry, const Json &values,
 
 void writeLostRecordKind(Json &value, const LostRaidRecord &record, std::uint32_t schemaVersion)
 {
-    if (record.kind == LostRaidRecordKind::FireSupport)
+    if (record.kind == LostRaidRecordKind::SpecialistSupport || record.kind == LostRaidRecordKind::SpecialistSniper)
+    {
+        if (schemaVersion < 76) throw std::invalid_argument{"specialist loss requires schema 76"};
+        value["kind"] = record.kind == LostRaidRecordKind::SpecialistSupport ? "squad_support" : "squad_sniper";
+    }
+    else if (record.kind == LostRaidRecordKind::FireSupport)
     {
         if (schemaVersion < 74) throw std::invalid_argument("fire-support loss requires schema 74");
         value["kind"] = "fire_support";
@@ -1789,6 +1795,8 @@ void writeLostRecordKind(Json &value, const LostRaidRecord &record, std::uint32_
 LostRaidRecordKind parseLostRecordKind(const Json &value, std::uint32_t schemaVersion)
 {
     if (!value.contains("kind")) return LostRaidRecordKind::Player;
+    if (schemaVersion >= 76 && value.at("kind") == "squad_support") return LostRaidRecordKind::SpecialistSupport;
+    if (schemaVersion >= 76 && value.at("kind") == "squad_sniper") return LostRaidRecordKind::SpecialistSniper;
     if (schemaVersion < 74 || value.at("kind") != "fire_support")
         throw std::invalid_argument("invalid fire-support loss kind");
     return LostRaidRecordKind::FireSupport;
@@ -3401,6 +3409,7 @@ bool isValidEnvelope(
 std::string serializeProfileEnvelope(const ProfileState &profile, std::string_view contentVersion)
 {
     return serializeProfileEnvelope(profile, contentVersion,
+        hasRaidSquadSaveData(profile) ? 76U :
         supportsRiversideArmedScavengersContent(contentVersion) ? 75U :
         supportsRaidFireSupportContent(contentVersion) ? 74U :
         supportsRaidNightRendezvousContent(contentVersion) ? 73U :
@@ -3430,15 +3439,15 @@ std::string serializeProfileEnvelope(
     if (profile.pendingRaid && (profile.pendingRaid->freightKeyLootSlotId || profile.pendingRaid->sealedFreightCrate) &&
         !freightContract)
         throw std::invalid_argument{"freight Loot requires schema 62 and compatible content"};
-    if (profile.pendingRaid && (schemaVersion != 75 || !supportsRaidScavengerRetreatContent(contentVersion)) &&
+    if (profile.pendingRaid && (schemaVersion < 75 || !supportsRaidScavengerRetreatContent(contentVersion)) &&
         std::any_of(profile.pendingRaid->armedScavengers.begin(), profile.pendingRaid->armedScavengers.end(),
             [](const auto &actor) { return actor.retreatPoint.has_value() || actor.escaped; }))
         throw std::invalid_argument{"scavenger retreat requires current hospital outdoor content"};
     if (profile.pendingRaid && profile.pendingRaid->fieldClueCache &&
-        (schemaVersion != 75 || !supportsFieldClueCacheContent(contentVersion)))
+        (schemaVersion < 75 || !supportsFieldClueCacheContent(contentVersion)))
         throw std::invalid_argument{"field clue cache requires current hospital outdoor content"};
     if (profile.pendingRaid && !profile.pendingRaid->volatileBarrels.empty() &&
-        (schemaVersion != 75 || !supportsRaidVolatileBarrelsContent(contentVersion)))
+        (schemaVersion < 75 || !supportsRaidVolatileBarrelsContent(contentVersion)))
         throw std::invalid_argument{"volatile barrels require current hospital outdoor content"};
     if (profile.pendingRaid && profile.pendingRaid->rescue && profile.pendingRaid->rescue->escortStart &&
         (schemaVersion < 75 || contentVersion != kHospitalHybridOutdoorContentVersion))
@@ -3466,12 +3475,12 @@ std::string serializeProfileEnvelope(
          (profile.baseManufacturing.activeOrder &&
           profile.baseManufacturing.activeOrder->recipeDefinitionId == kFreightBreachRecipeId)))
         throw std::invalid_argument{"freight breach requires schema 66 and compatible content"};
-    const bool scavengerContract = schemaVersion == 75 && supportsRiversideArmedScavengersContent(contentVersion);
-    if ((schemaVersion == 75 && !scavengerContract) ||
+    const bool scavengerContract = schemaVersion >= 75 && supportsRiversideArmedScavengersContent(contentVersion);
+    if ((schemaVersion >= 75 && !scavengerContract) ||
         (!scavengerContract && profile.pendingRaid && !profile.pendingRaid->armedScavengers.empty()))
         throw std::invalid_argument("armed scavengers require schema 75 and compatible content");
     if (profile.pendingRaid && isHospitalHybridLayoutVersion(profile.pendingRaid->spatialLayout.layoutVersion) &&
-        (schemaVersion != 75 || contentVersion != kHospitalHybridOutdoorContentVersion))
+        (schemaVersion < 75 || contentVersion != kHospitalHybridOutdoorContentVersion))
         throw std::invalid_argument("hybrid hospital geometry requires schema 75 and compatible content");
     const bool fireSupportContract = scavengerContract ||
         (schemaVersion == 74 && contentVersion == kRaidFireSupportContentVersion);
@@ -3549,19 +3558,23 @@ std::string serializeProfileEnvelope(
         schemaVersion != 35 && schemaVersion != 36 && schemaVersion != 37 &&
         schemaVersion != 38 && schemaVersion != 39 && schemaVersion != 40 &&
         schemaVersion != 41 && schemaVersion != 42 && schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66 && schemaVersion != 67 && schemaVersion != 68 && schemaVersion != 69 &&
-        schemaVersion != 70 && schemaVersion != 71 && schemaVersion != 72 && schemaVersion != 73 && schemaVersion != 74 && schemaVersion != 75)
+        schemaVersion != 70 && schemaVersion != 71 && schemaVersion != 72 && schemaVersion != 73 && schemaVersion != 74 && schemaVersion != 75 && schemaVersion != 76)
     {
         throw std::invalid_argument{"unsupported save schema version"};
     }
-    if ((schemaVersion != 75 || contentVersion != kHospitalHybridOutdoorContentVersion) &&
+    if ((schemaVersion < 75 || contentVersion != kHospitalHybridOutdoorContentVersion) &&
         containsRaidTacticalSupplies(profile))
         throw std::invalid_argument{"tactical supplies require current hospital outdoor content"};
-    if ((usesRationPolicy(profile) && (schemaVersion != 75 || !supportsBaseRationPolicyContent(contentVersion))) ||
+    if ((usesRationPolicy(profile) && (schemaVersion < 75 || !supportsBaseRationPolicyContent(contentVersion))) ||
         (profile.rationPolicy != BaseRationPolicy::Standard && profile.rationPolicy != BaseRationPolicy::Conserve))
         throw std::invalid_argument{"base ration policy requires current hospital outdoor content"};
+    if ((schemaVersion == 76 && contentVersion != kHospitalHybridOutdoorContentVersion) ||
+        (schemaVersion < 76 && hasRaidSquadSaveData(profile)))
+        throw std::invalid_argument{"specialist squad requires schema 76 and current content"};
     const auto legacy = schemaVersion < 56 ? std::optional<ProfileState>{legacyChestRigSnapshot(profile)} : std::nullopt;
     Json payload = profilePayload(legacy ? *legacy : profile, schemaVersion, freightContract,
         fuelContract, armorContract, illuminationContract, backpackContract);
+    if (schemaVersion == 76) payload["specialist_squad"] = writeRaidSquadSave(profile);
     const std::string payloadText = payload.dump();
     Json envelope{
         {"schema_version", schemaVersion},
@@ -3778,12 +3791,15 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
               schemaVersion != 39 && schemaVersion != 40 &&
               schemaVersion != 41 && schemaVersion != 42 &&
                schemaVersion != 43 && schemaVersion != 44 && schemaVersion != 45 && schemaVersion != 46 && schemaVersion != 47 && schemaVersion != 48 && schemaVersion != 49 && schemaVersion != 50 && schemaVersion != 51 && schemaVersion != 52 && schemaVersion != 53 && schemaVersion != 54 && schemaVersion != 55 && schemaVersion != 56 && schemaVersion != 57 && schemaVersion != 58 && schemaVersion != 59 && schemaVersion != 60 && schemaVersion != 61 && schemaVersion != 62 && schemaVersion != 63 && schemaVersion != 64 && schemaVersion != 65 && schemaVersion != 66 && schemaVersion != 67 && schemaVersion != 68 && schemaVersion != 69 &&
-               schemaVersion != 70 && schemaVersion != 71 && schemaVersion != 72 && schemaVersion != 73 && schemaVersion != 74 && schemaVersion != 75) ||
+               schemaVersion != 70 && schemaVersion != 71 && schemaVersion != 72 && schemaVersion != 73 && schemaVersion != 74 && schemaVersion != 75 && schemaVersion != 76) ||
             (contentVersion != content.contentVersion() && !legacyContent))
         {
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported save envelope"};
         }
         const Json &payload = envelope.at("payload");
+        if ((schemaVersion == 76 && contentVersion != kHospitalHybridOutdoorContentVersion) ||
+            (schemaVersion == 76) != payload.contains("specialist_squad"))
+            throw std::invalid_argument{"invalid specialist squad envelope"};
         if (!payload.is_object() ||
             checksum(payload.dump()) !=
                 envelope.at("payload_checksum").get<std::string>())
@@ -3797,8 +3813,8 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             schemaVersion >= 65 && supportsThrownIlluminationContent(contentVersion);
         const bool backpackContract =
             schemaVersion >= 66 && supportsRaidBackpackRecoveryContent(contentVersion);
-        const bool scavengerContract = schemaVersion == 75 && supportsRiversideArmedScavengersContent(contentVersion);
-        if (schemaVersion == 75 && !scavengerContract)
+        const bool scavengerContract = schemaVersion >= 75 && supportsRiversideArmedScavengersContent(contentVersion);
+        if (schemaVersion >= 75 && !scavengerContract)
             return {SaveLoadStatus::Failed, std::nullopt, "unsupported armed scavenger content"};
         const bool fireSupportContract = scavengerContract ||
             (schemaVersion == 74 && contentVersion == kRaidFireSupportContentVersion);
@@ -3976,7 +3992,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             if (population.contains("ration_policy"))
             {
                 const auto policy = population.at("ration_policy").get<std::string>();
-                if (schemaVersion != 75 || !supportsBaseRationPolicyContent(contentVersion) ||
+                if (schemaVersion < 75 || !supportsBaseRationPolicyContent(contentVersion) ||
                     (policy != "standard" && policy != "conserve")) throw std::invalid_argument{"invalid base ration policy"};
                 profile.rationPolicy = policy == "conserve" ? BaseRationPolicy::Conserve : BaseRationPolicy::Standard;
             }
@@ -5235,7 +5251,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                         {}});
             }
             if (isHospitalHybridLayoutVersion(raid.spatialLayout.layoutVersion) &&
-                (schemaVersion != 75 || contentVersion != kHospitalHybridOutdoorContentVersion))
+                (schemaVersion < 75 || contentVersion != kHospitalHybridOutdoorContentVersion))
                 return {SaveLoadStatus::Failed, std::nullopt, "incompatible hybrid hospital layout version"};
             if (schemaVersion >= 22)
             {
@@ -5623,7 +5639,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             }
             if (value.contains("field_clue_cache"))
             {
-                if (schemaVersion != 75 || !supportsFieldClueCacheContent(contentVersion))
+                if (schemaVersion < 75 || !supportsFieldClueCacheContent(contentVersion))
                     throw std::invalid_argument{"field clue cache is unavailable in this content"};
                 const auto &record = value.at("field_clue_cache");
                 RaidFieldCacheSnapshot cache{parseNonzeroAssetId(record.at("reward_asset_id")), {}};
@@ -5634,7 +5650,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             if (value.contains("volatile_barrels"))
             {
                 const auto &entries = value.at("volatile_barrels");
-                if (schemaVersion != 75 || !supportsRaidVolatileBarrelsContent(contentVersion) ||
+                if (schemaVersion < 75 || !supportsRaidVolatileBarrelsContent(contentVersion) ||
                     !entries.is_array() || entries.size() != 2)
                     throw std::invalid_argument{"invalid frozen volatile barrel list"};
                 for (const auto &entry : entries)
@@ -5967,6 +5983,7 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                     value.at("contribution").get<std::uint64_t>(), value.at("expired").get<bool>()};
             }
         }
+        if (schemaVersion == 76) readRaidSquadSave(payload.at("specialist_squad"), profile);
         raidline::save60::parsePlayerState(payload, profile, schemaVersion, illuminationContract);
         if (!fractureContract && profile.basePlayerEffects && profile.basePlayerEffects->medical &&
             profile.basePlayerEffects->medical->effect == MedicalUseEffect::StabilizeFracture)
@@ -5996,10 +6013,10 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
             if (!raidPursuitGeometryValid(content.map(raid.mapDefinitionId), raid, *raid.selfRecovery->pursuit))
                 return {SaveLoadStatus::Failed, std::nullopt, "invalid frozen lost weapon pursuit geometry"};
         }
-        if ((schemaVersion != 75 || contentVersion != kHospitalHybridOutdoorContentVersion) &&
+        if ((schemaVersion < 75 || contentVersion != kHospitalHybridOutdoorContentVersion) &&
             containsRaidTacticalSupplies(profile))
             return {SaveLoadStatus::Failed, std::nullopt, "tactical supplies require current hospital outdoor content"};
-        if (usesRationPolicy(profile) && (schemaVersion != 75 || !supportsBaseRationPolicyContent(contentVersion)))
+        if (usesRationPolicy(profile) && (schemaVersion < 75 || !supportsBaseRationPolicyContent(contentVersion)))
             return {SaveLoadStatus::Failed, std::nullopt, "base ration policy requires current hospital outdoor content"};
         const bool migratedChestRig = profile.chestRigLayoutVersion == 0;
         const auto migration = migrateLegacyChestRigLayout(profile, content);
@@ -6173,7 +6190,7 @@ SaveWriteResult SaveRepository::save(
         const bool rendezvous = supportsRaidNightRendezvousContent(contentVersion);
         const bool fireSupport = supportsRaidFireSupportContent(contentVersion);
         const bool scavengers = supportsRiversideArmedScavengersContent(contentVersion);
-        const auto schema = scavengers ? 75U : fireSupport ? 74U : rendezvous ? 73U : fracture ? 72U : pursuit ? 71U : blockade ? 70U : fieldTrade ? 69U : reserve ? 68U : power ? 67U : backpack ? 66U
+        const auto schema = hasRaidSquadSaveData(profile) ? 76U : scavengers ? 75U : fireSupport ? 74U : rendezvous ? 73U : fracture ? 72U : pursuit ? 71U : blockade ? 70U : fieldTrade ? 69U : reserve ? 68U : power ? 67U : backpack ? 66U
             : illumination ? 65U : armor ? 64U : fuel ? 63U : freight ? 62U : 61U;
         const auto isLegacy = [&](const std::optional<SaveEnvelopeMetadata> &source) {
             return source && (source->schemaVersion < schema || source->contentVersion != contentVersion);
@@ -6183,6 +6200,7 @@ SaveWriteResult SaveRepository::save(
         {
             // The former primary can remain in the rolling backup after upgrade.
             const std::string_view marker =
+                schema == 76 ? "specialist-squad-expedition-v1" :
                 contentVersion == kHospitalHybridOutdoorContentVersion ? "proc-map-hospital-outdoor-v1" :
                 scavengers ? "raid-riverside-armed-scavengers-v1" :
                 fireSupport ? "raid-single-fire-support-v1" :

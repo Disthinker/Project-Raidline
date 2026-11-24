@@ -107,7 +107,7 @@ void App::refreshBaseMedicalUi(bool force) {
         medicalProjection_.medical = p.medicalStatus;
         return;
     }
-    medicalProjection_ = projectUiBaseMedical(p, publishedContentRegistry(), language, medicalUi_.doses);
+    medicalProjection_ = projectUiBaseMedical(p, publishedContentRegistry(), language, medicalUi_.doses, medicalUi_.selectedPatient);
     medicalUi_.doses.page = std::min(medicalUi_.doses.page, dosePageCount(medicalProjection_) - 1);
     medicalTransferProjection_.reset();
     medicalUi_.warehousePage = std::min(medicalUi_.warehousePage,
@@ -188,6 +188,14 @@ void App::handleBaseMedicalEvent(const UiBaseMedicalEvent &event) {
         return;
     }
     switch (control) {
+    case Control::SquadPatient: {
+        const auto &roster = medicalProjection_.squadRoster;
+        auto next = medicalUi_.selectedPatient ? roster.upper_bound(*medicalUi_.selectedPatient) : roster.begin();
+        medicalUi_.selectedPatient = next == roster.end() ? std::nullopt : std::optional{next->first};
+        medicalFeedback_.clear();
+        refreshBaseMedicalUi(true);
+        return;
+    }
     case Control::Consolidate: {
         const bool open = !medicalUi_.doses.open;
         medicalUi_.doses = {};
@@ -331,7 +339,7 @@ void App::handleBaseMedicalEvent(const UiBaseMedicalEvent &event) {
         submitProfileUi<BaseMedicalServiceReceipt>(BaseMedicalServiceCommand{},nextProfileTransactionId("base-paid-medical"),
             [finish](const auto &r){finish(r.succeeded,r.succeeded?fmt::format("PLAYER FULLY TREATED | PAID {}",r.currencyPaid):r.message);});
     } else if(control==Control::Main) {
-        submitProfileUi<ResidentTreatmentReceipt>(StartResidentTreatmentCommand{p.resident.patientProfession, p.resident.supplies},nextProfileTransactionId("resident-treatment"),
+        submitProfileUi<ResidentTreatmentReceipt>(StartResidentTreatmentCommand{p.resident.patientProfession, p.resident.supplies, p.selectedPatient},nextProfileTransactionId("resident-treatment"),
             [finish](const auto &r){finish(r.succeeded,r.succeeded?"RESIDENT TREATMENT STARTED - MATERIALS DEDUCTED ONCE":r.message);});
     } else if(control==Control::Staffing) {
         const bool assigned=p.workforce.medicalWorker.has_value();
@@ -389,6 +397,33 @@ void App::renderBaseMedicalService() {
     button(Control::Close, language == UiLanguage::English ? "CLOSE" : tr("CLOSE MEDICAL"));
     button(Control::Personal, "PERSONAL TREATMENT", personal);
     button(Control::Residents, "RESIDENT CARE", !personal);
+    if (!personal && !p.squadRoster.empty()) {
+        const bool zh = language == UiLanguage::SimplifiedChinese;
+        const auto selected = p.selectedPatient ? p.squadRoster.find(*p.selectedPatient) : p.squadRoster.end();
+        std::string label = zh ? "指定伤员　按居民优先级" : "Patient · resident priority";
+        if (selected != p.squadRoster.end()) {
+            const auto &[role, resident] = *selected;
+            constexpr std::array<std::string_view,3> namesZh{"火力队员","支援干员","狙击干员"};
+            constexpr std::array<std::string_view,3> namesEn{"Fire support","Field medic","Scout sniper"};
+            std::string name{(zh ? namesZh : namesEn)[static_cast<std::size_t>(role)]};
+            if (resident.generation > 1)
+                name += zh ? fmt::format(" · 第 {} 任", resident.generation) :
+                    fmt::format(" · No. {}", resident.generation);
+            if (resident.status == RaidSquadResidentStatus::Missing) {
+                const auto left = resident.replacementReadyMinute > p.worldMinute ? resident.replacementReadyMinute - p.worldMinute : 0;
+                const auto place = role == RaidSquadRole::Support ? (zh ? "灰线仓库" : "Greyline Depot") :
+                    (zh ? "边境交换站" : "Frontier Exchange");
+                label = left ? fmt::format("{} · {} {} · {}", name, zh ? "补员等待" : "Replacement in",
+                    uiBaseMedicalDuration(left, language), place) :
+                    fmt::format("{} · {} · {}", name, zh ? "可营救继任者" : "Replacement available", place);
+            } else {
+                label = fmt::format("{} · {}", name, resident.status == RaidSquadResidentStatus::Wounded ?
+                    (zh ? "伤员 · 可留营休养或安排治疗" : "Wounded · rest or arrange treatment") :
+                    (zh ? "健康" : "Ready"));
+            }
+        }
+        button(Control::SquadPatient, label + "    ›", p.selectedPatient.has_value());
+    }
 
     if (personal) button(Control::Consolidate, medicalUi_.doses.open ? "Back to personal care" : "Combine medical charges");
     if (medicalUi_.doses.open) {

@@ -1,5 +1,5 @@
 #include "self_recovery_domain.h"
-#include "raid_fire_support_domain.h"
+#include "raid_squad_domain.h"
 
 #include <algorithm>
 #include <cmath>
@@ -68,8 +68,8 @@ InventoryReceipt applyOpen(
         }
         try
         {
-            const bool validRoot = record->second.kind == LostRaidRecordKind::FireSupport
-                ? isRaidFireSupportLossRoot(content, *asset, root.sourceSlot)
+            const bool validRoot = record->second.kind != LostRaidRecordKind::Player
+                ? isRaidSquadLossRoot(content, record->second.kind, *asset, root.sourceSlot)
                 : itemCanEquipInSlot(content.item(asset->definitionId), root.sourceSlot);
             if (!validRoot)
             {

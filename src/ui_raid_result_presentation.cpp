@@ -62,6 +62,12 @@ std::string uiRaidResultContextKey(const std::string &profileId,
         key.number(result->unlockedExtractionPermissions.size());
         for (const auto &id : result->unlockedExtractionPermissions) key.add(id.value());
         key.number(result->fireSupport.has_value());
+        for (const auto &[role, member] : result->squadResults) {
+            key.number(role);
+            key.number(member.died);
+            key.number(member.returnedLoanCount);
+            key.add(member.lostRecordId.value_or(""));
+        }
         if (result->fireSupport) {
             key.number(result->fireSupport->died);
             key.number(result->fireSupport->returnedLoanCount);
@@ -139,6 +145,17 @@ UiRaidResultProjection projectUiRaidResult(const std::string &profileId,
             p.detailLines.push_back(text("TEAMMATE LOSS RECORDED · SEE LOST ITEMS"));
     }
 
+    for (const auto &[role, member] : result.squadResults) {
+        if (role == RaidSquadRole::Fire) continue;
+        const bool zh = language == UiLanguage::SimplifiedChinese;
+        const auto name = role == RaidSquadRole::Support ? (zh ? "支援干员" : "Field medic") :
+            (zh ? "狙击干员" : "Scout sniper");
+        auto line = std::string{name} + " · " + (member.died ? (zh ? "阵亡" : "Killed") : (zh ? "归队" : "Returned"));
+        p.summaryLines.push_back(line);
+        if (!member.died) line += std::string{zh ? " · 归还借装 " : " · Returned loans "} + std::to_string(member.returnedLoanCount);
+        if (member.lostRecordId) line += zh ? " · 已登记失物" : " · Loss recorded";
+        p.detailLines.push_back(std::move(line));
+    }
     const auto rescued = static_cast<std::uint64_t>(p.rescuedOrdinaryResidents) +
         static_cast<std::uint64_t>(p.rescuedInjuredResidents);
     if (p.extracted && result.fuelExtractionPaid)

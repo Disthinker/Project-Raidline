@@ -1,5 +1,6 @@
 #include "raid_corpse_search.h"
 #include "raid_fire_support_domain.h"
+#include "raid_squad_domain.h"
 #include "raid_credential_extraction.h"
 #include "game_session.h"
 #include "base_defense_preparation.h"
@@ -3885,6 +3886,8 @@ GameSession::ordinarySurvivorRescuePlan() const
     {
         return std::nullopt;
     }
+    if (const auto &role = profile_.pendingRaid->specialistRescue)
+        return queryRaidSpecialistAdmission(profile_, profile_.pendingRaid->mapDefinitionId, *role);
     if (const auto &replacement = profile_.pendingRaid->fireSupportReplacementSource)
         return queryRaidFireSupportReplacementAdmission(profile_, *replacement);
     const RaidRescueSnapshot &rescue = *profile_.pendingRaid->rescue;
@@ -4711,8 +4714,8 @@ void GameSession::updateAlphaRaid(
         if (scavenger.ammunitionChangedLastUpdate)
             static_cast<void>(syncRaidArmedScavengerAmmo(profile_, publishedContentRegistry(),
                 scavenger.sourceEnemyId, scavenger.shotsFired, scavenger.spareMagazineInstalled));
-    if (profile_.pendingRaid && profile_.pendingRaid->fireSupport)
-        static_cast<void>(recordFireSupportDeath(profile_));
+    if (profile_.pendingRaid && (profile_.pendingRaid->fireSupport || !profile_.pendingRaid->squadMembers.empty()))
+        static_cast<void>(recordSquadCondition(profile_));
     if(!world_->raidSession().isActive())world_->commitNoiseDecoy({});
     const bool meleeFrame=world_->melee().result().attempted;
     if(meleeFrame)
@@ -4843,6 +4846,7 @@ void GameSession::updateAlphaRaid(
         if (profileUiCommitPending()) return;
     }
     advanceAlphaMedicalStatus(deltaTime);
+    if (world_->squadHealth(RaidSquadRole::Support).has_value()) advanceMedicTreatment(deltaTime);
 
     if (const auto fact = world_->pendingCredentialInvestigation())
     {
@@ -5201,11 +5205,21 @@ void GameSession::applyAlphaIncomingDamage()
     }
 }
 
-bool GameSession::recordFireSupportDeath(ProfileState &profile)
+bool GameSession::recordSquadCondition(ProfileState &profile)
 {
-    const auto death = world_->fireSupportDeathPosition();
-    return !death || revealRaidFireSupportCorpseInSimulation(
-        profile, publishedContentRegistry(), world_->fireSupportSpaceId(), *death);
+    if (!world_ || !profile.pendingRaid) return false;
+    for (const auto role : {RaidSquadRole::Fire, RaidSquadRole::Support, RaidSquadRole::Sniper})
+    {
+        const auto health = world_->squadHealth(role);
+        if (!health) continue;
+        if (const auto death = world_->squadDeathPosition(role))
+        {
+            if (!revealRaidSquadCorpseInSimulation(profile, publishedContentRegistry(), role, world_->squadSpaceId(role), *death))
+                return false;
+        }
+        setRaidSquadHealthInSimulation(profile, role, *health);
+    }
+    return true;
 }
 
 bool GameSession::prepareRaidSettlementCandidate(RaidResultOutcome outcome,ProfileState &candidate)
@@ -5215,7 +5229,7 @@ bool GameSession::prepareRaidSettlementCandidate(RaidResultOutcome outcome,Profi
         return false;
     }
     candidate = profile_;
-    if (candidate.pendingRaid->fireSupport && !recordFireSupportDeath(candidate))
+    if ((candidate.pendingRaid->fireSupport || !candidate.pendingRaid->squadMembers.empty()) && !recordSquadCondition(candidate))
     {
         persistenceMessage_ = "FIRE SUPPORT DEATH COULD NOT BE RECORDED";
         state_ = GameSessionState::SettlementBlocked;
@@ -5380,6 +5394,9 @@ bool GameSession::prepareSurvivorRescueCandidate(
     const auto &replacement = pending.fireSupportReplacementSource;
     const bool replacementRescue = !nightRendezvous && replacement.has_value();
     const auto admit = [&](ProfileState &candidate, std::string transactionId) {
+        if (!nightRendezvous && pending.specialistRescue)
+            return executeRaidSpecialistAdmission(candidate, publishedContentRegistry(), *pending.specialistRescue,
+                {candidate.revision, raidSquadSourceId(pending.settlementId, *pending.specialistRescue) + ":admission"}, &pending);
         if (replacementRescue)
             return executeRaidFireSupportReplacementAdmission(candidate, publishedContentRegistry(),
                 *replacement, {candidate.revision, raidFireSupportReplacementTransactionId(*replacement)});
@@ -5396,7 +5413,7 @@ bool GameSession::prepareSurvivorRescueCandidate(
     }
     auto &marked = nightRendezvous
         ? raidCandidate.pendingRaid->nightRendezvous : raidCandidate.pendingRaid->rescue;
-    if (!replacementRescue) marked->secured = true;
+    if (!replacementRescue && (nightRendezvous || !pending.specialistRescue)) marked->secured = true;
     const OrdinarySurvivorAdmissionReceipt raidReceipt =
         admit(raidCandidate, nextRaidTransaction("rescue"));
     if (!raidReceipt.succeeded)

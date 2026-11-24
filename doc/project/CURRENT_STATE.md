@@ -1,3 +1,7 @@
+# 专业小队远征 v1 · 已通过人工验收
+
+2026-11-24 已生成联合试玩候选，程序 SHA-256 `4a2fb1db9cff`。Windows 全量 3571/3571。原有 14 项 3 ms 检查通过；满编医院场景（护送者、100 名敌人、220 处遮挡及烟火）P95 1.752 ms，千件资产基地写盘时命中帧 P95 4.307 ms。 [启动试玩](<E:/RaidlineBuild/candidates/specialist-squad-expedition-v1/开始联合试玩.cmd>) · [四步验收](../acceptance/specialist-squad-expedition-v1.md)
+
 # 十六项玩法联合候选 · 已通过人工验收
 
 本轮基于 `main@ad3268c`。第 15、16 项为河畔拾荒者撤退与工坊有偿加急，已和前十四项合入本地试玩包，程序指纹 `a4a3c9b57a3f`。Windows 全量 3549/3549，14 项 3 ms 性能检查通过，千件资产存档 P95 为 4.6679 ms。用户已完成联合验收，授权提交、推送和创建 PR，Windows 与 Ubuntu CI 都通过后合并。[启动联合试玩](<E:/RaidlineBuild/candidates/local-multistage-v3/开始联合试玩.cmd>) · [联合试玩清单](../acceptance/local-multistage-v3.md) · [验证记录](../exec-plans/active/local-multistage-v3.md)

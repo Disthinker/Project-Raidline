@@ -14,6 +14,7 @@
 #include "base_workforce_domain.h"
 #include "game_session.h"
 #include "raid_fire_support_domain.h"
+#include "raid_squad_domain.h"
 #include "weapon_component_domain.h"
 #include "profile_ui_test_wait.h"
 #include "medical_domain.h"
@@ -3970,4 +3971,195 @@ TEST(AlphaExtractionSessionTest, OpticTransitionUsesHandlingAfterInstallation)
             session.update(aim, 0.005F);
         EXPECT_EQ(session.world().activeWeaponOptic(), WeaponOpticMode::High);
     }
+}
+
+class SpecialistMedicSessionTest : public testing::Test
+{
+protected:
+    raidline::test::TemporaryDirectory directory;
+    const ContentRegistry &content = publishedContentRegistry();
+    GameSession session;
+    AssetInstanceId kit{}, bandage{}, sidearm{}, rifle{}, marksman{};
+    virtual bool fullSquad() const { return false; }
+    void SetUp() override
+    {
+        auto profile = makeNewAlphaProfile("specialist-treatment", content);
+        profile.tutorial = TutorialProgress::Complete;
+        ++profile.basePopulation.ordinaryResidents;
+        ++profile.basePopulation.professionResidents[baseProfessionIndex(BaseResidentProfession::Combat)];
+        profile.squadRoster[RaidSquadRole::Support] = {};
+        const auto add = [&](const ItemDefinitionId &id, unsigned qty = 1U) {
+            const auto &definition = content.item(id);
+            const auto fit = findFirstProfileFit(profile, content, ProfileContainerId::stash(), definition, ItemOrientation::Degrees0);
+            if (!fit) throw std::runtime_error("cannot fit specialist session fixture");
+            return profile.assets.create(definition, StoredAssetLocation{ProfileContainerId::stash(), *fit}, qty);
+        };
+        sidearm = add(kRaidSquadSupportWeaponId);
+        add(kRaidSquadSupportAmmoId, 30);
+        kit = add(alpha_content::medkit);
+        bandage = add(alpha_content::bandage);
+        if (fullSquad())
+        {
+            profile.basePopulation.ordinaryResidents += 2;
+            profile.basePopulation.professionResidents[baseProfessionIndex(BaseResidentProfession::Combat)] += 2;
+            profile.squadRoster[RaidSquadRole::Sniper] = {};
+            rifle = add(kRaidFireSupportRifleId);
+            marksman = add(kRaidSquadSniperWeaponId);
+            add(kRaidFireSupportAmmunitionId, 30);
+            add(kRaidSquadSniperAmmoId, 20);
+        }
+        directory.claim("raidline-specialist-medicine-", testing::UnitTest::GetInstance()->current_test_info()->name());
+        ASSERT_TRUE(SaveRepository(directory.path()).save(profile, content.contentVersion()).succeeded);
+        session.configurePersistence(directory.path());
+        ASSERT_TRUE(session.continueProfile()) << session.persistenceMessage();
+        AlphaDeployRequest request;
+        request.seed = 6;
+        request.mapDefinitionId = kHospitalFloorplanMapId;
+        request.squad.push_back({RaidSquadRole::Support, sidearm, {kit,bandage}});
+        if (fullSquad())
+        {
+            request.squad.push_back({RaidSquadRole::Fire, rifle, {}});
+            request.squad.push_back({RaidSquadRole::Sniper, marksman, {}});
+        }
+        const auto deployed = session.requestDeployAlpha(request);
+        ASSERT_TRUE(deployed.accepted) << deployed.message;
+        ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+        ASSERT_TRUE(session.alphaRaidActive());
+        ASSERT_TRUE(session.world().medicCanReach({}));
+    }
+    unsigned charges(AssetInstanceId id) const
+    {
+        const auto *asset = session.profile().assets.find(id);
+        return asset ? asset->remainingCharges : 0;
+    }
+    void pass(float seconds)
+    {
+        for (int tick{}; tick < static_cast<int>(std::ceil(seconds * 60.F)); ++tick)
+            session.update({}, 1.F / 60.F);
+    }
+};
+
+TEST_F(SpecialistMedicSessionTest, SafeMedicStopsBleedingWithBorrowedBandageBeforeTreatingLowHealth)
+{
+    auto &world = session.world();
+    for (auto &enemy : WeaponHandlingTestAccess::actors(world)) ASSERT_TRUE(enemy.setPosition({50,50}));
+    auto &profile = WeaponHandlingTestAccess::profile(session);
+    ASSERT_FALSE(world.damagePlayer(49));
+    ASSERT_EQ(world.player().health(), 51);
+    profile.currentHealth = world.player().health();
+    profile.medicalStatus.bleeding = BleedingSeverity::Light;
+    profile.medicalStatus.lightBleedingRemainingMs = 35000;
+    profile.medicalStatus.bleedingDamageRemainingMs = 950;
+    profile.medicalStatus.painScreamRemainingMs = 15000;
+    const auto bandages = charges(bandage);
+    const auto kits = charges(kit);
+    const float duration = content.item(alpha_content::bandage).medicalUse->actionDurationMs * .001F;
+    pass(.3F);
+    ASSERT_TRUE(world.squadMember(RaidSquadRole::Support)->treating);
+    EXPECT_EQ(charges(kit), kits);
+    EXPECT_EQ(charges(bandage), bandages);
+    pass(duration);
+    EXPECT_EQ(session.profile().medicalStatus.bleeding, BleedingSeverity::None);
+    EXPECT_EQ(charges(bandage) + 1, bandages);
+    EXPECT_EQ(charges(kit), kits);
+    pass(.4F + content.item(alpha_content::medkit).medicalUse->actionDurationMs * .001F);
+    EXPECT_EQ(charges(kit) + 1, kits);
+    EXPECT_GT(world.player().health(), 51);
+    EXPECT_EQ(world.player().health(), session.profile().currentHealth);
+}
+
+TEST_F(SpecialistMedicSessionTest, OrderedTreatmentStopsOnDistanceAndChargesOnlyAfterHelpingLivingPatient)
+{
+    auto &world = session.world();
+    auto &medic = WeaponHandlingTestAccess::support(world, RaidSquadRole::Support);
+    ASSERT_TRUE(world.setSquadOrders(RaidSquadRole::Support, FireSupportMovementOrder::Hold, FireSupportFireOrder::FreeFire));
+    auto &profile = WeaponHandlingTestAccess::profile(session);
+    const auto original = world.player().position();
+    ASSERT_FALSE(world.damagePlayer(15));
+    ASSERT_EQ(world.player().health(), 85);
+    profile.currentHealth = world.player().health();
+    ASSERT_TRUE(session.orderMedicTreatment());
+    const auto initial = charges(kit);
+    const float duration = content.item(alpha_content::medkit).medicalUse->actionDurationMs * .001F;
+    pass(.3F);
+    ASSERT_TRUE(world.squadMember(RaidSquadRole::Support)->treating);
+    ASSERT_TRUE(const_cast<Player &>(world.player()).setPosition({original.x + 200,original.y}));
+    pass(.3F);
+    EXPECT_FALSE(world.squadMember(RaidSquadRole::Support)->treating);
+    EXPECT_EQ(charges(kit), initial);
+    medic.applyContact(PlayerDamageObservation{35}, 0);
+    const auto before = medic.health();
+    ASSERT_TRUE(session.orderMedicTreatment());
+    pass(duration + .1F);
+    EXPECT_GT(medic.health(), before);
+    EXPECT_EQ(charges(kit) + 1, initial);
+    EXPECT_EQ(session.profile().pendingRaid->squadMembers.front().health, medic.health());
+}
+
+class SpecialistSquadPersistenceSessionTest : public SpecialistMedicSessionTest
+{
+    bool fullSquad() const override { return true; }
+};
+
+TEST_F(SpecialistSquadPersistenceSessionTest, HardExitLoadsExistingCheckpointAndFailedActiveQuitRetriesMixedCasualtiesOnce)
+{
+    SaveRepository disk{directory.path()};
+    const auto before = disk.load(content);
+    ASSERT_TRUE(before.profile);
+    ASSERT_FALSE(before.profile->pendingRaid);
+    const auto &raid = *session.profile().pendingRaid;
+    const auto settlement = raid.settlementId;
+    ASSERT_EQ(raid.squadOrder.size(), 3U);
+    auto &world = session.world();
+    auto &medic = WeaponHandlingTestAccess::support(world, RaidSquadRole::Support);
+    auto &sniper = WeaponHandlingTestAccess::support(world, RaidSquadRole::Sniper);
+    medic.applyContact(PlayerDamageObservation{62}, 0.F);
+    sniper.applyContact(PlayerDamageObservation{250}, 0.F);
+    ASSERT_GT(medic.health(), 0);
+    ASSERT_LT(medic.health(), 50);
+    ASSERT_FALSE(sniper.alive());
+
+    GameSession afterCrash;
+    afterCrash.configurePersistence(directory.path());
+    ASSERT_TRUE(afterCrash.continueProfile()) << afterCrash.persistenceMessage();
+    EXPECT_EQ(profileStateFingerprint(afterCrash.profile()), profileStateFingerprint(*before.profile));
+    EXPECT_FALSE(afterCrash.profile().pendingRaid);
+    EXPECT_FALSE(afterCrash.profile().committedSettlements.contains(settlement));
+    for (const auto id : {sidearm, marksman, rifle, kit, bandage})
+        ASSERT_NE(afterCrash.profile().assets.find(id), nullptr);
+
+    const auto blocked = directory.path() / "profile.tmp.json";
+    ASSERT_TRUE(std::filesystem::create_directory(blocked));
+    const auto original = profileStateFingerprint(session.profile());
+    const auto quit = session.requestActiveQuitAlphaRaid();
+    ASSERT_TRUE(quit.accepted) << quit.message;
+    ASSERT_FALSE(waitForProfileUiDurability(session));
+    EXPECT_EQ(profileStateFingerprint(session.profile()), original);
+    const auto refused = disk.load(content);
+    ASSERT_TRUE(refused.profile);
+    EXPECT_EQ(profileStateFingerprint(*refused.profile), profileStateFingerprint(*before.profile));
+    ASSERT_TRUE(std::filesystem::remove(blocked));
+    ASSERT_TRUE(session.retryProfileUiCommit().accepted);
+    ASSERT_TRUE(waitForProfileUiDurability(session)) << session.persistenceMessage();
+    const auto &done = session.profile();
+    ASSERT_FALSE(done.pendingRaid);
+    ASSERT_TRUE(done.lastRaidResult);
+    ASSERT_TRUE(done.committedSettlements.contains(settlement));
+    EXPECT_EQ(done.lastRaidResult->outcome, RaidResultOutcome::ActiveQuit);
+    EXPECT_EQ(done.squadRoster.at(RaidSquadRole::Support).status, RaidSquadResidentStatus::Wounded);
+    EXPECT_EQ(done.squadRoster.at(RaidSquadRole::Sniper).status, RaidSquadResidentStatus::Missing);
+    EXPECT_TRUE(done.lastRaidResult->squadResults.at(RaidSquadRole::Sniper).died);
+    EXPECT_FALSE(done.lastRaidResult->squadResults.at(RaidSquadRole::Support).died);
+    for (const auto id : {sidearm, rifle, kit, bandage})
+    {
+        const auto *asset = done.assets.find(id);
+        ASSERT_NE(asset, nullptr);
+        const auto *location = std::get_if<StoredAssetLocation>(&asset->location);
+        ASSERT_TRUE(location);
+        EXPECT_EQ(location->container, ProfileContainerId::stash());
+    }
+    EXPECT_FALSE(session.requestActiveQuitAlphaRaid().accepted);
+    const auto reloaded = disk.load(content);
+    ASSERT_TRUE(reloaded.profile);
+    EXPECT_EQ(profileStateFingerprint(*reloaded.profile), profileStateFingerprint(done));
 }
