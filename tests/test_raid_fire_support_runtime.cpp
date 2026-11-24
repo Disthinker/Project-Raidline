@@ -2,6 +2,7 @@
 
 #include "collision.h"
 #include "gameplay_world.h"
+#include "profile_state.h"
 
 #include <algorithm>
 #include <chrono>
@@ -566,4 +567,150 @@ TEST(RaidFireSupportCrossSpaceTest, MeasuresDenseIndoorSimulationAndPortalFrames
             std::cout << "Fire support " << key << ": enemies=" << count << " blockers=220 samples=150 p95_ms=" << ms << '\n';
         }
     }
+}
+
+TEST(SpecialistSquadWorldTest, TeamSplitsAtDoorAndRegroupsWithDistinctLandings)
+{
+    auto config = supportWorld();
+    config.squadWeapons[1] = config.squadWeapons[2] = config.fireSupport;
+    config.interiors = {supportRoom()};
+    GameplayWorld world{config};
+    ASSERT_TRUE(world.setAllSquadOrders(FireSupportMovementOrder::Follow, FireSupportFireOrder::FreeFire));
+    ASSERT_TRUE(world.setSquadOrders(RaidSquadRole::Fire, FireSupportMovementOrder::Hold, FireSupportFireOrder::HoldFire));
+    world.update(useDoor(), 0);
+    ASSERT_TRUE(world.spaceTransitionedLastUpdate());
+    EXPECT_FALSE(world.squadMember(RaidSquadRole::Fire)->sameSpace);
+    const auto medic = world.squadMember(RaidSquadRole::Support);
+    const auto sniper = world.squadMember(RaidSquadRole::Sniper);
+    ASSERT_TRUE(medic && sniper && medic->sameSpace && sniper->sameSpace);
+    EXPECT_FALSE(isCollision(medic->bounds, sniper->bounds));
+    EXPECT_EQ(sniper->fireOrder, FireSupportFireOrder::HoldFire);
+    EXPECT_FALSE(world.setSquadOrders(RaidSquadRole::Fire, FireSupportMovementOrder::Follow, FireSupportFireOrder::FreeFire));
+    world.update(useDoor(), 0);
+    ASSERT_TRUE(world.inOutdoorRaidSpace());
+    ASSERT_TRUE(world.setAllSquadOrders(FireSupportMovementOrder::Regroup, FireSupportFireOrder::HoldFire));
+    for (auto role : {RaidSquadRole::Fire, RaidSquadRole::Support, RaidSquadRole::Sniper})
+    {
+        EXPECT_TRUE(world.squadMember(role)->sameSpace);
+        EXPECT_EQ(world.squadMember(role)->movementOrder, FireSupportMovementOrder::Regroup);
+    }
+}
+
+TEST(SpecialistSquadWorldTest, SniperAuthorizesOnlyTheReportedVisibleTargetAndUsesActualShot)
+{
+    auto config = supportWorld();
+    config.squadWeapons[2] = config.fireSupport;
+    config.fireSupport.reset();
+    config.initialEnemies = {{{845, 205}, {20, 20}, 5}};
+    GameplayWorld world{config};
+    constexpr auto role = RaidSquadRole::Sniper;
+    ASSERT_TRUE(world.setSquadOrders(role, FireSupportMovementOrder::Hold, FireSupportFireOrder::FreeFire));
+    world.update({}, kFrame);
+    auto view = world.squadMember(role);
+    ASSERT_TRUE(view && view->sniperReport);
+    EXPECT_EQ(view->sniperReport->kind, SniperTargetKind::Infected);
+    EXPECT_EQ(view->sniperReport->bearing, 0U);
+    EXPECT_FALSE(world.squadShotLastUpdate(role));
+    const auto oldToken = view->sniperReport->token;
+    ASSERT_TRUE(world.authorizeSniperShot(oldToken));
+    world.setRaidDaylight(false);
+    world.update({}, kFrame);
+    EXPECT_FALSE(world.squadMember(role)->sniperReport);
+    EXPECT_FALSE(world.squadShotLastUpdate(role));
+    world.setRaidDaylight(true);
+    world.update({}, kFrame);
+    ASSERT_TRUE(world.squadMember(role)->sniperReport);
+    EXPECT_FALSE(world.authorizeSniperShot(oldToken));
+    const auto beforeSmoke = world.squadMember(role)->sniperReport->token;
+    ASSERT_TRUE(world.authorizeSniperShot(beforeSmoke));
+    RaidSmokeRuntime smoke;
+    ASSERT_TRUE(smoke.start({{370,216}, {370,216}, outdoorRaidSpaceId(), SmokeUseDefinition{}}));
+    smoke.advance(.5F);
+    world.commitSmoke(std::move(smoke));
+    world.update({}, kFrame);
+    EXPECT_FALSE(world.squadMember(role)->sniperReport);
+    EXPECT_FALSE(world.squadShotLastUpdate(role));
+    world.commitSmoke({});
+    world.update({}, kFrame);
+    ASSERT_TRUE(world.squadMember(role)->sniperReport);
+    EXPECT_FALSE(world.authorizeSniperShot(beforeSmoke));
+    ASSERT_TRUE(world.authorizeSniperShot(world.squadMember(role)->sniperReport->token));
+    world.update({}, kFrame);
+    ASSERT_TRUE(world.squadShotLastUpdate(role));
+    EXPECT_FLOAT_EQ(world.squadShotLastUpdate(role)->noiseRadius, 115.F);
+    for (int tick{}; tick < 10; ++tick) world.update({}, kFrame);
+    EXPECT_EQ(world.squadMember(role)->sniperOutcome, SniperShotOutcome::Killed);
+    EXPECT_TRUE(world.enemies().empty());
+    EXPECT_FALSE(world.squadShotLastUpdate(role));
+
+    config.ballisticBlockers.push_back({1, {{440, 80}, {20, 260}}});
+    GameplayWorld wall{config};
+    wall.update({}, kFrame);
+    EXPECT_FALSE(wall.squadMember(role)->sniperReport);
+}
+
+TEST(SpecialistSquadWorldTest, FullHospitalEscortSmokeFireAndDenseEnemySimulationStayWithinFrameBudget)
+{
+    auto config = supportWorld();
+    config.lightConeObservationEnabled = true;
+    config.worldSize = {1800, 1300};
+    config.playerSpawn = {884, 634};
+    config.squadWeapons[1] = config.squadWeapons[2] = config.fireSupport;
+    config.rescue = RaidWorldConfig::OrdinarySurvivorRescue{{{1280, 640}, {64, 64}}, 2.F, Vec2{900, 680}};
+    constexpr Vec2 origin{900, 650};
+    for (unsigned i{}; i < 100; ++i)
+    {
+        const float angle = static_cast<float>(i) * .062831853F;
+        const float radius = 215.F + 28.F * (i % 3);
+        config.initialEnemies.push_back({{origin.x + radius * std::cos(angle), origin.y + radius * std::sin(angle)}, {20,20},100});
+    }
+    for (int i = 0; i < 2304 && config.ballisticBlockers.size() < 220; ++i)
+    {
+        const int cell = (i * 491) % 2304;
+        const Rect wall{{origin.x - 336 + (cell % 48) * 14, origin.y - 336 + (cell / 48) * 14}, {6,9}};
+        if (isCollision(wall, {{origin.x - 116, origin.y - 116}, {232,232}}) ||
+            std::ranges::any_of(config.initialEnemies, [&](const EnemySpawn &enemy) {
+                return isCollision(wall, {enemy.position, enemy.size});
+            })) continue;
+        config.ballisticBlockers.push_back({static_cast<BallisticBlockerId>(i + 1), wall});
+    }
+    ASSERT_EQ(config.ballisticBlockers.size(), 220U);
+    std::vector<double> samples;
+    std::size_t observed{};
+    for (unsigned frame{}; frame < 160; ++frame)
+    {
+        GameplayWorld world{config};
+        world.update(useDoor(), 0);
+        ASSERT_EQ(world.hospitalEscort()->state, HospitalEscortState::Following);
+        ASSERT_TRUE(world.setAllSquadOrders(FireSupportMovementOrder::Follow, FireSupportFireOrder::HoldFire));
+        RaidSmokeRuntime smoke;
+        RaidFireZoneRuntime fire;
+        ASSERT_TRUE(smoke.start({origin, {1050, 670}, outdoorRaidSpaceId(), SmokeUseDefinition{}}));
+        ASSERT_TRUE(fire.start({origin, {740, 600}, outdoorRaidSpaceId(), FireZoneUseDefinition{}}));
+        smoke.advance(.5F);
+        fire.advance(.5F);
+        world.commitSmoke(std::move(smoke));
+        world.commitFireZone(std::move(fire));
+        GameplayInput input;
+        const float angle = static_cast<float>(frame) * .13F;
+        input.moveLeft = true;
+        input.aimWorldPosition = {origin.x + 230 * std::cos(angle), origin.y + 230 * std::sin(angle)};
+        const auto start = std::chrono::steady_clock::now();
+        world.update(input, kFrame);
+        const bool valid = world.raidObservation().validGeometry();
+        for (const auto &enemy : world.enemies())
+            observed += world.raidEnemyObservable(enemy.combatTargetId()) ? 1U : 0U;
+        const auto elapsed = std::chrono::steady_clock::now() - start;
+        ASSERT_TRUE(valid);
+        ASSERT_EQ(world.simulationWorkloadLastUpdate().activeEnemies, 100U);
+        ASSERT_EQ(world.simulationWorkloadLastUpdate().activeBlockers, 220U);
+        ASSERT_EQ(world.smoke().clouds().size(), 1U);
+        ASSERT_EQ(world.fireZones().zones().size(), 1U);
+        ASSERT_TRUE(world.squadMember(RaidSquadRole::Sniper)->sniperReport);
+        if (frame >= 10) samples.push_back(std::chrono::duration<double, std::milli>(elapsed).count());
+    }
+    EXPECT_GT(observed, 0U);
+    std::ranges::sort(samples);
+    RecordProperty("full_squad_hospital_smoke_fire_p95_ms", std::to_string(samples[142]));
+    EXPECT_LE(samples[142], 3.0) << "three teammates, escort, smoke, fire, 100 enemies, 220 blockers";
 }

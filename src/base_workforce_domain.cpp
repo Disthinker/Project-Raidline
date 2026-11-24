@@ -59,6 +59,8 @@ BaseProfessionCounts facilityAssignedCounts(
         ++counts[baseProfessionIndex(BaseResidentProfession::General)];
     if (profile.pendingRaid && profile.pendingRaid->fireSupport)
         ++counts[baseProfessionIndex(BaseResidentProfession::Combat)];
+    if (profile.pendingRaid)
+        counts[baseProfessionIndex(BaseResidentProfession::Combat)] += static_cast<unsigned>(profile.pendingRaid->squadMembers.size());
     return counts;
 }
 

@@ -33,7 +33,8 @@ struct WeaponHandlingTestAccess
     static bool settle(GameSession &s, RaidResultOutcome outcome) { return s.settleAlphaRaid(outcome); }
     static void dead(GameSession &s) { static_cast<void>(s.world_->raidSession_.markPlayerDead()); }
     static auto &actors(GameplayWorld &w) { return w.activeEnemies(); }
-    static RaidFireSupportRuntime &support(GameplayWorld &w) { return w.fireSupport_.value(); }
+    static RaidFireSupportRuntime &support(GameplayWorld &w, RaidSquadRole role = RaidSquadRole::Fire)
+    { return w.squad_.at(static_cast<std::size_t>(role)).value(); }
     static bool restoreMeleeRecovery(GameplayWorld &w, float seconds)
     { return w.melee_.restoreRecovery(seconds); }
 };

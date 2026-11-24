@@ -2,6 +2,7 @@
 #include "weapon_ammo_domain.h"
 #include "raid_corpse_search.h"
 #include "raid_fire_support_domain.h"
+#include "raid_squad_domain.h"
 #include "raid_lifecycle.h"
 #include "self_recovery_domain.h"
 #include "chest_rig_layout_migration.h"
@@ -286,7 +287,8 @@ bool placementFits(
     std::optional<AssetInstanceId> ignoredAsset)
 {
     if(!placementWithinContainer(profile,content,container,origin,definition,orientation))return false;
-    if (container.kind == ProfileContainerKind::Stash && profile.pendingRaid && profile.pendingRaid->fireSupport &&
+    if (container.kind == ProfileContainerKind::Stash && profile.pendingRaid &&
+        (profile.pendingRaid->fireSupport || !profile.pendingRaid->squadMembers.empty()) &&
         raidFireSupportReservedStashOverlap(profile, content, origin, definition, orientation, ignoredAsset))
         return false;
     const InventoryFootprint footprint=inventoryFootprint(definition,orientation);
@@ -1467,6 +1469,7 @@ ProfileValidationResult validateProfileState(
     for (const auto &id : profile.raidExtractionPermissions)
         if (!knownExtractionPermission(id))
             return {false, "Raid extraction permission is unknown"};
+    if (const auto squad = validateRaidSquad(profile, content); !squad.valid) return squad;
     if (const auto components = validateWeaponComponents(profile, content); !components.valid)
         return components;
     if (const auto devices = validateTacticalDevices(profile, content); !devices.valid) return devices;
@@ -1798,6 +1801,9 @@ ProfileValidationResult validateProfileState(
         ++assignedByProfession[baseProfessionIndex(BaseResidentProfession::General)];
     if (profile.pendingRaid && profile.pendingRaid->fireSupport)
         ++assignedByProfession[baseProfessionIndex(BaseResidentProfession::Combat)];
+    if (profile.pendingRaid)
+        assignedByProfession[baseProfessionIndex(BaseResidentProfession::Combat)] +=
+            static_cast<std::uint32_t>(profile.pendingRaid->squadMembers.size());
     bool professionAssignmentsValid = true;
     for (std::size_t index = 0; index < assignedByProfession.size(); ++index)
     {
@@ -2136,13 +2142,14 @@ ProfileValidationResult validateProfileState(
         }
         const bool playerFailure = record.outcome == RaidResultOutcome::PlayerDead ||
             record.outcome == RaidResultOutcome::ActiveQuit;
-        const bool validKind = record.kind == LostRaidRecordKind::FireSupport
-            ? supportsRaidFireSupportContent(content.contentVersion()) &&
-                isRaidFireSupportMap(record.mapDefinitionId) &&
-                record.recordId == raidFireSupportLostRecordId(record.settlementId) &&
-                (playerFailure || record.outcome == RaidResultOutcome::Extracted)
-            : record.kind == LostRaidRecordKind::Player && playerFailure &&
-                record.settlementId == record.recordId;
+        bool validKind = record.kind == LostRaidRecordKind::Player && playerFailure &&
+            record.settlementId == record.recordId;
+        if (record.kind != LostRaidRecordKind::Player && isRaidFireSupportMap(record.mapDefinitionId) &&
+            supportsRaidFireSupportContent(content.contentVersion()) && (playerFailure || record.outcome == RaidResultOutcome::Extracted)) {
+            for (const auto role : {RaidSquadRole::Fire, RaidSquadRole::Support, RaidSquadRole::Sniper})
+                if (record.kind == raidSquadLossKind(role))
+                    validKind = record.recordId == raidSquadSourceId(record.settlementId,role);
+        }
         return !record.recordId.empty() && !record.raidId.empty() &&
             !record.difficulty.empty() && mapPublished && validKind &&
             profile.committedSettlements.contains(record.settlementId) &&
@@ -2462,8 +2469,8 @@ ProfileValidationResult validateProfileState(
         {
             const auto record = profile.lostRaidRecords.find(lost->recordId);
             if (record == profile.lostRaidRecords.end() ||
-                !(record->second.kind == LostRaidRecordKind::FireSupport
-                    ? isRaidFireSupportLossRoot(content, asset, lost->sourceSlot)
+                !(record->second.kind != LostRaidRecordKind::Player
+                    ? isRaidSquadLossRoot(content, record->second.kind, asset, lost->sourceSlot)
                     : itemCanEquipInSlot(*definition, lost->sourceSlot)) ||
                 !lostSourceSlots.emplace(
                     lost->recordId, lost->sourceSlot).second)
@@ -2479,8 +2486,8 @@ ProfileValidationResult validateProfileState(
         {
             if (!profile.recoveryTask.has_value() ||
                 task->taskId != profile.recoveryTask->taskId ||
-                !(profile.recoveryTask->sourceRecord.kind == LostRaidRecordKind::FireSupport
-                    ? isRaidFireSupportLossRoot(content, asset, task->sourceSlot)
+                !(profile.recoveryTask->sourceRecord.kind != LostRaidRecordKind::Player
+                    ? isRaidSquadLossRoot(content, profile.recoveryTask->sourceRecord.kind, asset, task->sourceSlot)
                     : itemCanEquipInSlot(*definition, task->sourceSlot)) ||
                 !recoverySourceSlots.insert(task->sourceSlot).second)
             {
@@ -3508,8 +3515,8 @@ ProfileValidationResult validateProfileState(
                         lost->sourceSlot == root.sourceSlot &&
                         loot == raid.loot.end();
                 rootsValid = rootsValid && root.assetId != 0U &&
-                    (recovery.sourceRecord.kind != LostRaidRecordKind::FireSupport ||
-                        (asset && isRaidFireSupportLossRoot(content, *asset, root.sourceSlot))) &&
+                    (recovery.sourceRecord.kind == LostRaidRecordKind::Player ||
+                        (asset && isRaidSquadLossRoot(content, recovery.sourceRecord.kind, *asset, root.sourceSlot))) &&
                     std::isfinite(root.position.x) &&
                     std::isfinite(root.position.y) && phaseValid &&
                     sourceSlots.insert(root.sourceSlot).second &&
@@ -5533,7 +5540,8 @@ ProfileValidationResult validateProfileState(
                 !raid.rescue || raid.rescue->definitionId != kRaidFireSupportReplacementRescueId ||
                 raid.mapDefinitionId != kRaidFireSupportReplacementMapId ||
                 raid.selfRecovery || raid.outpostRestoration || raid.baseSiteClearance || raid.basePerimeterSweep ||
-                !profile.committedRescues.contains(kRaidFireSupportReplacementRescueId) ||
+                (!profile.squadRoster.contains(RaidSquadRole::Fire) &&
+                    !profile.committedRescues.contains(kRaidFireSupportReplacementRescueId)) ||
                 !profile.committedSettlements.contains(*source) ||
                 (!admitted && (!profile.fireSupportReplacement ||
                     profile.fireSupportReplacement->deathSettlementId != *source ||
@@ -5549,7 +5557,9 @@ ProfileValidationResult validateProfileState(
                  raid.spatialLayout.layoutVersion != kHospitalLandmarkInteriorLayoutVersion ||
                  !validHospitalEscortStart(*raidMap, raid.spatialLayout, rescue.transferPoint, *rescue.escortStart)))
                 return {false, "hospital survivor escort has an invalid mission or street position"};
-            const bool committed = raid.fireSupportReplacementSource
+            const bool committed = raid.specialistRescue
+                ? profile.committedTransactions.contains(raidSquadSourceId(raid.settlementId, *raid.specialistRescue) + ":admission")
+                : raid.fireSupportReplacementSource
                 ? profile.committedTransactions.contains(
                     raidFireSupportReplacementTransactionId(*raid.fireSupportReplacementSource))
                 : profile.committedRescues.contains(rescue.definitionId);
@@ -5654,7 +5664,7 @@ ProfileValidationResult validateProfileState(
             if (!supportsRaidFireSupportContent(content.contentVersion()) ||
                 !profile.committedSettlements.contains(profile.lastRaidResult->settlementId) ||
                 profile.lastRaidResult->outcome == RaidResultOutcome::AbnormalQuit ||
-                support->returnedLoanCount > 2U ||
+                support->returnedLoanCount > 3U ||
                 (support->died && support->returnedLoanCount != 0U) ||
                 (!support->died && (support->returnedLoanCount == 0U || support->lostRecordId)))
                 return {false, "last Raid fire-support result is invalid"};
@@ -6058,6 +6068,8 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash, record.createdWorldMinute);
         hashInteger(hash, record.subsequentRaidSettlementCount);
         if (record.kind == LostRaidRecordKind::FireSupport) hashBytes(hash, "fire-support-loss-v1");
+        if (record.kind == LostRaidRecordKind::SpecialistSupport || record.kind == LostRaidRecordKind::SpecialistSniper)
+            hashInteger(hash, static_cast<unsigned>(record.kind));
     }
     hashInteger(hash, profile.nextRecoveryTaskId);
     if (profile.recoveryTask.has_value())
@@ -6075,6 +6087,8 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(hash,
             task.sourceRecord.subsequentRaidSettlementCount);
         if (task.sourceRecord.kind == LostRaidRecordKind::FireSupport) hashBytes(hash, "fire-support-loss-v1");
+        if (task.sourceRecord.kind == LostRaidRecordKind::SpecialistSupport || task.sourceRecord.kind == LostRaidRecordKind::SpecialistSniper)
+            hashInteger(hash, static_cast<unsigned>(task.sourceRecord.kind));
         hashInteger(hash, task.paidCurrency);
         hashInteger(hash, task.startedWorldMinute);
         hashInteger(hash, task.completionWorldMinute);
@@ -6688,6 +6702,8 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
             hashInteger(hash,
                 recovery.sourceRecord.subsequentRaidSettlementCount);
             if (recovery.sourceRecord.kind == LostRaidRecordKind::FireSupport) hashBytes(hash, "fire-support-loss-v1");
+            if (recovery.sourceRecord.kind == LostRaidRecordKind::SpecialistSupport || recovery.sourceRecord.kind == LostRaidRecordKind::SpecialistSniper)
+                hashInteger(hash, static_cast<unsigned>(recovery.sourceRecord.kind));
             hashFloat(hash, recovery.cachePosition.x);
             hashFloat(hash, recovery.cachePosition.y);
             hashFloat(hash, recovery.interactionDurationSeconds);
@@ -7046,6 +7062,61 @@ std::uint64_t profileStateFingerprint(const ProfileState &profile) noexcept
         hashInteger(
             hash,
             profile.lastRaidResult->baseThreatReducedUnits);
+    }
+    for (const auto &[role, member] : profile.squadRoster) {
+        hashBytes(hash, "squad-resident-v1");
+        hashInteger(hash, static_cast<unsigned>(role));
+        hashInteger(hash, static_cast<unsigned>(member.status));
+        hashInteger(hash, member.replacementReadyMinute);
+        hashInteger(hash, member.generation);
+    }
+    const auto hashPatient = [&](const BaseResidentMedicalState &medical) {
+        if (medical.activeTreatment && medical.activeTreatment->squadPatient) {
+            hashBytes(hash, "squad-patient-v1");
+            hashInteger(hash, static_cast<unsigned>(*medical.activeTreatment->squadPatient));
+        }
+    };
+    hashPatient(profile.residentMedical);
+    if (const auto &raid = profile.pendingRaid) {
+        hashPatient(raid->travel.startingResidentMedical);
+        if (raid->specialistRescue) {
+            hashBytes(hash, "specialist-rescue-v1");
+            hashInteger(hash, static_cast<unsigned>(*raid->specialistRescue));
+        }
+        for (auto role : raid->squadOrder) {
+            hashBytes(hash, "squad-slot-v1");
+            hashInteger(hash, static_cast<unsigned>(role));
+        }
+        const auto hashLoan = [&](const RaidFireSupportLoan &loan) {
+            hashInteger(hash, loan.assetId);
+            hashInteger(hash, loan.returnOrigin.x);
+            hashInteger(hash, loan.returnOrigin.y);
+            hashInteger(hash, static_cast<unsigned>(loan.originalOrientation));
+        };
+        if (raid->fireSupportHealth != 100 || !raid->fireSupportCargo.empty()) {
+            hashBytes(hash, "fire-support-field-state-v1");
+            hashInteger(hash, raid->fireSupportHealth);
+            hashInteger(hash, raid->fireSupportCargo.size());
+            for (const auto &loan : raid->fireSupportCargo) hashLoan(loan);
+        }
+        for (const auto &member : raid->squadMembers) {
+            hashBytes(hash, "squad-member-v1");
+            hashInteger(hash, static_cast<unsigned>(member.role));
+            hashInteger(hash, member.health);
+            hashInteger(hash, member.containerAssetId);
+            hashLoan(member.weapon);
+            hashInteger(hash, member.cargo.size());
+            for (const auto &loan : member.cargo) hashLoan(loan);
+        }
+    }
+    if (profile.lastRaidResult) {
+        for (const auto &[role, result] : profile.lastRaidResult->squadResults) {
+            hashBytes(hash, "squad-result-v1");
+            hashInteger(hash, static_cast<unsigned>(role));
+            hashInteger(hash, result.died ? 1U : 0U);
+            hashInteger(hash, result.returnedLoanCount);
+            if (result.lostRecordId) hashBytes(hash, *result.lostRecordId);
+        }
     }
     return hash;
 }

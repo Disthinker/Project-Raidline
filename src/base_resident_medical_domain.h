@@ -55,6 +55,7 @@ struct StartResidentTreatmentCommand
 {
     std::optional<BaseResidentProfession> expectedPatient;
     std::optional<std::vector<ResidentMedicalSupplySelection>> expectedSupplies;
+    std::optional<RaidSquadRole> squadPatient;
 };
 
 struct ResidentTreatmentPlan

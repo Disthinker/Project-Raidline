@@ -340,7 +340,13 @@ ResidentTreatmentPlan queryStartResidentTreatment(
             "the assigned medical worker is not healthy",
             definition);
     }
-    const auto patientProfession = nextInjuredProfession(profile.basePopulation,
+    if (command.squadPatient)
+    {
+        const auto it = profile.squadRoster.find(*command.squadPatient);
+        if (it == profile.squadRoster.end() || it->second.status != RaidSquadResidentStatus::Wounded)
+            return failure(profile,DomainErrorCode::InvalidQuantity,"selected team member is not wounded",definition);
+    }
+    const auto patientProfession = command.squadPatient ? BaseResidentProfession::Combat : nextInjuredProfession(profile.basePopulation,
         usesReserve ? profile.residentMedicalReservePolicy : ResidentMedicalReservePolicy{});
     const std::uint32_t adjustedDuration = applyBaseFacilityTaskDuration(
         definition.durationMinutes,
@@ -523,7 +529,14 @@ ResidentTreatmentReceipt executeStartResidentTreatment(
         plan.patientProfession,
         plan.workerProfession,
         0U,
-        plan.usesMedicalReserve};
+        plan.usesMedicalReserve, command.squadPatient};
+    if (plan.patientProfession == BaseResidentProfession::Combat && !command.squadPatient)
+    {
+        const auto found = std::ranges::find_if(candidate.squadRoster, [](const auto &entry) {
+            return entry.second.status == RaidSquadResidentStatus::Wounded;
+        });
+        if (found != candidate.squadRoster.end()) candidate.residentMedical.activeTreatment->squadPatient = found->first;
+    }
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;
     const ProfileValidationResult validation = validateProfileState(
@@ -584,6 +597,11 @@ ResidentTreatmentAdvanceResult applyResidentTreatmentThrough(
         profile.basePopulation.injuredByProfession[professionIndex] > 0U)
     {
         --profile.basePopulation.injuredByProfession[professionIndex];
+    }
+    if (treatment->squadPatient)
+    {
+        const auto patient = profile.squadRoster.find(*treatment->squadPatient);
+        if (patient != profile.squadRoster.end()) patient->second.status = RaidSquadResidentStatus::Ready;
     }
     profile.residentMedical.activeTreatment.reset();
     pauseBaseEmergencyPowerForFacility(profile, kMedicalFacility);

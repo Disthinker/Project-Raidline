@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -45,6 +46,8 @@
 #include "raid_proximity_alarm.h"
 #include <deque>
 #include "raid_volatile_barrel.h"
+
+enum class RaidSquadRole;
 
 struct RaidSimulationWorkload
 {
@@ -226,6 +229,8 @@ struct RaidWorldConfig
     bool nightRendezvousUnavailable{};
     std::optional<FireSupportConfig> fireSupport;
     std::vector<RaidVolatileBarrelSpawn> volatileBarrels;
+    std::array<std::optional<FireSupportConfig>, 3> squadWeapons{};
+    std::array<int, 3> squadInitialHealth{100, 100, 100};
 };
 
 struct RaidNightRendezvousView
@@ -582,6 +587,20 @@ public:
     takePlayerDamageObservations();
 
     void emitPlayerNoise(float radius) noexcept;
+    [[nodiscard]] std::optional<FireSupportView> squadMember(RaidSquadRole) const;
+    [[nodiscard]] bool setSquadOrders(RaidSquadRole, FireSupportMovementOrder, FireSupportFireOrder) noexcept;
+    [[nodiscard]] bool setAllSquadOrders(FireSupportMovementOrder, FireSupportFireOrder) noexcept;
+    [[nodiscard]] bool authorizeSniperShot(std::uint64_t token) noexcept;
+    void cancelSniperAuthorization() noexcept;
+    [[nodiscard]] std::optional<FireSupportShotEvent> squadShotLastUpdate(RaidSquadRole) const noexcept;
+    [[nodiscard]] const RaidSpaceDefinitionId &squadSpaceId(RaidSquadRole) const noexcept;
+    [[nodiscard]] std::optional<int> squadHealth(RaidSquadRole) const noexcept;
+    [[nodiscard]] std::optional<Vec2> squadDeathPosition(RaidSquadRole) const noexcept;
+    [[nodiscard]] bool canInteractWithSquad(RaidSquadRole) const noexcept;
+    [[nodiscard]] bool medicCanReach(std::optional<RaidSquadRole> patient) const noexcept;
+    [[nodiscard]] bool squadMedicalThreat() const noexcept;
+    void setMedicWorking(bool working) noexcept { medicWorking_ = working; }
+    void restoreSquadHealth(RaidSquadRole, int);
     bool setFireSupportOrders(FireSupportMovementOrder, FireSupportFireOrder) noexcept;
     [[nodiscard]] std::optional<FireSupportView> fireSupport() const;
     [[nodiscard]] std::optional<int> fireSupportHealth() const noexcept;
@@ -790,9 +809,11 @@ private:
 
     WorldShootingRuntime shooting_;
     WorldMeleeRuntime melee_;
-    std::optional<RaidFireSupportRuntime> fireSupport_;
-    // Like activeInteriorIndex_: the interior table is fixed for the life of this world.
-    std::optional<std::size_t> fireSupportInteriorIndex_;
+    // Fixed role slots preserve actor identity while the active space changes.
+    std::array<std::optional<RaidFireSupportRuntime>, 3> squad_;
+    std::array<std::optional<std::size_t>, 3> squadInteriors_;
+    bool squadPresent_{};
+    bool medicWorking_{};
     struct ScavengerWeaponRuntime
     {
         FireSupportConfig pistol;
@@ -831,7 +852,7 @@ private:
     void updateScavengerWeapons(float seconds);
     void clearScavengerAim() noexcept;
     template <bool CompanionsEnabled, bool ScavengersEnabled = false>
-    bool advanceRaidEnemies(float deltaTime, RaidFireSupportRuntime *support, RaidCompanionRuntime *escort = nullptr);
+    bool advanceRaidEnemies(float deltaTime, std::span<RaidFireSupportRuntime *const> squad, RaidCompanionRuntime *escort = nullptr);
     void emitRaidNoise(Vec2 source, float radius) noexcept;
     void consumeEnemyRemovals(std::span<const EnemyRemovalFact>);
     [[nodiscard]] Vec2 lostWeaponCorpseSearchPoint(Vec2 deathCenter) const noexcept;

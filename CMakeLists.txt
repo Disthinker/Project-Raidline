@@ -329,6 +329,7 @@ add_library(raidline_domain STATIC
     src/raid_visibility.cpp
     src/raid_visibility.h
     src/raid_lifecycle.cpp
+    src/raid_squad_domain.cpp
     src/raid_fire_support_domain.cpp
     src/raid_armed_scavenger_domain.cpp
     src/regional_operations_domain.cpp
@@ -486,8 +487,10 @@ add_library(raidline_services STATIC
     src/game_flow.cpp
     src/game_flow.h
     src/game_session.cpp
+    src/game_session_squad.cpp
     src/developer_test_range.cpp
     src/game_session.h
+    src/raid_squad_save.cpp
     src/save_repository.cpp
     src/save_repository.h
     src/player_effects_serialization.h
@@ -579,6 +582,7 @@ add_library(raidline_sdl_client STATIC
     src/ui_lost_recovery_presentation.cpp
     src/ui_lost_recovery_presentation.h
     src/app_ui_base_deployment.cpp
+    src/app_ui_specialist_squad.cpp
     src/ui_base_deployment_presentation.cpp
     src/ui_base_deployment_presentation.h
     src/app_ui_base_allocation.cpp
@@ -1065,6 +1069,14 @@ raidline_add_test(
     WeaponClearGestureTest
     tests/test_weapon_clear_gesture.cpp
     raidline::simulation)
+raidline_add_test(
+    RaidSquadDomainTest
+    tests/raid_squad_domain_test.cpp
+    raidline::services)
+raidline_add_test(
+    RaidSquadSaveTest
+    tests/test_raid_squad_save.cpp
+    raidline::services)
 raidline_add_test(
     SaveRepositoryTest
     tests/test_save_repository.cpp

@@ -439,7 +439,18 @@ enum class RaidResultOutcome
 
 inline constexpr std::uint32_t kLostRaidRecordRetainedSettlementCount = 3U;
 
-enum class LostRaidRecordKind { Player, FireSupport };
+enum class RaidSquadRole { Fire, Support, Sniper };
+enum class RaidSquadResidentStatus { Ready, Wounded, Missing };
+
+struct RaidSquadResident
+{
+    RaidSquadResidentStatus status{RaidSquadResidentStatus::Ready};
+    std::uint64_t replacementReadyMinute{};
+    std::uint32_t generation{1};
+    friend bool operator==(const RaidSquadResident &, const RaidSquadResident &) = default;
+};
+
+enum class LostRaidRecordKind { Player, FireSupport, SpecialistSupport, SpecialistSniper };
 
 struct LostRaidRecord
 {
@@ -939,6 +950,7 @@ struct ActiveResidentTreatment
     BaseResidentProfession workerProfession{BaseResidentProfession::General};
     std::uint32_t emergencyPowerBonusMinutes{};
     bool usesMedicalReserve{};
+    std::optional<RaidSquadRole> squadPatient;
 
     friend bool operator==(
         const ActiveResidentTreatment &,
@@ -1336,6 +1348,24 @@ struct RaidFireSupportLoan
     friend bool operator==(const RaidFireSupportLoan &, const RaidFireSupportLoan &) = default;
 };
 
+struct RaidSquadLoadout
+{
+    RaidSquadRole role{};
+    AssetInstanceId weaponAssetId{};
+    std::vector<AssetInstanceId> cargoAssetIds;
+    friend bool operator==(const RaidSquadLoadout &, const RaidSquadLoadout &) = default;
+};
+
+struct RaidSquadMember
+{
+    RaidSquadRole role{};
+    AssetInstanceId containerAssetId{};
+    RaidFireSupportLoan weapon;
+    std::vector<RaidFireSupportLoan> cargo;
+    int health{100};
+    friend bool operator==(const RaidSquadMember &, const RaidSquadMember &) = default;
+};
+
 struct RaidFireSupportSnapshot
 {
     AssetInstanceId containerAssetId{};
@@ -1406,6 +1436,11 @@ struct PendingRaidSnapshot
     std::optional<RaidFieldCacheSnapshot> fieldClueCache;
     std::optional<RaidFireSupportSnapshot> fireSupport;
     std::optional<std::string> fireSupportReplacementSource;
+    std::optional<RaidSquadRole> specialistRescue;
+    std::vector<RaidSquadMember> squadMembers;
+    std::vector<RaidSquadRole> squadOrder;
+    std::vector<RaidFireSupportLoan> fireSupportCargo;
+    int fireSupportHealth{100};
 };
 
 struct LastRaidResult
@@ -1423,6 +1458,7 @@ struct LastRaidResult
     std::vector<RaidExtractionPermissionDefinitionId> unlockedExtractionPermissions;
     bool fuelExtractionPaid{};
     std::optional<RaidFireSupportResult> fireSupport;
+    std::map<RaidSquadRole, RaidFireSupportResult> squadResults;
 };
 
 struct ProfileState
@@ -1477,6 +1513,7 @@ struct ProfileState
     std::set<RescueDefinitionId> committedRescues;
     bool nightRendezvousUnlocked{};
     std::optional<RaidFireSupportReplacement> fireSupportReplacement;
+    std::map<RaidSquadRole, RaidSquadResident> squadRoster;
     std::optional<PendingRaidSnapshot> pendingRaid;
     std::optional<LastRaidResult> lastRaidResult;
 };

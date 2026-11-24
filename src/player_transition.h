@@ -19,6 +19,8 @@ struct AlphaDeployRequest
     std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId;
     std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId;
     std::optional<RaidFireSupportLoadout> fireSupport;
+    std::vector<RaidSquadLoadout> squad{};
+    std::optional<RaidSquadRole> specialistRescue{};
 };
 
 // Service-only continuation data. No UI callback or second running session.

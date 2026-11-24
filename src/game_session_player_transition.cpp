@@ -2,6 +2,7 @@
 #include "base_world.h"
 #include "base_emergency_power_domain.h"
 #include "raid_fire_support_domain.h"
+#include "raid_squad_domain.h"
 #include "weapon_ammo_domain.h"
 #include <algorithm>
 #include <limits>
@@ -163,7 +164,7 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
             std::move(outpostRestorationId),
             std::move(baseSiteClearanceId),
             std::move(basePerimeterSweepId),
-            request.fireSupport},
+            request.fireSupport, request.squad, request.specialistRescue},
         CommandContext{
             recoveryProfile.revision,
             "deploy:" + raidId},
@@ -301,6 +302,14 @@ std::shared_ptr<PreparedPlayerTransition> GameSession::prepareAlphaDeployment(
         if (snapshot.fireSupport)
             worldConfig.fireSupport = npcWeaponConfig(candidate, snapshot.fireSupport->rifle.assetId,
                                                       kRaidFireSupportAmmunitionId);
+        worldConfig.squadInitialHealth[0] = snapshot.fireSupportHealth;
+        for (const auto &member : snapshot.squadMembers)
+        {
+            const auto slot = static_cast<std::size_t>(member.role);
+            worldConfig.squadWeapons.at(slot) = npcWeaponConfig(candidate, member.weapon.assetId,
+                member.role == RaidSquadRole::Support ? kRaidSquadSupportAmmoId : kRaidSquadSniperAmmoId);
+            worldConfig.squadInitialHealth.at(slot) = member.health;
+        }
         const bool ordinaryToolsEnabled = !snapshot.selfRecovery && !snapshot.outpostRestoration &&
             !snapshot.baseSiteClearance && !snapshot.basePerimeterSweep;
         worldConfig.noiseDecoyEnabled = pursuit || ordinaryToolsEnabled;
@@ -594,6 +603,8 @@ void GameSession::completePreparedPlayerTransition(const std::shared_ptr<Prepare
     raidNumber_ = prepared->raidNumber;
     alphaRaidActive_ = true;
     recoveredAbandonedRaid_ = false;
+    medicTreatment_.reset();
+    medicSearchDelay_ = 0;
     raidActionState_.cancel();
     weaponTriggerGate_.reset();
     droppedRaidMagazineIds_.clear();

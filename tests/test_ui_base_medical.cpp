@@ -345,6 +345,30 @@ TEST_F(UiBaseMedicalTest, ActiveResidentTreatmentCannotClearItsRequiredWorker) {
     control(Control::Staffing); EXPECT_EQ(profileStateFingerprint(profile()), fp);
     EXPECT_TRUE(profile().baseWorkforce.medicalWorker); EXPECT_TRUE(profile().residentMedical.activeTreatment);
 }
+
+TEST_F(UiBaseMedicalTest, SpecificSquadPatientReceivesTheSelectedResidentTreatment) {
+    using R = RaidSquadRole;
+    const auto combat = baseProfessionIndex(BaseResidentProfession::Combat);
+    const auto general = baseProfessionIndex(BaseResidentProfession::General);
+    auto &pop = profile().basePopulation;
+    ASSERT_GE(pop.professionResidents[general], 2U);
+    pop.professionResidents[general] -= 2;
+    pop.professionResidents[combat] += 2;
+    pop.injuredResidents += 2;
+    pop.injuredByProfession[combat] += 2;
+    profile().squadRoster[R::Support].status = RaidSquadResidentStatus::Wounded;
+    profile().squadRoster[R::Sniper].status = RaidSquadResidentStatus::Wounded;
+    ++profile().revision;
+    supplies();
+    control(Control::Residents);
+    control(Control::SquadPatient); control(Control::SquadPatient);
+    ASSERT_EQ(A::projection(*app).selectedPatient, R::Sniper);
+    ASSERT_TRUE(A::projection(*app).resident.canCommit) << A::projection(*app).resident.message;
+    control(Control::Main);
+    ASSERT_TRUE(profile().residentMedical.activeTreatment);
+    EXPECT_EQ(profile().residentMedical.activeTreatment->squadPatient, R::Sniper);
+    EXPECT_EQ(profile().squadRoster.at(R::Support).status, RaidSquadResidentStatus::Wounded);
+}
 TEST_F(UiBaseMedicalTest, AllThreeSizesAndBothLanguagesRenderWithoutMutatingPlans) {
     supplies(); const auto fp = profileStateFingerprint(profile());
     for (auto size : kUiWindowSizes) for (auto language : {UiLanguage::SimplifiedChinese, UiLanguage::English}) {

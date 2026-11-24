@@ -1,4 +1,4 @@
-#include "raid_fire_support_domain.h"
+#include "raid_squad_domain.h"
 
 #include <algorithm>
 #include <cmath>
@@ -98,9 +98,13 @@ std::string loadoutError(RaidFireSupportLoadoutFailure failure)
 bool replacementOriginMatches(const ProfileState &profile, std::string_view source,
                               std::uint64_t worldMinute) noexcept
 {
-    return profile.fireSupportReplacement && profile.fireSupportReplacement->deathSettlementId == source &&
-        profile.fireSupportReplacement->readyWorldMinute <= worldMinute &&
-        profile.basePopulation.professionResidents[kCombatIndex] == 0U &&
+    if (!profile.fireSupportReplacement || profile.fireSupportReplacement->deathSettlementId != source ||
+        profile.fireSupportReplacement->readyWorldMinute > worldMinute) return false;
+    const auto fire = profile.squadRoster.find(RaidSquadRole::Fire);
+    if (fire != profile.squadRoster.end())
+        return fire->second.status == RaidSquadResidentStatus::Missing &&
+            fire->second.replacementReadyMinute == profile.fireSupportReplacement->readyWorldMinute;
+    return profile.basePopulation.professionResidents[kCombatIndex] == livingSpecialistCount(profile) &&
         profile.committedRescues.contains(kRaidFireSupportReplacementRescueId);
 }
 
@@ -136,9 +140,7 @@ RaidFireSupportLoadoutAvailability queryRaidFireSupportLoadout(
         return result;
     }
 
-    const auto workforce = projectBaseWorkforce(profile);
-    result.availableCombatResidents = std::min(workforce.availableResidents,
-        workforce.availableByProfession[kCombatIndex]);
+    result.availableCombatResidents = availableRaidSquadResidents(profile,RaidSquadRole::Fire);
     for (const auto &[id, asset] : profile.assets.records())
     {
         if (!stashLocation(asset))
@@ -232,7 +234,7 @@ bool raidFireSupportReservedStashOverlap(const ProfileState &profile, const Cont
     GridPosition origin, const ItemDefinition &definition, ItemOrientation orientation,
     std::optional<AssetInstanceId> ignoredAsset) noexcept
 {
-    if (!profile.pendingRaid || !profile.pendingRaid->fireSupport)
+    if (!profile.pendingRaid || (!profile.pendingRaid->fireSupport && profile.pendingRaid->squadMembers.empty()))
         return false;
     const auto &raid = *profile.pendingRaid;
     if (!raid.startingAssets)
@@ -247,8 +249,12 @@ bool raidFireSupportReservedStashOverlap(const ProfileState &profile, const Cont
     };
     try
     {
+        for (const auto &m : raid.squadMembers)
+            if (intersects(m.weapon) || std::ranges::any_of(m.cargo,intersects)) return true;
+        if (!raid.fireSupport) return false;
         const auto &support = *raid.fireSupport;
-        return intersects(support.rifle) || (support.spareMagazine && intersects(*support.spareMagazine));
+        return intersects(support.rifle) || (support.spareMagazine && intersects(*support.spareMagazine)) ||
+            std::ranges::any_of(raid.fireSupportCargo,intersects);
     }
     catch (...)
     {
@@ -259,7 +265,7 @@ bool raidFireSupportReservedStashOverlap(const ProfileState &profile, const Cont
 ProfileValidationResult validateRaidFireSupportStashReservations(const ProfileState &profile,
     const ContentRegistry &content, const AssetRegistry &assets)
 {
-    if (!profile.pendingRaid || !profile.pendingRaid->fireSupport)
+    if (!profile.pendingRaid || (!profile.pendingRaid->fireSupport && profile.pendingRaid->squadMembers.empty()))
         return {true, {}};
     for (const auto &[id, asset] : assets.records())
     {
@@ -316,7 +322,8 @@ ProfileValidationResult validateRaidFireSupportCorpse(const ProfileState &profil
     }
     for (const auto &[id, asset] : profile.assets.records())
         if (ownedBy(&asset, support.containerAssetId) && id != support.rifle.assetId &&
-            (!support.spareMagazine || id != support.spareMagazine->assetId))
+            (!support.spareMagazine || id != support.spareMagazine->assetId) &&
+            std::ranges::none_of(raid.fireSupportCargo,[id](const auto &loan){return loan.assetId == id;}))
             return {false, "fire support owns an asset outside its frozen loans"};
     return validateRaidFireSupportStashReservations(profile, content, profile.assets);
 }
@@ -404,6 +411,9 @@ std::string raidFireSupportLostRecordId(std::string_view settlementId)
 
 void forgetRaidFireSupportLostRecord(ProfileState &profile, std::string_view recordId) noexcept
 {
+    if (profile.lastRaidResult)
+        for (auto &[role,result] : profile.lastRaidResult->squadResults)
+            if (result.lostRecordId == recordId) result.lostRecordId.reset();
     if (profile.lastRaidResult && profile.lastRaidResult->fireSupport)
     {
         auto &stored = profile.lastRaidResult->fireSupport->lostRecordId;
@@ -458,13 +468,19 @@ ProfileValidationResult applyRaidFireSupportCasualtyInCandidate(ProfileState &ca
     auto &combat = population.professionResidents[kCombatIndex];
     if (combat <= population.injuredByProfession[kCombatIndex] || !population.ordinaryResidents)
         return {false, "fire support casualty has no healthy resident"};
-    if (combat == 1U)
+    const auto fire = candidate.squadRoster.find(RaidSquadRole::Fire);
+    if (fire != candidate.squadRoster.end() || combat == livingSpecialistCount(candidate) + 1U)
     {
         const auto now = candidate.worldClock.elapsedWorldMinutes;
         if (now > std::numeric_limits<std::uint64_t>::max() - kRaidFireSupportReplacementDelayMinutes)
             return {false, "fire support replacement date cannot advance"};
         candidate.fireSupportReplacement = RaidFireSupportReplacement{
             std::string{settlementId}, now + kRaidFireSupportReplacementDelayMinutes};
+    }
+    if (fire != candidate.squadRoster.end())
+    {
+        fire->second.status = RaidSquadResidentStatus::Missing;
+        fire->second.replacementReadyMinute = candidate.fireSupportReplacement->readyWorldMinute;
     }
     --combat;
     --population.ordinaryResidents;
@@ -565,6 +581,14 @@ OrdinarySurvivorAdmissionReceipt executeRaidFireSupportReplacementAdmission(Prof
     ++population.professionResidents[kCombatIndex];
     if (candidate.pendingRaid)
         candidate.pendingRaid->rescue->secured = true;
+    if (auto it = candidate.squadRoster.find(RaidSquadRole::Fire); it != candidate.squadRoster.end())
+    {
+        if (it->second.generation == std::numeric_limits<unsigned>::max())
+            return fail(RaidRescueError::RevisionOverflow,"fire support generation exhausted");
+        it->second.status = RaidSquadResidentStatus::Ready;
+        it->second.replacementReadyMinute = 0U;
+        ++it->second.generation;
+    }
     candidate.fireSupportReplacement.reset();
     candidate.committedTransactions.insert(context.transactionId);
     ++candidate.revision;

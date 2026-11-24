@@ -61,9 +61,20 @@ std::optional<AssetInstanceId> cycleTreatmentKit(const std::vector<AssetInstance
 bool App::routeFireSupportInput(const SDL_Event &event)
 {
     const bool keyPress = event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat;
+    const bool slotKey = keyPress && event.key.scancode >= SDL_SCANCODE_F1 && event.key.scancode <= SDL_SCANCODE_F4;
+    const auto slotRole = [&]() -> std::optional<RaidSquadRole> {
+        const auto slot = static_cast<int>(event.key.scancode) - static_cast<int>(SDL_SCANCODE_F2);
+        if (slot < 0) return {};
+        const auto &raid = gameSession_.profile().pendingRaid;
+        if (raid && !raid->squadOrder.empty()) {
+            if (static_cast<std::size_t>(slot) < raid->squadOrder.size()) return raid->squadOrder[slot];
+            return {};
+        }
+        return slot == 0 ? std::optional{RaidSquadRole::Fire} : std::nullopt;
+    };
     if (!fireSupportOrdersOpen_)
     {
-        if (!keyPress || event.key.scancode != SDL_SCANCODE_F2 ||
+        if (!slotKey ||
             gameFlow_.state() != GameFlowState::Raid || !windowHasInputFocus_ ||
             pauseMenu_.isOpen() || inventoryOverlayState_.isOpen() || tacticalMapOpen_ ||
             quickWheelOpen() || selectedThrowable_ || developerWeaponPanelOpen_ ||
@@ -71,8 +82,11 @@ bool App::routeFireSupportInput(const SDL_Event &event)
             developerPerformanceOverlayOpen_ || raidSaveProtectionVisible() ||
             gameSession_.world().raidSession().state() != RaidSessionState::InRaid)
             return false;
-        const auto teammate = gameSession_.world().fireSupport();
-        if (!teammate || !teammate->alive() || !teammate->sameSpace) return false;
+        squadCommandRole_ = slotRole();
+        if (event.key.scancode != SDL_SCANCODE_F1 && !squadCommandRole_) return false;
+        if (!squadOrdersAvailable()) return false;
+        squadCargoIndex_ = 0;
+        squadOrderFeedback_.clear();
 
         fireSupportOrdersOpen_ = true;
         fireSupportUiBlocksGameplayThisFrame_ = true;
@@ -88,7 +102,23 @@ bool App::routeFireSupportInput(const SDL_Event &event)
         return true;
     }
 
-    if (keyPress && (event.key.scancode == SDL_SCANCODE_F2 ||
+    if (slotKey && slotRole() != squadCommandRole_) {
+        const auto next = slotRole();
+        if (next || event.key.scancode == SDL_SCANCODE_F1) {
+            const auto old = squadCommandRole_;
+            squadCommandRole_ = next;
+            if (!squadOrdersAvailable()) squadCommandRole_ = old;
+            else {
+                fireSupportTreatmentOpen_ = false;
+                fireSupportTreatmentKit_.reset();
+                squadCargoIndex_ = 0;
+                squadOrderFeedback_.clear();
+                fireSupportPress_.cancel();
+            }
+        }
+        return true;
+    }
+    if (keyPress && ((slotKey && (squadCommandRole_ || event.key.scancode == SDL_SCANCODE_F1)) ||
         (event.key.scancode == SDL_SCANCODE_ESCAPE && !fireSupportTreatmentOpen_)))
     {
         closeFireSupportOrders();
@@ -96,13 +126,17 @@ bool App::routeFireSupportInput(const SDL_Event &event)
     }
 
     int chosenOrder = 0;
+    const bool squadPanel = specialistCommandPanel() && !fireSupportTreatmentOpen_;
+    const auto actionAt = [&](Vec2 point) {
+        return squadPanel ? squadActionAt(point) : fireSupportOrderAction(point, fireSupportTreatmentOpen_);
+    };
     if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP)
     {
         if (event.button.button == SDL_BUTTON_LEFT)
         {
-            int action = fireSupportOrderAction({event.button.x, event.button.y}, fireSupportTreatmentOpen_);
-            std::string context;
-            if (action == ConfirmTreatment) {
+            int action = actionAt({event.button.x, event.button.y});
+            std::string context = squadPanel ? squadActionKey(action) : std::string{};
+            if (!squadPanel && action == ConfirmTreatment) {
                 if (!fireSupportTreatmentKit_ || !gameSession_.queryFireSupportTreatment(*fireSupportTreatmentKit_).canCommit)
                     action = 0;
                 else {
@@ -121,10 +155,10 @@ bool App::routeFireSupportInput(const SDL_Event &event)
                  fireSupportTreatmentOpen_) chosenOrder = BackToOrders;
     }
     else if (event.type == SDL_EVENT_MOUSE_MOTION && fireSupportPress_.action !=
-        fireSupportOrderAction({event.motion.x, event.motion.y}, fireSupportTreatmentOpen_))
+        actionAt({event.motion.x, event.motion.y}))
         fireSupportPress_.cancel();
     else if (keyPress && !fireSupportTreatmentOpen_ &&
-             event.key.scancode >= SDL_SCANCODE_1 && event.key.scancode <= SDL_SCANCODE_5)
+             event.key.scancode >= SDL_SCANCODE_1 && event.key.scancode <= (squadPanel ? SDL_SCANCODE_9 : SDL_SCANCODE_5))
         chosenOrder = static_cast<int>(event.key.scancode - SDL_SCANCODE_1) + 1;
     else if (keyPress && fireSupportTreatmentOpen_) {
         switch (event.key.scancode) {
@@ -141,7 +175,9 @@ bool App::routeFireSupportInput(const SDL_Event &event)
         return false;
     }
 
-    if (chosenOrder >= OpenTreatment) {
+    if (squadPanel && chosenOrder) {
+        handleSquadOrder(chosenOrder);
+    } else if (chosenOrder >= OpenTreatment) {
         fireSupportPress_.cancel();
         if (chosenOrder == BackToOrders) {
             fireSupportTreatmentOpen_ = false;
@@ -181,6 +217,8 @@ void App::closeFireSupportOrders()
     fireSupportOrdersOpen_ = false;
     fireSupportTreatmentOpen_ = false;
     fireSupportTreatmentKit_.reset();
+    squadCommandRole_.reset();
+    squadOrderFeedback_.clear();
     fireSupportUiBlocksGameplayThisFrame_ = true;
     fireSupportPress_.cancel();
     input_.suppressPrimaryPointerUntilRelease();
@@ -189,8 +227,9 @@ void App::closeFireSupportOrders()
 
 void App::renderFireSupportWorld()
 {
-    const auto teammate = gameSession_.world().fireSupport();
-    if (!teammate || !teammate->alive() || !teammate->visible) return;
+    for (const auto role : {RaidSquadRole::Fire, RaidSquadRole::Support, RaidSquadRole::Sniper}) {
+    const auto teammate = gameSession_.world().squadMember(role);
+    if (!teammate || !teammate->alive() || !teammate->visible) continue;
 
     const auto &bounds = teammate->bounds;
     const float middle = bounds.position.x + bounds.size.x * 0.5F;
@@ -199,18 +238,26 @@ void App::renderFireSupportWorld()
     const SDL_FRect vest{middle - 9.0F, top + 12.0F, 18.0F, bounds.size.y - 14.0F};
     SDL_SetRenderDrawColor(renderer_, 98, 170, 151, 255);
     SDL_RenderFillRect(renderer_, &head);
-    SDL_SetRenderDrawColor(renderer_, 51, 91, 85, 255);
+    const auto color = role == RaidSquadRole::Support ? SDL_Color{88, 125, 167, 255} :
+        role == RaidSquadRole::Sniper ? SDL_Color{126, 111, 76, 255} : SDL_Color{51, 91, 85, 255};
+    SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, 255);
     SDL_RenderFillRect(renderer_, &vest);
     SDL_SetRenderDrawColor(renderer_, 164, 230, 208, 255);
     SDL_RenderRect(renderer_, &vest);
 
-    if (!fireSupportOrdersOpen_ && !inventoryOverlayState_.isOpen() && teammate->inInteractionRange &&
+    if (role != RaidSquadRole::Fire) {
+        const bool zh = uiTextRenderer_.language() == UiLanguage::SimplifiedChinese;
+        renderWorldLabel(vest.x, top - 20.0F, role == RaidSquadRole::Support ?
+            (zh ? "支援" : "Medic") : (zh ? "狙击" : "Sniper"));
+    }
+    if (role == RaidSquadRole::Fire && !fireSupportOrdersOpen_ && !inventoryOverlayState_.isOpen() && teammate->inInteractionRange &&
         !tacticalMapOpen_ && !quickWheelOpen() && visibleWeaponOptic() != WeaponOpticMode::High &&
         !gameSession_.world().raidSpacePortalInteractionInRange() &&
         !gameSession_.world().ordinarySurvivorRescueInteractionInRange() &&
         !gameSession_.canCallSignalExtraction() && gameSession_.canTakeFireSupportMagazine() &&
         !gameSession_.nearbyRaidSceneContainer())
         renderWorldLabel(vest.x, top - 22.0F, "F: TAKE TEAMMATE MAGAZINE");
+    }
 }
 
 void App::renderFireSupportOrders()
@@ -219,6 +266,12 @@ void App::renderFireSupportOrders()
         inventoryOverlayState_.isOpen() || tacticalMapOpen_ || developerWeaponPanelOpen_ ||
         developerRangePanelOpen_ || developerPerformanceOverlayOpen_ || raidSaveProtectionVisible())
         return;
+    const auto &raid = gameSession_.profile().pendingRaid;
+    if (!fireSupportTreatmentOpen_ && ((fireSupportOrdersOpen_ && specialistCommandPanel()) ||
+        (!fireSupportOrdersOpen_ && raid && !raid->squadOrder.empty()))) {
+        renderSquadOrders();
+        return;
+    }
     const auto teammate = gameSession_.world().fireSupport();
     if (!teammate) return;
 

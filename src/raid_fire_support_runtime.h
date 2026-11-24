@@ -6,7 +6,7 @@
 #include "player_damage_observation.h"
 #include "raid_space_query.h"
 
-enum class FireSupportMovementOrder { Follow, Hold };
+enum class FireSupportMovementOrder { Follow, Hold, Regroup, Spread };
 enum class FireSupportFireOrder { HoldFire, FreeFire };
 
 inline constexpr int kFireSupportMaxHealth = 100;
@@ -21,6 +21,15 @@ struct FireSupportConfig
     float noiseRadius{};
 };
 
+enum class SniperTargetKind { Infected, Armored, Runner, Scavenger };
+enum class SniperShotOutcome { None, Fired, Hit, Killed };
+struct SniperReport
+{
+    SniperTargetKind kind{};
+    unsigned bearing{};
+    std::uint64_t token{};
+};
+
 struct FireSupportView
 {
     Rect bounds;
@@ -31,6 +40,10 @@ struct FireSupportView
     bool sameSpace{};
     bool visible{};
     bool inInteractionRange{};
+
+    std::optional<SniperReport> sniperReport;
+    SniperShotOutcome sniperOutcome{};
+    bool treating{};
 
     [[nodiscard]] bool alive() const noexcept { return health > 0; }
 };
@@ -57,6 +70,11 @@ public:
     [[nodiscard]] int health() const noexcept { return health_.current(); }
     [[nodiscard]] bool treatmentBlocked() const noexcept { return controlRemaining_ > 0.0F || treatmentInterrupted_; }
     void restoreHealth(int amount) { if (alive() && amount > 0) static_cast<void>(health_.restore(amount)); }
+    void setDeploymentHealth(int health)
+    {
+        if (health >= 0 && health < health_.current())
+            static_cast<void>(health_.takeDamage(health_.current() - health));
+    }
     void setMovementOrder(FireSupportMovementOrder order) noexcept;
 
     // World owns the shared static geometry and resolves the requested sweep.
@@ -76,6 +94,7 @@ protected:
     float controlRemaining_{};
     bool receivingTreatment_{};
     bool treatmentInterrupted_{};
+    bool performingTreatment_{};
     void clearNavigation() noexcept;
     void clearAttackLocks() noexcept { attackLocks_.clear(); }
 
@@ -97,20 +116,25 @@ public:
     void setOrders(FireSupportMovementOrder, FireSupportFireOrder) noexcept;
     void clearSpatialTransient() noexcept;
     void leaveSpace() noexcept;
-    void beginFrame(bool receivingTreatment = false) noexcept
+    void beginFrame(bool receivingTreatment = false, bool performingTreatment = false) noexcept
     {
         shotEvent_.reset();
-        receivingTreatment_ = receivingTreatment;
+        receivingTreatment_ = receivingTreatment || performingTreatment;
+        performingTreatment_ = performingTreatment;
         treatmentInterrupted_ = false;
     }
     [[nodiscard]] const std::optional<FireSupportShotEvent> &shotEvent() const noexcept
     {
         return shotEvent_;
     }
+    void observeSniperTargets(const EnemyLifecycle &, const RaidSpaceBlockerIndex &, const RaidSmokeSight &,
+                            RaidSightParameters ambient, float seconds, std::span<const RaidIlluminationCoverage *const> lights);
+    [[nodiscard]] bool authorizeSniperShot(std::uint64_t token) noexcept;
+    void cancelSniperAuthorization() noexcept { authorizedTarget_.reset(); }
     [[nodiscard]] HitResolutionResult updateWeapon(
         float seconds, Rect protectedPlayer, EnemyLifecycle &targets,
         const RaidSpaceBlockerIndex &blockerIndex,
-        const std::vector<BallisticBlocker> &blockers, const RaidSmokeSight &smoke = {});
+        const std::vector<BallisticBlocker> &blockers, const RaidSmokeSight &smoke = {}, bool sniper = false);
 
 private:
     FireSupportConfig config_;
@@ -120,6 +144,13 @@ private:
     std::optional<LogicalBallisticFlight> flight_;
     std::optional<FireSupportShotEvent> shotEvent_;
 
+    std::optional<CombatTargetId> reportedTarget_, authorizedTarget_;
+    std::optional<SniperReport> report_;
+    SniperShotOutcome sniperOutcome_{};
+    float sniperRange_{};
+    Vec2 observerPosition_{};
+    float watchHeading_{};
+    std::uint64_t reportGeneration_{};
     void tryFire(Rect protectedPlayer, const EnemyLifecycle &targets,
-                 const RaidSpaceBlockerIndex &blockerIndex, const RaidSmokeSight &smoke);
+                 const RaidSpaceBlockerIndex &blockerIndex, const RaidSmokeSight &smoke, bool sniper);
 };

@@ -2011,11 +2011,12 @@ bool App::tryDeployFromBase(
     std::optional<RegionalOutpostDefinitionId> outpostRestorationId,
     std::optional<RegionalBaseSiteDefinitionId> baseSiteClearanceId,
     std::optional<RegionalBaseSiteDefinitionId> basePerimeterSweepId,
-    std::optional<RaidFireSupportLoadout> fireSupport)
+    std::optional<RaidFireSupportLoadout> fireSupport,
+    std::vector<RaidSquadLoadout> squad, std::optional<RaidSquadRole> specialistRescue)
 {
     if (gameSession_.inventoryPersistencePending() &&
-        deferInventoryBarrier([this, outpostRestorationId, baseSiteClearanceId, basePerimeterSweepId, fireSupport] {
-            static_cast<void>(tryDeployFromBase(outpostRestorationId, baseSiteClearanceId, basePerimeterSweepId, fireSupport));
+        deferInventoryBarrier([this, outpostRestorationId, baseSiteClearanceId, basePerimeterSweepId, fireSupport, squad, specialistRescue] {
+            static_cast<void>(tryDeployFromBase(outpostRestorationId, baseSiteClearanceId, basePerimeterSweepId, fireSupport, squad, specialistRescue));
     }))return false;
     const ContentRegistry &content = publishedContentRegistry();
     const ProfileState &profile = gameSession_.profile();
@@ -2081,7 +2082,7 @@ bool App::tryDeployFromBase(
                           renderRaidLoadingScreen(targetMap, progress);
                       }}
                 : RaidDeploymentProgressCallback{},
-            std::move(fireSupport));
+            std::move(fireSupport), std::move(squad), specialistRescue);
     trackProfileUiSubmission(submission,[this](const ProfileUiCompletion &completion) {
         if(!completion.succeeded){uiMessage_=completion.message;return;}
         if(!gameFlow_.completeDeploy(completion.requestId)){uiMessage_="CHANGES SAVED | REOPEN THE PAGE";return;}
@@ -4839,6 +4840,7 @@ void App::processEvents()
             if (deploymentUi_.confirmationKey) deploymentWarningArmed_ = false;
             deploymentUi_.confirmationKey.reset();
         }
+        if (routeSquadDeploymentShortcut(event)) continue;
         input_.handleEvent(event);
         if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
              event.type == SDL_EVENT_MOUSE_BUTTON_UP) &&
@@ -6384,8 +6386,7 @@ void App::update(float deltaTime)
     updateFieldIntelligenceTradeAfterWorld();
     if (fireSupportOrdersOpen_)
     {
-        const auto teammate = gameSession_.world().fireSupport();
-        if (!teammate || !teammate->alive() ||
+        if (!squadOrdersAvailable() ||
             gameSession_.world().raidSession().state() != RaidSessionState::InRaid)
             closeFireSupportOrders();
     }
@@ -6457,8 +6458,10 @@ void App::update(float deltaTime)
         const float gain = std::clamp(1.0F - distance / std::max(shot.noiseRadius, 1.0F), 0.0F, 0.85F);
         if (gain > 0.0F) gameAudio_.play(SoundEventId::WeaponPistolFire, gain);
     }
-    if (const auto shot = gameSession_.world().fireSupportShotLastUpdate())
+    for (const auto role : {RaidSquadRole::Fire, RaidSquadRole::Support, RaidSquadRole::Sniper})
     {
+        const auto shot = gameSession_.world().squadShotLastUpdate(role);
+        if (!shot) continue;
         const auto &player = gameSession_.world().player();
         const Vec2 listener{player.position().x + player.size() / 2.0F,
                             player.position().y + player.size() / 2.0F};
@@ -6466,7 +6469,8 @@ void App::update(float deltaTime)
         const float gain = std::clamp(1.0F - distance / std::max(kFireSupportRange, shot->noiseRadius), 0.0F, 0.7F);
         if (gain > 0.0F)
         {
-            gameAudio_.play(SoundEventId::WeaponRifleFire, gain);
+            gameAudio_.play(role == RaidSquadRole::Support ? SoundEventId::WeaponPistolFire :
+                SoundEventId::WeaponRifleFire, gain);
             if (gameSession_.world().inOutdoorRaidSpace())
                 gameAudio_.play(SoundEventId::WeaponFireTailOutdoor, gain);
         }
@@ -8489,6 +8493,9 @@ void App::renderExtractionPoint()
             gameSession_.world().ordinarySurvivorRescueInteractionInRange();
         const auto plan = gameSession_.ordinarySurvivorRescuePlan();
         const bool secured = plan.has_value() && plan->alreadyCommitted;
+        const auto &pending = gameSession_.profile().pendingRaid;
+        const auto specialist = pending ? pending->specialistRescue : std::nullopt;
+        const bool zh = uiTextRenderer_.language() == UiLanguage::SimplifiedChinese;
         SDL_SetRenderDrawColor(
             renderer_,
             secured ? 48 : (inRange ? 46 : 34),
@@ -8503,9 +8510,14 @@ void App::renderExtractionPoint()
             secured ? 174 : 206,
             255);
         SDL_RenderRect(renderer_, &rescue);
-        renderWorldLabel(rescue.x + 7.0F,
-            rescue.y + 7.0F,
-            secured
+        if (specialist || (pending && pending->fireSupportReplacementSource)) {
+            const auto name = !specialist ? (zh ? "火力队员继任者" : "Fire support replacement") :
+                *specialist == RaidSquadRole::Support ?
+                (zh ? "支援干员" : "Field medic") : (zh ? "狙击干员" : "Scout sniper");
+            renderWorldLabel(rescue.x + 7.0F, rescue.y + 7.0F, fmt::format("{}{}",
+                secured ? (zh ? "已接纳 · " : "Recruited · ") : inRange ? (zh ? "按住 F 营救 · " : "Hold F to rescue · ") : "", name));
+        } else renderWorldLabel(rescue.x + 7.0F,
+            rescue.y + 7.0F, secured
                 ? "SAFE TRANSFER COMPLETE"
                 : (inRange
                        ? "HOLD F: SECURE TRANSFER"

@@ -1148,6 +1148,93 @@ TEST_F(UiBaseDeploymentTest, FireSupportIsOfferedForThreeOrdinaryMapsAndNeverFor
     EXPECT_EQ(profileStateFingerprint(profile()), before);
 }
 
+TEST_F(UiBaseDeploymentTest, SquadRescueSelectionUsesOnlyTheChosenOrdinaryMap) {
+    const auto greyline = std::ranges::find(content.maps(), kRaidFireSupportMapId, &MapDefinition::id);
+    const auto frontier = std::ranges::find(content.maps(), kRaidFireSupportReplacementMapId, &MapDefinition::id);
+    ASSERT_NE(greyline, content.maps().end());
+    ASSERT_NE(frontier, content.maps().end());
+    map(static_cast<std::size_t>(greyline - content.maps().begin()));
+    control(C::Squad);
+    ASSERT_TRUE(A::state(*app).squadOpen);
+    control(C::SquadRecruit);
+    EXPECT_EQ(A::state(*app).specialistRescue, RaidSquadRole::Support);
+    key(SDL_SCANCODE_RETURN); A::frame(*app);
+    expectNoRaid();
+    EXPECT_FALSE(A::state(*app).squadOpen);
+    key(SDL_SCANCODE_F1); A::frame(*app);
+    ASSERT_TRUE(A::state(*app).squadOpen);
+    down(C::SquadRecruit); up(C::SquadDone);
+    EXPECT_EQ(A::state(*app).specialistRescue, RaidSquadRole::Support);
+    draw();
+    const auto recruitButton = uiDeploymentControlRect(C::SquadRecruit);
+    EXPECT_GT(bright({recruitButton.x + 12, recruitButton.y + 6,
+        recruitButton.w - 24, recruitButton.h - 12}), 10);
+    control(C::SquadDone);
+    map(static_cast<std::size_t>(frontier - content.maps().begin()));
+    EXPECT_FALSE(A::state(*app).specialistRescue);
+    control(C::Squad); control(C::SquadRecruit);
+    EXPECT_EQ(A::state(*app).specialistRescue, RaidSquadRole::Sniper);
+    control(C::SquadDone); control(C::Deploy);
+    ASSERT_EQ(A::flow(*app).state(), GameFlowState::Raid);
+    ASSERT_TRUE(profile().pendingRaid);
+    EXPECT_EQ(profile().pendingRaid->specialistRescue, RaidSquadRole::Sniper);
+    EXPECT_TRUE(profile().pendingRaid->squadOrder.empty());
+}
+
+TEST_F(UiBaseDeploymentTest, SquadSelectsRealLoansAndFunctionKeysAddressEnlistmentOrder) {
+    using R = RaidSquadRole;
+    const auto greyline = std::ranges::find(content.maps(), kRaidFireSupportMapId, &MapDefinition::id);
+    ASSERT_NE(greyline, content.maps().end());
+    auto &pop = profile().basePopulation;
+    const auto combat = baseProfessionIndex(BaseResidentProfession::Combat);
+    const auto general = baseProfessionIndex(BaseResidentProfession::General);
+    ASSERT_GE(pop.professionResidents[general], 2U);
+    pop.professionResidents[general] -= 2; pop.professionResidents[combat] += 2;
+    profile().squadRoster[R::Support] = {};
+    const auto stash = ProfileContainerId::stash();
+    const auto pistol = addToStorage(stash, kRaidSquadSupportWeaponId, 1);
+    const auto medicine = addToStorage(stash, alpha_content::medkit, 1);
+    ASSERT_NE(pistol, 0U); ASSERT_NE(medicine, 0U);
+    ASSERT_NE(addToStorage(stash, kRaidSquadSupportAmmoId, 30), 0U);
+    const auto rifle = addToStorage(stash, kRaidFireSupportRifleId, 1);
+    ASSERT_NE(rifle, 0U);
+    ASSERT_NE(addToStorage(stash, kRaidFireSupportAmmunitionId, 30), 0U);
+    ++profile().revision;
+    ASSERT_TRUE(validateProfileState(profile(), content).valid) << validateProfileState(profile(), content).message;
+    map(static_cast<std::size_t>(greyline - content.maps().begin()));
+    control(C::Squad); control(C::SquadSupport); control(C::SquadToggle);
+    ASSERT_EQ(A::state(*app).squad.size(), 1U);
+    const auto &choices = A::projection(*app).squadOptions[static_cast<std::size_t>(R::Support)];
+    const auto maxChoices = choices.cargo.size();
+    for (std::size_t i = 0; i < maxChoices; ++i) {
+        control(C::SquadCargoOne);
+        if (A::state(*app).squad.front().cargoAssetIds == std::vector<AssetInstanceId>{medicine}) break;
+    }
+    ASSERT_EQ(A::state(*app).squad.front().cargoAssetIds, std::vector<AssetInstanceId>{medicine});
+    control(C::SquadFire); control(C::SquadToggle); control(C::SquadDone);
+    ASSERT_EQ(A::state(*app).squad.size(), 2U);
+    control(C::Deploy);
+    ASSERT_EQ(A::flow(*app).state(), GameFlowState::Raid) << A::legacyMessage(*app);
+    ASSERT_EQ(profile().pendingRaid->squadOrder, (std::vector<R>{R::Support, R::Fire}));
+    auto &world = A::session(*app).world();
+    key(SDL_SCANCODE_F2); A::frame(*app); ASSERT_TRUE(A::ordersOpen(*app));
+    key(SDL_SCANCODE_2); A::frame(*app);
+    ASSERT_TRUE(world.squadMember(R::Support));
+    EXPECT_EQ(world.squadMember(R::Support)->movementOrder, FireSupportMovementOrder::Hold);
+    EXPECT_EQ(world.squadMember(R::Fire)->movementOrder, FireSupportMovementOrder::Follow);
+    key(SDL_SCANCODE_F3); A::frame(*app);
+    key(SDL_SCANCODE_4); A::frame(*app);
+    EXPECT_EQ(world.squadMember(R::Fire)->fireOrder, FireSupportFireOrder::FreeFire);
+    EXPECT_EQ(world.squadMember(R::Support)->fireOrder, FireSupportFireOrder::HoldFire);
+    key(SDL_SCANCODE_F1); A::frame(*app);
+    key(SDL_SCANCODE_7); A::frame(*app);
+    EXPECT_EQ(world.squadMember(R::Fire)->movementOrder, FireSupportMovementOrder::Spread);
+    EXPECT_EQ(world.squadMember(R::Support)->movementOrder, FireSupportMovementOrder::Spread);
+    key(SDL_SCANCODE_ESCAPE); A::frame(*app);
+    EXPECT_FALSE(A::ordersOpen(*app));
+    EXPECT_TRUE(A::captured(*app));
+}
+
 TEST_F(UiBaseDeploymentTest, FuelBriefingIsLimitedToOrdinaryFrontierDeployments) {
     const auto fingerprint = profileStateFingerprint(profile());
     for (const auto &map : content.maps()) {

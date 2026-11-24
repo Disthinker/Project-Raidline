@@ -743,7 +743,9 @@ private:
             baseSiteClearanceId = std::nullopt,
         std::optional<RegionalBaseSiteDefinitionId>
             basePerimeterSweepId = std::nullopt,
-        std::optional<RaidFireSupportLoadout> fireSupport = std::nullopt);
+        std::optional<RaidFireSupportLoadout> fireSupport = std::nullopt,
+        std::vector<RaidSquadLoadout> squad = {},
+        std::optional<RaidSquadRole> specialistRescue = std::nullopt);
     [[nodiscard]] const MapDefinition &selectedRaidMap() const;
     void cycleSelectedRaidMap(int direction) noexcept;
     void handleRaidIntelligenceSelection(RaidIntelligenceCategory category);
@@ -961,6 +963,18 @@ private:
     void updateFieldIntelligenceTradeAfterWorld();
     void suppressRaidPanelControls(GameplayInput &);
     bool routeFireSupportInput(const SDL_Event &);
+    void handleSquadDeployment(UiDeploymentControl);
+    bool routeSquadDeploymentShortcut(const SDL_Event &);
+    void renderSquadDeployment();
+    bool squadOrdersAvailable() const;
+    bool specialistCommandPanel() const;
+    int squadActionAt(Vec2) const;
+    std::string squadActionKey(int) const;
+    void renderSquadOrders();
+    void handleSquadOrder(int order);
+    std::optional<RaidSquadRole> squadCommandRole_;
+    std::size_t squadCargoIndex_{};
+    std::string squadOrderFeedback_;
     void closeFireSupportOrders();
     void renderFireSupportWorld();
     void renderFireSupportOrders();
