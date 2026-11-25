@@ -1,4 +1,5 @@
 #include "app.h"
+#include "authored_player_sprite.h"
 #include "ui_app_persistence_wait.h"
 #include "test_temp_directory.h"
 #include "alpha_content_ids.h"
@@ -64,11 +65,13 @@ struct UiQuickWheelTestAccess {
             return Texture{IMG_LoadTexture(a.renderer_,reinterpret_cast<const char *>(utf8.c_str()))};
         };
         a.backgroundTexture_ = texture(defaultV0MapDefinition().backgroundTexturePath);
-        a.playerTexture_ = texture("characters/protagonist_left_minimal_256x320.png");
-        a.playerMoveHorizontalTexture_ = texture("characters/player/default/player_default_move_horizontal_6f_1536x640.png");
+        a.playerAtlas_ = loadPlayerAtlas(a.renderer_, root);
+        ASSERT_TRUE(a.playerAtlas_.valid());
+        a.scavengerIdleTexture_ = texture("characters/protagonist_left_minimal_256x320.png");
+        a.scavengerMoveTexture_ = texture("characters/player/default/player_default_move_horizontal_6f_1536x640.png");
         a.enemyMoveHorizontalTexture_ = texture("characters/enemy/default/enemy_default_move_horizontal_6f_1536x640.png");
-        ASSERT_TRUE(a.backgroundTexture_.valid() && a.playerTexture_.valid() &&
-            a.playerMoveHorizontalTexture_.valid() && a.enemyMoveHorizontalTexture_.valid());
+        ASSERT_TRUE(a.backgroundTexture_.valid() && a.scavengerIdleTexture_.valid() &&
+            a.scavengerMoveTexture_.valid() && a.enemyMoveHorizontalTexture_.valid());
     }
     static bool beginBackdrop(App &a) {return a.quickWheelBackdrop_.begin(a.renderer_);}
     static bool composeBackdrop(App &a) {return a.quickWheelBackdrop_.compose();}
@@ -76,8 +79,8 @@ struct UiQuickWheelTestAccess {
     static void detach(App &a) {
         for(auto &t:a.inventoryItemTextures_)t.reset();
         for(auto &t:a.worldItemTextures_)t.reset();
-        a.backgroundTexture_.reset(); a.playerTexture_.reset();
-        a.playerMoveHorizontalTexture_.reset(); a.enemyMoveHorizontalTexture_.reset();
+        a.backgroundTexture_.reset(); a.playerAtlas_.reset(); a.scavengerIdleTexture_.reset();
+        a.scavengerMoveTexture_.reset(); a.enemyMoveHorizontalTexture_.reset();
         a.raidSmokeTerrain_.reset(); a.indoorInformationLayer_.reset(); a.indoorShadowMask_.reset();
         a.quickWheelBackdrop_.reset();a.uiTextRenderer_.shutdown(); a.renderer_=nullptr;
     }

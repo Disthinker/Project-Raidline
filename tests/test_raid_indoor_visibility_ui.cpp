@@ -71,27 +71,25 @@ struct RaidIndoorVisibilityUiTestAccess
         a.indoorInformationLayer_.reset();
         a.indoorShadowMask_.reset();
         a.enemyMoveHorizontalTexture_.reset();
-        a.playerMoveHorizontalTexture_.reset();
-        a.playerTexture_.reset();
+        a.playerAtlas_.reset();
         a.uiTextRenderer_.shutdown();
         a.renderer_ = nullptr;
     }
     static void sprites(App &a)
     {
-        const auto make = [&](Uint32 color)
+        const auto make = [&](Uint32 color, int width, int height)
         {
             SDL_Texture *t =
                 SDL_CreateTexture(a.renderer_, SDL_PIXELFORMAT_RGBA8888,
-                                  SDL_TEXTUREACCESS_STATIC, 1536, 640);
+                                  SDL_TEXTUREACCESS_STATIC, width, height);
             EXPECT_NE(t, nullptr);
-            std::vector<Uint32> pixels(1536U * 640U, color);
-            EXPECT_TRUE(SDL_UpdateTexture(t, nullptr, pixels.data(), 1536 * 4));
+            std::vector<Uint32> pixels(static_cast<std::size_t>(width) * height, color);
+            EXPECT_TRUE(SDL_UpdateTexture(t, nullptr, pixels.data(), width * 4));
             EXPECT_TRUE(SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND));
             return Texture{t};
         };
-        a.enemyMoveHorizontalTexture_ = make(0xEA32D2FFU);
-        a.playerMoveHorizontalTexture_ = make(0x18CB88FFU);
-        a.playerTexture_ = make(0x18CB88FFU);
+        a.enemyMoveHorizontalTexture_ = make(0xEA32D2FFU, 1536, 640);
+        a.playerAtlas_ = make(0x18CB88FFU, 512, 768);
     }
     static void syntheticRoom(App &a, bool large = false)
     {

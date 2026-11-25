@@ -109,8 +109,7 @@ bool App::renderWeaponOpticWorld(const WeaponOpticViewProjection &projection,
         if (!selectScene())
             return false;
         if (inBase)
-            renderPlayerAvatar(base.playerPosition(), base.playerSize(),
-                base.playerFacingDirection(), base.playerIsMoving(), base.playerAnimationFrame());
+            renderPlayerAvatar(base.playerPosition(), base.playerSize(), base.playerMotionFrame());
         else
             renderPlayer();
         return true;

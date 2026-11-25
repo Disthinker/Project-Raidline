@@ -39,13 +39,21 @@ SDL_FRect Texture::contentBounds() const noexcept {
     if(content_.w>0 && content_.h>0)return content_;
     float w{},h{};SDL_GetTextureSize(get(),&w,&h);return {0,0,w,h};
 }
-Texture loadInventoryTexture(SDL_Renderer *renderer,const std::filesystem::path &path) {
+Texture loadInventoryTexture(SDL_Renderer *renderer,const std::filesystem::path &path,
+                             SDL_Rect measureRegion) {
     const auto utf8=path.u8string();
     SDL_Surface *image=IMG_Load(reinterpret_cast<const char *>(utf8.c_str()));
     if(!image)return {};
+    const SDL_Rect full{0,0,image->w,image->h};
+    if (measureRegion.w == 0 && measureRegion.h == 0) measureRegion = full;
+    SDL_Rect measured{};
+    if (!SDL_GetRectIntersection(&measureRegion, &full, &measured)) {
+        SDL_DestroySurface(image);
+        return {};
+    }
     int left=image->w,top=image->h,right=-1,bottom=-1;
     if(!SDL_LockSurface(image)) {SDL_DestroySurface(image);return {};}
-    for(int y=0;y<image->h;++y)for(int x=0;x<image->w;++x) {
+    for(int y=measured.y;y<measured.y+measured.h;++y)for(int x=measured.x;x<measured.x+measured.w;++x) {
         Uint8 r,g,b,a;
         if(SDL_ReadSurfacePixel(image,x,y,&r,&g,&b,&a) && a) {
             left=std::min(left,x);top=std::min(top,y);right=std::max(right,x);bottom=std::max(bottom,y);
@@ -54,7 +62,8 @@ Texture loadInventoryTexture(SDL_Renderer *renderer,const std::filesystem::path 
     SDL_UnlockSurface(image);
     const SDL_FRect content=right>=left && bottom>=top ? SDL_FRect{
         static_cast<float>(left),static_cast<float>(top),static_cast<float>(right-left+1),static_cast<float>(bottom-top+1)}:
-        SDL_FRect{0,0,static_cast<float>(image->w),static_cast<float>(image->h)};
+        SDL_FRect{static_cast<float>(measured.x),static_cast<float>(measured.y),
+                  static_cast<float>(measured.w),static_cast<float>(measured.h)};
     Texture texture{SDL_CreateTextureFromSurface(renderer,image),content};
     SDL_DestroySurface(image);
     if(texture.valid())SDL_SetTextureBlendMode(texture.get(),SDL_BLENDMODE_BLEND);

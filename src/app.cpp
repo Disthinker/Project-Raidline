@@ -1,5 +1,6 @@
 // Implementation of the App class
 #include "app.h"
+#include "authored_player_sprite.h"
 #include "ui_raid_illumination.h"
 #include "ui_weapon_optic_view.h"
 #include "base_siege_warning_layout.h"
@@ -61,16 +62,16 @@ namespace
     constexpr float kBaseOperationNoticeLifetimeSeconds{9.0F};
     constexpr std::size_t kBaseBuildCardsPerPage{4U};
 
-    constexpr int kPlayerSpriteWidth{64};
-    constexpr int kPlayerSpriteHeight{80};
+    constexpr int kScavengerSpriteWidth{64};
+    constexpr int kScavengerSpriteHeight{80};
 
-    constexpr float kPlayerMoveSourceFrameWidth{256.0f};
-    constexpr float kPlayerMoveSourceFrameHeight{320.0f};
+    constexpr float kScavengerMoveSourceFrameWidth{256.0f};
+    constexpr float kScavengerMoveSourceFrameHeight{320.0f};
 
-    constexpr float kPlayerMoveLeftRowY{0.0f};
-    constexpr float kPlayerMoveRightRowY{320.0f};
+    constexpr float kScavengerMoveLeftRowY{0.0f};
+    constexpr float kScavengerMoveRightRowY{320.0f};
 
-    constexpr std::size_t kPlayerMoveFrameCount{6};
+    constexpr std::size_t kScavengerMoveFrameCount{6};
 
     constexpr float kEnemySpriteWidth{64.0f};
     constexpr float kEnemySpriteHeight{80.0f};
@@ -1604,12 +1605,12 @@ bool App::loadTextures()
         defaultV0MapDefinition()
             .backgroundTexturePath;
 
-    const std::string playerPath =
+    const std::string scavengerIdlePath =
         assetRoot +
         "characters/"
         "protagonist_left_minimal_256x320.png";
 
-    const std::string playerMoveHorizontalPath =
+    const std::string scavengerMovePath =
         assetRoot +
         "characters/player/default/"
         "player_default_move_horizontal_6f_1536x640.png";
@@ -1622,8 +1623,8 @@ bool App::loadTextures()
     // 所有资源先加载到局部 RAII 对象。
     // 任意一步失败时，不会留下半完成的 App 状态。
     Texture backgroundTexture;
-    Texture playerTexture;
-    Texture playerMoveHorizontalTexture;
+    Texture scavengerIdleTexture;
+    Texture scavengerMoveTexture;
     Texture enemyMoveHorizontalTexture;
 
     std::array<Texture, itemCount()>
@@ -1641,17 +1642,21 @@ bool App::loadTextures()
         return false;
     }
 
-    playerTexture=loadInventoryTexture(renderer_,std::filesystem::u8path(playerPath));
-    if (!playerTexture.valid())
+    Texture playerAtlas = loadPlayerAtlas(renderer_, std::filesystem::u8path(assetRoot));
+    if (!playerAtlas.valid())
     {
+        fmt::print("Could not load the 512x768 player atlas '{}{}': {}\n",
+                   assetRoot, kPlayerAtlasPath, SDL_GetError());
         return false;
     }
+    if (!loadTexture(renderer_, scavengerIdlePath, false, scavengerIdleTexture))
+        return false;
 
     if (!loadTexture(
             renderer_,
-            playerMoveHorizontalPath,
+            scavengerMovePath,
             true,
-            playerMoveHorizontalTexture))
+            scavengerMoveTexture))
     {
         return false;
     }
@@ -1711,12 +1716,13 @@ bool App::loadTextures()
     backgroundTexture_ =
         std::move(backgroundTexture);
 
-    playerTexture_ =
-        std::move(playerTexture);
+    playerAtlas_ = std::move(playerAtlas);
+    scavengerIdleTexture_ =
+        std::move(scavengerIdleTexture);
 
-    playerMoveHorizontalTexture_ =
+    scavengerMoveTexture_ =
         std::move(
-            playerMoveHorizontalTexture);
+            scavengerMoveTexture);
 
     enemyMoveHorizontalTexture_ =
         std::move(
@@ -8161,12 +8167,7 @@ SDL_FRect App::worldLabelBounds(float x, float y, std::string_view label)
     const Vec2 bodySize = inBase ? gameFlow_.baseWorld().playerSize()
                                 : Vec2{gameSession_.world().player().size(),
                                        gameSession_.world().player().size()};
-    // Match renderPlayerAvatar exactly; this changes only label placement.
-    const SDL_FRect avatar{
-        std::round(position.x + (bodySize.x - kPlayerSpriteWidth) * 0.5F),
-        std::round(position.y + (bodySize.y - kPlayerSpriteHeight) * 0.5F),
-        static_cast<float>(kPlayerSpriteWidth),
-        static_cast<float>(kPlayerSpriteHeight)};
+    const SDL_FRect avatar = playerAvatarBounds(position, bodySize);
     const Vec2 camera = inBase ? baseWorldCameraOffset() : raidWorldCameraOffset();
     const float zoom = inBase ? baseConstructionZoom() : 1.0F;
     const Vec2 shake = raidWorldScreenShakePixels();
@@ -9887,15 +9888,23 @@ void App::renderGroundItems()
     }
 }
 
-void App::renderPlayerAvatar(
+void App::renderPlayerAvatar(Vec2 position, Vec2 bodySize, PlayerMotionFrame frame)
+{
+    if (!playerAtlas_.valid()) return;
+    const auto source = playerAtlasFrame(frame);
+    const auto destination = playerAvatarBounds(position, bodySize);
+    SDL_RenderTexture(renderer_, playerAtlas_.get(), &source, &destination);
+}
+
+void App::renderScavengerAvatar(
     Vec2 position,
     Vec2 bodySize,
     Vec2 facingDirection,
     bool moving,
     std::size_t animationFrame)
 {
-    const float spriteW = kPlayerSpriteWidth;
-    const float spriteH = kPlayerSpriteHeight;
+    const float spriteW = kScavengerSpriteWidth;
+    const float spriteH = kScavengerSpriteHeight;
     // The camera is committed through an integer SDL viewport. Align the
     // player to the same pixel grid so fractional simulation positions cannot
     // make the centered avatar oscillate by one pixel against the world.
@@ -9913,32 +9922,32 @@ void App::renderPlayerAvatar(
     {
         SDL_RenderTexture(
             renderer_,
-            playerTexture_.get(),
+            scavengerIdleTexture_.get(),
             nullptr,
             &playerRect);
     }
     else
     {
         std::size_t frameIndex = moving ? animationFrame : 0U;
-        if (frameIndex >= kPlayerMoveFrameCount)
+        if (frameIndex >= kScavengerMoveFrameCount)
         {
             frameIndex = 0;
         }
         const float sourceX =
             static_cast<float>(frameIndex) *
-            kPlayerMoveSourceFrameWidth;
+            kScavengerMoveSourceFrameWidth;
         const float sourceY =
             facingDirection.x < 0.0f
-                ? kPlayerMoveLeftRowY
-                : kPlayerMoveRightRowY;
+                ? kScavengerMoveLeftRowY
+                : kScavengerMoveRightRowY;
         SDL_FRect sourceRect{
             sourceX,
             sourceY,
-            kPlayerMoveSourceFrameWidth,
-            kPlayerMoveSourceFrameHeight};
+            kScavengerMoveSourceFrameWidth,
+            kScavengerMoveSourceFrameHeight};
         SDL_RenderTexture(
             renderer_,
-            playerMoveHorizontalTexture_.get(),
+            scavengerMoveTexture_.get(),
             &sourceRect,
             &playerRect);
     }
@@ -9946,11 +9955,12 @@ void App::renderPlayerAvatar(
 
 void App::renderPlayerPreview(const SDL_FRect &bounds)
 {
-    if(!playerTexture_.valid())return;
-    const auto source=playerTexture_.contentBounds();
-    const auto fit=fitInventoryTexture(source.w,source.h,{bounds.x,bounds.y,bounds.w,bounds.h},ItemOrientation::Degrees0,0);
-    const SDL_FRect destination{fit.x,fit.y,fit.width,fit.height};
-    SDL_RenderTexture(renderer_,playerTexture_.get(),&source,&destination);
+    if (!playerAtlas_.valid()) return;
+    const auto source = playerAtlas_.contentBounds();
+    const auto fit = fitInventoryTexture(source.w, source.h,
+        {bounds.x, bounds.y, bounds.w, bounds.h}, ItemOrientation::Degrees0, 0);
+    const SDL_FRect destination{fit.x, fit.y, fit.width, fit.height};
+    SDL_RenderTexture(renderer_, playerAtlas_.get(), &source, &destination);
 }
 
 void App::renderPlayer()
@@ -9958,12 +9968,8 @@ void App::renderPlayer()
     const Player &player = gameSession_.world().player();
     const Vec2 logicPos = player.position();
     const float logicSize = player.size();
-    renderPlayerAvatar(
-        logicPos,
-        Vec2{logicSize, logicSize},
-        player.facingDirection(),
-        player.isMoving(),
-        player.currentAnimationFrameIndex());
+    const Vec2 bodySize{logicSize, logicSize};
+    renderPlayerAvatar(logicPos, bodySize, player.motionFrame());
 
     if (player.isImpactSlowed())
     {
@@ -9973,11 +9979,7 @@ void App::renderPlayer()
             196U,
             72U,
             255U);
-        const SDL_FRect playerRect{
-            logicPos.x + (logicSize - kPlayerSpriteWidth) / 2.0F,
-            logicPos.y + (logicSize - kPlayerSpriteHeight) / 2.0F,
-            static_cast<float>(kPlayerSpriteWidth),
-            static_cast<float>(kPlayerSpriteHeight)};
+        const SDL_FRect playerRect = playerAvatarBounds(logicPos, bodySize);
         SDL_RenderRect(renderer_, &playerRect);
     }
 }
@@ -10018,8 +10020,8 @@ void App::renderEnemies()
                 found->aiming ? found->aimDirection : Vec2{-1.0F, 0.0F};
             const bool running = found->retreating && (facing.x != 0 || facing.y != 0);
             const auto frame = running ? static_cast<std::size_t>(
-                std::fmod(uiClockSeconds_ * 8.0F, static_cast<float>(kPlayerMoveFrameCount))) : 0U;
-            renderPlayerAvatar(bounds.position, bounds.size, facing, running, frame);
+                std::fmod(uiClockSeconds_ * 8.0F, static_cast<float>(kScavengerMoveFrameCount))) : 0U;
+            renderScavengerAvatar(bounds.position, bounds.size, facing, running, frame);
             const float x = bounds.position.x + bounds.size.x * 0.5F;
             const float y = bounds.position.y + bounds.size.y * 0.5F;
             // The warning stays on the figure; its short stroke shows the raised pistol.
@@ -10776,8 +10778,7 @@ void App::renderBaseWorldScene(Rect visible, bool terrainOnly, bool drawAvatar)
     }
 
     if (drawAvatar)
-        renderPlayerAvatar(world.playerPosition(), world.playerSize(),
-            world.playerFacingDirection(), world.playerIsMoving(), world.playerAnimationFrame());
+        renderPlayerAvatar(world.playerPosition(), world.playerSize(), world.playerMotionFrame());
     renderMeleeSwing(world.melee());
     renderShotPresentations();
     renderShotFeedbackPresentations();
@@ -10860,8 +10861,7 @@ void App::renderBaseWorld()
             SDL_RenderGeometry(renderer_, indoorInformationLayer_.get(), litVertices.data(),
                 static_cast<int>(litVertices.size()), nullptr, 0);
         SDL_SetRenderViewport(renderer_,&worldViewport);
-        renderPlayerAvatar(world.playerPosition(),world.playerSize(),world.playerFacingDirection(),
-            world.playerIsMoving(),world.playerAnimationFrame());
+        renderPlayerAvatar(world.playerPosition(), world.playerSize(), world.playerMotionFrame());
     }
 
     static_cast<void>(SDL_SetRenderViewport(renderer_, nullptr));
@@ -15121,8 +15121,9 @@ void App::shutdown()
     indoorInformationLayer_.reset();
     indoorShadowMask_.reset();
     raidSmokeTerrain_.reset();
-    playerMoveHorizontalTexture_.reset();
-    playerTexture_.reset();
+    playerAtlas_.reset();
+    scavengerMoveTexture_.reset();
+    scavengerIdleTexture_.reset();
     backgroundTexture_.reset();
     uiTextRenderer_.shutdown();
 

@@ -1454,6 +1454,35 @@ TEST(GameplayWorldTest, AimAtPlayerCenterPreservesPreviousFacing)
     EXPECT_FLOAT_EQ(world.player().facingDirection().y, 0.0F);
 }
 
+TEST(GameplayWorldTest, BackpedallingAndVerticalAimKeepTheAuthoredStride)
+{
+    GameplayWorld world;
+    GameplayInput input{};
+    input.moveLeft = true;
+    input.aimWorldPosition = Vec2{1000.0F, 376.0F};
+    world.update(input, 0.12F);
+    const auto walk = world.player().motionFrame();
+    ASSERT_EQ(walk.clip, PlayerMotionClip::Walk);
+    ASSERT_EQ(walk.index, 1U);
+    ASSERT_FALSE(walk.left);
+
+    const Vec2 position = world.player().position();
+    const float centerX = position.x + world.player().size() * 0.5F;
+    input.moveLeft = false;
+    input.moveUp = true;
+    input.aimWorldPosition = Vec2{centerX, 100.0F};
+    world.update(input, 1.0F / 60.0F);
+    ASSERT_NEAR(world.player().facingDirection().x, 0.0F, 1e-6F);
+    EXPECT_EQ(world.player().motionFrame(), walk);
+
+    input.aimWorldPosition = Vec2{0.0F, 376.0F};
+    world.update(input, 1.0F / 60.0F);
+    const auto turned = world.player().motionFrame();
+    EXPECT_TRUE(turned.left);
+    EXPECT_EQ(turned.clip, walk.clip);
+    EXPECT_EQ(turned.index, walk.index);
+}
+
 TEST(GameplayWorldTest, WeaponFeedbackReflectsShotAndRecovers)
 {
     GameplayWorld world;
@@ -2927,6 +2956,28 @@ TEST(GameplayWorldRaidTest, StartsActiveRaidWithPublishedExtractionPoint)
     EXPECT_FLOAT_EQ(bounds.position.y, 520.0F);
     EXPECT_FLOAT_EQ(bounds.size.x, 176.0F);
     EXPECT_FLOAT_EQ(bounds.size.y, 136.0F);
+}
+
+TEST(GameplayWorldRaidTest, PassingThroughAnEntranceKeepsTheLateStrideTakeoff)
+{
+    auto config = makeInteriorDiscoveryWorldConfig();
+    config.playerSpawn = {40.0F, 100.0F};
+    GameplayWorld world{std::move(config)};
+    GameplayInput input{};
+    input.moveRight = true;
+    world.update(input, 0.35F);
+    ASSERT_EQ(world.player().motionFrame().index, 3U);
+    input.sprint = true;
+    input.interactJustPressed = true;
+    world.update(input, 0.01F);
+    ASSERT_TRUE(world.spaceTransitionedLastUpdate());
+    ASSERT_FALSE(world.inOutdoorRaidSpace());
+    EXPECT_EQ(world.player().motionFrame().clip, PlayerMotionClip::WalkToRunNear);
+    EXPECT_EQ(world.player().motionFrame().entryPhase, 3U);
+    input.interactJustPressed = false;
+    world.update(input, 0.09F);
+    EXPECT_EQ(world.player().motionFrame().clip, PlayerMotionClip::Run);
+    EXPECT_EQ(world.player().motionFrame().index, 3U);
 }
 
 TEST(GameplayWorldRaidTest, IndependentInteriorSwitchesActiveSpatialAuthority)

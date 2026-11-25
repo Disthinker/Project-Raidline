@@ -1,5 +1,9 @@
 # Project Raidline
 
+## 验收入口
+
+所有游戏候选统一由桌面的 **Project Raidline Debug** 启动。交付时原位更新此快捷方式或其固定目标，核对程序指纹、工作目录、运行资源及隔离试玩档。试玩说明只列这个入口。新候选与上一版回滚程序分别保存；清理多余的游戏快捷方式、独立试玩启动脚本和可重建编译产物，保留玩家存档、共享依赖、验证记录及仍需保留的独立候选。
+
 ## Product and sources
 
 Independent game, not a weekly teaching project. Target Windows PC, keyboard/mouse, offline single-player; keep core code portable for Linux build/test CI, not a simultaneous Linux release.

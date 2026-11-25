@@ -1,0 +1,767 @@
+{
+  "schema": "raidline-authored-player-atlas-v1",
+  "image": "atlas.png",
+  "frameSize": [
+    64,
+    64
+  ],
+  "anchor": [
+    32,
+    60
+  ],
+  "columns": 8,
+  "rows": 12,
+  "sourceSha256": "d3b73ba36d8f01343963cef5e2db144cc0cb776dff820813ff2a31da3cdddf75",
+  "clips": [
+    {
+      "id": "Idle",
+      "body": "human",
+      "facing": "right",
+      "row": 0,
+      "loop": true,
+      "origin": "static-base",
+      "frames": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 64,
+          "h": 64,
+          "ms": 1000
+        }
+      ],
+      "timingNote": "Static hold; 1000 ms repeated, not an authored duration."
+    },
+    {
+      "id": "Walk",
+      "body": "human",
+      "facing": "right",
+      "row": 1,
+      "loop": true,
+      "origin": "authored",
+      "sourceClipId": "99aed59d-4476-45b2-b11b-ae12141c30a4",
+      "frames": [
+        {
+          "x": 0,
+          "y": 64,
+          "w": 64,
+          "h": 64,
+          "ms": 110
+        },
+        {
+          "x": 64,
+          "y": 64,
+          "w": 64,
+          "h": 64,
+          "ms": 115
+        },
+        {
+          "x": 128,
+          "y": 64,
+          "w": 64,
+          "h": 64,
+          "ms": 110
+        },
+        {
+          "x": 192,
+          "y": 64,
+          "w": 64,
+          "h": 64,
+          "ms": 115
+        },
+        {
+          "x": 256,
+          "y": 64,
+          "w": 64,
+          "h": 64,
+          "ms": 110
+        },
+        {
+          "x": 320,
+          "y": 64,
+          "w": 64,
+          "h": 64,
+          "ms": 115
+        },
+        {
+          "x": 384,
+          "y": 64,
+          "w": 64,
+          "h": 64,
+          "ms": 110
+        },
+        {
+          "x": 448,
+          "y": 64,
+          "w": 64,
+          "h": 64,
+          "ms": 115
+        }
+      ]
+    },
+    {
+      "id": "Run",
+      "body": "human",
+      "facing": "right",
+      "row": 2,
+      "loop": true,
+      "origin": "authored",
+      "sourceClipId": "200f670c-6978-418a-a960-c9e7aaed6b6e",
+      "frames": [
+        {
+          "x": 0,
+          "y": 128,
+          "w": 64,
+          "h": 64,
+          "ms": 90
+        },
+        {
+          "x": 64,
+          "y": 128,
+          "w": 64,
+          "h": 64,
+          "ms": 115
+        },
+        {
+          "x": 128,
+          "y": 128,
+          "w": 64,
+          "h": 64,
+          "ms": 90
+        },
+        {
+          "x": 192,
+          "y": 128,
+          "w": 64,
+          "h": 64,
+          "ms": 90
+        },
+        {
+          "x": 256,
+          "y": 128,
+          "w": 64,
+          "h": 64,
+          "ms": 115
+        },
+        {
+          "x": 320,
+          "y": 128,
+          "w": 64,
+          "h": 64,
+          "ms": 90
+        }
+      ]
+    },
+    {
+      "id": "StandToRun",
+      "body": "human",
+      "facing": "right",
+      "row": 3,
+      "loop": false,
+      "origin": "authored",
+      "sourceClipId": "f4f7f723-5450-4fd7-bb56-acbbc9ac8442",
+      "frames": [
+        {
+          "x": 0,
+          "y": 192,
+          "w": 64,
+          "h": 64,
+          "ms": 55
+        },
+        {
+          "x": 64,
+          "y": 192,
+          "w": 64,
+          "h": 64,
+          "ms": 55
+        },
+        {
+          "x": 128,
+          "y": 192,
+          "w": 64,
+          "h": 64,
+          "ms": 45
+        }
+      ]
+    },
+    {
+      "id": "WalkToRunNear",
+      "body": "human",
+      "facing": "right",
+      "row": 4,
+      "loop": false,
+      "origin": "authored",
+      "sourceClipId": "18efbc77-1523-406e-9eb8-3c0d997b7b38",
+      "frames": [
+        {
+          "x": 0,
+          "y": 256,
+          "w": 64,
+          "h": 64,
+          "ms": 55
+        },
+        {
+          "x": 64,
+          "y": 256,
+          "w": 64,
+          "h": 64,
+          "ms": 45
+        }
+      ],
+      "entryVariants": [
+        {
+          "walkFrame": 0,
+          "frames": [
+            {
+              "x": 0,
+              "y": 256,
+              "w": 64,
+              "h": 64,
+              "ms": 55
+            },
+            {
+              "x": 64,
+              "y": 256,
+              "w": 64,
+              "h": 64,
+              "ms": 45
+            }
+          ]
+        },
+        {
+          "walkFrame": 1,
+          "frames": [
+            {
+              "x": 128,
+              "y": 256,
+              "w": 64,
+              "h": 64,
+              "ms": 55
+            },
+            {
+              "x": 192,
+              "y": 256,
+              "w": 64,
+              "h": 64,
+              "ms": 45
+            }
+          ]
+        },
+        {
+          "walkFrame": 2,
+          "frames": [
+            {
+              "x": 256,
+              "y": 256,
+              "w": 64,
+              "h": 64,
+              "ms": 55
+            },
+            {
+              "x": 320,
+              "y": 256,
+              "w": 64,
+              "h": 64,
+              "ms": 45
+            }
+          ]
+        },
+        {
+          "walkFrame": 3,
+          "frames": [
+            {
+              "x": 384,
+              "y": 256,
+              "w": 64,
+              "h": 64,
+              "ms": 55
+            },
+            {
+              "x": 448,
+              "y": 256,
+              "w": 64,
+              "h": 64,
+              "ms": 45
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "WalkToRunFar",
+      "body": "human",
+      "facing": "right",
+      "row": 5,
+      "loop": false,
+      "origin": "phase-derived",
+      "frames": [
+        {
+          "x": 0,
+          "y": 320,
+          "w": 64,
+          "h": 64,
+          "ms": 55
+        },
+        {
+          "x": 64,
+          "y": 320,
+          "w": 64,
+          "h": 64,
+          "ms": 45
+        }
+      ],
+      "entryVariants": [
+        {
+          "walkFrame": 4,
+          "frames": [
+            {
+              "x": 0,
+              "y": 320,
+              "w": 64,
+              "h": 64,
+              "ms": 55
+            },
+            {
+              "x": 64,
+              "y": 320,
+              "w": 64,
+              "h": 64,
+              "ms": 45
+            }
+          ]
+        },
+        {
+          "walkFrame": 5,
+          "frames": [
+            {
+              "x": 128,
+              "y": 320,
+              "w": 64,
+              "h": 64,
+              "ms": 55
+            },
+            {
+              "x": 192,
+              "y": 320,
+              "w": 64,
+              "h": 64,
+              "ms": 45
+            }
+          ]
+        },
+        {
+          "walkFrame": 6,
+          "frames": [
+            {
+              "x": 256,
+              "y": 320,
+              "w": 64,
+              "h": 64,
+              "ms": 55
+            },
+            {
+              "x": 320,
+              "y": 320,
+              "w": 64,
+              "h": 64,
+              "ms": 45
+            }
+          ]
+        },
+        {
+          "walkFrame": 7,
+          "frames": [
+            {
+              "x": 384,
+              "y": 320,
+              "w": 64,
+              "h": 64,
+              "ms": 55
+            },
+            {
+              "x": 448,
+              "y": 320,
+              "w": 64,
+              "h": 64,
+              "ms": 45
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Idle",
+      "body": "human",
+      "facing": "left",
+      "row": 6,
+      "loop": true,
+      "origin": "static-base",
+      "frames": [
+        {
+          "x": 0,
+          "y": 384,
+          "w": 64,
+          "h": 64,
+          "ms": 1000
+        }
+      ],
+      "timingNote": "Static hold; 1000 ms repeated, not an authored duration."
+    },
+    {
+      "id": "Walk",
+      "body": "human",
+      "facing": "left",
+      "row": 7,
+      "loop": true,
+      "origin": "authored",
+      "sourceClipId": "4df74256-8df6-438b-95ae-4c613715675e",
+      "frames": [
+        {
+          "x": 0,
+          "y": 448,
+          "w": 64,
+          "h": 64,
+          "ms": 110
+        },
+        {
+          "x": 64,
+          "y": 448,
+          "w": 64,
+          "h": 64,
+          "ms": 115
+        },
+        {
+          "x": 128,
+          "y": 448,
+          "w": 64,
+          "h": 64,
+          "ms": 110
+        },
+        {
+          "x": 192,
+          "y": 448,
+          "w": 64,
+          "h": 64,
+          "ms": 115
+        },
+        {
+          "x": 256,
+          "y": 448,
+          "w": 64,
+          "h": 64,
+          "ms": 110
+        },
+        {
+          "x": 320,
+          "y": 448,
+          "w": 64,
+          "h": 64,
+          "ms": 115
+        },
+        {
+          "x": 384,
+          "y": 448,
+          "w": 64,
+          "h": 64,
+          "ms": 110
+        },
+        {
+          "x": 448,
+          "y": 448,
+          "w": 64,
+          "h": 64,
+          "ms": 115
+        }
+      ]
+    },
+    {
+      "id": "Run",
+      "body": "human",
+      "facing": "left",
+      "row": 8,
+      "loop": true,
+      "origin": "authored",
+      "sourceClipId": "99c461d8-9c31-4509-8cf9-d6cd1ac3b431",
+      "frames": [
+        {
+          "x": 0,
+          "y": 512,
+          "w": 64,
+          "h": 64,
+          "ms": 90
+        },
+        {
+          "x": 64,
+          "y": 512,
+          "w": 64,
+          "h": 64,
+          "ms": 115
+        },
+        {
+          "x": 128,
+          "y": 512,
+          "w": 64,
+          "h": 64,
+          "ms": 90
+        },
+        {
+          "x": 192,
+          "y": 512,
+          "w": 64,
+          "h": 64,
+          "ms": 90
+        },
+        {
+          "x": 256,
+          "y": 512,
+          "w": 64,
+          "h": 64,
+          "ms": 115
+        },
+        {
+          "x": 320,
+          "y": 512,
+          "w": 64,
+          "h": 64,
+          "ms": 90
+        }
+      ]
+    },
+    {
+      "id": "StandToRun",
+      "body": "human",
+      "facing": "left",
+      "row": 9,
+      "loop": false,
+      "origin": "authored",
+      "sourceClipId": "27d93b04-a41c-46c6-bae4-297dac422e55",
+      "frames": [
+        {
+          "x": 0,
+          "y": 576,
+          "w": 64,
+          "h": 64,
+          "ms": 55
+        },
+        {
+          "x": 64,
+          "y": 576,
+          "w": 64,
+          "h": 64,
+          "ms": 55
+        },
+        {
+          "x": 128,
+          "y": 576,
+          "w": 64,
+          "h": 64,
+          "ms": 45
+        }
+      ]
+    },
+    {
+      "id": "WalkToRunNear",
+      "body": "human",
+      "facing": "left",
+      "row": 10,
+      "loop": false,
+      "origin": "authored",
+      "sourceClipId": "32c0cd51-49ff-41fe-9f05-4db18da618ab",
+      "frames": [
+        {
+          "x": 0,
+          "y": 640,
+          "w": 64,
+          "h": 64,
+          "ms": 55
+        },
+        {
+          "x": 64,
+          "y": 640,
+          "w": 64,
+          "h": 64,
+          "ms": 45
+        }
+      ],
+      "entryVariants": [
+        {
+          "walkFrame": 0,
+          "frames": [
+            {
+              "x": 0,
+              "y": 640,
+              "w": 64,
+              "h": 64,
+              "ms": 55
+            },
+            {
+              "x": 64,
+              "y": 640,
+              "w": 64,
+              "h": 64,
+              "ms": 45
+            }
+          ]
+        },
+        {
+          "walkFrame": 1,
+          "frames": [
+            {
+              "x": 128,
+              "y": 640,
+              "w": 64,
+              "h": 64,
+              "ms": 55
+            },
+            {
+              "x": 192,
+              "y": 640,
+              "w": 64,
+              "h": 64,
+              "ms": 45
+            }
+          ]
+        },
+        {
+          "walkFrame": 2,
+          "frames": [
+            {
+              "x": 256,
+              "y": 640,
+              "w": 64,
+              "h": 64,
+              "ms": 55
+            },
+            {
+              "x": 320,
+              "y": 640,
+              "w": 64,
+              "h": 64,
+              "ms": 45
+            }
+          ]
+        },
+        {
+          "walkFrame": 3,
+          "frames": [
+            {
+              "x": 384,
+              "y": 640,
+              "w": 64,
+              "h": 64,
+              "ms": 55
+            },
+            {
+              "x": 448,
+              "y": 640,
+              "w": 64,
+              "h": 64,
+              "ms": 45
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "WalkToRunFar",
+      "body": "human",
+      "facing": "left",
+      "row": 11,
+      "loop": false,
+      "origin": "phase-derived",
+      "frames": [
+        {
+          "x": 0,
+          "y": 704,
+          "w": 64,
+          "h": 64,
+          "ms": 55
+        },
+        {
+          "x": 64,
+          "y": 704,
+          "w": 64,
+          "h": 64,
+          "ms": 45
+        }
+      ],
+      "entryVariants": [
+        {
+          "walkFrame": 4,
+          "frames": [
+            {
+              "x": 0,
+              "y": 704,
+              "w": 64,
+              "h": 64,
+              "ms": 55
+            },
+            {
+              "x": 64,
+              "y": 704,
+              "w": 64,
+              "h": 64,
+              "ms": 45
+            }
+          ]
+        },
+        {
+          "walkFrame": 5,
+          "frames": [
+            {
+              "x": 128,
+              "y": 704,
+              "w": 64,
+              "h": 64,
+              "ms": 55
+            },
+            {
+              "x": 192,
+              "y": 704,
+              "w": 64,
+              "h": 64,
+              "ms": 45
+            }
+          ]
+        },
+        {
+          "walkFrame": 6,
+          "frames": [
+            {
+              "x": 256,
+              "y": 704,
+              "w": 64,
+              "h": 64,
+              "ms": 55
+            },
+            {
+              "x": 320,
+              "y": 704,
+              "w": 64,
+              "h": 64,
+              "ms": 45
+            }
+          ]
+        },
+        {
+          "walkFrame": 7,
+          "frames": [
+            {
+              "x": 384,
+              "y": 704,
+              "w": 64,
+              "h": 64,
+              "ms": 55
+            },
+            {
+              "x": 448,
+              "y": 704,
+              "w": 64,
+              "h": 64,
+              "ms": 45
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

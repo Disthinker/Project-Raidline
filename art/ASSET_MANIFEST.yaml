@@ -18,6 +18,33 @@ pipeline:
   acceptance_report: art/reviews/batch_reports/phase1_week13_16_acceptance.md
 
 production_packages:
+  - id: authored_player_motion_v1
+    status: local_candidate_pending_gameplay_acceptance
+    scope: human_player_only
+    plan: RL-AUTHORED-PLAYER-MOTION-v1
+    publication_owner: art_controller
+    source: "中性人类动作交接_20261125.pose.json"
+    source_sha256: d3b73ba36d8f01343963cef5e2db144cc0cb776dff820813ff2a31da3cdddf75
+    rig: humanoid-static-skin-v3
+    appearance: "中性底模"
+    derivation: original_offline_manual_pose_studio_renderer
+    atlas: assets/characters/player/authored_motion_v1/atlas.png
+    atlas_sha256: ea339b3585a5a9de8a2c498673ea92fdba5f8f78aee0a08ac6e6cec94f62b54e
+    frames: assets/characters/player/authored_motion_v1/atlas.json
+    frames_sha256: 856b3ac6af989ea8edca1b506d98ec64dc847a95a3751c8b7972c0602508cc92
+    grid: [8, 12]
+    frame_size: [64, 64]
+    source_pivot: [32, 60]
+    facings: [right, left]
+    per_facing_rows: [Idle, Walk, Run, StandToRun, WalkToRunNear, WalkToRunFar]
+    authored_frames: 38
+    neutral_idle_frames: 2
+    phase_derived_frames: 4
+    entry_variants_per_walk_to_run_clip: 4
+    additional_registered_entry_cells: 12
+    additional_repeated_exit_cells: 12
+    legacy_anchors_unchanged: true
+
   - id: named_firearms_pack_v1
     status: failed_archived
     production_thread_id: 019f7eb5-1aa3-7891-8ae3-af7541956e36

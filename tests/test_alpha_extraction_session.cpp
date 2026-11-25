@@ -1163,6 +1163,7 @@ TEST(AlphaExtractionSessionTest, HospitalLungeFractureFollowsPainReliefExtractio
         const float fracturedWalk = moveDistance(false);
         EXPECT_GT(fracturedWalk, 0.0F);
         EXPECT_NEAR(moveDistance(true), fracturedWalk, 0.01F);
+        EXPECT_EQ(player.motionFrame().clip, PlayerMotionClip::Walk);
 
         ASSERT_TRUE(session.startAlphaMedical(painkiller));
         for (int frame = 0; frame < 25 && session.raidActionState().active(); ++frame)
@@ -1172,6 +1173,7 @@ TEST(AlphaExtractionSessionTest, HospitalLungeFractureFollowsPainReliefExtractio
         const float treatedWalk = moveDistance(false);
         EXPECT_NEAR(fracturedWalk, 0.7F * treatedWalk, 0.01F);
         EXPECT_NEAR(moveDistance(true), 1.5F * treatedWalk, 0.01F);
+        EXPECT_EQ(player.motionFrame().clip, PlayerMotionClip::Run);
 
         GameplayInput interact;
         interact.interactJustPressed = true;
