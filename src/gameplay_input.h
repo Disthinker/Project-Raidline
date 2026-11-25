@@ -95,4 +95,6 @@ struct GameplayInput
     bool credentialInvestigationAllowed{true};
     bool nightRendezvousInteractionBlocked{};
     bool treatingFireSupport{};
+    // Presentation selection only; resolved by the service from equipped instances.
+    bool heldWeaponMotion{};
 };

@@ -560,6 +560,8 @@ void GameSession::preparePlayerCombatInput(GameplayInput &simulationInput,const 
     }
 
     const auto weapon=activeAlphaWeapon();
+    simulationInput.heldWeaponMotion = weapon.has_value() || (raidActionState_.active() &&
+        std::holds_alternative<WeaponSwitchRaidAction>(*raidActionState_.active()));
     const bool directFireIntent =
         simulationInput.fireJustPressed ||
         simulationInput.firePressed;
@@ -620,6 +622,9 @@ void GameSession::preparePlayerCombatInput(GameplayInput &simulationInput,const 
     {
         simulationInput.movementSpeedMultiplier *= 0.9F;
     }
+    // Capture legal aim before the temporary optic closure specific to a switch.
+    authoredPoseAimRequested_ = simulationInput.aimDownSights && simulationInput.allowWeaponOptics &&
+        !simulationInput.sprint && !input.freezeObservationDirection && !input.inventoryOpen && !input.throwableModal;
     if (raidActionState_.active().has_value())
     {
         const auto &action = *raidActionState_.active();

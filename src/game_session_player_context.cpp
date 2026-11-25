@@ -58,6 +58,60 @@ PlayerGameplayContext GameSession::playerGameplayContext() const noexcept
     return result;
 }
 
+AuthoredWeaponPoseInput GameSession::authoredWeaponPoseInput(const GameplayInput &input) const noexcept
+{
+    AuthoredWeaponPoseInput result;
+    bool canAct{};
+    if ((alphaRaidActive_ || state_ == GameSessionState::InRaid) && world_)
+    {
+        result.motion = world_->player().motionFrame();
+        result.aimDirection = world_->weaponAimDirection();
+        // Legacy worlds simulate movement but do not bind a Profile weapon.
+        if (!alphaRaidActive_) return result;
+        result.adsProgress = world_->weaponAimDownSightsProgress();
+        canAct = state_ == GameSessionState::InRaid && world_->raidSession().isActive() &&
+            !world_->player().isControlled() && !world_->player().isDead();
+    }
+    else if (basePlayerWorld_ && !profile_.pendingRaid && state_ == GameSessionState::BetweenRaids)
+    {
+        result.motion = basePlayerWorld_->playerMotionFrame();
+        result.aimDirection = basePlayerWorld_->weaponAimDirection();
+        result.adsProgress = basePlayerWorld_->weaponAimDownSightsProgress();
+        canAct = profile_.currentHealth > 0 && !basePlayerWorld_->playerControlled();
+    }
+    else
+        return result;
+
+    const auto binding = [&](std::optional<AssetInstanceId> id) {
+        AuthoredWeaponBinding value;
+        const auto *asset = id ? profile_.assets.find(*id) : nullptr;
+        if (asset)
+        {
+            value.id = asset->instanceId;
+            const auto &definition = asset->definitionId.value();
+            if (definition == "item.weapon.pistol_basic") value.kind = AuthoredGunKind::Pistol;
+            else if (definition == "item.weapon.carbine_5_45_compact") value.kind = AuthoredGunKind::Compact;
+            else value.kind = AuthoredGunKind::Rifle;
+        }
+        return value;
+    };
+    result.active = binding(activeAlphaWeapon());
+    const bool hasControl = canAct && !tacticalDeviceWheelOpen_ && !input.inventoryOpen &&
+        !input.freezeObservationDirection && !input.throwableModal;
+    result.aimRequested = hasControl && input.aimDownSights && input.allowWeaponOptics && authoredPoseAimRequested_;
+    if (!hasControl || !input.allowWeaponOptics) result.adsProgress = 0.0F;
+    if (canAct && raidActionState_.active())
+    {
+        if (const auto *action = std::get_if<WeaponSwitchRaidAction>(&*raidActionState_.active());
+            action && action->durationSeconds > 0.0F)
+        {
+            result.target = binding(equippedAsset(profile_, action->targetSlot));
+            result.switchProgress = std::clamp(action->elapsedSeconds / action->durationSeconds, 0.0F, 1.0F);
+        }
+    }
+    return result;
+}
+
 void GameSession::cancelPlayerControlIntent() noexcept
 {
     const auto *medical = raidActionState_.active()

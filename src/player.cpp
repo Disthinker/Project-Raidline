@@ -12,6 +12,8 @@ namespace
     constexpr std::array runEnds{90, 205, 295, 385, 500, 590};
     constexpr std::array standStartEnds{55, 110, 155};
     constexpr std::array walkStartEnds{55, 100};
+    constexpr std::array heldWalkTransitionEnds{45, 90};
+    constexpr std::array<std::size_t, 6> walkLandingByRunFrame{0, 2, 3, 4, 6, 7};
     // Smaller than one microsecond; absorb binary float error at exact authored boundaries.
     constexpr double boundaryToleranceMs{0.00005};
 
@@ -28,6 +30,8 @@ namespace
         case PlayerMotionClip::Walk: return walkEnds;
         case PlayerMotionClip::Run: return runEnds;
         case PlayerMotionClip::StandToRun: return standStartEnds;
+        case PlayerMotionClip::StandToWalk:
+        case PlayerMotionClip::RunToWalk: return heldWalkTransitionEnds;
         case PlayerMotionClip::WalkToRunNear:
         case PlayerMotionClip::WalkToRunFar: return walkStartEnds;
         }
@@ -35,10 +39,29 @@ namespace
     }
 }
 
-void PlayerMotion::move(bool sprint, float seconds) noexcept
+void PlayerMotion::move(bool sprint, float seconds, bool holdingWeapon) noexcept
 {
     using Clip = PlayerMotionClip;
-    if (!sprint && frame_.clip != Clip::Walk)
+    const auto walkBegin = [](std::size_t index) { return index ? walkEnds[index - 1] : 0; };
+    if ((sprint || !holdingWeapon) && (frame_.clip == Clip::RunToWalk || frame_.clip == Clip::StandToWalk))
+    {
+        frame_.index = frame_.clip == Clip::RunToWalk ? walkLandingByRunFrame[frame_.entryPhase] : 0;
+        frame_.clip = Clip::Walk;
+        frame_.entryPhase = 0;
+        elapsedMs_ = walkBegin(frame_.index);
+    }
+    if (!sprint && holdingWeapon && frame_.clip == Clip::Idle)
+    {
+        frame_.clip = Clip::StandToWalk;
+        elapsedMs_ = 0.0;
+    }
+    else if (!sprint && holdingWeapon && frame_.clip == Clip::Run)
+    {
+        frame_.clip = Clip::RunToWalk;
+        frame_.entryPhase = static_cast<std::uint8_t>(frame_.index);
+        elapsedMs_ = 0.0;
+    }
+    else if (!sprint && frame_.clip != Clip::Walk && frame_.clip != Clip::StandToWalk && frame_.clip != Clip::RunToWalk)
     {
         // Carry the bearing foot through a slowdown, including an interrupted start.
         if (frame_.clip == Clip::Run)
@@ -75,11 +98,13 @@ void PlayerMotion::move(bool sprint, float seconds) noexcept
         elapsedMs_ + boundaryToleranceMs >= ends.back())
     {
         // The near-supported transition lands on the far foot (run frame four).
-        const double landing = frame_.clip == Clip::WalkToRunNear ? runEnds[2] : 0.0;
+        const bool landsWalking = frame_.clip == Clip::StandToWalk || frame_.clip == Clip::RunToWalk;
+        const double landing = frame_.clip == Clip::RunToWalk ? walkBegin(walkLandingByRunFrame[frame_.entryPhase])
+            : frame_.clip == Clip::WalkToRunNear ? runEnds[2] : 0.0;
         elapsedMs_ = landing + std::max(0.0, elapsedMs_ - ends.back());
-        frame_.clip = Clip::Run;
+        frame_.clip = landsWalking ? Clip::Walk : Clip::Run;
         frame_.entryPhase = 0;
-        ends = runEnds;
+        ends = frameEnds(frame_.clip);
     }
     if (elapsedMs_ >= ends.back())
         elapsedMs_ = std::fmod(elapsedMs_, ends.back());
@@ -189,7 +214,7 @@ void Player::update(const GameplayInput &input, float deltaTime, float worldWidt
         position_.x += direction.x * movementSpeed * effectiveDeltaTime;
         position_.y += direction.y * movementSpeed * effectiveDeltaTime;
 
-        motion_.move(input.sprint, effectiveDeltaTime);
+        motion_.move(input.sprint, effectiveDeltaTime, input.heldWeaponMotion);
     }
     else if (wasMoving)
     {
