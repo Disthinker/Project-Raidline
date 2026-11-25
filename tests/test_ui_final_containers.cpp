@@ -1,4 +1,5 @@
 #include "app.h"
+#include "authored_player_sprite.h"
 #include "ui_app_persistence_wait.h"
 #include "test_temp_directory.h"
 #include "alpha_content_ids.h"
@@ -26,12 +27,12 @@ struct UiFinalContainersTestAccess {
             a.inventoryItemTextures_[i] = loadInventoryTexture(renderer, assets / d.inventoryTexturePath);
             ASSERT_TRUE(a.inventoryItemTextures_[i].valid());
         }
-        a.playerTexture_ = loadInventoryTexture(renderer, assets / "characters/protagonist_left_minimal_256x320.png");
-        ASSERT_TRUE(a.playerTexture_.valid());
+        a.playerAtlas_ = loadPlayerAtlas(renderer, assets);
+        ASSERT_TRUE(a.playerAtlas_.valid());
     }
     static void detach(App &a) {
         for (auto &texture : a.inventoryItemTextures_) texture.reset();
-        a.playerTexture_.reset(); a.uiTextRenderer_.shutdown(); a.renderer_ = nullptr;
+        a.playerAtlas_.reset(); a.uiTextRenderer_.shutdown(); a.renderer_ = nullptr;
     }
     static void language(App &a, UiLanguage language) { a.uiTextRenderer_.setLanguage(language); }
     static void draw(App &a, bool raid, std::optional<AssetInstanceId> external) {

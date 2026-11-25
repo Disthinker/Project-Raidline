@@ -22,12 +22,6 @@ bool pointInside(Vec2 point, const ContentRect &rect) noexcept
         point.y <= rect.position.y + rect.size.y;
 }
 
-AnimationClip makeBasePlayerMoveClip()
-{
-    return AnimationClip{
-        std::vector<AnimationFrame>(6, AnimationFrame{0.10F})};
-}
-
 float resolveHorizontalMovement(
     Vec2 position,
     Vec2 size,
@@ -86,9 +80,6 @@ std::string defenseLayoutIdentity(const HomeRegionLayout &layout,
 }
 
 BaseWorld::BaseWorld()
-    : playerMovementAnimator_{
-          makeBasePlayerMoveClip(),
-          AnimationPlayMode::Loop}
 {
     rebuildSite("regional_base_site.greyline_yard");
 }
@@ -354,6 +345,8 @@ std::optional<BaseFacilityKind> BaseWorld::update(
             std::max(0.0F, deltaTime));
     shooting_.beginFrame(deltaTime);
     melee_.beginFrame(deltaTime);
+    const bool pointerAiming = input.aimWorldPosition.has_value() ||
+        input.aimMotionDelta.has_value();
     if (std::isfinite(deltaTime) && deltaTime > 0.0F)
     {
         Vec2 direction{
@@ -365,7 +358,6 @@ std::optional<BaseFacilityKind> BaseWorld::update(
             direction.x * direction.x + direction.y * direction.y;
         if (lengthSquared > 0.0F)
         {
-            const bool wasMoving = playerIsMoving_;
             const float inverseLength = 1.0F / std::sqrt(lengthSquared);
             direction.x *= inverseLength;
             direction.y *= inverseLength;
@@ -379,11 +371,8 @@ std::optional<BaseFacilityKind> BaseWorld::update(
                 playerFacingDirection_.x = playerHorizontalFacing_;
             }
             playerIsMoving_ = true;
-            if (!wasMoving)
-            {
-                playerMovementAnimator_.reset();
-            }
-            playerMovementAnimator_.update(deltaTime);
+            if (!pointerAiming) playerMotion_.face(direction.x);
+            playerMotion_.move(input.sprint, movementTime);
             const float speed = (input.sprint ? 360.0F : 240.0F) *
                 std::clamp(input.movementSpeedMultiplier, 0.0F, 1.0F);
             const float maximumY = walkableBounds_.position.y +
@@ -436,15 +425,13 @@ std::optional<BaseFacilityKind> BaseWorld::update(
         else
         {
             playerIsMoving_ = false;
-            playerMovementAnimator_.reset();
+            playerMotion_.stop();
         }
     }
 
     const Vec2 playerCenter{
         playerPosition_.x + playerSize_.x * 0.5F,
         playerPosition_.y + playerSize_.y * 0.5F};
-    const bool pointerAiming = input.aimWorldPosition.has_value() ||
-        input.aimMotionDelta.has_value();
     if (pointerAiming)
     {
         shooting_.updateAim(
@@ -454,6 +441,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
             layout_.worldSize,
             deltaTime);
         playerFacingDirection_ = shooting_.aimDirection();
+        playerMotion_.face(playerFacingDirection_.x);
         if (playerFacingDirection_.x != 0.0F)
         {
             playerHorizontalFacing_ = playerFacingDirection_.x;
@@ -755,8 +743,9 @@ bool BaseWorld::resumeBaseDefense(const BaseDefenseSnapshot &s)
     movementBlockers_=std::move(frozen);movementBlockerIndex_=std::move(index);
     playerPosition_=s.playerPosition;
     playerFacingDirection_=shooting_.aimDirection();playerIsMoving_=false;
+    playerMotion_.face(playerFacingDirection_.x);
     if(playerFacingDirection_.x!=0) playerHorizontalFacing_=playerFacingDirection_.x;
-    playerMovementAnimator_.reset();
+    playerMotion_.stop();
     return true;
 }
 std::optional<BaseDefenseSnapshot> BaseWorld::baseDefenseCheckpoint() const
@@ -858,7 +847,7 @@ bool BaseWorld::playerIsMoving() const noexcept
 
 std::size_t BaseWorld::playerAnimationFrame() const noexcept
 {
-    return playerMovementAnimator_.currentFrameIndex();
+    return playerMotionFrame().index;
 }
 
 const std::array<BaseFacility, 9> &BaseWorld::facilities() const noexcept
@@ -1138,7 +1127,7 @@ void BaseWorld::resetAtRaidGate() noexcept
             playerSize_.x * 0.5F,
         gate.bounds.position.y + gate.bounds.size.y + 28.0F};
     playerIsMoving_ = false;
-    playerMovementAnimator_.reset();
+    playerMotion_.stop();
     shooting_.reanchor(
         {playerPosition_.x + playerSize_.x * 0.5F,
          playerPosition_.y + playerSize_.y * 0.5F},
@@ -1151,7 +1140,7 @@ void BaseWorld::resetAtMedicalPoint() noexcept
     clearSpatialCombatState();
     playerPosition_ = medicalRespawnPosition();
     playerIsMoving_ = false;
-    playerMovementAnimator_.reset();
+    playerMotion_.stop();
     shooting_.reanchor(
         {playerPosition_.x + playerSize_.x * 0.5F,
          playerPosition_.y + playerSize_.y * 0.5F},

@@ -8,7 +8,7 @@
 #include <string_view>
 #include <vector>
 
-#include "animation.h"
+#include "player_motion.h"
 #include "base_defense_runtime.h"
 #include "base_facility_layout_domain.h"
 #include "gameplay_input.h"
@@ -142,6 +142,7 @@ public:
     [[nodiscard]] Vec2 playerSize() const noexcept;
     [[nodiscard]] Vec2 playerFacingDirection() const noexcept;
     [[nodiscard]] bool playerIsMoving() const noexcept;
+    [[nodiscard]] PlayerMotionFrame playerMotionFrame() const noexcept { return playerMotion_.frame(); }
     [[nodiscard]] std::size_t playerAnimationFrame() const noexcept;
     [[nodiscard]] const std::array<BaseFacility, 9> &facilities() const noexcept;
     [[nodiscard]] Vec2 worldSize() const noexcept;
@@ -279,7 +280,7 @@ private:
     Vec2 playerFacingDirection_{-1.0F, 0.0F};
     float playerHorizontalFacing_{-1.0F};
     bool playerIsMoving_{};
-    Animator playerMovementAnimator_;
+    PlayerMotion playerMotion_;
     Rect walkableBounds_{};
     std::array<BaseFacility, 9> facilities_;
     std::vector<BaseFacilitySpatialOverride> facilityOverrides_;

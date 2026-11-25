@@ -38,4 +38,6 @@ private:
 // Measures transparent padding once on the CPU image during loading. The
 // original pixels/file are unchanged; world renderers may still use the full
 // texture, while inventory consumers use the visible source rectangle.
-[[nodiscard]] Texture loadInventoryTexture(SDL_Renderer *,const std::filesystem::path &);
+// For an atlas, measureRegion limits the measurement to a single source cell.
+[[nodiscard]] Texture loadInventoryTexture(SDL_Renderer *,const std::filesystem::path &,
+                                           SDL_Rect measureRegion = {});

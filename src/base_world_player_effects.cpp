@@ -42,7 +42,7 @@ void BaseWorld::applyPlayerControl(float seconds) noexcept {
   if (std::isfinite(seconds) && seconds > 0) {
     playerControlRemaining_ = std::max(playerControlRemaining_, seconds);
     playerIsMoving_ = false;
-    playerMovementAnimator_.reset();
+    playerMotion_.stop();
   }
 }
 void BaseWorld::applyPlayerImpactSlow(float seconds) noexcept {
@@ -57,10 +57,11 @@ bool BaseWorld::restorePlayerBody(Vec2 position, Vec2 facing, float control, flo
       !std::isfinite(length) || length < .0001F || !std::isfinite(control) || !std::isfinite(slow) || control < 0 || slow < 0)
     return false;
   playerPosition_ = position; playerFacingDirection_ = {facing.x / length, facing.y / length};
+  playerMotion_.face(playerFacingDirection_.x);
   observationDirection_ = playerFacingDirection_;
   playerControlRemaining_ = control; playerImpactSlowRemaining_ = slow;
   playerIsMoving_ = false;
-  playerMovementAnimator_.reset();
+  playerMotion_.stop();
   if (!preserveWeaponState)
     shooting_.reanchor({position.x + playerSize_.x / 2, position.y + playerSize_.y / 2},
                       playerFacingDirection_, layout_.worldSize);

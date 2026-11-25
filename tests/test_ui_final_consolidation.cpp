@@ -1,4 +1,5 @@
 #include "app.h"
+#include "authored_player_sprite.h"
 #include "ui_app_persistence_wait.h"
 #include "test_temp_directory.h"
 #include <gtest/gtest.h>
@@ -84,7 +85,7 @@ struct UiFinalConsolidationTestAccess {
   }
   static void detach(App &a) {
     a.indoorInformationLayer_.reset();a.indoorShadowMask_.reset();
-    a.backgroundTexture_.reset();a.playerTexture_.reset();a.playerMoveHorizontalTexture_.reset();a.enemyMoveHorizontalTexture_.reset();
+    a.backgroundTexture_.reset();a.playerAtlas_.reset(); a.scavengerIdleTexture_.reset();a.scavengerMoveTexture_.reset();a.enemyMoveHorizontalTexture_.reset();
     for(auto &texture:a.worldItemTextures_)texture.reset();for(auto &texture:a.inventoryItemTextures_)texture.reset();
     a.uiTextRenderer_.shutdown(); a.renderer_=nullptr;
   }
@@ -612,7 +613,7 @@ TEST_F(UiFinalConsolidationTest, ActualCorpseLabelUsesObservedSideAndSurvivesThe
   ASSERT_TRUE(death);position(*death);
   const auto before=profileStateFingerprint(session.profile());
   const auto &player=session.world().player();const auto camera=A::raidCamera(*app);
-  const SDL_FRect avatar{std::round(player.position().x+(player.size()-64)*.5F),std::round(player.position().y+(player.size()-80)*.5F),64,80};
+  const SDL_FRect avatar = playerAvatarBounds(player.position(), {player.size(), player.size()});
   const SDL_FRect view{camera.x,camera.y,1280,720};
   const float screenX=std::lround(-camera.x),screenY=std::lround(-camera.y);
   static_cast<void>(session.world().raidObservation());const auto builds=session.world().indoorObservationBuildCount();

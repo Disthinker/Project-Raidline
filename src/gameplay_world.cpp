@@ -1357,7 +1357,8 @@ void GameplayWorld::update(
         input,
         deltaTime,
         worldWidth(),
-        worldHeight());
+        worldHeight(),
+        Player::FacingSource::ResolvedAim);
     const Vec2 requestedPlayerPosition = player_.position();
 
     const Vec2 resolvedPlayerPosition = resolveMovementAgainstBlockers(

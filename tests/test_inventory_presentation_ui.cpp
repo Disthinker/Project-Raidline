@@ -1,8 +1,10 @@
 #include "app.h"
+#include "authored_player_sprite.h"
 #include "ui_app_persistence_wait.h"
 #include "alpha_content_ids.h"
 #include <gtest/gtest.h>
 #include <chrono>
+#include <cstring>
 #include <cstdlib>
 #include <memory>
 #include <fstream>
@@ -65,7 +67,7 @@ struct InventoryPresentationUiTestAccess
     {
         for (auto &t : a.inventoryItemTextures_)
             t.reset();
-        a.playerTexture_.reset();a.uiTextRenderer_.shutdown();
+        a.playerAtlas_.reset();a.uiTextRenderer_.shutdown();
         a.renderer_ = nullptr;
     }
     static void draw(App &a, UiLanguage language)
@@ -100,8 +102,17 @@ struct InventoryPresentationUiTestAccess
             a.inventoryItemTextures_[i]=loadInventoryTexture(a.renderer_,assets/definition.inventoryTexturePath);
             ASSERT_TRUE(a.inventoryItemTextures_[i].valid())<<definition.inventoryTexturePath;
         }
-        a.playerTexture_=loadInventoryTexture(a.renderer_,assets/"characters/protagonist_left_minimal_256x320.png");
-        ASSERT_TRUE(a.playerTexture_.valid());
+        a.playerAtlas_=loadPlayerAtlas(a.renderer_, assets);
+        ASSERT_TRUE(a.playerAtlas_.valid());
+    }
+    static Texture &motionAtlas(App &a) { return a.playerAtlas_; }
+    static void drawMotion(App &a, PlayerMotionFrame frame)
+    {
+        a.renderPlayerAvatar({100.25F, 160.25F}, {32, 32}, frame);
+    }
+    static void drawStandingPreview(App &a, const SDL_FRect &bounds)
+    {
+        a.renderPlayerPreview(bounds);
     }
 };
 namespace
@@ -194,6 +205,79 @@ class InventoryPresentationUiTest : public testing::Test
         SDL_SetRenderScale(renderer, v.scale, v.scale);
     }
 };
+TEST_F(InventoryPresentationUiTest, AuthoredWorldFramesMatchBothAtlasDirectionsAtTheOriginalFootAnchor)
+{
+    render();
+    auto &atlas = A::motionAtlas(*app);
+    const auto assets = std::filesystem::path{__FILE__}.parent_path().parent_path() / "assets";
+    atlas = loadPlayerAtlas(renderer, assets);
+    ASSERT_TRUE(atlas.valid());
+    const std::array<std::pair<PlayerMotionClip, int>, 6> clips{{
+        {PlayerMotionClip::Idle, 1}, {PlayerMotionClip::Walk, 8},
+        {PlayerMotionClip::Run, 6}, {PlayerMotionClip::StandToRun, 3},
+        {PlayerMotionClip::WalkToRunNear, 8}, {PlayerMotionClip::WalkToRunFar, 8}}};
+    // At this fractional simulation position the old standing foot ends at y=210.
+    // Compare pixel-for-pixel against the file layout, including the transparent border.
+    for (const bool left : {false, true})
+        for (std::size_t row = 0; row < clips.size(); ++row)
+            for (int column = 0; column < clips[row].second; ++column)
+            {
+                SCOPED_TRACE(testing::Message() << "left=" << left << " row=" << row << " column=" << column);
+                ASSERT_TRUE(SDL_SetRenderDrawColor(renderer, 2, 3, 4, 255));
+                ASSERT_TRUE(SDL_RenderClear(renderer));
+                // Last two rows pack one pair per entry pose, in walk order.
+                const auto index = static_cast<std::size_t>(row >= 4 ? column % 2 : column);
+                const auto phase = static_cast<std::uint8_t>(row >= 4 ? column / 2 : 0);
+                A::drawMotion(*app, {clips[row].first, index, left, phase});
+                const SDL_FRect source{64.0F * column, 64.0F * (row + (left ? 6U : 0U)), 64, 64};
+                const SDL_FRect expected{191, 125, 90, 90}; // 120 px right of the avatar.
+                ASSERT_TRUE(SDL_RenderTexture(renderer, atlas.get(), &source, &expected));
+                ASSERT_TRUE(SDL_RenderPresent(renderer));
+                const auto *pixels = static_cast<const Uint8 *>(surface->pixels);
+                int lowest = -1;
+                for (int y = 123; y < 217; ++y)
+                {
+                    const auto *line = pixels + y * surface->pitch;
+                    ASSERT_EQ(std::memcmp(line + 69 * 4, line + 189 * 4, 94 * 4), 0) << y;
+                    for (int x = 71; x < 161; ++x)
+                        if (std::memcmp(line + x * 4, pixels, 4) != 0) lowest = y;
+                }
+                ASSERT_GE(lowest, 125) << "empty frame";
+                if (clips[row].first == PlayerMotionClip::Idle)
+                    EXPECT_NEAR(lowest, 210, 1);
+            }
+}
+
+TEST_F(InventoryPresentationUiTest, AuthoredPreviewFitsOneStandingPoseWithoutPaddingOrStretch)
+{
+    render();
+    const auto assets = std::filesystem::path{__FILE__}.parent_path().parent_path() / "assets";
+    auto &atlas = A::motionAtlas(*app);
+    atlas = loadPlayerAtlas(renderer, assets);
+    ASSERT_TRUE(atlas.valid());
+    const auto pose = atlas.contentBounds();
+    EXPECT_GE(pose.x, 0); EXPECT_LE(pose.x + pose.w, 64);
+    EXPECT_GE(pose.y, 384); EXPECT_LE(pose.y + pose.h, 448);
+    ASSERT_GT(pose.h, pose.w);
+    ASSERT_TRUE(SDL_SetRenderDrawColor(renderer, 2, 3, 4, 255));
+    ASSERT_TRUE(SDL_RenderClear(renderer));
+    // These proportions leave spare height. A stretched or full-atlas draw
+    // differs visibly from the tightly framed original standing sprite.
+    const SDL_FRect bounds{60, 260, 108, 226};
+    A::drawStandingPreview(*app, bounds);
+    const float scale = bounds.w / pose.w;
+    const SDL_FRect reference{220, bounds.y + (bounds.h - pose.h * scale) * 0.5F,
+                              bounds.w, pose.h * scale};
+    ASSERT_TRUE(SDL_RenderTexture(renderer, atlas.get(), &pose, &reference));
+    ASSERT_TRUE(SDL_RenderPresent(renderer));
+    const auto *pixels = static_cast<const Uint8 *>(surface->pixels);
+    for (int y = 260; y < 486; ++y)
+    {
+        const auto *line = pixels + y * surface->pitch;
+        ASSERT_EQ(std::memcmp(line + 60 * 4, line + 220 * 4, 108 * 4), 0) << y;
+    }
+}
+
 TEST_F(InventoryPresentationUiTest,
        PageAndHeaderClicksPreserveOriginalProfileAndSavedBytes)
 {

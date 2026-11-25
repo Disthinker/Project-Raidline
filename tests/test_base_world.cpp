@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 
 #include "base_world.h"
 #include "item_definition.h"
@@ -605,4 +606,60 @@ TEST(BaseWorldTest, ReserveFacilityIsNotVisibleOrBlocking)
                 bounds.size.x == access.workZone.size.x &&
                 bounds.size.y == access.workZone.size.y;
         }));
+}
+
+TEST(BaseWorldTest, AllEightWalkToRunEntriesRetainTheirPosesThroughTurningAndLanding)
+{
+    constexpr std::array starts{.001F, .110F, .225F, .335F, .450F, .560F, .675F, .785F};
+    for (const bool left : {false, true})
+    {
+        for (std::size_t i = 0; i < starts.size(); ++i)
+        {
+            SCOPED_TRACE(::testing::Message() << "left=" << left << ", walk frame=" << i);
+            BaseWorld world;
+            BaseInput input;
+            input.moveLeft = left;
+            input.moveRight = !left;
+            auto step = [&](float dt) { static_cast<void>(world.update(input, dt)); };
+            step(starts[i]);
+            ASSERT_EQ(world.playerMotionFrame(), (PlayerMotionFrame{PlayerMotionClip::Walk, i, left}));
+            const auto start = i < 4 ? PlayerMotionClip::WalkToRunNear : PlayerMotionClip::WalkToRunFar;
+            const auto phase = static_cast<std::uint8_t>(i % 4);
+            input.sprint = true;
+            step(.054F);
+            ASSERT_EQ(world.playerMotionFrame(), (PlayerMotionFrame{start, 0, left, phase}));
+            input.moveLeft = !left;
+            input.moveRight = left;
+            step(.001F);
+            ASSERT_EQ(world.playerMotionFrame(), (PlayerMotionFrame{start, 1, !left, phase}));
+            step(.045F);
+            ASSERT_EQ(world.playerMotionFrame(), (PlayerMotionFrame{PlayerMotionClip::Run, i < 4 ? 3U : 0U, !left}));
+            input.moveLeft = input.moveRight = false;
+            step(.010F);
+            EXPECT_EQ(world.playerMotionFrame(), (PlayerMotionFrame{PlayerMotionClip::Idle, 0, !left}));
+            input.moveUp = true;
+            step(.110F);
+            EXPECT_EQ(world.playerMotionFrame(), (PlayerMotionFrame{PlayerMotionClip::StandToRun, 2, !left}));
+        }
+    }
+}
+
+TEST(BaseWorldTest, PointerFacingWinsOverBackpedallingAndVerticalAimRetainsTheSide)
+{
+    BaseWorld world;
+    const Vec2 half{world.playerSize().x * .5F, world.playerSize().y * .5F};
+    const auto before = world.playerPosition();
+    BaseInput input;
+    input.moveRight = true;
+    input.aimWorldPosition = Vec2{before.x + half.x - 150, before.y + half.y};
+    static_cast<void>(world.update(input, .111F));
+    ASSERT_LT(world.playerFacingDirection().x, 0.0F);
+    ASSERT_EQ(world.playerMotionFrame(), (PlayerMotionFrame{PlayerMotionClip::Walk, 1, true}));
+
+    input.moveRight = false;
+    const auto after = world.playerPosition();
+    input.aimWorldPosition = Vec2{after.x + half.x, after.y + half.y - 150};
+    static_cast<void>(world.update(input, .016F));
+    ASSERT_NEAR(world.playerFacingDirection().x, 0.0F, .0001F);
+    EXPECT_EQ(world.playerMotionFrame(), (PlayerMotionFrame{PlayerMotionClip::Idle, 0, true}));
 }

@@ -1,4 +1,5 @@
 #include "app.h"
+#include "authored_player_sprite.h"
 #include "test_temp_directory.h"
 #include "ui_app_persistence_wait.h"
 #include "alpha_content_ids.h"
@@ -91,10 +92,12 @@ struct UiBaseDeploymentTestAccess {
     }
     static void loadPlayerArt(App &a) {
         const auto root = std::filesystem::path{__FILE__}.parent_path().parent_path()/"assets";
-        a.playerTexture_ = loadInventoryTexture(a.renderer_,root/"characters/protagonist_left_minimal_256x320.png");
-        a.playerMoveHorizontalTexture_ = loadInventoryTexture(a.renderer_,
+        a.playerAtlas_ = loadPlayerAtlas(a.renderer_, root);
+        ASSERT_TRUE(a.playerAtlas_.valid());
+        a.scavengerIdleTexture_ = loadInventoryTexture(a.renderer_,root/"characters/protagonist_left_minimal_256x320.png");
+        a.scavengerMoveTexture_ = loadInventoryTexture(a.renderer_,
             root/"characters/player/default/player_default_move_horizontal_6f_1536x640.png");
-        ASSERT_TRUE(a.playerTexture_.valid() && a.playerMoveHorizontalTexture_.valid());
+        ASSERT_TRUE(a.scavengerIdleTexture_.valid() && a.scavengerMoveTexture_.valid());
     }
     static void drawEscortMarkers(App &a, const HospitalEscortView &view) {
         const auto &r = kRaidTacticalChart;
@@ -136,7 +139,7 @@ struct UiBaseDeploymentTestAccess {
         a.renderer_ = r; ASSERT_TRUE(a.uiTextRenderer_.initialize(r)); a.uiTextRenderer_.setRasterScale(scale);
     }
     static void detach(App &a) {
-        a.playerTexture_.reset(); a.playerMoveHorizontalTexture_.reset(); a.raidSmokeTerrain_.reset();
+        a.playerAtlas_.reset(); a.scavengerIdleTexture_.reset(); a.scavengerMoveTexture_.reset(); a.raidSmokeTerrain_.reset();
         a.indoorInformationLayer_.reset(); a.indoorShadowMask_.reset();
         a.uiTextRenderer_.shutdown(); a.renderer_ = nullptr;
     }

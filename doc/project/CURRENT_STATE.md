@@ -1,3 +1,7 @@
+# 主角手作移动动画 v1 · 已通过人工验收
+
+2026-11-25，基地与对局已接入主角手作动画。左右各 8 个走转跑入口均已对齐承重脚。Windows 全量 3586/3586，程序 SHA-256 `891b8a5e88b0`。验收入口为桌面 **Project Raidline Debug** · [四步试玩](<E:/WorkPlace/Projects/C/Project Raidline-local-multistage-v3/doc/acceptance/authored-player-motion-v1.md>)
+
 # 专业小队远征 v1 · 已通过人工验收
 
 2026-11-24 已生成联合试玩候选，程序 SHA-256 `4a2fb1db9cff`。Windows 全量 3571/3571。原有 14 项 3 ms 检查通过；满编医院场景（护送者、100 名敌人、220 处遮挡及烟火）P95 1.752 ms，千件资产基地写盘时命中帧 P95 4.307 ms。 [启动试玩](<E:/RaidlineBuild/candidates/specialist-squad-expedition-v1/开始联合试玩.cmd>) · [四步验收](../acceptance/specialist-squad-expedition-v1.md)

@@ -27,6 +27,7 @@
 #include "inventory_interaction.h"
 #include "item_definition.h"
 #include "pause_menu.h"
+#include "player_motion.h"
 #include "profile_inventory_interaction.h"
 #include "profile_container_presentation.h"
 #include "raid_camera.h"
@@ -639,8 +640,9 @@ private:
     std::array<std::string, 8U> performanceOverlayLines_{};
 
     Texture backgroundTexture_;
-    Texture playerTexture_;
-    Texture playerMoveHorizontalTexture_;
+    Texture playerAtlas_;
+    Texture scavengerIdleTexture_;
+    Texture scavengerMoveTexture_;
     Texture enemyMoveHorizontalTexture_;
 
     // 世界物品与背包物品使用不同分辨率的纹理。
@@ -942,7 +944,8 @@ private:
     void renderDeveloperWeaponPanel();
     void renderDeveloperPerformanceOverlay();
     void refreshDeveloperPerformanceOverlay();
-    void renderPlayerAvatar(
+    void renderPlayerAvatar(Vec2 position, Vec2 bodySize, PlayerMotionFrame frame);
+    void renderScavengerAvatar(
         Vec2 position,
         Vec2 bodySize,
         Vec2 facingDirection,

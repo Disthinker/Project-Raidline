@@ -439,6 +439,7 @@ add_library(raidline_simulation STATIC
     src/raid_space_spatial_index.h
     src/player.cpp
     src/player.h
+    src/player_motion.h
     src/shot_feedback_presentation.cpp
     src/shot_feedback_presentation.h
     src/storage_cabinet.cpp
@@ -516,6 +517,7 @@ add_library(raidline_sdl_client STATIC
     src/app_base_fortification.cpp
     src/base_fortification_build_ui.h
     src/app.cpp
+    src/authored_player_sprite.h
     src/app_weapon_optics.cpp
     src/ui_weapon_optic_view.cpp
     src/ui_weapon_optic_view.h
@@ -640,6 +642,19 @@ add_executable(Project_Raidline src/main.cpp)
 raidline_configure_executable(Project_Raidline)
 target_link_libraries(Project_Raidline PRIVATE raidline::sdl_client)
 
+# Source art may keep an older timestamp when it is published. Stage the sheet
+# and frame table by content even when the executable needs no relink.
+set(player_motion_dir assets/characters/player/authored_motion_v1)
+set(sync_player_motion "${CMAKE_CURRENT_BINARY_DIR}/sync-player-motion-$<CONFIG>.cmake")
+file(GENERATE OUTPUT "${sync_player_motion}" CONTENT
+    "foreach(name IN ITEMS atlas.png atlas.json)
+    configure_file(\"${CMAKE_CURRENT_SOURCE_DIR}/${player_motion_dir}/\${name}\" \"$<TARGET_FILE_DIR:Project_Raidline>/${player_motion_dir}/\${name}\" COPYONLY)
+endforeach()
+")
+add_custom_target(raidline_player_motion_assets
+    COMMAND ${CMAKE_COMMAND} -P "${sync_player_motion}" VERBATIM)
+add_dependencies(Project_Raidline raidline_player_motion_assets)
+
 add_executable(HospitalOutdoorInspect tools/hospital_outdoor_inspect.cpp)
 raidline_configure_executable(HospitalOutdoorInspect)
 target_link_libraries(HospitalOutdoorInspect PRIVATE raidline::services nlohmann_json::nlohmann_json)
@@ -744,6 +759,8 @@ target_compile_definitions(
     PRIVATE
     RAIDLINE_SOURCE_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")
 raidline_add_test(PlayerTest tests/test_player.cpp raidline::simulation)
+raidline_add_test(PlayerMotionAtlasTest tests/test_player_motion_atlas.cpp raidline::sdl_client)
+target_link_libraries(PlayerMotionAtlasTest PRIVATE nlohmann_json::nlohmann_json)
 raidline_add_test(
     WeaponFireTest
     tests/test_weapon_fire.cpp

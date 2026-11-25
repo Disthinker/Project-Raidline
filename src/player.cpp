@@ -1,29 +1,107 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
-#include <vector>
+#include <span>
 #include "player.h"
 
 namespace
 {
-    constexpr std::size_t kPlayerMoveFrameCount{6};
-    // Ten animation frames per second divides evenly into the current stable
-    // 60 Hz presentation cadence. The former 0.09 s duration alternated
-    // between five and six presented frames and created a visible rhythmic
-    // hitch while the camera followed the player.
-    constexpr float kPlayerMoveFrameDuration{0.10f};
+    // Cumulative ends from the authored frame table, in milliseconds.
+    constexpr std::array walkEnds{110, 225, 335, 450, 560, 675, 785, 900};
+    constexpr std::array runEnds{90, 205, 295, 385, 500, 590};
+    constexpr std::array standStartEnds{55, 110, 155};
+    constexpr std::array walkStartEnds{55, 100};
+    // Smaller than one microsecond; absorb binary float error at exact authored boundaries.
+    constexpr double boundaryToleranceMs{0.00005};
+
     constexpr float kImpactSlowDurationSeconds{0.18F};
     constexpr float kImpactSlowTimeMultiplier{0.28F};
     constexpr float kSprintSpeedMultiplier{1.5F};
     constexpr float kTimerEpsilon{0.00001F};
 
-    AnimationClip makePlayerMoveClip()
+    std::span<const int> frameEnds(PlayerMotionClip clip) noexcept
     {
-        return AnimationClip{
-            std::vector<AnimationFrame>(
-                kPlayerMoveFrameCount,
-                AnimationFrame{kPlayerMoveFrameDuration})};
+        switch (clip)
+        {
+        case PlayerMotionClip::Idle: return {};
+        case PlayerMotionClip::Walk: return walkEnds;
+        case PlayerMotionClip::Run: return runEnds;
+        case PlayerMotionClip::StandToRun: return standStartEnds;
+        case PlayerMotionClip::WalkToRunNear:
+        case PlayerMotionClip::WalkToRunFar: return walkStartEnds;
+        }
+        return {};
     }
+}
+
+void PlayerMotion::move(bool sprint, float seconds) noexcept
+{
+    using Clip = PlayerMotionClip;
+    if (!sprint && frame_.clip != Clip::Walk)
+    {
+        // Carry the bearing foot through a slowdown, including an interrupted start.
+        if (frame_.clip == Clip::Run)
+            elapsedMs_ *= static_cast<double>(walkEnds.back()) / runEnds.back();
+        else if (frame_.clip == Clip::WalkToRunNear || frame_.clip == Clip::WalkToRunFar)
+        {
+            const bool nearFoot = frame_.clip == Clip::WalkToRunNear;
+            const std::size_t walkIndex = (nearFoot ? 0U : 4U) + frame_.entryPhase;
+            const int entry = walkIndex == 0 ? 0 : walkEnds[walkIndex - 1];
+            const int landing = nearFoot ? walkEnds[3] : walkEnds.back();
+            elapsedMs_ = entry + elapsedMs_ * (landing - entry) / walkStartEnds.back();
+        }
+        else
+            elapsedMs_ = 0.0;
+        frame_.clip = Clip::Walk;
+        frame_.entryPhase = 0;
+    }
+    else if (sprint && frame_.clip == Clip::Idle)
+    {
+        frame_.clip = Clip::StandToRun;
+        elapsedMs_ = 0.0;
+    }
+    else if (sprint && frame_.clip == Clip::Walk)
+    {
+        frame_.clip = frame_.index < 4 ? Clip::WalkToRunNear : Clip::WalkToRunFar;
+        frame_.entryPhase = static_cast<std::uint8_t>(frame_.index % 4);
+        elapsedMs_ = 0.0;
+    }
+
+    if (seconds > 0.0F && std::isfinite(seconds))
+        elapsedMs_ += static_cast<double>(seconds) * 1000.0;
+    auto ends = frameEnds(frame_.clip);
+    if (frame_.clip != Clip::Walk && frame_.clip != Clip::Run &&
+        elapsedMs_ + boundaryToleranceMs >= ends.back())
+    {
+        // The near-supported transition lands on the far foot (run frame four).
+        const double landing = frame_.clip == Clip::WalkToRunNear ? runEnds[2] : 0.0;
+        elapsedMs_ = landing + std::max(0.0, elapsedMs_ - ends.back());
+        frame_.clip = Clip::Run;
+        frame_.entryPhase = 0;
+        ends = runEnds;
+    }
+    if (elapsedMs_ >= ends.back())
+        elapsedMs_ = std::fmod(elapsedMs_, ends.back());
+    if (elapsedMs_ + boundaryToleranceMs >= ends.back())
+        elapsedMs_ = 0.0;
+    frame_.index = static_cast<std::size_t>(
+        std::upper_bound(ends.begin(), ends.end(), elapsedMs_ + boundaryToleranceMs) - ends.begin());
+}
+
+void PlayerMotion::stop() noexcept
+{
+    frame_.clip = PlayerMotionClip::Idle;
+    frame_.index = 0;
+    frame_.entryPhase = 0;
+    elapsedMs_ = 0.0;
+}
+
+void PlayerMotion::face(float horizontal) noexcept
+{
+    // Normalizing a vertical world-space sight line can leave a subpixel residue.
+    if (std::abs(horizontal) > 0.00001F)
+        frame_.left = horizontal < 0.0F;
 }
 
 Player::Player(float x, float y, int maxHealth)
@@ -33,9 +111,6 @@ Player::Player(float x, float y, int maxHealth)
 
 Player::Player(float x, float y, int maxHealth, int currentHealth)
     : position_{x, y},
-      movementAnimator_{
-          makePlayerMoveClip(),
-          AnimationPlayMode::Loop},
       health_{maxHealth, currentHealth}
 {
 }
@@ -45,7 +120,8 @@ int Player::restoreHealth(int amount)
     return health_.restore(amount);
 }
 
-void Player::update(const GameplayInput &input, float deltaTime, float worldWidth, float worldHeight)
+void Player::update(const GameplayInput &input, float deltaTime, float worldWidth, float worldHeight,
+                    FacingSource facingSource)
 {
     const bool wasControlled = isControlled();
     float effectiveDeltaTime{};
@@ -72,7 +148,7 @@ void Player::update(const GameplayInput &input, float deltaTime, float worldWidt
     if (wasControlled)
     {
         isMoving_ = false;
-        movementAnimator_.reset();
+        motion_.stop();
         return;
     }
 
@@ -105,6 +181,7 @@ void Player::update(const GameplayInput &input, float deltaTime, float worldWidt
         direction.x /= length;
         direction.y /= length;
         facingDirection_ = direction;
+        if (facingSource == FacingSource::Movement) motion_.face(direction.x);
         // 归一化方向更新
         const float movementSpeed = speed_ *
             (input.sprint ? kSprintSpeedMultiplier : 1.0F) *
@@ -112,12 +189,12 @@ void Player::update(const GameplayInput &input, float deltaTime, float worldWidt
         position_.x += direction.x * movementSpeed * effectiveDeltaTime;
         position_.y += direction.y * movementSpeed * effectiveDeltaTime;
 
-        movementAnimator_.update(effectiveDeltaTime);
+        motion_.move(input.sprint, effectiveDeltaTime);
     }
     else if (wasMoving)
     {
         // 如果停止移动，重置动画到初始帧
-        movementAnimator_.reset();
+        motion_.stop();
     }
     // 检查边界
     if (position_.x <= 0)
@@ -171,6 +248,7 @@ bool Player::faceDirection(Vec2 direction) noexcept
     facingDirection_ = Vec2{
         direction.x / length,
         direction.y / length};
+    motion_.face(facingDirection_.x);
     return true;
 }
 
@@ -181,7 +259,7 @@ bool Player::isMoving() const
 
 std::size_t Player::currentAnimationFrameIndex() const
 {
-    return movementAnimator_.currentFrameIndex();
+    return motionFrame().index;
 }
 
 bool Player::takeDamage(int damage)
@@ -222,7 +300,7 @@ bool Player::applyControl(float duration) noexcept
         controlRemaining_,
         duration);
     isMoving_ = false;
-    movementAnimator_.reset();
+    motion_.stop();
     return true;
 }
 

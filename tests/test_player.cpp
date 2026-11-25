@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <array>
 #include <cmath>
 #include <limits>
 #include "player.h"
@@ -251,9 +252,9 @@ namespace
     constexpr float kPlayerAnimationTestWorldWidth{1280.0f};
     constexpr float kPlayerAnimationTestWorldHeight{720.0f};
 
-    // Player 当前移动动画每帧持续 0.10 秒。
-    constexpr float kBelowPlayerMoveFrameDuration{0.05f};
-    constexpr float kPastPlayerMoveFrameDuration{0.10f};
+    // 作者的走路首帧持续 110 ms。
+    constexpr float kBelowPlayerMoveFrameDuration{0.055f};
+    constexpr float kPastPlayerMoveFrameDuration{0.110f};
 }
 
 // Player 初始时应为 Idle，移动动画停在第 0 帧。
@@ -281,7 +282,7 @@ TEST(PlayerTest, MoveRightSetsMovingState)
 
     EXPECT_TRUE(player.isMoving());
 
-    // 0.01 秒小于单帧 0.10 秒，因此仍处于 frame 0。
+    // 0.01 秒小于首帧 0.11 秒，因此仍处于 frame 0。
     EXPECT_EQ(player.currentAnimationFrameIndex(), 0u);
 }
 
@@ -308,7 +309,7 @@ TEST(PlayerTest, MovementTimeAccumulatesAndAdvancesAnimationFrame)
         kPlayerAnimationTestWorldWidth,
         kPlayerAnimationTestWorldHeight);
 
-    // 0.05 + 0.05 = 0.10，恰好进入下一帧。
+    // 0.055 + 0.055 = 0.110，恰好进入下一帧。
     EXPECT_EQ(player.currentAnimationFrameIndex(), 1u);
 }
 
@@ -426,19 +427,19 @@ TEST(PlayerTest, VerticalInputSetsMovingState)
     EXPECT_EQ(player.currentAnimationFrameIndex(), 0u);
 }
 
-// 当前 Player 移动 Clip 有 6 帧，应能完整循环回到 frame 0。
-TEST(PlayerTest, MovementAnimationLoopsAcrossSixFrames)
+// 作者的走路循环有 8 帧，应能完整循环回到 frame 0。
+TEST(PlayerTest, WalkingAnimationLoopsAcrossEightAuthoredFrames)
 {
     GameplayInput input{};
     input.moveRight = true;
 
     Player player(640.0f, 360.0f);
 
-    // 一轮时长为 6 × 0.10 = 0.60 秒。
-    // 使用 0.61 秒可完整跨过一轮，并在 frame 0 中保留少量时间。
+    // 两个 450 ms 的支撑阶段组成完整循环。
+    // 使用 0.91 秒可完整跨过一轮，并在 frame 0 中保留少量时间。
     player.update(
         input,
-        0.61f,
+        0.91f,
         kPlayerAnimationTestWorldWidth,
         kPlayerAnimationTestWorldHeight);
 
@@ -457,7 +458,7 @@ TEST(PlayerTest, MovementIntentAtBoundaryStillAdvancesAnimation)
 
     player.update(
         input,
-        0.10f,
+        0.11f,
         1280.0f,
         720.0f);
 
@@ -468,7 +469,7 @@ TEST(PlayerTest, MovementIntentAtBoundaryStillAdvancesAnimation)
 
 // Player 向右移动后停止时，应回到 Idle 和 frame 0，
 // 同时保留最后一次有效的向右朝向。
-// App 依靠这组状态选择右向 sprite-sheet 的第 0 帧。
+// 停步后使用单独的右向站姿。
 TEST(
     PlayerTest,
     StoppingAfterRightMovementKeepsRightFacingAtFirstFrame)
@@ -480,7 +481,7 @@ TEST(
 
     player.update(
         moveRight,
-        0.10f,
+        0.11f,
         1280.0f,
         720.0f);
 
@@ -598,4 +599,153 @@ TEST(PlayerTest, NonLethalHitBrieflySlowsMovementThenFullyRecovers)
         player.position().x - slowedPosition,
         24.0F,
         0.0001F);
+}
+
+TEST(PlayerTest, EachAuthoredWalkFrameHasItsOwnStartAndLandsOnTheOppositeFoot)
+{
+    constexpr std::array starts{.001F, .110F, .225F, .335F, .450F, .560F, .675F, .785F};
+    for (const bool left : {false, true})
+    {
+        for (std::size_t i = 0; i < starts.size(); ++i)
+        {
+            SCOPED_TRACE(::testing::Message() << "left=" << left << ", walk frame=" << i);
+            const bool near = i < 4;
+            const auto phase = static_cast<std::uint8_t>(i % 4);
+            const auto start = near ? PlayerMotionClip::WalkToRunNear : PlayerMotionClip::WalkToRunFar;
+            Player player{640, 360};
+            GameplayInput input{};
+            input.moveLeft = left;
+            input.moveRight = !left;
+            auto step = [&](float dt) { player.update(input, dt, 1280, 720); };
+            step(starts[i]);
+            ASSERT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::Walk, i, left}));
+            input.sprint = true;
+            const float beforeX = player.position().x;
+            step(.054F);
+            ASSERT_EQ(player.motionFrame(), (PlayerMotionFrame{start, 0, left, phase}));
+            EXPECT_NEAR(std::abs(player.position().x - beforeX), .054F * 360.0F, .0001F);
+
+            // Crossing a portal relocates the player, then resolves aim in the new space.
+            ASSERT_TRUE(player.setPosition({400, 200}));
+            ASSERT_TRUE(player.faceDirection({left ? 1.0F : -1.0F, 0}));
+            EXPECT_EQ(player.motionFrame(), (PlayerMotionFrame{start, 0, !left, phase}));
+            step(.001F);
+            ASSERT_EQ(player.motionFrame(), (PlayerMotionFrame{start, 1, left, phase}));
+            step(.045F);
+            ASSERT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::Run, near ? 3U : 0U, left}));
+            input.sprint = false;
+            step(.001F);
+            EXPECT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::Walk, near ? 4U : 0U, left}));
+        }
+    }
+}
+
+TEST(PlayerTest, AbortingALateWalkToRunRestoresTheSameWalkPoseAndClearsTheEntry)
+{
+    Player player{640, 360};
+    GameplayInput input{};
+    input.moveLeft = true;
+    auto step = [&](float dt) { player.update(input, dt, 1280, 720); };
+    step(.8F);
+    ASSERT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::Walk, 7, true}));
+    input.sprint = true;
+    step(.005F);
+    ASSERT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::WalkToRunFar, 0, true, 3}));
+    input.sprint = false;
+    step(.005F);
+    ASSERT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::Walk, 7, true}));
+    input.sprint = true;
+    step(.05F);
+    input.moveLeft = false;
+    step(.001F);
+    ASSERT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::Idle, 0, true}));
+    input.moveRight = true;
+    step(.001F);
+    EXPECT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::StandToRun, 0, false}));
+}
+
+TEST(PlayerTest, AuthoredWalkHonorsAllEightFrameDurations)
+{
+    GameplayInput input{};
+    input.moveRight = true;
+    Player player{640, 360};
+    constexpr std::array<float, 8> durations{.110F, .115F, .110F, .115F, .110F, .115F, .110F, .115F};
+    for (std::size_t i = 0; i < durations.size(); ++i)
+    {
+        player.update(input, durations[i] - .001F, 1280, 720);
+        EXPECT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::Walk, i, false}));
+        player.update(input, .001F, 1280, 720);
+    }
+    EXPECT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::Walk, 0, false}));
+}
+
+TEST(PlayerTest, StandStartAndRunHonorEveryAuthoredFrameBoundary)
+{
+    Player player{150, 150};
+    GameplayInput input{};
+    input.moveRight = true;
+    input.sprint = true;
+    auto step = [&](float dt) { player.update(input, dt, 2000, 1200); };
+    step(.054F);
+    EXPECT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::StandToRun, 0, false}));
+    step(.001F);
+    EXPECT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::StandToRun, 1, false}));
+    step(.055F);
+    EXPECT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::StandToRun, 2, false}));
+    step(.045F);
+    constexpr std::array<float, 6> runSeconds{.09F, .115F, .09F, .09F, .115F, .09F};
+    for (std::size_t i = 0; i < runSeconds.size(); ++i)
+    {
+        ASSERT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::Run, i, false}));
+        step(runSeconds[i]);
+    }
+    EXPECT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::Run, 0, false}));
+}
+
+TEST(PlayerTest, LongUpdateCarriesTimeAcrossStartAndRunLoops)
+{
+    Player large{640, 360}, small{640, 360};
+    GameplayInput input{};
+    input.moveLeft = true;
+    input.sprint = true;
+    large.update(input, 1.45F, 1280, 720);
+    for (int i = 0; i < 145; ++i)
+        small.update(input, .010F, 1280, 720);
+    EXPECT_EQ(large.motionFrame(), small.motionFrame());
+    EXPECT_EQ(large.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::Run, 1, true}));
+}
+
+TEST(PlayerTest, FinalAimSelectsSideWithoutAdvancingOrRestartingTheMotion)
+{
+    Player player{640, 360};
+    GameplayInput input{};
+    input.moveRight = true;
+    player.update(input, .225F, 1280, 720, Player::FacingSource::ResolvedAim);
+    ASSERT_TRUE(player.faceDirection({-1, 0}));
+    EXPECT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::Walk, 2, true}));
+    player.update(input, .020F, 1280, 720, Player::FacingSource::ResolvedAim);
+    ASSERT_TRUE(player.faceDirection({0, 1}));
+    EXPECT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::Walk, 2, true}));
+    ASSERT_TRUE(player.faceDirection({1, 0}));
+    EXPECT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::Walk, 2, false}));
+}
+
+TEST(PlayerTest, StartingSprintCanBeCancelledAndControlledImmediately)
+{
+    Player player{640, 360};
+    GameplayInput input{};
+    input.moveLeft = true;
+    input.sprint = true;
+    player.update(input, .012F, 1280, 720);
+    input.sprint = false;
+    player.update(input, .010F, 1280, 720);
+    ASSERT_EQ(player.motionFrame().clip, PlayerMotionClip::Walk);
+    input.sprint = true;
+    player.update(input, .030F, 1280, 720);
+    ASSERT_EQ(player.motionFrame().clip, PlayerMotionClip::WalkToRunNear);
+    ASSERT_TRUE(player.applyControl(.3F));
+    EXPECT_EQ(player.motionFrame(), (PlayerMotionFrame{PlayerMotionClip::Idle, 0, true}));
+    player.update(input, .2F, 1280, 720);
+    EXPECT_FALSE(player.isMoving());
+    EXPECT_EQ(player.motionFrame().clip, PlayerMotionClip::Idle);
 }

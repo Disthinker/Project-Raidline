@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-#include "animation.h"
+#include "player_motion.h"
 #include "gameplay_input.h"
 #include "health_system.h"
 #include "vec2.h"
@@ -13,7 +13,9 @@ public:
     Player(float x, float y, int maxHealth = 3);
     Player(float x, float y, int maxHealth, int currentHealth);
 
-    void update(const GameplayInput &input, float deltaTime, float worldWidth, float worldHeight);
+    enum class FacingSource { Movement, ResolvedAim };
+    void update(const GameplayInput &input, float deltaTime, float worldWidth, float worldHeight,
+                FacingSource facingSource = FacingSource::Movement);
 
     Vec2 position() const;
     [[nodiscard]] bool setPosition(Vec2 position) noexcept;
@@ -22,6 +24,7 @@ public:
     [[nodiscard]] bool faceDirection(Vec2 direction) noexcept;
     bool isMoving() const;
     std::size_t currentAnimationFrameIndex() const;
+    [[nodiscard]] PlayerMotionFrame motionFrame() const noexcept { return motion_.frame(); }
 
     [[nodiscard]] bool takeDamage(int damage);
     [[nodiscard]] int restoreHealth(int amount);
@@ -44,7 +47,7 @@ private:
     Vec2 facingDirection_{0.0f, -1.0f};
 
     bool isMoving_{false};
-    Animator movementAnimator_;
+    PlayerMotion motion_;
     Health health_{3};
     float controlRemaining_{};
     float impactSlowRemaining_{};
