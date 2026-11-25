@@ -1,5 +1,7 @@
 #pragma once
 
+#include "authored_weapon_pose.h"
+
 #include "weapon_component_domain.h"
 #include "noise_decoy_domain.h"
 #include "tactical_device_domain.h"
@@ -233,6 +235,7 @@ public:
         float deltaTime);
     void bindBasePlayerWorld(BaseWorld *world) noexcept;
     [[nodiscard]] PlayerGameplayContext playerGameplayContext() const noexcept;
+    [[nodiscard]] AuthoredWeaponPoseInput authoredWeaponPoseInput(const GameplayInput &acceptedInput) const noexcept;
     [[nodiscard]] const RaidActionState &playerActionState() const noexcept { return raidActionState_; }
     [[nodiscard]] std::optional<BaseCorpseRecord> nearbyBaseCorpse() const;
     [[nodiscard]] InventoryPlan queryBaseCorpseInspection(std::string_view corpseId) const;
@@ -806,6 +809,7 @@ private:
     bool opticInteractionNeedsRelease_{};
     bool sprintFireIntentPending_{};
     float sprintFireReadyRemaining_{};
+    bool authoredPoseAimRequested_{};
     EquipmentSlotKind activeWeaponSlot_{EquipmentSlotKind::PrimaryWeapon};
     std::optional<AssetInstanceId> configuredWeaponAssetId_;
     std::optional<AssetInstanceId> configuredBaseWeaponAssetId_;

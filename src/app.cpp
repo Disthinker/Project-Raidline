@@ -1649,6 +1649,12 @@ bool App::loadTextures()
                    assetRoot, kPlayerAtlasPath, SDL_GetError());
         return false;
     }
+    AuthoredWeaponLayer playerWeaponLayer;
+    if (!playerWeaponLayer.load(renderer_, std::filesystem::u8path(assetRoot)))
+    {
+        fmt::print("Could not load authored player weapon art: {}\n", SDL_GetError());
+        return false;
+    }
     if (!loadTexture(renderer_, scavengerIdlePath, false, scavengerIdleTexture))
         return false;
 
@@ -1717,6 +1723,7 @@ bool App::loadTextures()
         std::move(backgroundTexture);
 
     playerAtlas_ = std::move(playerAtlas);
+    playerWeaponLayer_ = std::move(playerWeaponLayer);
     scavengerIdleTexture_ =
         std::move(scavengerIdleTexture);
 
@@ -2894,6 +2901,7 @@ void App::updateBase(float deltaTime)
             inventoryInput.interactJustPressed = inventoryInput.interactPressed = false;
             if(profileUiBusy())return;
             gameFlow_.updateBase(inventoryInput, deltaTime);
+            samplePlayerWeaponPose(inventoryInput, deltaTime);
             consumePresentationAudioEvents();
         }
         return;
@@ -2907,6 +2915,7 @@ void App::updateBase(float deltaTime)
             modalInput.inventoryOpen = true;
             if(profileUiBusy())return;
             gameFlow_.updateBase(modalInput, deltaTime);
+            samplePlayerWeaponPose(modalInput, deltaTime);
             consumePresentationAudioEvents();
         }
         if (input_.wasActionJustPressed(GameAction::InventoryCancel))
@@ -3087,6 +3096,7 @@ void App::updateBase(float deltaTime)
     const auto actionMessageBefore=gameSession_.persistenceMessage();
     if(profileUiBusy())return;
     gameFlow_.updateBase(input, deltaTime);
+    samplePlayerWeaponPose(input, deltaTime);
     if((input.cycleFireModeJustPressed || !input.raidReloadIntents.empty() ||
         input.lightJustPressed || input.lightJustReleased || input.weaponSlotJustPressed) &&
        gameSession_.persistenceMessage()!=actionMessageBefore && !gameSession_.persistenceMessage().empty())
@@ -5825,6 +5835,35 @@ void App::handleDeveloperPanelClick(MousePosition position)
 
 void App::update(float deltaTime)
 {
+    poseSampled_ = false;
+    updateGame(deltaTime);
+    if (!poseSampled_)
+    {
+        GameplayInput paused;
+        paused.inventoryOpen = true;
+        samplePlayerWeaponPose(paused, 0.0F);
+    }
+}
+
+void App::samplePlayerWeaponPose(const GameplayInput &input, float deltaTime)
+{
+    poseSampled_ = true;
+    const auto scene = gameFlow_.state();
+    if (poseScene_ != scene)
+    {
+        playerWeaponPose_ = {};
+        playerWeaponDraw_ = {};
+        poseScene_ = scene;
+    }
+    if (playerWeaponLayer_.valid() && (scene == GameFlowState::Base || scene == GameFlowState::Raid))
+    {
+        playerWeaponPose_.update(gameSession_.authoredWeaponPoseInput(input), deltaTime);
+        playerWeaponDraw_ = playerWeaponLayer_.compose(playerWeaponPose_.frame());
+    }
+}
+
+void App::updateGame(float deltaTime)
+{
     if (gameFlow_.state() != GameFlowState::Raid || pauseMenu_.isOpen() ||
         !windowHasInputFocus_ || developerWeaponPanelOpen_ || developerRangePanelOpen_ ||
         raidSaveProtectionVisible())
@@ -6387,6 +6426,7 @@ void App::update(float deltaTime)
     gameFlow_.update(
         gameplayInput,
         deltaTime);
+    samplePlayerWeaponPose(gameplayInput, deltaTime);
     if (gameSession_.world().nightRendezvousSignaledLastUpdate())
         gameAudio_.play(SoundEventId::NoiseDecoyPulse);
     updateFieldIntelligenceTradeAfterWorld();
@@ -9890,6 +9930,11 @@ void App::renderGroundItems()
 
 void App::renderPlayerAvatar(Vec2 position, Vec2 bodySize, PlayerMotionFrame frame)
 {
+    if (playerWeaponDraw_.count)
+    {
+        playerWeaponLayer_.draw(renderer_, playerAvatarBounds(position, bodySize), playerWeaponDraw_);
+        return;
+    }
     if (!playerAtlas_.valid()) return;
     const auto source = playerAtlasFrame(frame);
     const auto destination = playerAvatarBounds(position, bodySize);
@@ -15121,6 +15166,8 @@ void App::shutdown()
     indoorInformationLayer_.reset();
     indoorShadowMask_.reset();
     raidSmokeTerrain_.reset();
+    playerWeaponDraw_ = {};
+    playerWeaponLayer_ = {};
     playerAtlas_.reset();
     scavengerMoveTexture_.reset();
     scavengerIdleTexture_.reset();

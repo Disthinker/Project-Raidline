@@ -440,6 +440,8 @@ add_library(raidline_simulation STATIC
     src/player.cpp
     src/player.h
     src/player_motion.h
+    src/authored_weapon_pose.h
+    src/authored_weapon_pose.cpp
     src/shot_feedback_presentation.cpp
     src/shot_feedback_presentation.h
     src/storage_cabinet.cpp
@@ -508,6 +510,8 @@ target_link_libraries(
 add_library(raidline::services ALIAS raidline_services)
 
 add_library(raidline_sdl_client STATIC
+    src/authored_weapon_layer.h
+    src/authored_weapon_layer.cpp
     src/app_throwable.cpp
     src/app_raid_smoke.cpp
     src/app_raid_barrels.cpp
@@ -644,11 +648,12 @@ target_link_libraries(Project_Raidline PRIVATE raidline::sdl_client)
 
 # Source art may keep an older timestamp when it is published. Stage the sheet
 # and frame table by content even when the executable needs no relink.
-set(player_motion_dir assets/characters/player/authored_motion_v1)
+set(player_character_dir assets/characters/player)
 set(sync_player_motion "${CMAKE_CURRENT_BINARY_DIR}/sync-player-motion-$<CONFIG>.cmake")
 file(GENERATE OUTPUT "${sync_player_motion}" CONTENT
-    "foreach(name IN ITEMS atlas.png atlas.json)
-    configure_file(\"${CMAKE_CURRENT_SOURCE_DIR}/${player_motion_dir}/\${name}\" \"$<TARGET_FILE_DIR:Project_Raidline>/${player_motion_dir}/\${name}\" COPYONLY)
+    "foreach(name IN ITEMS authored_motion_v1/atlas.png authored_motion_v1/atlas.json
+                           authored_weapon_v1/body.png authored_weapon_v1/parts.png authored_weapon_v1/atlas.json)
+    configure_file(\"${CMAKE_CURRENT_SOURCE_DIR}/${player_character_dir}/\${name}\" \"$<TARGET_FILE_DIR:Project_Raidline>/${player_character_dir}/\${name}\" COPYONLY)
 endforeach()
 ")
 add_custom_target(raidline_player_motion_assets
@@ -761,6 +766,9 @@ target_compile_definitions(
 raidline_add_test(PlayerTest tests/test_player.cpp raidline::simulation)
 raidline_add_test(PlayerMotionAtlasTest tests/test_player_motion_atlas.cpp raidline::sdl_client)
 target_link_libraries(PlayerMotionAtlasTest PRIVATE nlohmann_json::nlohmann_json)
+raidline_add_test(AuthoredWeaponPoseTest tests/test_authored_weapon_pose.cpp raidline::services)
+raidline_add_test(AuthoredWeaponLayerTest tests/test_authored_weapon_layer.cpp raidline::sdl_client)
+target_link_libraries(AuthoredWeaponLayerTest PRIVATE nlohmann_json::nlohmann_json)
 raidline_add_test(
     WeaponFireTest
     tests/test_weapon_fire.cpp

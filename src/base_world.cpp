@@ -372,7 +372,7 @@ std::optional<BaseFacilityKind> BaseWorld::update(
             }
             playerIsMoving_ = true;
             if (!pointerAiming) playerMotion_.face(direction.x);
-            playerMotion_.move(input.sprint, movementTime);
+            playerMotion_.move(input.sprint, movementTime, input.heldWeaponMotion);
             const float speed = (input.sprint ? 360.0F : 240.0F) *
                 std::clamp(input.movementSpeedMultiplier, 0.0F, 1.0F);
             const float maximumY = walkableBounds_.position.y +

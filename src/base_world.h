@@ -219,6 +219,7 @@ public:
     weaponAccuracyProjection() const noexcept;
     [[nodiscard]] Vec2 weaponAimWorldPosition() const noexcept;
     [[nodiscard]] Vec2 weaponAimDirection() const noexcept;
+    [[nodiscard]] float weaponAimDownSightsProgress() const noexcept { return shooting_.aimDownSightsProgress(); }
     [[nodiscard]] WeaponOpticMode configuredWeaponOptic() const noexcept { return shooting_.configuredWeaponOptic(); }
     [[nodiscard]] WeaponOpticMode activeWeaponOptic() const noexcept
     {

@@ -34,6 +34,8 @@
 #include "raid_pointer_capture.h"
 #include "raid_tactical_map_presentation.h"
 #include "texture.h"
+#include "authored_weapon_layer.h"
+#include "authored_weapon_pose.h"
 #include "ui_text_renderer.h"
 #include "ui_item_context_presentation.h"
 #include "ui_quick_wheel_presentation.h"
@@ -641,6 +643,11 @@ private:
 
     Texture backgroundTexture_;
     Texture playerAtlas_;
+    AuthoredWeaponLayer playerWeaponLayer_;
+    AuthoredWeaponPoseClock playerWeaponPose_;
+    AuthoredWeaponComposition playerWeaponDraw_;
+    GameFlowState poseScene_{GameFlowState::MainMenu};
+    bool poseSampled_{};
     Texture scavengerIdleTexture_;
     Texture scavengerMoveTexture_;
     Texture enemyMoveHorizontalTexture_;
@@ -785,6 +792,8 @@ private:
     [[nodiscard]] SDL_FRect baseAutoDefenseButton() const noexcept;
     void processEvents();
     void update(float deltaTime);
+    void updateGame(float deltaTime);
+    void samplePlayerWeaponPose(const GameplayInput &input, float deltaTime);
 
     // 背包输入编排。
     void handleInventoryCancel();

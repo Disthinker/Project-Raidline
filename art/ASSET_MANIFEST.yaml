@@ -18,6 +18,28 @@ pipeline:
   acceptance_report: art/reviews/batch_reports/phase1_week13_16_acceptance.md
 
 production_packages:
+  - id: authored_player_weapon_layer_v1
+    status: local_candidate_pending_gameplay_acceptance
+    scope: human_player_only
+    publication_owner: art_controller
+    plan: RL-AUTHORED-PLAYER-WEAPON-LAYER-v1
+    source: "中性人类动作模组_v2.pose.json"
+    source_sha256: 5bb29567a2d2c2bdc5e8273fcd20103c6e630440be36bcd3051294e326ed08c1
+    schema: raidline-authored-weapon-v1
+    appearance: "中性底模"
+    placeholder_identity_sources: [item_rifle_basic_v1, item_pistol_basic_v1]
+    source_pivot: [32, 60]
+    source_frame_size: [64, 64]
+    authored_clips: 68
+    authored_frames: 244
+    extra_unarmed_entry_pairs: 16
+    body: assets/characters/player/authored_weapon_v1/body.png
+    body_sha256: b207f8534e91708ef4d2ed8f63a600666d187c5f4b83502631e6fb998a35d92b
+    parts: assets/characters/player/authored_weapon_v1/parts.png
+    parts_sha256: 88f993c797d74524e7855d480e02e53164e2db77816fe3642cfe51bcd7039855
+    atlas: assets/characters/player/authored_weapon_v1/atlas.json
+    atlas_sha256: 34422ac58c194f04eb5cfd14f53dc9225aac2ae2d97ee0328a2d4b701779ad92
+
   - id: authored_player_motion_v1
     status: local_candidate_pending_gameplay_acceptance
     scope: human_player_only
