@@ -2623,6 +2623,14 @@ Json profilePayload(const ProfileState &profile, std::uint32_t schemaVersion,
                 {"used_fallback", raid.spatialLayout.usedFallback}};
             if (schemaVersion >= 34)
             {
+                if (!raid.spatialLayout.roadNetwork.empty())
+                {
+                    Json segments = Json::array();
+                    for (const auto &s : raid.spatialLayout.roadNetwork)
+                        segments.push_back({s.x1, s.y1, s.x2, s.y2, static_cast<unsigned>(s.kind)});
+                    payload["pending_raid"]["spatial_layout"]["road_network_v1"] =
+                        std::move(segments);
+                }
                 Json roads = Json::array();
                 for (const RaidOutdoorRoadCell &cell :
                      raid.spatialLayout.roadCells)
@@ -5048,6 +5056,33 @@ static SaveLoadResult deserializeParsedProfileEnvelope(
                 {
                     raid.spatialLayout.layoutVersion =
                         layout.at("layout_version").get<std::uint32_t>();
+                    if (layout.contains("road_network_v1"))
+                    {
+                        const auto &network = layout.at("road_network_v1");
+                        if (!network.is_array() || network.empty() || network.size() > 8192)
+                            return {SaveLoadStatus::Failed, std::nullopt, "Invalid road network"};
+                        for (const auto &row : network)
+                        {
+                            if (!row.is_array() || row.size() != 5 ||
+                                !std::all_of(row.begin(), row.end(), [](const Json &v) {
+                                    return v.is_number_unsigned() && v.get<std::uint64_t>() <= 400;
+                                }))
+                                return {SaveLoadStatus::Failed, std::nullopt,
+                                        "Invalid road segment"};
+                            RaidRoadSegment s{row[0].get<int>(),
+                                              row[1].get<int>(),
+                                              row[2].get<int>(),
+                                              row[3].get<int>(),
+                                              {}};
+                            const int k = row[4].get<int>();
+                            if (k > 2 || s.y2 > 225 || s.x2 < s.x1 || s.y2 < s.y1 ||
+                                ((s.x1 == s.x2) == (s.y1 == s.y2)))
+                                return {SaveLoadStatus::Failed, std::nullopt,
+                                        "Invalid road geometry"};
+                            s.kind = static_cast<RaidOutdoorRoadKind>(k);
+                            raid.spatialLayout.roadNetwork.push_back(s);
+                        }
+                    }
                     for (const Json &road : layout.at("road_cells"))
                     {
                         const std::uint32_t kind =

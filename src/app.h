@@ -34,6 +34,7 @@
 #include "raid_pointer_capture.h"
 #include "raid_tactical_map_presentation.h"
 #include "texture.h"
+#include "frontier_road_art.h"
 #include "authored_weapon_layer.h"
 #include "authored_weapon_pose.h"
 #include "ui_text_renderer.h"
@@ -641,6 +642,7 @@ private:
     std::uint64_t framePerformanceSequence_{};
     std::array<std::string, 8U> performanceOverlayLines_{};
 
+    FrontierRoadArt frontierRoadArt_;
     Texture backgroundTexture_;
     Texture playerAtlas_;
     AuthoredWeaponLayer playerWeaponLayer_;

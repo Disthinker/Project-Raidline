@@ -74,6 +74,39 @@ struct FrozenResourcePointRequest
     const RaidResourcePointArchetypeDefinition *definition{};
 };
 
+const RaidAnchorPlacementSnapshot *crisisTarget(
+    const RaidGeneratedMapLayout &layout, const std::vector<FrozenResourcePointRequest> &requests,
+    const HighRiskCrisisDefinition &crisis, Pcg32 random)
+{
+    std::vector<const RaidAnchorPlacementSnapshot *> candidates;
+    bool highValue = false;
+    for (const auto &request : requests)
+    {
+        const auto *anchor = findRaidAnchorPlacement(layout, request.instanceId);
+        if (!anchor)
+            continue;
+        const auto district =
+            std::find_if(layout.districts.begin(), layout.districts.end(),
+                         [&](const auto &d) { return d.instanceId == anchor->districtInstanceId; });
+        if (district == layout.districts.end() ||
+            std::find(crisis.allowedDistrictKinds.begin(), crisis.allowedDistrictKinds.end(),
+                      district->kind) == crisis.allowedDistrictKinds.end())
+            continue;
+        const bool premium = request.definition->riskTier >= 2U;
+        if (!highValue && premium)
+        {
+            highValue = true;
+            candidates.clear();
+        }
+        if (!highValue || premium)
+            candidates.push_back(anchor);
+    }
+    if (candidates.empty())
+        return nullptr;
+    std::sort(candidates.begin(), candidates.end(), [](auto *a, auto *b) { return a->id < b->id; });
+    return candidates[random.bounded(static_cast<std::uint32_t>(candidates.size()))];
+}
+
 std::vector<std::size_t> selectLootSlots(
     const MapDefinition &map,
     Pcg32 &random)
@@ -2037,8 +2070,33 @@ DeployReceipt executeDeploy(
     }
     reportRaidDeploymentProgress(
         progress, 0.30F, RaidDeploymentProgressStage::GeneratingLayout);
+    // Changing the pavement must not convert a seed with no blockade into a
+    // salvage reward. Use the accepted layout only to decide eligibility;
+    // a qualifying encounter still needs a certified detour on the new map.
+    bool blockadeEligible = true;
+    if (map->id == kFreightCrateMapId && map->proceduralOutdoor.roadNetworkV1 && highRiskCrisis &&
+        regionalMissionCount == 0U)
+    {
+        const auto prior = generateRaidMapLayout(*map, snapshot.seed, generationAnchors);
+        const auto *focus =
+            crisisTarget(prior, resourcePointRequests, *highRiskCrisis, crisisRandom);
+        blockadeEligible =
+            focus &&
+            chooseFrontierRoadBlockade(*map, prior, focus->bounds, command.seed).has_value();
+    }
+    std::optional<RaidRoadBlockadeSnapshot> certifiedBlockade;
+    const auto certifyRoads = [&](const RaidGeneratedMapLayout &layout) {
+        if (!highRiskCrisis || regionalMissionCount || !blockadeEligible)
+            return true;
+        const auto *focus =
+            crisisTarget(layout, resourcePointRequests, *highRiskCrisis, crisisRandom);
+        if (!focus)
+            return false;
+        certifiedBlockade = chooseFrontierRoadBlockade(*map, layout, focus->bounds, command.seed);
+        return certifiedBlockade.has_value();
+    };
     snapshot.spatialLayout = generateRaidMapLayout(
-        *map, snapshot.seed, generationAnchors);
+        *map, snapshot.seed, generationAnchors, map->proceduralOutdoor.roadNetworkV1, certifyRoads);
     if (snapshot.rescue && snapshot.rescue->definitionId == kHospitalMedicalRescueId)
     {
         // Choose a reachable transfer point on the finished map without
@@ -2343,55 +2401,18 @@ DeployReceipt executeDeploy(
         }
         if (highRiskCrisis != nullptr)
         {
-            std::vector<const RaidResourcePointSnapshot *> candidates;
-            for (const RaidResourcePointSnapshot &resourcePoint :
-                 snapshot.spatialLayout.resourcePoints)
-            {
-                const auto district = std::find_if(
-                    snapshot.spatialLayout.districts.begin(),
-                    snapshot.spatialLayout.districts.end(),
-                    [&](const RaidDistrictSnapshot &candidate)
-                    {
-                        return candidate.instanceId ==
-                            resourcePoint.districtInstanceId;
-                    });
-                if (district == snapshot.spatialLayout.districts.end() ||
-                    std::find(
-                        highRiskCrisis->allowedDistrictKinds.begin(),
-                        highRiskCrisis->allowedDistrictKinds.end(),
-                        district->kind) ==
-                        highRiskCrisis->allowedDistrictKinds.end())
-                {
-                    continue;
-                }
-                candidates.push_back(&resourcePoint);
-            }
-            const bool hasHighValue = std::any_of(
-                candidates.begin(), candidates.end(),
-                [](const RaidResourcePointSnapshot *candidate)
-                { return candidate->riskTier >= 2U; });
-            if (hasHighValue)
-            {
-                std::erase_if(
-                    candidates,
-                    [](const RaidResourcePointSnapshot *candidate)
-                    { return candidate->riskTier < 2U; });
-            }
-            std::sort(
-                candidates.begin(), candidates.end(),
-                [](const RaidResourcePointSnapshot *left,
-                   const RaidResourcePointSnapshot *right)
-                { return left->instanceId < right->instanceId; });
-            if (candidates.empty())
-            {
-                return deployFailure(
-                    RaidLifecycleError::InvalidCommand,
-                    "high-risk crisis has no compatible resource point",
-                    profile.revision);
-            }
-            const RaidResourcePointSnapshot &target = *candidates[
-                crisisRandom.bounded(
-                    static_cast<std::uint32_t>(candidates.size()))];
+            const auto *focus = crisisTarget(snapshot.spatialLayout, resourcePointRequests,
+                                             *highRiskCrisis, crisisRandom);
+            const auto found =
+                std::find_if(snapshot.spatialLayout.resourcePoints.begin(),
+                             snapshot.spatialLayout.resourcePoints.end(), [&](const auto &point) {
+                                 return focus && point.instanceId == focus->id;
+                             });
+            if (found == snapshot.spatialLayout.resourcePoints.end())
+                return deployFailure(RaidLifecycleError::InvalidCommand,
+                                     "high-risk crisis has no compatible resource point",
+                                     profile.revision);
+            const RaidResourcePointSnapshot &target = *found;
             RaidHighRiskCrisisSnapshot crisis;
             crisis.definitionId = highRiskCrisis->id;
             crisis.displayName = highRiskCrisis->displayName;
@@ -2406,10 +2427,12 @@ DeployReceipt executeDeploy(
             crisis.activeEnemyCap = highRiskCrisis->activeEnemyCap;
             crisis.advancedLootTableId =
                 highRiskCrisis->advancedLootTableId;
-            if (regionalMissionCount == 0U && map->id == kFreightCrateMapId &&
+            if (blockadeEligible && regionalMissionCount == 0U && map->id == kFreightCrateMapId &&
                 supportsFrontierHighRiskBlockadeContent(content.contentVersion()))
-                crisis.roadBlockade = chooseFrontierRoadBlockade(
-                    *map, snapshot.spatialLayout, target.bounds, command.seed);
+                crisis.roadBlockade = certifiedBlockade
+                                          ? certifiedBlockade
+                                          : chooseFrontierRoadBlockade(*map, snapshot.spatialLayout,
+                                                                       target.bounds, command.seed);
 
             struct PressureCandidate
             {

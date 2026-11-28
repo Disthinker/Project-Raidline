@@ -5,6 +5,7 @@
 #include <cmath>
 #include <limits>
 #include <numeric>
+#include <map>
 #include <optional>
 #include <queue>
 #include <set>
@@ -27,6 +28,8 @@ struct Cell
 struct RoadSkeleton
 {
     std::vector<RaidOutdoorRoadCell> cells;
+    bool traceNetwork{};
+    std::vector<RaidRoadSegment> segments;
     std::vector<std::uint8_t> ranks;
 };
 
@@ -669,6 +672,74 @@ void paintRoad(
     }
 }
 
+int artCoordinate(std::uint32_t cell)
+{
+    return static_cast<int>((cell * 80U + 40U + 32U) / 64U);
+}
+
+void traceRoad(RoadSkeleton &roads, const ProceduralOutdoorDefinition &definition,
+               RaidRoadSegment edge)
+{
+    if (edge.x1 == edge.x2 && edge.y1 == edge.y2)
+        return;
+    if (edge.x1 > edge.x2 || edge.y1 > edge.y2)
+    {
+        std::swap(edge.x1, edge.x2);
+        std::swap(edge.y1, edge.y2);
+    }
+    roads.segments.push_back(edge);
+    // Sample navigation cell centers in the actual paved footprint. Tile
+    // bounds are half-open, including the square apron around each end.
+    const int half = raidRoadHalfWidthTiles(edge.kind);
+    const int left = (edge.x1 - half) * 64, right = (edge.x2 + half) * 64;
+    const int top = (edge.y1 - half) * 64, bottom = (edge.y2 + half) * 64;
+    for (int y = std::max(0, top / 80);
+         y < static_cast<int>(definition.rows) && y * 80 + 40 < bottom; ++y)
+        for (int x = std::max(0, left / 80);
+             x < static_cast<int>(definition.columns) && x * 80 + 40 < right; ++x)
+            if (x * 80 + 40 >= left && y * 80 + 40 >= top)
+                addRoadCell(roads, definition, {static_cast<unsigned>(x), static_cast<unsigned>(y)},
+                            edge.kind);
+}
+
+std::vector<RaidRoadSegment> freezeRoadNetwork(const std::vector<RaidRoadSegment> &raw)
+{
+    using Point = std::pair<int, int>;
+    // East and south unit edges have exactly one owner, including collinear
+    // overlap. Split straight runs only at a junction or a change of width.
+    std::map<Point, std::array<int, 4>> arms;
+    for (const auto &s : raw)
+    {
+        const bool horizontal = s.y1 == s.y2;
+        const int d = horizontal ? 1 : 2, rank = 1 + static_cast<int>(s.kind);
+        for (int x = s.x1, y = s.y1; x < s.x2 || y < s.y2; x += horizontal, y += !horizontal)
+        {
+            auto &a = arms[{x, y}][d], &b = arms[{x + horizontal, y + !horizontal}][(d + 2) % 4];
+            a = b = std::max(a, rank);
+        }
+    }
+    std::vector<RaidRoadSegment> result;
+    for (const auto &[pos, links] : arms)
+        for (int d : {1, 2})
+        {
+            const int rank = links[d];
+            if (!rank || (links[(d + 2) % 4] == rank && !links[(d + 1) % 4] && !links[(d + 3) % 4]))
+                continue;
+            auto [x, y] = pos;
+            do
+            {
+                x += d == 1;
+                y += d == 2;
+                const auto &next = arms.at({x, y});
+                if (next[d] != rank || next[(d + 1) % 4] || next[(d + 3) % 4])
+                    break;
+            } while (true);
+            result.push_back(
+                {pos.first, pos.second, x, y, static_cast<RaidOutdoorRoadKind>(rank - 1)});
+        }
+    return result;
+}
+
 void paintRoadWidth(
     RoadSkeleton &roads,
     const ProceduralOutdoorDefinition &definition,
@@ -677,6 +748,14 @@ void paintRoadWidth(
     RaidOutdoorRoadKind kind,
     std::uint32_t width)
 {
+    if (roads.traceNetwork)
+    {
+        const int x1 = artCoordinate(from.column), y1 = artCoordinate(from.row);
+        const int x2 = artCoordinate(to.column), y2 = artCoordinate(to.row);
+        traceRoad(roads, definition, {x1, y1, x2, y1, kind});
+        traceRoad(roads, definition, {x2, y1, x2, y2, kind});
+        return;
+    }
     const int firstOffset = -static_cast<int>(width / 2U);
     const int lastOffset = firstOffset + static_cast<int>(width) - 1;
     const std::uint32_t firstColumn = std::min(from.column, to.column);
@@ -938,12 +1017,11 @@ std::vector<RaidDistrictSnapshot> freezeDistricts(
     return result;
 }
 
-RoadSkeleton buildV3Roads(
-    const ProceduralOutdoorDefinition &definition,
-    const DistrictField &districtField,
-    Pcg32 &random)
+RoadSkeleton buildV3Roads(const ProceduralOutdoorDefinition &definition,
+                          const DistrictField &districtField, Pcg32 &random, bool traceNetwork)
 {
     RoadSkeleton roads;
+    roads.traceNetwork = traceNetwork;
     roads.ranks.resize(
         static_cast<std::size_t>(definition.columns) * definition.rows, 0U);
     const auto fineColumn = [&](std::uint32_t districtColumn)
@@ -1036,6 +1114,40 @@ RoadSkeleton buildV3Roads(
                 RaidOutdoorRoadKind::Secondary, 3U);
         }
     }
+    if (roads.traceNetwork)
+    {
+        // A service lane returns to the same secondary street through two
+        // right-angle turns. Search clear frontage before laying any segment.
+        const int street = artCoordinate(upperRouteRow);
+        const int width = static_cast<int>(definition.columns * 80 / 64);
+        const int length = 16 + static_cast<int>(random.bounded(9));
+        const int depth = 8 + static_cast<int>(random.bounded(5));
+        const int start = static_cast<int>(random.bounded(width));
+        for (int i = 0; i < width; ++i)
+        {
+            const int x = (start + i) % width;
+            if (x < 6 || x + length + 6 >= width)
+                continue;
+            const bool clear = std::none_of(
+                roads.segments.begin(), roads.segments.end(), [&](const RaidRoadSegment &s) {
+                    if (s.y1 == street && s.y2 == street)
+                        return false;
+                    const int margin = raidRoadHalfWidthTiles(s.kind) + 2;
+                    return s.x2 + margin >= x && s.x1 - margin <= x + length &&
+                           s.y2 + margin >= street && s.y1 - margin <= street + depth;
+                });
+            if (!clear)
+                continue;
+            traceRoad(roads, definition,
+                      {x, street, x, street + depth, RaidOutdoorRoadKind::Access});
+            traceRoad(roads, definition,
+                      {x, street + depth, x + length, street + depth, RaidOutdoorRoadKind::Access});
+            traceRoad(
+                roads, definition,
+                {x + length, street, x + length, street + depth, RaidOutdoorRoadKind::Access});
+            break;
+        }
+    }
     return roads;
 }
 
@@ -1044,6 +1156,19 @@ bool rectUsesRoadCells(
     const RoadSkeleton &roads,
     ContentRect rect) noexcept
 {
+    if (roads.traceNetwork)
+    {
+        for (const auto &edge : roads.segments)
+        {
+            const int half = raidRoadHalfWidthTiles(edge.kind);
+            const ContentRect paved{
+                {map.walkableBounds.position.x + (edge.x1 - half) * 64.0F,
+                 map.walkableBounds.position.y + (edge.y1 - half) * 64.0F},
+                {(edge.x2 - edge.x1 + 2 * half) * 64.0F, (edge.y2 - edge.y1 + 2 * half) * 64.0F}};
+            if (overlaps(rect, paved))
+                return true;
+        }
+    }
     const auto &definition = map.proceduralOutdoor;
     const float cellWidth = map.walkableBounds.size.x /
         static_cast<float>(definition.columns);
@@ -1198,6 +1323,27 @@ void connectPointToRoad(
 {
     const auto &definition = map.proceduralOutdoor;
     const Cell start = fineCellForPoint(map, point);
+    if (roads.traceNetwork)
+    {
+        if (roads.ranks[cellIndex(definition, start.column, start.row)])
+            return;
+        const int x = artCoordinate(start.column), y = artCoordinate(start.row);
+        int nx = x, ny = y, distance = std::numeric_limits<int>::max();
+        for (const auto &s : roads.segments)
+        {
+            const int cx = std::clamp(x, s.x1, s.x2), cy = std::clamp(y, s.y1, s.y2);
+            const int cost = std::abs(x - cx) + std::abs(y - cy);
+            if (cost < distance)
+            {
+                distance = cost;
+                nx = cx;
+                ny = cy;
+            }
+        }
+        traceRoad(roads, definition, {x, y, nx, y, kind});
+        traceRoad(roads, definition, {nx, y, nx, ny, kind});
+        return;
+    }
     if (usesHospitalOutdoorPlan(map) && roads.ranks[cellIndex(definition, start.column, start.row)] != 0U)
         return;
     Cell nearest = start;
@@ -2042,11 +2188,9 @@ void finalizeRoadCells(
     }
 }
 
-RaidGeneratedMapLayout generateV3Layout(
-    const MapDefinition &map,
-    std::uint64_t raidSeed,
-    const RaidMapGenerationAnchors &anchors,
-    std::uint32_t attempt)
+RaidGeneratedMapLayout generateV3Layout(const MapDefinition &map, std::uint64_t raidSeed,
+                                        const RaidMapGenerationAnchors &anchors,
+                                        std::uint32_t attempt, bool traceNetwork = false)
 {
     const auto &definition = map.proceduralOutdoor;
     Pcg32 districtRandom{
@@ -2074,7 +2218,7 @@ RaidGeneratedMapLayout generateV3Layout(
     else
     {
         districtField = generateDistrictField(definition, districts, districtRandom);
-        roads = buildV3Roads(definition, districtField, roadRandom);
+        roads = buildV3Roads(definition, districtField, roadRandom, traceNetwork);
         landmarks = placeLandmarks(map, districtField, districts, roads, landmarkRandom);
     }
     if (landmarks.size() != definition.landmarkTemplates.size())
@@ -2101,6 +2245,7 @@ RaidGeneratedMapLayout generateV3Layout(
     layout.generationAttempt = attempt;
     layout.districts = freezeDistricts(map, districtField, districts);
     layout.roadCells = roads.cells;
+    layout.roadNetwork = freezeRoadNetwork(roads.segments);
     layout.anchorPlacements = placements;
     layout.landmarks = std::move(landmarks);
     layout.terrainSpans = generateTerrain(
@@ -2359,9 +2504,8 @@ void appendRaidExteriorPlacementAnchors(
 }
 
 RaidGeneratedMapLayout generateRaidMapLayout(
-    const MapDefinition &map,
-    std::uint64_t raidSeed,
-    const RaidMapGenerationAnchors &anchors)
+    const MapDefinition &map, std::uint64_t raidSeed, const RaidMapGenerationAnchors &anchors,
+    bool newFrontierRoads, const std::function<bool(const RaidGeneratedMapLayout &)> &acceptRoads)
 {
     if (raidSeed == 0U || !finitePositive(map.walkableBounds.size))
     {
@@ -2375,6 +2519,76 @@ RaidGeneratedMapLayout generateRaidMapLayout(
         return fixed;
     }
 
+    // The optional credential exit must not change the attempt, prop stream,
+    // or placement of any original anchor. Select it on the accepted roads.
+    const auto optionalExit =
+        std::find_if(anchors.requests.begin(), anchors.requests.end(), [](const auto &request) {
+            return request.kind == RaidMapAnchorKind::CredentialExtraction;
+        });
+    if (newFrontierRoads && map.id == MapDefinitionId{"map.raid.frontier_exchange"} &&
+        optionalExit != anchors.requests.end())
+    {
+        auto core = anchors;
+        core.requests.erase(core.requests.begin() +
+                            std::distance(anchors.requests.begin(), optionalExit));
+        auto layout = generateRaidMapLayout(map, raidSeed, core, true, acceptRoads);
+        const auto &def = map.proceduralOutdoor;
+        Pcg32 choice{raidSeed, 0x657869742d7631ULL};
+        const auto start = choice.bounded(static_cast<unsigned>(layout.roadCells.size()));
+        const auto *spawn = findRaidAnchorPlacement(layout, kRaidAnchorPlayerSpawn);
+        const auto reachable =
+            reachableLayoutCells(map, layout, spawn ? spawn->bounds.position : anchors.playerSpawn);
+        for (std::size_t offset = 0; offset < layout.roadCells.size(); ++offset)
+        {
+            const auto &cell = layout.roadCells[(start + offset) % layout.roadCells.size()];
+            if (reachable.empty() || !reachable[cellIndex(def, cell.column, cell.row)])
+                continue;
+            const int col = cell.column * def.districtColumns / def.columns,
+                      row = cell.row * def.districtRows / def.rows;
+            const auto district =
+                std::find_if(layout.districts.begin(), layout.districts.end(), [&](const auto &d) {
+                    return districtKindMatchesAnchor(d.kind, optionalExit->kind) &&
+                           std::any_of(d.cells.begin(), d.cells.end(), [&](const auto &span) {
+                               return span.row == row && col >= span.firstColumn &&
+                                      col < span.firstColumn + span.length;
+                           });
+                });
+            if (district == layout.districts.end())
+                continue;
+            const Vec2 size = optionalExit->size;
+            const ContentRect exit{
+                {map.walkableBounds.position.x + (cell.column + 0.5F) * 80 - size.x / 2,
+                 map.walkableBounds.position.y + (cell.row + 0.5F) * 80 - size.y / 2},
+                size};
+            if (exit.position.x < map.walkableBounds.position.x ||
+                exit.position.y < map.walkableBounds.position.y ||
+                exit.position.x + size.x >
+                    map.walkableBounds.position.x + map.walkableBounds.size.x ||
+                exit.position.y + size.y >
+                    map.walkableBounds.position.y + map.walkableBounds.size.y)
+                continue;
+            const auto clearance = inflated(exit, 20);
+            if (std::any_of(layout.ballisticBlockers.begin(), layout.ballisticBlockers.end(),
+                            [&](auto r) { return overlaps(clearance, r); }) ||
+                std::any_of(layout.anchorPlacements.begin(), layout.anchorPlacements.end(),
+                            [&](const auto &a) { return overlaps(clearance, a.bounds); }) ||
+                std::any_of(layout.landmarks.begin(), layout.landmarks.end(), [&](const auto &l) {
+                    return std::any_of(l.structures.begin(), l.structures.end(),
+                                       [&](auto r) { return overlaps(clearance, r); });
+                }))
+                continue;
+            layout.anchorPlacements.push_back(
+                {optionalExit->id, optionalExit->kind, exit, district->instanceId});
+            if (!layout.roadNetwork.empty() && acceptRoads && !acceptRoads(layout))
+            {
+                layout.anchorPlacements.pop_back();
+                continue;
+            }
+            layout.layoutHash = raidMapLayoutHash(layout);
+            return layout;
+        }
+        return generateRaidMapLayout(map, raidSeed, anchors);
+    }
     const ProceduralOutdoorDefinition &definition = map.proceduralOutdoor;
     if (definition.layoutVersion >= 3U)
     {
@@ -2383,7 +2597,10 @@ RaidGeneratedMapLayout generateRaidMapLayout(
              ++attempt)
         {
             RaidGeneratedMapLayout layout = generateV3Layout(
-                map, raidSeed, anchors, attempt);
+                map, raidSeed, anchors, attempt,
+                newFrontierRoads && map.id == MapDefinitionId{"map.raid.frontier_exchange"} &&
+                    map.walkableBounds.size.x == definition.columns * 80U &&
+                    map.walkableBounds.size.y == definition.rows * 80U);
             if (layout.layoutVersion != definition.layoutVersion ||
                 layout.districts.size() != (usesHospitalOutdoorPlan(map) ?
                     expandedDistricts(definition).size() : 8U) ||
@@ -2422,13 +2639,17 @@ RaidGeneratedMapLayout generateRaidMapLayout(
                         placement.bounds.size.y * 0.5F});
             }
             if (layoutConnects(map, layout, frozenAnchors) &&
-                (!usesHospitalOutdoorPlan(map) || inspectHospitalOutdoorRoutes(map, layout).passable()))
+                (layout.roadNetwork.empty() || !acceptRoads || acceptRoads(layout)) &&
+                (!usesHospitalOutdoorPlan(map) ||
+                 inspectHospitalOutdoorRoutes(map, layout).passable()))
             {
                 layout.layoutHash = raidMapLayoutHash(layout);
                 return layout;
             }
         }
 
+        if (newFrontierRoads && map.id == MapDefinitionId{"map.raid.frontier_exchange"})
+            return generateRaidMapLayout(map, raidSeed, anchors);
         MapDefinition fallbackMap = map;
         // Preserve the accepted 320x180 fallback exactly, but do not pack the
         // full Frontier population of props into a smaller theme.
@@ -2590,6 +2811,14 @@ std::uint64_t raidMapLayoutHash(
         hashValue(hash, span.firstColumn);
         hashValue(hash, span.length);
         hashValue(hash, static_cast<std::uint32_t>(span.kind));
+    }
+    if (!layout.roadNetwork.empty())
+    {
+        hashValue(hash, 0x524f4144U);
+        hashValue(hash, static_cast<std::uint32_t>(layout.roadNetwork.size()));
+        for (const auto &s : layout.roadNetwork)
+            for (int v : {s.x1, s.y1, s.x2, s.y2, static_cast<int>(s.kind)})
+                hashValue(hash, static_cast<std::uint32_t>(v));
     }
     hashValue(hash, static_cast<std::uint32_t>(layout.roadCells.size()));
     for (const RaidOutdoorRoadCell &cell : layout.roadCells)

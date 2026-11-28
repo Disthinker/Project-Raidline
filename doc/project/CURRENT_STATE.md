@@ -1,3 +1,7 @@
+# 边境交换站随机道路 v1 · 已通过人工验收
+
+桌面 **Project Raidline Debug** →「继续游戏」→ 正常出击「边境交换站」。程序指纹 0c48e042b1a6，Windows 全量 3596/3596 通过。[道路试玩说明](../acceptance/frontier-road-generation-v1.md)
+
 # 主角持枪动作与双手绘制 v1 · 已通过人工验收
 
 桌面 **Project Raidline Debug** →「继续游戏」。程序 `51fe90d18370`，Windows 全量 3594/3594。[四步试玩](../acceptance/authored-player-weapon-layer-v1.md)

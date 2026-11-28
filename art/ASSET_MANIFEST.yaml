@@ -18,6 +18,41 @@ pipeline:
   acceptance_report: art/reviews/batch_reports/phase1_week13_16_acceptance.md
 
 production_packages:
+  - id: raid_road_generation_v1
+    status: local_candidate_pending_gameplay_acceptance
+    scope: frontier_exchange_new_deployments_only
+    publication_owner: art_controller
+    plan: RL-ROAD-GENERATION-v1
+    source: "道路试摆 v4"
+    source_sha256: 33d043c78efe21ca5d67147adeaef6f7619715443e8f33316d57b00cfcb6ba44
+    source_archive: raidline_roads_v1.zip
+    source_archive_sha256: fa2105da8a7e5258624ebfa92cf1d7a7f4df90d180dfd73e087d0ee2284a4c7f
+    root: assets/maps/roads/v1
+    texture_count: 17
+    tile_size: [64, 64]
+    road_widths: [128, 256, 512]
+    lane_arrow_draw_width: 44
+    decal_alpha: 0.8
+    supported_rotation: [0, 90, 180, 270]
+    textures:
+      - {file: arrow_through_right.png, size: [64, 128], sha256: e56fcb34c016a88411058bf847cd25fe0234ce67085c6ff38f96f21a91a332cb}
+      - {file: asphalt_01.png, size: [64, 64], sha256: f6831b3f1da8acacd0fb41e8e1e98e756337f02808560cd307a01b97baa7c85b}
+      - {file: asphalt_02.png, size: [64, 64], sha256: 8d6f6a72e679cc003e20d46fe8d86e4b3cdd3bc72702969290f347c27ee3fbf9}
+      - {file: asphalt_03.png, size: [64, 64], sha256: 7c80a428d2cdfc08307920ad2caa3ba9f9776ebddff41fa48d519ed1bb414e43}
+      - {file: asphalt_04.png, size: [64, 64], sha256: 453ea2dcd1326b240a30dccfe838c514205ab3781bb37ef556bf2ec5aba13c67}
+      - {file: asphalt_05.png, size: [64, 64], sha256: 3d46f58287ecdb05984d39e165dafd615f03827fd7dc994901d796150d725b95}
+      - {file: asphalt_06.png, size: [64, 64], sha256: 5285dd1d311d34b218a241fdfbd6512f222477a75b4a8b1bb5b9de98be41a688}
+      - {file: curb_quarter.png, size: [64, 64], sha256: 62deb51a5fbe2a9bcf532f00d0e3b68d9e5060422a9445e820194c71d7ce64cb}
+      - {file: curb_strip.png, size: [64, 64], sha256: 0f7222803c6decfa183e84938cfb9c32acfed64dabe735697b80a31ad0083c82}
+      - {file: mark_white_arrow_left.png, size: [64, 128], sha256: 6fbb0b782370ea7b76821c7ed955b637cc35988d4ec94e4eec05a9ce3bba5a40}
+      - {file: mark_white_arrow_right.png, size: [64, 128], sha256: 022d5f5ad1a3ee995098026f23e51712b145ddb648a20f98324f9f160f4f09a5}
+      - {file: mark_white_arrow_straight.png, size: [64, 128], sha256: 926ea029196e767d47415668f8a857b9bc0269b32f89275662b6073bbf95da8d}
+      - {file: mark_white_dash.png, size: [64, 64], sha256: 0cd40d27eb998056780ee489faaf5d36a95fa6ac1f657e7e0fae5a66994c63c4}
+      - {file: mark_white_stop.png, size: [256, 64], sha256: 0dc84cbc697e21d4cdf1a7976c22d6e6f6938a631f6dc97f9ba0767aaa2d9b24}
+      - {file: mark_white_zebra.png, size: [256, 128], sha256: 07a0f8530859b033c78498c0635385d5f05b8e4140a922d57c7249cdeb75d427}
+      - {file: mark_yellow_dash.png, size: [64, 64], sha256: 35169de598b65d11b404aa4d28c1d35e7b4ff0de98f0baae16a5f62e52286cfb}
+      - {file: mark_yellow_double.png, size: [64, 64], sha256: 0e01350ce5ee97f403ab2a5b25871447a0cb823bda4cc38e2749a90a25c270fb}
+
   - id: authored_player_weapon_layer_v1
     status: local_candidate_pending_gameplay_acceptance
     scope: human_player_only
