@@ -521,6 +521,7 @@ add_library(raidline_sdl_client STATIC
     src/app_base_fortification.cpp
     src/base_fortification_build_ui.h
     src/app.cpp
+    src/frontier_road_art.cpp
     src/authored_player_sprite.h
     src/app_weapon_optics.cpp
     src/ui_weapon_optic_view.cpp
@@ -1183,6 +1184,7 @@ raidline_add_test(WeaponInventoryUiTest tests/test_weapon_inventory_ui.cpp raidl
 raidline_add_test(ArmoredInfectedTest tests/test_armored_infected.cpp raidline::services)
 
 raidline_add_test(DeveloperRangeTest tests/test_developer_test_range.cpp raidline::services)
+raidline_add_test(FrontierRoadArtTest tests/test_frontier_road_art.cpp raidline::sdl_client)
 raidline_add_test(DeveloperRangeUiTest tests/test_developer_range_ui.cpp raidline::sdl_client)
 raidline_add_test(UiFoundationTest tests/test_ui_foundation.cpp raidline::sdl_client)
 raidline_add_test(InventoryPresentationUiTest tests/test_inventory_presentation_ui.cpp raidline::sdl_client)

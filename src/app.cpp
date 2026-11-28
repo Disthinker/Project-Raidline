@@ -1600,6 +1600,8 @@ bool App::loadTextures()
         std::string{basePath} +
         "assets/";
 
+    if (!frontierRoadArt_.load(renderer_, assetRoot))
+        return false;
     const std::string backgroundPath =
         assetRoot +
         defaultV0MapDefinition()
@@ -8126,22 +8128,25 @@ void App::renderBackground(bool drawOutdoorDetails, bool terrainOnly,
                     cellHeight + 0.5F};
                 SDL_RenderFillRect(renderer_, &terrain);
             }
-            for (const RaidOutdoorRoadCell &road : projection.roadCells)
-            {
-                const SDL_FRect roadBounds{
-                    map->walkableBounds.position.x +
-                        road.column * cellWidth,
-                    map->walkableBounds.position.y + road.row * cellHeight,
-                    cellWidth + 0.5F,
-                    cellHeight + 0.5F};
-                if (road.kind == RaidOutdoorRoadKind::Primary)
-                    SDL_SetRenderDrawColor(renderer_, 91, 91, 83, 255);
-                else if (road.kind == RaidOutdoorRoadKind::Secondary)
-                    SDL_SetRenderDrawColor(renderer_, 76, 78, 72, 255);
-                else
-                    SDL_SetRenderDrawColor(renderer_, 66, 69, 62, 255);
-                SDL_RenderFillRect(renderer_, &roadBounds);
-            }
+            const auto &layout = gameSession_.profile().pendingRaid->spatialLayout;
+            if (!layout.roadNetwork.empty())
+                frontierRoadArt_.draw(renderer_, layout, map->walkableBounds,
+                                      {visible.position, visible.size});
+            else
+                for (const RaidOutdoorRoadCell &road : projection.roadCells)
+                {
+                    const SDL_FRect roadBounds{
+                        map->walkableBounds.position.x + road.column * cellWidth,
+                        map->walkableBounds.position.y + road.row * cellHeight, cellWidth + 0.5F,
+                        cellHeight + 0.5F};
+                    if (road.kind == RaidOutdoorRoadKind::Primary)
+                        SDL_SetRenderDrawColor(renderer_, 91, 91, 83, 255);
+                    else if (road.kind == RaidOutdoorRoadKind::Secondary)
+                        SDL_SetRenderDrawColor(renderer_, 76, 78, 72, 255);
+                    else
+                        SDL_SetRenderDrawColor(renderer_, 66, 69, 62, 255);
+                    SDL_RenderFillRect(renderer_, &roadBounds);
+                }
             SDL_SetRenderDrawColor(renderer_, 139, 127, 86, 220);
             SDL_RenderRect(renderer_, &ground);
             return;
@@ -15171,6 +15176,7 @@ void App::shutdown()
     playerAtlas_.reset();
     scavengerMoveTexture_.reset();
     scavengerIdleTexture_.reset();
+    frontierRoadArt_ = FrontierRoadArt{};
     backgroundTexture_.reset();
     uiTextRenderer_.shutdown();
 

@@ -2920,6 +2920,7 @@
       "route_profile": "DISTRICT ROAD NETWORK | HUGE OUTDOOR | FIXED LANDMARKS",
       "procedural_outdoor": {
         "layout_version": 4,
+        "road_network_v1": true,
         "columns": 320,
         "rows": 180,
         "district_columns": 40,

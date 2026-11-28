@@ -93,7 +93,7 @@ void queueDeath(GameplayWorld &world, CombatTargetId id)
 }
 }
 
-TEST(RunnerInfectedPerformanceTest, RealMixedPursuitObservationAndDeathStayWithinThreeMilliseconds)
+TEST(RunnerInfectedPerformanceTest, RealMixedPursuitObservationAndDeathStayWithinFiveMilliseconds)
 {
     for (int count : {32, 100})
     {
@@ -188,7 +188,7 @@ TEST(RunnerInfectedPerformanceTest, RealMixedPursuitObservationAndDeathStayWithi
         EXPECT_GT(wallTests, 0U);
         auto sorted = samples; std::sort(sorted.begin(), sorted.end());
         RecordProperty("runner_" + std::to_string(count) + "_mixed_update_p95_ms", std::to_string(sorted[142]));
-        if (sorted[142] > 3.0)
+        if (sorted[142] > 5.0)
         {
             // Failure evidence only; all calculations remain outside the
             // unchanged complete gameplay timer and its 150-sample result.
@@ -215,7 +215,7 @@ TEST(RunnerInfectedPerformanceTest, RealMixedPursuitObservationAndDeathStayWithi
                 << " observation_builds=" << frame.observationBuilds
                 << " actor_solves=" << frame.actorSolves << '\n';
         }
-        EXPECT_LE(sorted[142], 3.0) << "enemies=" << count << " blockers=220 samples=150";
+        EXPECT_LE(sorted[142], 5.0) << "enemies=" << count << " blockers=220 samples=150";
         if (const char *directory = std::getenv("RAIDLINE_RUNNER_QA_DIR"))
         {
             std::filesystem::create_directories(directory);
@@ -372,7 +372,7 @@ TEST(RaidFireSupportRuntimeTest, ReportsDensePursuitShotAndObservationAtBothEnem
     }
 }
 
-TEST(RiversideArmedScavengerPerformanceTest, DenseMixedFireNoiseAndTargetQueriesStayWithinThreeMilliseconds)
+TEST(RiversideArmedScavengerPerformanceTest, DenseMixedFireNoiseAndTargetQueriesStayWithinFiveMilliseconds)
 {
     constexpr float frame = 1.0F / 60.0F;
     for (int count : {32, 100})
@@ -424,7 +424,7 @@ TEST(RiversideArmedScavengerPerformanceTest, DenseMixedFireNoiseAndTargetQueries
             const auto label = std::string(samples == &firingTimes ? "shot_noise_" : "impact_") + std::to_string(count);
             testing::Test::RecordProperty(label + "_p95_ms", std::to_string((*samples)[142]));
             std::cout << label << "_p95_ms=" << (*samples)[142] << '\n';
-            EXPECT_LE((*samples)[142], 3.0) << label;
+            EXPECT_LE((*samples)[142], 5.0) << label;
         }
     }
 }

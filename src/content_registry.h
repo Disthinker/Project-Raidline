@@ -961,6 +961,7 @@ struct ProceduralOutdoorDefinition
     std::vector<RaidLandmarkTemplateDefinition> landmarkTemplates;
     std::vector<RaidResourcePointArchetypeDefinition> resourcePointArchetypes;
     std::vector<RaidEncounterArchetypeDefinition> encounterArchetypes;
+    bool roadNetworkV1{};
 
     friend bool operator==(
         const ProceduralOutdoorDefinition &,

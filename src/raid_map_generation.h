@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -53,6 +54,22 @@ enum class RaidOutdoorRoadKind : std::uint8_t
     Secondary,
     Primary
 };
+
+// Canonical centerline segments use 64-pixel grid intersections. Endpoints
+// shared by several segments are junctions; an arm exists only along an edge.
+struct RaidRoadSegment
+{
+    int x1{}, y1{}, x2{}, y2{};
+    RaidOutdoorRoadKind kind{};
+    friend bool operator==(const RaidRoadSegment &, const RaidRoadSegment &) = default;
+};
+
+constexpr int raidRoadHalfWidthTiles(RaidOutdoorRoadKind kind) noexcept
+{
+    return kind == RaidOutdoorRoadKind::Primary     ? 4
+           : kind == RaidOutdoorRoadKind::Secondary ? 2
+                                                    : 1;
+}
 
 struct RaidOutdoorRoadCell
 {
@@ -230,6 +247,7 @@ struct RaidGeneratedMapLayout
     std::vector<RaidDistrictSnapshot> districts;
     std::vector<RaidTerrainSpan> terrainSpans;
     std::vector<RaidOutdoorRoadCell> roadCells;
+    std::vector<RaidRoadSegment> roadNetwork;
     std::vector<RaidOutdoorPropSnapshot> props;
     std::vector<RaidAnchorPlacementSnapshot> anchorPlacements;
     std::vector<RaidLandmarkPlacementSnapshot> landmarks;
@@ -337,9 +355,9 @@ void appendRaidExteriorPlacementAnchors(
     const RaidExteriorPlacementDefinition &placement);
 
 [[nodiscard]] RaidGeneratedMapLayout generateRaidMapLayout(
-    const MapDefinition &map,
-    std::uint64_t raidSeed,
-    const RaidMapGenerationAnchors &anchors);
+    const MapDefinition &map, std::uint64_t raidSeed, const RaidMapGenerationAnchors &anchors,
+    bool newFrontierRoads = false,
+    const std::function<bool(const RaidGeneratedMapLayout &)> &acceptRoads = {});
 
 [[nodiscard]] bool raidMapLayoutConnectsAnchors(
     const MapDefinition &map,

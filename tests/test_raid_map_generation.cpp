@@ -6,6 +6,7 @@
 #include <cmath>
 #include <limits>
 #include <queue>
+#include <map>
 #include <set>
 
 #include "content_registry.h"
@@ -1055,4 +1056,48 @@ TEST(RaidMapGenerationTest, SelectsOnlyLegalSpecialLocationCandidate)
     const RaidGeneratedMapLayout layout = generateRaidMapLayout(
         map, 99117U, anchors);
     EXPECT_TRUE(raidMapLayoutConnectsAnchors(map, layout, anchors));
+}
+
+TEST(RaidMapGenerationTest, FrontierNewSortieFreezesOrthogonalRoadNetwork)
+{
+    const auto &map = publishedContentRegistry().map(MapDefinitionId{"map.raid.frontier_exchange"});
+    const auto anchors = publishedAnchors(map);
+    const auto a = generateRaidMapLayout(map, 910223U, anchors, true);
+    const auto b = generateRaidMapLayout(map, 910224U, anchors, true);
+    ASSERT_FALSE(a.roadNetwork.empty());
+    EXPECT_EQ(a.roadNetwork, generateRaidMapLayout(map, 910223U, anchors, true).roadNetwork);
+    EXPECT_NE(a.roadNetwork, b.roadNetwork);
+    EXPECT_EQ(a.layoutHash, raidMapLayoutHash(a));
+    std::map<std::pair<int, int>, unsigned> arms;
+    std::set<int> widths;
+    for (const auto &edge : a.roadNetwork)
+    {
+        ASSERT_TRUE((edge.x1 == edge.x2) != (edge.y1 == edge.y2));
+        ASSERT_LE(edge.x1, edge.x2);
+        ASSERT_LE(edge.y1, edge.y2);
+        EXPECT_GE(edge.x1, 0);
+        EXPECT_GE(edge.y1, 0);
+        EXPECT_LE(edge.x2, 400);
+        EXPECT_LE(edge.y2, 225);
+        const bool horizontal = edge.y1 == edge.y2;
+        unsigned &from = arms[{edge.x1, edge.y1}], &to = arms[{edge.x2, edge.y2}];
+        const unsigned out = horizontal ? 2 : 4, back = horizontal ? 8 : 1;
+        EXPECT_EQ(from & out, 0U);
+        EXPECT_EQ(to & back, 0U);
+        from |= out;
+        to |= back;
+        widths.insert(128 * raidRoadHalfWidthTiles(edge.kind));
+    }
+    EXPECT_EQ(widths, (std::set<int>{128, 256, 512}));
+    const auto has = [&](unsigned mask) {
+        return std::any_of(arms.begin(), arms.end(),
+                           [&](const auto &entry) { return entry.second == mask; });
+    };
+    EXPECT_TRUE(has(15));
+    EXPECT_TRUE(has(7) || has(11) || has(13) || has(14));
+    EXPECT_TRUE(has(3) || has(6) || has(9) || has(12));
+    auto prior = generateRaidMapLayout(map, 910223U, anchors);
+    EXPECT_TRUE(prior.roadNetwork.empty());
+    EXPECT_EQ(prior, generateRaidMapLayout(map, 910223U, anchors, true,
+                                           [](const auto &) { return false; }));
 }

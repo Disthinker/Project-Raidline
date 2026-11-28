@@ -2789,6 +2789,7 @@ ContentRegistry ContentRegistry::fromJson(
                     requiredObject(mapValue, "procedural_outdoor");
                 auto &value = definition.proceduralOutdoor;
                 value.enabled = true;
+                value.roadNetworkV1 = procedural.value("road_network_v1", false);
                 value.layoutVersion =
                     requiredPositiveUint(procedural, "layout_version");
                 value.columns = requiredPositiveUint(procedural, "columns");
